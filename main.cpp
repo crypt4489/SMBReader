@@ -31,20 +31,25 @@ typedef struct BitmapInfoHeader
 } BitmapInfoHeader;
 #pragma pack(pop)
 
-void WriteOutSMBBMP(std::string name)
+void WriteOutSMBBMP(std::string name, std::vector<uint8_t>::iterator begin, std::vector<uint8_t>::iterator end)
 {
 	std::ofstream filehandle(name);
 
 	if (!filehandle.is_open())
 		throw std::runtime_error("BMP file is unable to be opened");
 
-	BitmapFileHeader fileheader{ 0x424d, 0, 0, 0, 0 };
-	BitmapInfoHeader infoheader{ 40, 256, 256, 1, 32, 0, 0, 0, 0, 0, 0 };
+	BitmapFileHeader fileheader{ 0x4d42, 14+40+(256*256*3), 0, 0, 0x36};
+	BitmapInfoHeader infoheader{ 40, 256, 256, 1, 24, 0, 0, 0, 0, 0, 0 };
 
 	filehandle.write(reinterpret_cast<char*>(&fileheader.bfType), 14);
 	filehandle.write(reinterpret_cast<char*>(&infoheader.biSize), 40);
-
-	filehandle.flush();
+	while (begin != end)
+	{
+		
+		filehandle.put(*begin);
+		begin+=1;
+	}
+	
 	filehandle.close();
 
 
@@ -102,17 +107,19 @@ enum chunktype
 
 // 72 10 FD 2D is the tag for material (texture) definition
 
-// 62 56 72 49 is sequence for the indexed renderable class definition
+// 62 56 72 49 is sequence for the indexed renderable class definition 62 56 62 50 is for pb indexed renderable class definition
 
 // in geo file, uses XX XX FF 00 for demarcation between vertices structs?
 
-// fc 17 04 00 is beginning and end of indices
+// fc 17 04 00 is beginning and end of indices (of some kind)
 
 // texture resources are 73 bytes in length (not including string size) from tag - 16 bytes in the chunk tag
 
 // gr2 is 43 bytes excluding the string size minus the 16 bytes up to the string
 
 // for joints, there are joints name and then the number of matrices for the joints. These matrices are packed within 112 bytes of data. followed by the number of matrices is 4byte indices
+
+// for every pb indexed renderable there is a fc 17 04 00 pair that corresponds to the number of indices in the indexed renderable. 
 
 #define BEGINNINGCHUNKTAG 0xa77e4dfa
 //#define DATACHUNKTAG 0xcbe402b6
@@ -189,7 +196,7 @@ int main()
 {
 	std::cout << sizeof(BitmapFileHeader) << sizeof(BitmapInfoHeader) << std::endl;
 	SMBFile fileHeader{};
-	std::vector<uint8_t> filedata = LoadFile("test.smb");
+	std::vector<uint8_t> filedata = LoadFile("come.smb");
 	auto iter = filedata.begin();
 	ReadHeader(iter, &fileHeader);
 	int end;
@@ -219,6 +226,7 @@ int main()
 	{
 		std::cout << (j+1) << " " << i.fileName << " " << i.fileOffset+fileHeader.fileOffset << " " << i.numOfBytesAfterTag <<
 			 " " << i.fileName.size() <<std::endl;
+		i.fileOffset += fileHeader.fileOffset;
 		j++;
 	}
 	auto geoIndex = filedata.begin() + fileHeader.fileOffset;
@@ -237,32 +245,34 @@ int main()
 		}
 		std::cout << "\n";
 	} */
+	
 	int count = 0;
-	auto loop = filedata.begin() + chunks[5].fileOffset;
-	while (loop < filedata.begin() + chunks[5].fileOffset + 4000)
+	auto loop = filedata.begin() + chunks[73].fileOffset;
+	int sizet = chunks[74].fileOffset - chunks[73].fileOffset;
+	/*while (loop < filedata.begin() + chunks[73].fileOffset + sizet)
 	{
-		std::cout << count << " ";
+		//std::cout << count << " ";
 		for (int i = 0; i < 4; i++)
 		{
-			if (count < 0)
+			if (count > 0)
 			{
 				float f;
 				CopyBytes(loop, 4, &f);
-				std::cout << " " << f;
+				//std::cout << " " << f;
 				count += 4;
 			}
 			else {
 				int f;
 				CopyBytes(loop, 4, &f);
-				std::cout << " " << f;
+				//std::cout << " " << f;
 				count += 4;
 			}
 		}
 		std::cout << "\n";
-	}
-	count = 0;
-	loop = filedata.begin() + chunks[5].fileOffset;
-	while (loop < filedata.begin() + chunks[5].fileOffset + 4000)
+	} */
+	/*count = 0;
+	loop = filedata.begin() + chunks[74].fileOffset;
+	while (loop < filedata.begin() + chunks[74].fileOffset + 4000)
 	{
 		std::cout << count << " ";
 		for (int i = 0; i < 4; i++)
@@ -283,6 +293,11 @@ int main()
 		}
 		std::cout << "\n";
 	}
+
+	*/
+	std::printf("%s %x %d\n", chunks[73].fileName.c_str(), chunks[73].fileOffset, chunks[73].fileOffset);
+	std::printf("%x %d\n", chunks[74].fileOffset, chunks[74].fileOffset - chunks[73].fileOffset);
+	//WriteOutSMBBMP("test.bmp", filedata.begin() + chunks[42].fileOffset, filedata.begin() + chunks[42].fileOffset + (256 * 256 * 3));
 
 	return 0;
 }
