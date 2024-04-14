@@ -31,24 +31,20 @@ typedef struct BitmapInfoHeader
 } BitmapInfoHeader;
 #pragma pack(pop)
 
-void WriteOutSMBBMP(std::string name, std::vector<uint8_t>::iterator begin, std::vector<uint8_t>::iterator end)
+void WriteOutSMBBMP(std::string name, char *image, int width, int height)
 {
-	std::ofstream filehandle(name);
+	std::ofstream filehandle(name, std::ios::binary);
 
 	if (!filehandle.is_open())
 		throw std::runtime_error("BMP file is unable to be opened");
 
-	BitmapFileHeader fileheader{ 0x4d42, 14+40+(256*256*3), 0, 0, 0x36};
-	BitmapInfoHeader infoheader{ 40, 256, 256, 1, 24, 0, 0, 0, 0, 0, 0 };
+	BitmapFileHeader fileheader{ 0x4d42, 14+40+(width*height*4), 0, 0, 0x36};
+	BitmapInfoHeader infoheader{ 40, width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 
 	filehandle.write(reinterpret_cast<char*>(&fileheader.bfType), 14);
 	filehandle.write(reinterpret_cast<char*>(&infoheader.biSize), 40);
-	while (begin != end)
-	{
-		
-		filehandle.put(*begin);
-		begin+=1;
-	}
+
+	filehandle.write(image, (width * height * 4));
 	
 	filehandle.close();
 
@@ -105,7 +101,11 @@ enum chunktype
 
 // will need a matrix reader. matrices for joints come after names, could be a gr2 file. 
 
-// 72 10 FD 2D is the tag for material (texture) definition
+// 72 10 FD 2D is the tag for a  specific material in a material definition.
+
+// material definitions follow a geo definition (at least for what has been sampled).
+
+// 65 42 0B 00 tag for material definition.
 
 // 62 56 72 49 is sequence for the indexed renderable class definition 62 56 62 50 is for pb indexed renderable class definition
 
@@ -119,7 +119,25 @@ enum chunktype
 
 // for joints, there are joints name and then the number of matrices for the joints. These matrices are packed within 112 bytes of data. followed by the number of matrices is 4byte indices
 
-// for every pb indexed renderable there is a fc 17 04 00 pair that corresponds to the number of indices in the indexed renderable. 
+// for every pb indexed renderable there is a fc 17 04 00 pair that corresponds to the number of indices in the indexed renderable.
+// 
+// after geo file name, there 1, 1, 1, 0 (4bytes apiece) , then there are 28 seemingly random bytes aligned on the fourteenth byte in the sunsequent row. 
+
+
+// every indexedrenderable has stored its sphere with center and radius (floats)
+
+//it seems like they just store the data for the structs in total in there.
+
+// 47 42 E6 41 FF FF FF FF means something...
+
+
+// after joint names for indexed renderable, there a floats packed at 28 bytes a time with non consectutive id number for the first 4 bytes.
+
+// size of colormap is 43776, additive spark map is 1408, and normal map is 87296 in compressed size bytes
+
+// the first two maps are DXT1 textures, normal map is stored as D3DFMT_X8l8V8u8
+
+//colormap is followed by 96 bytes of zero. colormaps are mipmapped stored consectuvely
 
 #define BEGINNINGCHUNKTAG 0xa77e4dfa
 //#define DATACHUNKTAG 0xcbe402b6
@@ -145,7 +163,7 @@ typedef struct chunk_data_t
 {
 	uint32_t chunkType;
 	uint32_t chunkId;
-	uint32_t pad;
+	uint32_t contigOffset;
 	uint32_t fileOffset; //monotonically increasing for each chunk
 	uint32_t numOfBytesAfterTag;
 	uint32_t pad3;
@@ -196,7 +214,7 @@ int main()
 {
 	std::cout << sizeof(BitmapFileHeader) << sizeof(BitmapInfoHeader) << std::endl;
 	SMBFile fileHeader{};
-	std::vector<uint8_t> filedata = LoadFile("come.smb");
+	std::vector<uint8_t> filedata = LoadFile("steef.smb");
 	auto iter = filedata.begin();
 	ReadHeader(iter, &fileHeader);
 	int end;
@@ -211,6 +229,9 @@ int main()
 	{
 		std::cerr << "Success\n";
 	}
+	std::cout << fileHeader.numContiguousBytes << std::endl;
+	std::cout << fileHeader.numSystemBytes << std::endl;
+	std::cout << filedata.size() << std::endl;
 	std::vector<ChunkTag> chunks(fileHeader.numResources);
 	std::vector<std::vector<uint8_t>::iterator> locations(fileHeader.numResources);
 	int j = 0;
@@ -226,14 +247,15 @@ int main()
 	{
 		std::cout << (j+1) << " " << i.fileName << " " << i.fileOffset+fileHeader.fileOffset << " " << i.numOfBytesAfterTag <<
 			 " " << i.fileName.size() <<std::endl;
-		i.fileOffset += fileHeader.fileOffset;
-		j++;
+		std::cout << i.chunkId << " " << i.chunkType << " " << i.contigOffset << " " << i.pad3 << " " << i.pad4 << std::endl;
+		std::cout << "-------------" << std::endl;
+		
 	}
 	auto geoIndex = filedata.begin() + fileHeader.fileOffset;
-	size = chunks[5].fileOffset - chunks[4].fileOffset;
-	std::cout << "size : " << size << std::endl;
-	std::cout << chunks[5].fileOffset << " " << chunks[5].fileName << std::endl;
-	std::cout << chunks[4].fileOffset << " " << chunks[4].fileName << std::endl;
+	//size = chunks[5].fileOffset - chunks[4].fileOffset;
+	//std::cout << "size : " << size << std::endl;
+	//std::cout << chunks[5].fileOffset << " " << chunks[5].fileName << std::endl;
+	//std::cout << chunks[4].fileOffset << " " << chunks[4].fileName << std::endl;
 	/*for (int i = 0; i < size; i += 4 * 16)
 	{
 		std::cout << i << "---";
@@ -246,9 +268,9 @@ int main()
 		std::cout << "\n";
 	} */
 	
-	int count = 0;
-	auto loop = filedata.begin() + chunks[73].fileOffset;
-	int sizet = chunks[74].fileOffset - chunks[73].fileOffset;
+	//int count = 0;
+	//auto loop = filedata.begin() + chunks[73].fileOffset;
+	//int sizet = chunks[74].fileOffset - chunks[73].fileOffset;
 	/*while (loop < filedata.begin() + chunks[73].fileOffset + sizet)
 	{
 		//std::cout << count << " ";
@@ -293,11 +315,32 @@ int main()
 		}
 		std::cout << "\n";
 	}
-
+	
 	*/
-	std::printf("%s %x %d\n", chunks[73].fileName.c_str(), chunks[73].fileOffset, chunks[73].fileOffset);
-	std::printf("%x %d\n", chunks[74].fileOffset, chunks[74].fileOffset - chunks[73].fileOffset);
-	//WriteOutSMBBMP("test.bmp", filedata.begin() + chunks[42].fileOffset, filedata.begin() + chunks[42].fileOffset + (256 * 256 * 3));
+	//std::printf("%s %x %d\n", chunks[73].fileName.c_str(), chunks[73].fileOffset, chunks[73].fileOffset);
+	//std::printf("%x %d\n", chunks[74].fileOffset, chunks[74].fileOffset - chunks[73].fileOffset);
+#define HEIGHT 256
+	char* image = new char[256 * HEIGHT * 4];
+	//memset(image, 0, 256 *256 *4);
+	unsigned char* block = filedata.data() + fileHeader.fileOffset;
 
+    #include "s3tc.h"
+	BlockDecompressImageDXT1(256, HEIGHT, block, (unsigned long*)image);
+	
+	
+	for (int i = 0; i < 256 * HEIGHT * 4; i += 4)
+	{
+		if (i == 0)
+			std::printf("%d %d %d %d\n", image[i], image[i + 1], image[i + 2], image[i + 3]);
+		int temp = image[i];
+		int temp2 = image[i + 1];
+		int temp3 = image[i + 2];
+		int temp4 = image[i + 3];
+		image[i + 3] = temp;
+		image[i + 2] = temp4;
+		image[i + 1] = temp3;
+		image[i] = temp2;
+	} 
+	WriteOutSMBBMP("work.bmp", (char*)image, 256, HEIGHT);
 	return 0;
 }
