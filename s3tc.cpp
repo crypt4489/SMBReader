@@ -98,23 +98,23 @@ void DecompressBlockDXT1(unsigned long x, unsigned long y, unsigned long width, 
 // unsigned long height:                Texture height.
 // const unsigned char *blockStorage:   pointer to compressed DXT1 blocks.
 // unsigned long *image:                pointer to the image where the decompressed pixels will be stored.
-#include <cstdio>
-void BlockDecompressImageDXT1(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image)
+
+int BlockDecompressImageDXT1(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image)
 {
     unsigned long blockCountX = (width + 3) / 4;
     unsigned long blockCountY = (height + 3) / 4;
     unsigned long blockWidth = (width < 4) ? width : 4;
     unsigned long blockHeight = (height < 4) ? height : 4;
-    std::printf("%d %d %d %d\n", blockCountX, blockCountY, blockWidth, blockHeight);
-    unsigned long count = 0;
+    int ret = 0;
+    
     for (unsigned long j = 0; j < blockCountY; j++)
     {
         for (unsigned long i = 0; i < blockCountX; i++) DecompressBlockDXT1(i*4, j*4, width, blockStorage + i * 8, image);
         blockStorage += blockCountX * 8;
-        count += blockCountX * 8;
+        ret += blockCountX * 8;
     }
-    
-    std::printf("%d %x %x %x %x", count, blockStorage[0], blockStorage[1], blockStorage[2], blockStorage[3]);
+
+    return ret;
 }
 
 // void DecompressBlockDXT5(): Decompresses one block of a DXT5 texture and stores the resulting pixels at the appropriate offset in 'image'.
@@ -234,17 +234,21 @@ void DecompressBlockDXT5(unsigned long x, unsigned long y, unsigned long width, 
 // const unsigned char *blockStorage:   pointer to compressed DXT5 blocks.
 // unsigned long *image:                pointer to the image where the decompressed pixels will be stored.
 
-void BlockDecompressImageDXT5(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image)
+int BlockDecompressImageDXT5(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image)
 {
     unsigned long blockCountX = (width + 3) / 4;
     unsigned long blockCountY = (height + 3) / 4;
     unsigned long blockWidth = (width < 4) ? width : 4;
     unsigned long blockHeight = (height < 4) ? height : 4;
+    int ret = 0;
 
     for (unsigned long j = 0; j < blockCountY; j++)
     {
         for (unsigned long i = 0; i < blockCountX; i++) DecompressBlockDXT5(i*4, j*4, width, blockStorage + i * 16, image);
         blockStorage += blockCountX * 16;
+        ret += blockCountX * 16;
     }
+
+    return ret;
 }
 

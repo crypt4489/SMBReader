@@ -5,6 +5,12 @@
 #include <string>
 #include <fstream>
 #include <iostream>
+#include <filesystem>
+#include <regex>
+
+
+#include "s3tc.h"
+
 #pragma pack(2)
 typedef struct BitmapFileHeader
 {
@@ -51,6 +57,18 @@ void WriteOutSMBBMP(std::string name, char *image, int width, int height)
 
 }
 
+void WriteOutChunk(std::string name, char* data, uint32_t size)
+{
+	std::ofstream filehandle(name, std::ios::binary);
+
+	if (!filehandle.is_open())
+		throw std::runtime_error("Chunk file is unable to be opened");
+	
+	filehandle.write(data, size);
+
+	filehandle.close();
+}
+
 std::vector<uint8_t> LoadFile(std::string name)
 {
 	std::ifstream filehandle(name, std::ios::binary | std::ios::ate);
@@ -73,13 +91,39 @@ std::vector<uint8_t> LoadFile(std::string name)
 	return filedata;
 }
 
+template <typename C> inline void CopyBytes(std::vector<uint8_t>::iterator& file, int size, C copy)
+{
+	if constexpr (std::is_pointer_v<C>)
+	{
+		std::copy(file, file + size, reinterpret_cast<char*>(copy));
+	}
+	else
+	{
+		std::copy(file, file + size, copy);
+	}
+
+	file += size;
+}
+
 enum chunktype
 {
 	GEO = 0,
+	TEXTURE = 1,
 	GR2 = 6,
 	Joints = 20,
 };
 
+struct Texture
+{
+	uint32_t type;
+	uint32_t width;
+	uint32_t height;
+	uint32_t miplevels;
+};
+
+struct GeoFile
+{
+};
 
 
 // each string is null terminated except the first file
@@ -133,16 +177,36 @@ enum chunktype
 
 // after joint names for indexed renderable, there a floats packed at 28 bytes a time with non consectutive id number for the first 4 bytes.
 
-// size of colormap is 43776, additive spark map is 1408, and normal map is 87296 in compressed size bytes
+// size of colormap is 43776, additive spark map is 1408, and normal map is 87296 in compressed size bytes except normal maps
 
 // the first two maps are DXT1 textures, normal map is stored as D3DFMT_X8l8V8u8
 
 //colormap is followed by 96 bytes of zero. colormaps are mipmapped stored consectuvely
 
+// normals are mipmapped from 128X128 to 8X8
+
+// I think all textures for a chaarcter are contained within a smb file. it is just weird that they'll mention it multiple times for a geo definition.
+
+
+// end of geo tag has the number after the joint names * 4 * 7 many bytes of floating point data in chunks of 7 floats. then followed by 24 bytes.
+
+// then fololowed by a 4 byte number then that number of bytes until end of chunk
+
+//VertexFormat is what determines the encoding of the following vertex for geo file (which is fucking compressed and pisses me off) I think?
+
+// numSystembyte + numContinguous + file offset = total size of file
+
+// so it is possible that all things with continguous offset (not sr2 files) are stored after the fileheader in order and that the sr2s are after the fileOffset + numContiguousByte 
+
+// confirmed at least that all things that impact a continguous offset are placed at the contiguous offset where they are!!!
+
+//21 bytes after texture string until the definition (at for what I need!!!)
 #define BEGINNINGCHUNKTAG 0xa77e4dfa
 //#define DATACHUNKTAG 0xcbe402b6
 #define ENDTAG 0xbeef1234
 #define ENDGEOTAG 0xdc7c9d74
+
+static std::filesystem::path currDir = std::filesystem::current_path();
 
 typedef struct smb_file_t
 {
@@ -171,167 +235,13 @@ typedef struct chunk_data_t
 	uint32_t pad4;
 	uint32_t stringSize;
 	std::string fileName;
+	uint32_t definitionBegin;
 } ChunkTag;
 
-template <typename C> inline void CopyBytes(std::vector<uint8_t>::iterator& file, int size, C copy)
+inline void RGBATexture(char* image, int height, int width)
 {
-	if constexpr(std::is_pointer_v<C>)
+	for (int i = 0; i < width * height * 4; i += 4)
 	{
-		std::copy(file, file + size, reinterpret_cast<char*>(copy));
-	}
-	else
-	{
-		std::copy(file, file + size, copy);
-	}
-	
-	file += size;
-}
-
-void ReadHeader(std::vector<uint8_t>::iterator &file, SMBFile* header)
-{
-	CopyBytes(file, 4, &header->magic);
-	CopyBytes(file, 4, &header->version);
-	int stringSize;
-	CopyBytes(file, 4, &stringSize);
-	header->name.resize(stringSize);
-	CopyBytes(file, stringSize, header->name.begin());
-	CopyBytes(file, 32, &header->fileOffset);
-}
-
-void ReadChunk(std::vector<uint8_t>::iterator& file, ChunkTag* tag)
-{
-	int magic;
-	CopyBytes(file, 4, &magic);
-	CopyBytes(file, 8*4, &tag->chunkType);
-	file += 4;
-	CopyBytes(file, 4, &tag->stringSize);
-	tag->fileName.resize(tag->stringSize);
-	CopyBytes(file, tag->stringSize, tag->fileName.begin());
-	file += (tag->numOfBytesAfterTag - (tag->stringSize + 16));
-}
-
-int main()
-{
-	std::cout << sizeof(BitmapFileHeader) << sizeof(BitmapInfoHeader) << std::endl;
-	SMBFile fileHeader{};
-	std::vector<uint8_t> filedata = LoadFile("steef.smb");
-	auto iter = filedata.begin();
-	ReadHeader(iter, &fileHeader);
-	int end;
-	CopyBytes(iter, 4, &end);
-	
-	if (end != ENDTAG)
-	{
-		std::cerr << "Cannot read file header\n";
-		return -1;
-	}
-	else
-	{
-		std::cerr << "Success\n";
-	}
-	std::cout << fileHeader.numContiguousBytes << std::endl;
-	std::cout << fileHeader.numSystemBytes << std::endl;
-	std::cout << filedata.size() << std::endl;
-	std::vector<ChunkTag> chunks(fileHeader.numResources);
-	std::vector<std::vector<uint8_t>::iterator> locations(fileHeader.numResources);
-	int j = 0;
-	int size = fileHeader.numResources;
-	while (j < size)
-	{
-		locations[j] = iter;
-		ReadChunk(iter, &chunks[j]);
-		j++;
-	}
-	j = 0;
-	for (auto& i : chunks)
-	{
-		std::cout << (j+1) << " " << i.fileName << " " << i.fileOffset+fileHeader.fileOffset << " " << i.numOfBytesAfterTag <<
-			 " " << i.fileName.size() <<std::endl;
-		std::cout << i.chunkId << " " << i.chunkType << " " << i.contigOffset << " " << i.pad3 << " " << i.pad4 << std::endl;
-		std::cout << "-------------" << std::endl;
-		
-	}
-	auto geoIndex = filedata.begin() + fileHeader.fileOffset;
-	//size = chunks[5].fileOffset - chunks[4].fileOffset;
-	//std::cout << "size : " << size << std::endl;
-	//std::cout << chunks[5].fileOffset << " " << chunks[5].fileName << std::endl;
-	//std::cout << chunks[4].fileOffset << " " << chunks[4].fileName << std::endl;
-	/*for (int i = 0; i < size; i += 4 * 16)
-	{
-		std::cout << i << "---";
-		for (int k = 0; k < 16; k++)
-		{
-			float f;
-			CopyBytes(geoIndex, 4, &f);
-			std::cout << f << " ";
-		}
-		std::cout << "\n";
-	} */
-	
-	//int count = 0;
-	//auto loop = filedata.begin() + chunks[73].fileOffset;
-	//int sizet = chunks[74].fileOffset - chunks[73].fileOffset;
-	/*while (loop < filedata.begin() + chunks[73].fileOffset + sizet)
-	{
-		//std::cout << count << " ";
-		for (int i = 0; i < 4; i++)
-		{
-			if (count > 0)
-			{
-				float f;
-				CopyBytes(loop, 4, &f);
-				//std::cout << " " << f;
-				count += 4;
-			}
-			else {
-				int f;
-				CopyBytes(loop, 4, &f);
-				//std::cout << " " << f;
-				count += 4;
-			}
-		}
-		std::cout << "\n";
-	} */
-	/*count = 0;
-	loop = filedata.begin() + chunks[74].fileOffset;
-	while (loop < filedata.begin() + chunks[74].fileOffset + 4000)
-	{
-		std::cout << count << " ";
-		for (int i = 0; i < 4; i++)
-		{
-			if (count < 15000)
-			{
-				float f;
-				CopyBytes(loop, 4, &f);
-				std::cout << " " << f;
-				count += 4;
-			}
-			else {
-				int f;
-				CopyBytes(loop, 4, &f);
-				std::cout << " " << f;
-				count += 4;
-			}
-		}
-		std::cout << "\n";
-	}
-	
-	*/
-	//std::printf("%s %x %d\n", chunks[73].fileName.c_str(), chunks[73].fileOffset, chunks[73].fileOffset);
-	//std::printf("%x %d\n", chunks[74].fileOffset, chunks[74].fileOffset - chunks[73].fileOffset);
-#define HEIGHT 256
-	char* image = new char[256 * HEIGHT * 4];
-	//memset(image, 0, 256 *256 *4);
-	unsigned char* block = filedata.data() + fileHeader.fileOffset;
-
-    #include "s3tc.h"
-	BlockDecompressImageDXT1(256, HEIGHT, block, (unsigned long*)image);
-	
-	
-	for (int i = 0; i < 256 * HEIGHT * 4; i += 4)
-	{
-		if (i == 0)
-			std::printf("%d %d %d %d\n", image[i], image[i + 1], image[i + 2], image[i + 3]);
 		int temp = image[i];
 		int temp2 = image[i + 1];
 		int temp3 = image[i + 2];
@@ -340,7 +250,171 @@ int main()
 		image[i + 2] = temp4;
 		image[i + 1] = temp3;
 		image[i] = temp2;
-	} 
-	WriteOutSMBBMP("work.bmp", (char*)image, 256, HEIGHT);
+	}
+}
+
+std::filesystem::path SetupTexturesDirectory(std::string nameOfDir)
+{
+	std::filesystem::path pathToDir = currDir / nameOfDir;
+	if (!std::filesystem::exists(pathToDir))
+	{
+		std::filesystem::create_directory(pathToDir);
+	}
+	return pathToDir;
+}
+
+void ExportTexture(ChunkTag chunk, std::vector<uint8_t>::iterator fileBegin, uint32_t offset)
+{
+	std::regex filenamePattern{ "\([A-Za-z_]+)\\." };
+
+	std::smatch match;
+
+	std::string name;
+	if (std::regex_search(chunk.fileName, match, filenamePattern))
+	{
+		name = match[1];
+		std::cout << match[1] << std::endl;
+	}
+	else
+	{
+		std::cerr << "Couldn't find the filename in " << chunk.fileName << std::endl;
+		return;
+	}
+	
+	auto pathToTextures = SetupTexturesDirectory(name);
+	auto definitionLoc = fileBegin + chunk.definitionBegin + 21;
+	Texture tex{};
+	CopyBytes(definitionLoc, sizeof(Texture), &tex);
+	std::cout
+		<< tex.height << "\n"
+		<< tex.width << "\n"
+		<< tex.type << "\n"
+		<< tex.miplevels << "\n"
+		<< "-------------------\n";
+	int writeWidth = tex.width, writeHeight = tex.height;
+	auto dataLoc = fileBegin + offset + chunk.contigOffset;
+	int offsetwithin = 0;
+	std::vector<char> image(writeWidth * writeHeight * 4);
+	for (int i = 0; i < tex.miplevels; i++)
+	{
+		char* dataPtr = reinterpret_cast<char*>(&(*dataLoc));
+		std::string writeFileName = name + std::to_string(i+1) + ".bmp";
+		auto writePath = pathToTextures / writeFileName;
+		switch (tex.type)
+		{
+		case 12:
+			offsetwithin = BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)dataPtr, (unsigned long*)image.data());
+			RGBATexture(image.data(), writeHeight, writeWidth);
+			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
+			image.clear();
+			image.resize(writeWidth * writeHeight * 4);
+			break;
+		case 7:
+			std::printf("%x %x %x %x\n", dataPtr[0], dataPtr[1], dataPtr[2], dataPtr[3]);
+			WriteOutSMBBMP(writePath.string(), dataPtr, writeWidth, writeHeight);
+			offsetwithin = writeHeight * writeWidth * 4;
+			break;
+		default:
+			std::cerr << "Unsupported/Unknown texture type\n";
+			return;
+		}
+
+		dataLoc += offsetwithin;
+		writeHeight >>= 1;
+		writeWidth >>= 1;
+		
+	}
+	
+}
+
+void ExportChunks(std::vector<ChunkTag> chunks, std::vector<uint8_t>::iterator fileBegin, int fileOffset)
+{
+	for (const auto& chunk : chunks)
+	{
+		switch (chunk.chunkType)
+		{
+		case GEO:
+			break;
+		case TEXTURE:
+			ExportTexture(chunk, fileBegin, fileOffset);
+			break;
+		case GR2:
+			break;
+		case Joints:
+			break;
+		default:
+			std::cerr << "Unprocessed chunkType\n";
+			break;
+		}
+	}
+}
+
+void ReadHeader(std::vector<uint8_t>::iterator &file, SMBFile& header)
+{
+	CopyBytes(file, 4, &header.magic);
+	CopyBytes(file, 4, &header.version);
+	int stringSize;
+	CopyBytes(file, 4, &stringSize);
+	header.name.resize(stringSize);
+	CopyBytes(file, stringSize, header.name.begin());
+	CopyBytes(file, 32, &header.fileOffset);
+}
+
+void ReadChunk(std::vector<uint8_t>::iterator& file, ChunkTag& tag, std::vector<uint8_t>::iterator fileBegin)
+{
+	int magic;
+	CopyBytes(file, 4, &magic);
+	CopyBytes(file, 8*4, &tag.chunkType);
+	file += 4;
+	CopyBytes(file, 4, &tag.stringSize);
+	tag.fileName.resize(tag.stringSize);
+	CopyBytes(file, tag.stringSize, tag.fileName.begin());
+	tag.definitionBegin = std::distance(fileBegin, file);
+	file += (tag.numOfBytesAfterTag - (tag.stringSize + 16));
+}
+
+int main()
+{
+	std::cout << sizeof(BitmapFileHeader) << sizeof(BitmapInfoHeader) << std::endl;
+	SMBFile fileHeader{};
+	std::vector<uint8_t> filedata = LoadFile("test.smb");
+	auto iter = filedata.begin();
+	ReadHeader(iter, fileHeader);
+	int end;
+	CopyBytes(iter, 4, &end);
+	
+	if (end != ENDTAG)
+	{
+		std::cerr << "Cannot read file header\n";
+		return -1;
+	}
+
+	std::cout << fileHeader.numContiguousBytes << std::endl;
+	std::cout << fileHeader.numSystemBytes << std::endl;
+	std::cout << fileHeader.numSystemBytes + fileHeader.fileOffset << std::endl;
+	std::cout << filedata.size() << std::endl;
+	std::vector<ChunkTag> chunks(fileHeader.numResources);
+	std::vector<std::vector<uint8_t>::iterator> locations(fileHeader.numResources);
+	int j = 0;
+	int size = fileHeader.numResources;
+	while (j < size)
+	{
+		locations[j] = iter;
+		ReadChunk(iter, chunks[j], filedata.begin());
+		j++;
+	}
+	j = 0;
+	for (auto& i : chunks)
+	{
+		std::cout << (j+1) << " " << i.fileName << " " << i.fileOffset+fileHeader.fileOffset << " " << i.numOfBytesAfterTag <<
+			 " " << i.fileName.size() <<std::endl;
+		std::cout << i.chunkId << " " << i.chunkType << " " << i.contigOffset + fileHeader.fileOffset << " " << i.pad3 << " " << i.pad4 << std::endl;
+		std::cout << "-------------" << std::endl;
+		j++;
+		
+	}
+
+	ExportChunks(chunks, filedata.begin(), fileHeader.fileOffset);
+	
 	return 0;
 }
