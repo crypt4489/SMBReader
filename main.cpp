@@ -201,6 +201,8 @@ struct GeoFile
 // confirmed at least that all things that impact a continguous offset are placed at the contiguous offset where they are!!!
 
 //21 bytes after texture string until the definition (at for what I need!!!)
+
+//both files oddly use the same legacy directx values for the texture types. will specify in enumeration. WEIRD!!!!
 #define BEGINNINGCHUNKTAG 0xa77e4dfa
 //#define DATACHUNKTAG 0xcbe402b6
 #define ENDTAG 0xbeef1234
@@ -238,7 +240,7 @@ typedef struct chunk_data_t
 	uint32_t definitionBegin;
 } ChunkTag;
 
-inline void RGBATexture(char* image, int height, int width)
+inline void BGRATexture(char* image, int height, int width)
 {
 	for (int i = 0; i < width * height * 4; i += 4)
 	{
@@ -253,7 +255,20 @@ inline void RGBATexture(char* image, int height, int width)
 	}
 }
 
-std::filesystem::path SetupTexturesDirectory(std::string nameOfDir)
+inline void BGRATexture2(char* image, int height, int width)
+{
+	for (int i = 0; i < width * height * 4; i += 4)
+	{
+		int temp = image[i];
+		//int temp2 = image[i + 1];
+		int temp3 = image[i + 2];
+		image[i] = temp3;
+		//image[i + 2] = temp2;
+		image[i + 2] = temp;
+	}
+}
+
+std::filesystem::path SetupDirectory(std::string nameOfDir)
 {
 	std::filesystem::path pathToDir = currDir / nameOfDir;
 	if (!std::filesystem::exists(pathToDir))
@@ -281,7 +296,7 @@ void ExportTexture(ChunkTag chunk, std::vector<uint8_t>::iterator fileBegin, uin
 		return;
 	}
 	
-	auto pathToTextures = SetupTexturesDirectory(name);
+	auto pathToTextures = SetupDirectory(name);
 	auto definitionLoc = fileBegin + chunk.definitionBegin + 21;
 	Texture tex{};
 	CopyBytes(definitionLoc, sizeof(Texture), &tex);
@@ -297,29 +312,38 @@ void ExportTexture(ChunkTag chunk, std::vector<uint8_t>::iterator fileBegin, uin
 	std::vector<char> image(writeWidth * writeHeight * 4);
 	for (int i = 0; i < tex.miplevels; i++)
 	{
-		char* dataPtr = reinterpret_cast<char*>(&(*dataLoc));
+		
 		std::string writeFileName = name + std::to_string(i+1) + ".bmp";
 		auto writePath = pathToTextures / writeFileName;
+		char* dataPtr = reinterpret_cast<char*>(&(*dataLoc));
 		switch (tex.type)
 		{
+		case 7:
+			std::cerr << "X8L8U8V8 format is not exportable\n";
+			return;
 		case 12:
 			offsetwithin = BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)dataPtr, (unsigned long*)image.data());
-			RGBATexture(image.data(), writeHeight, writeWidth);
+			BGRATexture(image.data(), writeHeight, writeWidth);
 			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
-			image.clear();
-			image.resize(writeWidth * writeHeight * 4);
+			dataLoc += offsetwithin;
 			break;
-		case 7:
-			std::printf("%x %x %x %x\n", dataPtr[0], dataPtr[1], dataPtr[2], dataPtr[3]);
-			WriteOutSMBBMP(writePath.string(), dataPtr, writeWidth, writeHeight);
-			offsetwithin = writeHeight * writeWidth * 4;
+		case 14:
+			offsetwithin = BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)dataPtr, (unsigned char*)image.data());
+			BGRATexture(image.data(), writeHeight, writeWidth);
+			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
+			dataLoc += offsetwithin;
+			break;
+		case 18:
+			CopyBytes(dataLoc, writeHeight * writeWidth * 4, image.data());
+			BGRATexture2(image.data(), writeHeight, writeWidth);
+			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
 			break;
 		default:
-			std::cerr << "Unsupported/Unknown texture type\n";
+			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
 			return;
 		}
-
-		dataLoc += offsetwithin;
+		image.clear();
+		image.resize(writeWidth * writeHeight * 4);
 		writeHeight >>= 1;
 		writeWidth >>= 1;
 		
@@ -375,9 +399,12 @@ void ReadChunk(std::vector<uint8_t>::iterator& file, ChunkTag& tag, std::vector<
 
 int main()
 {
-	std::cout << sizeof(BitmapFileHeader) << sizeof(BitmapInfoHeader) << std::endl;
+	std::string MainSMB = "test.smb";
+	
+	currDir = SetupDirectory(MainSMB.substr(0, MainSMB.find_last_of('.')));
+	
 	SMBFile fileHeader{};
-	std::vector<uint8_t> filedata = LoadFile("test.smb");
+	std::vector<uint8_t> filedata = LoadFile(MainSMB);
 	auto iter = filedata.begin();
 	ReadHeader(iter, fileHeader);
 	int end;

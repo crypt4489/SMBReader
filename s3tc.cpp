@@ -5,6 +5,7 @@
 // unsigned char b:     blue channel.
 // unsigned char a:     alpha channel.
 #include "s3tc.h"
+#include <cstdint>
 unsigned long PackRGBA(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
 {
     return ((r << 24) | (g << 16) | (b << 8) | a);
@@ -245,6 +246,140 @@ int BlockDecompressImageDXT5(unsigned long width, unsigned long height, const un
     for (unsigned long j = 0; j < blockCountY; j++)
     {
         for (unsigned long i = 0; i < blockCountX; i++) DecompressBlockDXT5(i*4, j*4, width, blockStorage + i * 16, image);
+        blockStorage += blockCountX * 16;
+        ret += blockCountX * 16;
+    }
+
+    return ret;
+}
+
+static void Decompress16x3bitIndices(const uint8_t* packed, uint8_t* unpacked)
+{
+    uint32_t tmp, block, i;
+
+    for (block = 0; block < 2; ++block) {
+        tmp = 0;
+
+        // Read three bytes
+        for (i = 0; i < 3; ++i) {
+            tmp |= ((uint32_t)packed[i]) << (i * 8);
+        }
+
+        // Unpack 8x3 bit from last 3 byte block
+        for (i = 0; i < 8; ++i) {
+            unpacked[i] = (tmp >> (i * 3)) & 0x7;
+        }
+
+        packed += 3;
+        unpacked += 8;
+    }
+}
+
+void DecompressBlockBC3(uint32_t x, uint32_t y, uint32_t stride,
+    const uint8_t* blockStorage, unsigned char* image)
+{
+    uint8_t alpha0, alpha1;
+    uint8_t alphaIndices[16];
+
+    uint16_t color0, color1;
+    uint8_t r0, g0, b0, r1, g1, b1;
+
+    int i, j;
+
+    uint32_t temp, code;
+
+    alpha0 = *(blockStorage);
+    alpha1 = *(blockStorage + 1);
+
+    Decompress16x3bitIndices(blockStorage + 2, alphaIndices);
+
+    color0 = *(const uint16_t*)(blockStorage + 8);
+    color1 = *(const uint16_t*)(blockStorage + 10);
+
+    temp = (color0 >> 11) * 255 + 16;
+    r0 = (uint8_t)((temp / 32 + temp) / 32);
+    temp = ((color0 & 0x07E0) >> 5) * 255 + 32;
+    g0 = (uint8_t)((temp / 64 + temp) / 64);
+    temp = (color0 & 0x001F) * 255 + 16;
+    b0 = (uint8_t)((temp / 32 + temp) / 32);
+
+    temp = (color1 >> 11) * 255 + 16;
+    r1 = (uint8_t)((temp / 32 + temp) / 32);
+    temp = ((color1 & 0x07E0) >> 5) * 255 + 32;
+    g1 = (uint8_t)((temp / 64 + temp) / 64);
+    temp = (color1 & 0x001F) * 255 + 16;
+    b1 = (uint8_t)((temp / 32 + temp) / 32);
+
+    code = *(const uint32_t*)(blockStorage + 12);
+
+    for (j = 0; j < 4; j++) {
+        for (i = 0; i < 4; i++) {
+            uint8_t finalAlpha;
+            int alphaCode;
+            uint8_t colorCode;
+            uint32_t finalColor;
+
+            alphaCode = alphaIndices[4 * j + i];
+
+            if (alphaCode == 0) {
+                finalAlpha = alpha0;
+            }
+            else if (alphaCode == 1) {
+                finalAlpha = alpha1;
+            }
+            else {
+                if (alpha0 > alpha1) {
+                    finalAlpha = (uint8_t)(((8 - alphaCode) * alpha0 + (alphaCode - 1) * alpha1) / 7);
+                }
+                else {
+                    if (alphaCode == 6) {
+                        finalAlpha = 0;
+                    }
+                    else if (alphaCode == 7) {
+                        finalAlpha = 255;
+                    }
+                    else {
+                        finalAlpha = (uint8_t)(((6 - alphaCode) * alpha0 + (alphaCode - 1) * alpha1) / 5);
+                    }
+                }
+            }
+
+            colorCode = (code >> 2 * (4 * j + i)) & 0x03;
+            finalColor = 0;
+
+            switch (colorCode) {
+            case 0:
+                finalColor = PackRGBA(r0, g0, b0, finalAlpha);
+                break;
+            case 1:
+                finalColor = PackRGBA(r1, g1, b1, finalAlpha);
+                break;
+            case 2:
+                finalColor = PackRGBA((2 * r0 + r1) / 3, (2 * g0 + g1) / 3, (2 * b0 + b1) / 3, finalAlpha);
+                break;
+            case 3:
+                finalColor = PackRGBA((r0 + 2 * r1) / 3, (g0 + 2 * g1) / 3, (b0 + 2 * b1) / 3, finalAlpha);
+                break;
+            }
+
+
+            *(uint32_t*)(image + sizeof(uint32_t) * (i + x) + (stride * (y + j))) = finalColor;
+        }
+    }
+}
+
+
+int BlockDecompressImageDXT3(unsigned long width, unsigned long height, const unsigned char* blockStorage, unsigned char* image)
+{
+    unsigned long blockCountX = (width + 3) / 4;
+    unsigned long blockCountY = (height + 3) / 4;
+    unsigned long blockWidth = (width < 4) ? width : 4;
+    unsigned long blockHeight = (height < 4) ? height : 4;
+    int ret = 0;
+
+    for (unsigned long j = 0; j < blockCountY; j++)
+    {
+        for (unsigned long i = 0; i < blockCountX; i++) DecompressBlockBC3(i * 4, j * 4, width*4, blockStorage + i * 16, image);
         blockStorage += blockCountX * 16;
         ret += blockCountX * 16;
     }

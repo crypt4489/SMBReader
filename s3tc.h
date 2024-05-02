@@ -6,5 +6,5 @@ void DecompressBlockDXT1(unsigned long x, unsigned long y, unsigned long width, 
 int BlockDecompressImageDXT1(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image);
 void DecompressBlockDXT5(unsigned long x, unsigned long y, unsigned long width, const unsigned char *blockStorage, unsigned long *image);
 int BlockDecompressImageDXT5(unsigned long width, unsigned long height, const unsigned char *blockStorage, unsigned long *image);
-
+int BlockDecompressImageDXT3(unsigned long width, unsigned long height, const unsigned char* blockStorage, unsigned char* image);
 #endif // S3TC_H
