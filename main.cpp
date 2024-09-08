@@ -10,120 +10,11 @@
 
 
 #include "s3tc.h"
-
-#pragma pack(2)
-typedef struct BitmapFileHeader
-{
-	uint16_t  bfType;
-	uint32_t  bfSize;
-	uint16_t  bfReserved1;
-	uint16_t  bfReserved2;
-	uint32_t  bfOffBits;
-} BitmapFileHeader;
-
-typedef struct BitmapInfoHeader
-{
-	uint32_t biSize;
-	int	biWidth;
-	int	biHeight;
-	uint16_t biPlanes;
-	uint16_t biBitCount;
-	uint32_t biCompression;
-	uint32_t biSizeImage;
-	int	biXPelsPerMeter;
-	int	biYPelsPerMeter;
-	uint32_t biClrUsed;
-	uint32_t biClrImportant;
-} BitmapInfoHeader;
-#pragma pack(pop)
-
-void WriteOutSMBBMP(std::string name, char *image, int width, int height)
-{
-	std::ofstream filehandle(name, std::ios::binary);
-
-	if (!filehandle.is_open())
-		throw std::runtime_error("BMP file is unable to be opened");
-
-	BitmapFileHeader fileheader{ 0x4d42, 14+40+(width*height*4), 0, 0, 0x36};
-	BitmapInfoHeader infoheader{ 40, width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
-
-	filehandle.write(reinterpret_cast<char*>(&fileheader.bfType), 14);
-	filehandle.write(reinterpret_cast<char*>(&infoheader.biSize), 40);
-
-	filehandle.write(image, (width * height * 4));
-	
-	filehandle.close();
+#include "SMB.h"
+#include "FileManager.h"
+#include "Exporter.h"
 
 
-}
-
-void WriteOutChunk(std::string name, char* data, uint32_t size)
-{
-	std::ofstream filehandle(name, std::ios::binary);
-
-	if (!filehandle.is_open())
-		throw std::runtime_error("Chunk file is unable to be opened");
-	
-	filehandle.write(data, size);
-
-	filehandle.close();
-}
-
-std::vector<uint8_t> LoadFile(std::string name)
-{
-	std::ifstream filehandle(name, std::ios::binary | std::ios::ate);
-
-	if (!filehandle.is_open())
-		throw std::runtime_error("SMB file is unable to be opened");
-
-	filehandle.seekg(0, std::ios_base::end);
-
-	std::streampos filesize = filehandle.tellg();
-
-	std::vector<uint8_t> filedata(filesize);
-
-	filehandle.seekg(0, std::ios_base::beg);
-
-	filehandle.read(reinterpret_cast<char*>(filedata.data()), filesize);
-
-	filehandle.close();
-
-	return filedata;
-}
-
-template <typename C> inline void CopyBytes(std::vector<uint8_t>::iterator& file, int size, C copy)
-{
-	if constexpr (std::is_pointer_v<C>)
-	{
-		std::copy(file, file + size, reinterpret_cast<char*>(copy));
-	}
-	else
-	{
-		std::copy(file, file + size, copy);
-	}
-
-	file += size;
-}
-
-enum chunktype
-{
-	GEO = 0,
-	TEXTURE = 1,
-	GR2 = 6,
-	Joints = 20,
-};
-
-struct Texture
-{
-	uint32_t type;
-	uint32_t width;
-	uint32_t height;
-	uint32_t miplevels;
-};
-
-struct GeoFile
-{
-};
 
 
 // each string is null terminated except the first file
@@ -134,12 +25,12 @@ struct GeoFile
 
 // file offset is where the data actually starts (maybe?)
 
-//numResources corresponds to the number of BEGINNINGCHUNKTAGS are present in a file
+//numResources corresponds to the number of BEGINNINGSMBChunkS are present in a file
 
 //each datachunk has an identifier that brackets that beginning and end of the chunk 
 //before the size of the filestring doesn't seem to be size or offset of chunk
 
-//number of total data from point in chunk is 16 bytes after BEGINNINGCHUNKTAG
+//number of total data from point in chunk is 16 bytes after BEGINNINGSMBChunk
 
 // for geo, indices are 16-bit, could be tristrips, might appear in gf2 files as well.
 
@@ -196,252 +87,57 @@ struct GeoFile
 
 // numSystembyte + numContinguous + file offset = total size of file
 
-// so it is possible that all things with continguous offset (not sr2 files) are stored after the fileheader in order and that the sr2s are after the fileOffset + numContiguousByte 
+// so it is possible that all things with continguous offset (not sr2 files) are stored after the smbfile in order and that the sr2s are after the fileOffset + numContiguousByte 
 
 // confirmed at least that all things that impact a continguous offset are placed at the contiguous offset where they are!!!
 
 //21 bytes after texture string until the definition (at for what I need!!!)
 
 //both files oddly use the same legacy directx values for the texture types. will specify in enumeration. WEIRD!!!!
-#define BEGINNINGCHUNKTAG 0xa77e4dfa
-//#define DATACHUNKTAG 0xcbe402b6
+#define BEGINNINGSMBChunk 0xa77e4dfa
+//#define DATASMBChunk 0xcbe402b6
 #define ENDTAG 0xbeef1234
 #define ENDGEOTAG 0xdc7c9d74
 
-static std::filesystem::path currDir = std::filesystem::current_path();
 
-typedef struct smb_file_t
-{
-	uint32_t magic;
-	uint32_t version;
-	std::string name;
-	uint32_t fileOffset; // number of bytes from beginning of file
-	uint32_t headerStreamEnd; //number of bytes from beginning of file
-	uint32_t numContiguousBytes;
-	uint32_t numSystemBytes;
-	uint32_t contiguousSizeUnpadded;
-	uint32_t systemSizeUnpadded;
-	uint32_t numResources;
-	uint32_t ioMode;
-} SMBFile;
-
-typedef struct chunk_data_t
-{
-	uint32_t chunkType;
-	uint32_t chunkId;
-	uint32_t contigOffset;
-	uint32_t fileOffset; //monotonically increasing for each chunk
-	uint32_t numOfBytesAfterTag;
-	uint32_t pad3;
-	uint32_t tag;
-	uint32_t pad4;
-	uint32_t stringSize;
-	std::string fileName;
-	uint32_t definitionBegin;
-} ChunkTag;
-
-inline void BGRATexture(char* image, int height, int width)
-{
-	for (int i = 0; i < width * height * 4; i += 4)
-	{
-		int temp = image[i];
-		int temp2 = image[i + 1];
-		int temp3 = image[i + 2];
-		int temp4 = image[i + 3];
-		image[i + 3] = temp;
-		image[i + 2] = temp4;
-		image[i + 1] = temp3;
-		image[i] = temp2;
-	}
-}
-
-inline void BGRATexture2(char* image, int height, int width)
-{
-	for (int i = 0; i < width * height * 4; i += 4)
-	{
-		int temp = image[i];
-		//int temp2 = image[i + 1];
-		int temp3 = image[i + 2];
-		image[i] = temp3;
-		//image[i + 2] = temp2;
-		image[i + 2] = temp;
-	}
-}
-
-std::filesystem::path SetupDirectory(std::string nameOfDir)
-{
-	std::filesystem::path pathToDir = currDir / nameOfDir;
-	if (!std::filesystem::exists(pathToDir))
-	{
-		std::filesystem::create_directory(pathToDir);
-	}
-	return pathToDir;
-}
-
-void ExportTexture(ChunkTag chunk, std::vector<uint8_t>::iterator fileBegin, uint32_t offset)
-{
-	std::regex filenamePattern{ "\([A-Za-z_]+)\\." };
-
-	std::smatch match;
-
-	std::string name;
-	if (std::regex_search(chunk.fileName, match, filenamePattern))
-	{
-		name = match[1];
-		std::cout << match[1] << std::endl;
-	}
-	else
-	{
-		std::cerr << "Couldn't find the filename in " << chunk.fileName << std::endl;
-		return;
-	}
-	
-	auto pathToTextures = SetupDirectory(name);
-	auto definitionLoc = fileBegin + chunk.definitionBegin + 21;
-	Texture tex{};
-	CopyBytes(definitionLoc, sizeof(Texture), &tex);
-	std::cout
-		<< tex.height << "\n"
-		<< tex.width << "\n"
-		<< tex.type << "\n"
-		<< tex.miplevels << "\n"
-		<< "-------------------\n";
-	int writeWidth = tex.width, writeHeight = tex.height;
-	auto dataLoc = fileBegin + offset + chunk.contigOffset;
-	int offsetwithin = 0;
-	std::vector<char> image(writeWidth * writeHeight * 4);
-	for (int i = 0; i < tex.miplevels; i++)
-	{
-		
-		std::string writeFileName = name + std::to_string(i+1) + ".bmp";
-		auto writePath = pathToTextures / writeFileName;
-		char* dataPtr = reinterpret_cast<char*>(&(*dataLoc));
-		switch (tex.type)
-		{
-		case 7:
-			std::cerr << "X8L8U8V8 format is not exportable\n";
-			return;
-		case 12:
-			offsetwithin = BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)dataPtr, (unsigned long*)image.data());
-			BGRATexture(image.data(), writeHeight, writeWidth);
-			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
-			dataLoc += offsetwithin;
-			break;
-		case 14:
-			offsetwithin = BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)dataPtr, (unsigned char*)image.data());
-			BGRATexture(image.data(), writeHeight, writeWidth);
-			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
-			dataLoc += offsetwithin;
-			break;
-		case 18:
-			CopyBytes(dataLoc, writeHeight * writeWidth * 4, image.data());
-			BGRATexture2(image.data(), writeHeight, writeWidth);
-			WriteOutSMBBMP(writePath.string(), image.data(), writeWidth, writeHeight);
-			break;
-		default:
-			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
-			return;
-		}
-		image.clear();
-		image.resize(writeWidth * writeHeight * 4);
-		writeHeight >>= 1;
-		writeWidth >>= 1;
-		
-	}
-	
-}
-
-void ExportChunks(std::vector<ChunkTag> chunks, std::vector<uint8_t>::iterator fileBegin, int fileOffset)
-{
-	for (const auto& chunk : chunks)
-	{
-		switch (chunk.chunkType)
-		{
-		case GEO:
-			break;
-		case TEXTURE:
-			ExportTexture(chunk, fileBegin, fileOffset);
-			break;
-		case GR2:
-			break;
-		case Joints:
-			break;
-		default:
-			std::cerr << "Unprocessed chunkType\n";
-			break;
-		}
-	}
-}
-
-void ReadHeader(std::vector<uint8_t>::iterator &file, SMBFile& header)
-{
-	CopyBytes(file, 4, &header.magic);
-	CopyBytes(file, 4, &header.version);
-	int stringSize;
-	CopyBytes(file, 4, &stringSize);
-	header.name.resize(stringSize);
-	CopyBytes(file, stringSize, header.name.begin());
-	CopyBytes(file, 32, &header.fileOffset);
-}
-
-void ReadChunk(std::vector<uint8_t>::iterator& file, ChunkTag& tag, std::vector<uint8_t>::iterator fileBegin)
-{
-	int magic;
-	CopyBytes(file, 4, &magic);
-	CopyBytes(file, 8*4, &tag.chunkType);
-	file += 4;
-	CopyBytes(file, 4, &tag.stringSize);
-	tag.fileName.resize(tag.stringSize);
-	CopyBytes(file, tag.stringSize, tag.fileName.begin());
-	tag.definitionBegin = std::distance(fileBegin, file);
-	file += (tag.numOfBytesAfterTag - (tag.stringSize + 16));
-}
 
 int main()
 {
-	std::string MainSMB = "test.smb";
-	
-	currDir = SetupDirectory(MainSMB.substr(0, MainSMB.find_last_of('.')));
-	
-	SMBFile fileHeader{};
-	std::vector<uint8_t> filedata = LoadFile(MainSMB);
-	auto iter = filedata.begin();
-	ReadHeader(iter, fileHeader);
-	int end;
-	CopyBytes(iter, 4, &end);
-	
-	if (end != ENDTAG)
-	{
-		std::cerr << "Cannot read file header\n";
-		return -1;
-	}
 
-	std::cout << fileHeader.numContiguousBytes << std::endl;
-	std::cout << fileHeader.numSystemBytes << std::endl;
-	std::cout << fileHeader.numSystemBytes + fileHeader.fileOffset << std::endl;
-	std::cout << filedata.size() << std::endl;
-	std::vector<ChunkTag> chunks(fileHeader.numResources);
-	std::vector<std::vector<uint8_t>::iterator> locations(fileHeader.numResources);
+	std::cout << sizeof(SMBFile) << std::endl;
+	std::cout << sizeof(SMBChunk) << std::endl;
+	std::string MainSMB = "strangernew.smb";
+	
+	FileManager::SetCurrentDirectory(MainSMB.substr(0, MainSMB.find_last_of('.')));
+	
+	SMBFile smbfile{};
+	smbfile.LoadFile(MainSMB);
+	std::cout << smbfile.numContiguousBytes << std::endl;
+	std::cout << smbfile.numSystemBytes << std::endl;
+	std::cout << smbfile.numSystemBytes + smbfile.fileOffset << std::endl;
+
 	int j = 0;
-	int size = fileHeader.numResources;
-	while (j < size)
+	
+	for (auto& i : smbfile.chunks)
 	{
-		locations[j] = iter;
-		ReadChunk(iter, chunks[j], filedata.begin());
-		j++;
+		std::cout << (j++) << "\n" << i << "\n";
 	}
-	j = 0;
-	for (auto& i : chunks)
-	{
-		std::cout << (j+1) << " " << i.fileName << " " << i.fileOffset+fileHeader.fileOffset << " " << i.numOfBytesAfterTag <<
-			 " " << i.fileName.size() <<std::endl;
-		std::cout << i.chunkId << " " << i.chunkType << " " << i.contigOffset + fileHeader.fileOffset << " " << i.pad3 << " " << i.pad4 << std::endl;
-		std::cout << "-------------" << std::endl;
-		j++;
-		
-	}
-
-	ExportChunks(chunks, filedata.begin(), fileHeader.fileOffset);
+	
+	
+	Exporter::ExportChunksFromFile(smbfile);
 	
 	return 0;
 }
+
+//compression algorithm details for original xbox:
+/*
+the first two elements are paired for most part and repeat
+
+
+*/
+
+
+/*
+	compression for hd version
+	address of global_stranger.smb string is 0076b320
+*/

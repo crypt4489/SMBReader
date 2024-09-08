@@ -8,7 +8,7 @@
 #include <cstdint>
 unsigned long PackRGBA(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
 {
-    return ((r << 24) | (g << 16) | (b << 8) | a);
+    return ((r << 0) | (g << 8) | (b << 16) | (a << 24));
 }
 
 // void DecompressBlockDXT1(): Decompresses one block of a DXT1 texture and stores the resulting pixels at the appropriate offset in 'image'.
@@ -91,6 +91,15 @@ void DecompressBlockDXT1(unsigned long x, unsigned long y, unsigned long width, 
                 image[(y + j)*width + (x + i)] = finalColor;
         }
     }
+}
+
+int DXT1CompressedSize(unsigned long width, unsigned long height)
+{
+    int ret = 0;
+    unsigned long blockCountX = (width + 3) / 4;
+    unsigned long blockCountY = (height + 3) / 4;
+    ret = blockCountX * 8 * blockCountY;
+    return ret;
 }
 
 // void BlockDecompressImageDXT1(): Decompresses all the blocks of a DXT1 compressed texture and stores the resulting pixels in 'image'.
@@ -226,6 +235,15 @@ void DecompressBlockDXT5(unsigned long x, unsigned long y, unsigned long width, 
                 image[(y + j)*width + (x + i)] = finalColor;
         }
     }
+}
+
+int DXT5CompressedSize(unsigned long width, unsigned long height)
+{
+    int ret = 0;
+    unsigned long blockCountX = (width + 3) / 4;
+    unsigned long blockCountY = (height + 3) / 4;
+    ret = blockCountX * 16 * blockCountY;
+    return ret;
 }
 
 // void BlockDecompressImageDXT5(): Decompresses all the blocks of a DXT5 compressed texture and stores the resulting pixels in 'image'.
@@ -366,6 +384,15 @@ void DecompressBlockBC3(uint32_t x, uint32_t y, uint32_t stride,
             *(uint32_t*)(image + sizeof(uint32_t) * (i + x) + (stride * (y + j))) = finalColor;
         }
     }
+}
+
+int DXT3CompressedSize(unsigned long width, unsigned long height)
+{
+    int ret = 0;
+    unsigned long blockCountX = (width + 3) / 4;
+    unsigned long blockCountY = (height + 3) / 4;
+    ret = blockCountX * 16 * blockCountY;
+    return ret;
 }
 
 
