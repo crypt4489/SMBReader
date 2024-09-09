@@ -44,6 +44,7 @@ public:
 		file->seekg(offset, std::ios_base::beg);
 		Texture tex{};
 		file->read(reinterpret_cast<char*>(&tex), sizeof(Texture));
+		std::cout << name << "\n" << tex;
 		file->seekg(chunk.contigOffset + smb.fileOffset, std::ios_base::beg);
 		int writeWidth = tex.width;
 		int	writeHeight = tex.height;

@@ -8,6 +8,15 @@ public:
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
+	friend std::ostream& operator<<(std::ostream& os, const Texture& tex)
+	{
+		os  << tex.type << "\n"
+			<< tex.width << "\n"
+			<< tex.height << "\n"
+			<< tex.miplevels << "\n"
+			<< "------------------" << "\n";
+		return os;
+	}
 };
 
 namespace TexUtils

@@ -1,6 +1,7 @@
 #pragma once
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <optional>
 #include <regex>
 #include <unordered_map>

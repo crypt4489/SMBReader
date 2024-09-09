@@ -105,6 +105,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalIncludeDirectories>$(SolutionDir)/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -128,19 +129,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Exporter.cpp" />
-    <ClCompile Include="FileManager.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="s3tc.cpp" />
-    <ClCompile Include="SMB.cpp" />
-    <ClCompile Include="Texture.cpp" />
+    <ClCompile Include="src\Exporter.cpp" />
+    <ClCompile Include="src\FileManager.cpp" />
+    <ClCompile Include="src\s3tc.cpp" />
+    <ClCompile Include="src\SMB.cpp" />
+    <ClCompile Include="src\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Exporter.h" />
-    <ClInclude Include="FileManager.h" />
-    <ClInclude Include="s3tc.h" />
-    <ClInclude Include="SMB.h" />
-    <ClInclude Include="Texture.h" />
+    <ClInclude Include="include\Exporter.h" />
+    <ClInclude Include="include\FileManager.h" />
+    <ClInclude Include="include\s3tc.h" />
+    <ClInclude Include="include\SMB.h" />
+    <ClInclude Include="include\Texture.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
