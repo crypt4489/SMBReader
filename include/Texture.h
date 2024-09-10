@@ -25,9 +25,7 @@ namespace TexUtils
 	{
 		for (int i = 0; i < width * height * 4; i += 4)
 		{
-			int temp3 = image[i + 2];
-			image[i + 2] = image[i];
-			image[i] = temp3;
+			std::swap(image[i], image[i + 2]);
 		}
 	}
 
@@ -58,6 +56,9 @@ namespace TexUtils
 			uint32_t biClrImportant;
 		} BitmapInfoHeader;
 #pragma pack(pop)
+
+		static_assert(sizeof(BitmapFileHeader) == 14);
+		static_assert(sizeof(BitmapInfoHeader) == 40);
 
 		inline void WriteOutBMPHeaders(std::shared_ptr<std::fstream> stream, int width, int height)
 		{

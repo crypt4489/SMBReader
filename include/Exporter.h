@@ -40,7 +40,7 @@ public:
 		std::string name = FileManager::ExtractFileNameFromPath(chunk.fileName);
 		auto file = smb.fileHandle.second;
 		auto pathToTextures = FileManager::SetupDirectory(name);
-		std::streampos offset = chunk.offsetInHeader + static_cast<std::streampos>(21);
+		std::streampos offset = chunk.offsetInHeader + 21LL;
 		file->seekg(offset, std::ios_base::beg);
 		Texture tex{};
 		file->read(reinterpret_cast<char*>(&tex), sizeof(Texture));
@@ -51,7 +51,7 @@ public:
 		size_t compressedsize = 0;
 		std::vector<char> image(writeWidth * writeHeight * 4);
 		std::vector<char> input;
-		for (int i = 0; i < tex.miplevels; i++)
+		for (uint32_t i = 0; i < tex.miplevels; i++)
 		{
 			std::string writeFileName = name + std::to_string(i + 1) + ".bmp";
 			auto writePath = pathToTextures / writeFileName;

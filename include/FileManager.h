@@ -11,7 +11,7 @@ class FileManager
 {
 public:
 
-	typedef std::pair<uint64_t, std::shared_ptr<std::fstream>> FileHandle;
+	typedef std::pair<uint32_t, std::shared_ptr<std::fstream>> FileHandle;
 
 	static std::optional<FileHandle> OpenFile(const std::string name, std::ios::openmode flags)
 	{

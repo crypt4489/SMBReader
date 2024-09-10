@@ -5,6 +5,10 @@
 #include "FileManager.h"
 
 
+#define BEGINNINGSMBChunk 0xa77e4dfa
+#define ENDTAG 0xbeef1234
+#define ENDGEOTAG 0xdc7c9d74
+
 enum chunktype
 {
 	GEO = 0,

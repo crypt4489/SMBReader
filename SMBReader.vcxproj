@@ -143,6 +143,9 @@
     <ClInclude Include="include\SMB.h" />
     <ClInclude Include="include\Texture.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="SMBUnarchiverNotes.txt" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
