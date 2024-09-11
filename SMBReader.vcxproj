@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -132,6 +132,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="src\Exporter.cpp" />
     <ClCompile Include="src\FileManager.cpp" />
+    <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\s3tc.cpp" />
     <ClCompile Include="src\SMB.cpp" />
     <ClCompile Include="src\Texture.cpp" />
@@ -139,6 +140,7 @@
   <ItemGroup>
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
+    <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\s3tc.h" />
     <ClInclude Include="include\SMB.h" />
     <ClInclude Include="include\Texture.h" />

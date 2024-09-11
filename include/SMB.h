@@ -71,6 +71,20 @@ public:
 		FileManager::CloseFile(fileHandle.first);
 	}
 
+	void LoadFile(std::filesystem::path path)
+	{
+		auto ret = FileManager::OpenFile(path, std::ios::binary | std::ios::in);
+
+		if (!ret)
+		{
+			throw std::runtime_error("SMB file is unable to be opened");
+		}
+
+		fileHandle = ret.value();
+
+		ProcessFile();
+	}
+
 	void LoadFile(std::string name)
 	{
 		auto ret = FileManager::OpenFile(name, std::ios::binary | std::ios::in);
@@ -82,14 +96,7 @@ public:
 
 		fileHandle = ret.value();
 
-		ReadHeader();
-
-		int prev = 0;
-
-		for (auto& i : chunks)
-		{
-			ReadChunk(i);	
-		}
+		ProcessFile();
 	}
 
 	void ReadHeader()
@@ -116,6 +123,16 @@ public:
 		std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
 		std::streamoff next = chunk.offsetInHeader + offset;
 		fh->seekg(next, std::ios_base::beg);
+	}
+
+	void ProcessFile()
+	{
+		ReadHeader();
+
+		for (auto& i : chunks)
+		{
+			ReadChunk(i);
+		}
 	}
 };
 
