@@ -98,7 +98,7 @@ public:
 
 		ProcessFile();
 	}
-
+private:
 	void ReadHeader()
 	{
 		if (!fileHandle.second) return;
@@ -120,7 +120,7 @@ public:
 		chunk.fileName.resize(chunk.stringsize);
 		fh->read(chunk.fileName.data(), chunk.stringsize);
 		chunk.offsetInHeader = fh->tellg();
-		std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
+		std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16LL));
 		std::streamoff next = chunk.offsetInHeader + offset;
 		fh->seekg(next, std::ios_base::beg);
 	}

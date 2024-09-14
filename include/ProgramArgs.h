@@ -1,10 +1,12 @@
 #pragma once
 #include <filesystem>
+#include <functional>
 #include <iostream>
 #include <algorithm> 
 #include <cctype>
 #include <locale>
 #include "Exporter.h"
+#include "RenderInstance.h"
 #include "SMB.h"
 class ProgramArgs
 {
@@ -13,7 +15,7 @@ public:
 	{
 		if (argc <= 1)
 		{
-			ScanSTDIN();
+			//ScanSTDIN();
 		}
 		else 
 		{
@@ -44,9 +46,14 @@ public:
 private:
 	void Process()
 	{
-		FileManager::SetCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
-		mainSMB->LoadFile(inputFile);
-		if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
+		//FileManager::SetCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
+		//mainSMB->LoadFile(inputFile);
+		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
+		RenderInstance instance;
+		instance.CreateGLFWWindow();
+		instance.CreateRenderInstance();
+		instance.DestroyRenderInstance();
+		instance.DestroyGLFWWindow();
 	}
 	std::unique_ptr<SMBFile> mainSMB;
 	bool justexport;
