@@ -52,6 +52,7 @@ private:
 		RenderInstance instance;
 		instance.CreateGLFWWindow();
 		instance.CreateRenderInstance();
+		instance.CreateGPUReferenceAndLogicalDevice();
 		instance.DestroyRenderInstance();
 		instance.DestroyGLFWWindow();
 	}
