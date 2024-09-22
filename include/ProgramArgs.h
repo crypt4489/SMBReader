@@ -35,7 +35,7 @@ public:
 		std::cin >> justexport;
 		std::cout << "\n";	
 		size_t size = in.length(), off = 0;
-		if (in[0] == '\"') off++;
+		if (in[off] == '\"') off++;
 		if (in[size] == '\"') size--;
 		in = in.substr(off, size-off);			
 		inputFile = in;
@@ -50,11 +50,9 @@ private:
 		//mainSMB->LoadFile(inputFile);
 		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
 		RenderInstance instance;
-		instance.CreateGLFWWindow();
-		instance.CreateRenderInstance();
-		instance.CreateGPUReferenceAndLogicalDevice();
-		instance.DestroyRenderInstance();
-		instance.DestroyGLFWWindow();
+		instance.CreateVulkanRenderer();
+		instance.DestroyVulkanRenderer();
+		
 	}
 	std::unique_ptr<SMBFile> mainSMB;
 	bool justexport;

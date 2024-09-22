@@ -44,14 +44,14 @@ namespace TexUtils
 		typedef struct BitmapInfoHeader
 		{
 			uint32_t biSize;
-			int	biWidth;
-			int	biHeight;
+			uint32_t biWidth;
+			uint32_t biHeight;
 			uint16_t biPlanes;
 			uint16_t biBitCount;
 			uint32_t biCompression;
 			uint32_t biSizeImage;
-			int	biXPelsPerMeter;
-			int	biYPelsPerMeter;
+			uint32_t biXPelsPerMeter;
+			uint32_t biYPelsPerMeter;
 			uint32_t biClrUsed;
 			uint32_t biClrImportant;
 		} BitmapInfoHeader;
@@ -60,7 +60,7 @@ namespace TexUtils
 		static_assert(sizeof(BitmapFileHeader) == 14);
 		static_assert(sizeof(BitmapInfoHeader) == 40);
 
-		inline void WriteOutBMPHeaders(std::shared_ptr<std::fstream> stream, int width, int height)
+		inline void WriteOutBMPHeaders(std::shared_ptr<std::fstream> stream, uint32_t width, uint32_t height)
 		{
 			BitmapFileHeader fileheader{ 0x4d42, 14 + 40 + (width * height * 4), 0, 0, 0x36 };
 			BitmapInfoHeader infoheader{ 40, width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
