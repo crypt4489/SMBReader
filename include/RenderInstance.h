@@ -425,7 +425,7 @@ public:
 		vkGetDeviceQueue(logicalDevice, graphicsIdx, 0, &graphicsQueue);
 		vkGetDeviceQueue(logicalDevice, presentIdx, 0, &presentQueue);
 
-		::VKUtils::SwapChainSupportDetails supportDetails = ::VKUtils::querySwapChainSupport(gpu, renderSurface);
+		//::VKUtils::SwapChainSupportDetails supportDetails = ::VKUtils::querySwapChainSupport(gpu, renderSurface);
 	}
 
 	void CreateDrawingSurface()
@@ -482,6 +482,42 @@ public:
 			throw std::runtime_error("failed to create swap chain!");
 		}
 
+		vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, nullptr);
+		swapChainImages.resize(imageCount);
+		vkGetSwapchainImagesKHR(logicalDevice, swapChain, &imageCount, swapChainImages.data());
+
+		swapChainImageFormat = surfaceFormat.format;
+		swapChainExtent = extent;
+
+	}
+
+	void CreateVKSWCImageViews()
+	{
+		swapChainImageViews.resize(swapChainImages.size());
+		for (size_t i = 0; i < swapChainImages.size(); i++) {
+			VkImageViewCreateInfo createInfo{};
+			createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			createInfo.image = swapChainImages[i];
+			createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			createInfo.format = swapChainImageFormat;
+			createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+			createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			createInfo.subresourceRange.baseMipLevel = 0;
+			createInfo.subresourceRange.levelCount = 1;
+			createInfo.subresourceRange.baseArrayLayer = 0;
+			createInfo.subresourceRange.layerCount = 1;
+			if (vkCreateImageView(logicalDevice, &createInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create image views!");
+			}
+		}
+	}
+
+	void CreateGraphicsPipelineTemp()
+	{
+
 	}
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures)
@@ -509,8 +545,10 @@ public:
 		CreateRenderInstance();
 		CreateDrawingSurface();
 		CreateGPUReferenceAndLogicalDevice();
-		
+		CreateVKSWCImageViews();
 	}
+
+	
 
 	void DestroyVulkanRenderer()
 	{
@@ -526,6 +564,12 @@ public:
 
 	void DestroyRenderInstance()
 	{
+
+		for (auto& imageView : swapChainImageViews) {
+			vkDestroyImageView(logicalDevice, imageView, nullptr);
+		}
+
+
 		if (swapChain)
 		{
 			vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
@@ -551,13 +595,23 @@ public:
 	}
 private:
 	VkInstance instance = VK_NULL_HANDLE;
+
 	VkDevice logicalDevice = VK_NULL_HANDLE;
 	VkPhysicalDevice gpu = VK_NULL_HANDLE;
+
 	VkQueue graphicsQueue = VK_NULL_HANDLE, presentQueue = VK_NULL_HANDLE;
 	int graphicsIdx = -1, presentIdx = -1;
+
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
+
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+	std::vector<VkImage> swapChainImages;
+	std::vector<VkImageView> swapChainImageViews;
+	VkFormat swapChainImageFormat;
+	VkExtent2D swapChainExtent;
+
 	GLFWwindow* window = nullptr;
+
 	std::vector<const char*> instanceExtensions{};
 	std::vector<const char*> instanceLayers{};
 	std::vector<const char*> deviceExtensions{};

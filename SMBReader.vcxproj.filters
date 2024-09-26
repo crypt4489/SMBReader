@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{cbf3b65a-ee98-46df-b986-87e875bddc0c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -65,5 +68,14 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="SMBUnarchiverNotes.txt" />
+    <Text Include="shaders\typicalfrag.frag">
+      <Filter>Shaders</Filter>
+    </Text>
+    <Text Include="shaders\typicalvert.vert">
+      <Filter>Shaders</Filter>
+    </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shadercompile.bat" />
   </ItemGroup>
 </Project>
