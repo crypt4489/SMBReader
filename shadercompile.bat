@@ -18,6 +18,10 @@ IF EXIST %OutputFile% (
 
 	IF !InputYear! LEQ !OutputYear! (
 
+		IF !InputYear! LSS !OutputYear! (
+			goto :eof
+		)
+
 		SET InputMonth=!InputFileTime:~0,2!
 		SET OutputMonth=!OutputFileTime:~0,2!
 
@@ -29,14 +33,23 @@ IF EXIST %OutputFile% (
 
 		IF !InputMonth! LEQ !OutputMonth! (
 
+			IF !InputMonth! LSS !OutputMonth! (
+				goto :eof
+			)
+
 			SET InputDay=!InputFileTime:~3,2!
 			SET OutputDay=!OutputFileTime:~3,2!
 
 			SET /A InputDay=!InputDay!
 			SET /A OutputDay=!OutputDay!
 
+
 			IF !InputDay! LEQ !OutputDay! (
 
+
+				IF !InputDay! LSS !OutputDay! (
+					goto :eof
+				)
 				
 
 				SET InputHour=!InputFileTime:~11,2!
@@ -70,7 +83,7 @@ IF EXIST %OutputFile% (
 					goto :WRITEOUT
 				)
 
-				IF !InputHour! LSS !OutputHour! (
+				IF !InputHour! LSS !OutputHour! ( 
 					goto :eof
 				)
 

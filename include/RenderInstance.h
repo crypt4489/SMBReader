@@ -767,6 +767,7 @@ public:
 		CreateSwapChain();
 		CreateVKSWCImageViews();
 		CreateRenderPass();
+		CreateFrameBuffers();
 		CreateGraphicsPipelineTemp();
 	}
 
@@ -786,6 +787,12 @@ public:
 
 	void DestroyRenderInstance()
 	{
+
+
+		for (auto framebuffer : swapChainFramebuffers) {
+			if (framebuffer) vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
+		}
+
 
 		if (graphicsPipeline)
 		{
