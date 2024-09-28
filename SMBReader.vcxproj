@@ -135,10 +135,11 @@
       <AdditionalDependencies>glfw3.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
-      <Command>XCOPY "$(SolutionDir)lib\windows\x64\*.DLL" "$(OutDir)" /D /K /Y</Command>
+      <Command>XCOPY "$(SolutionDir)lib\windows\x64\*.DLL" "$(OutDir)" /D /K /Y
+XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     </PostBuildEvent>
     <PostBuildEvent>
-      <Message>Copy DLL to Target Build</Message>
+      <Message>Copy DLL and Shaders to Target Build</Message>
     </PostBuildEvent>
     <PreBuildEvent>
       <Command>shadercompile.bat</Command>

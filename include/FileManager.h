@@ -128,6 +128,11 @@ public:
 		return name;
 	}
 
+	static std::filesystem::path GetCurrentDirectoryFM()
+	{
+		return currDir;
+	}
+
 
 private:
 	static uint32_t globalId;

@@ -16,7 +16,7 @@ IF EXIST %OutputFile% (
 	SET /A InputYear=!InputYear!
 	SET /A OutputYear=!OutputYear!
 
-	IF !InputYear! GEQ !OutputYear! (
+	IF !InputYear! LEQ !OutputYear! (
 
 		SET InputMonth=!InputFileTime:~0,2!
 		SET OutputMonth=!OutputFileTime:~0,2!
@@ -27,7 +27,7 @@ IF EXIST %OutputFile% (
 		SET /A InputMonth=!InputMonth!
 		SET /A OutputMonth=!OutputMonth!
 
-		IF !InputMonth! GEQ !OutputMonth! (
+		IF !InputMonth! LEQ !OutputMonth! (
 
 			SET InputDay=!InputFileTime:~3,2!
 			SET OutputDay=!OutputFileTime:~3,2!
@@ -35,7 +35,7 @@ IF EXIST %OutputFile% (
 			SET /A InputDay=!InputDay!
 			SET /A OutputDay=!OutputDay!
 
-			IF !InputDay! GEQ !OutputDay! (
+			IF !InputDay! LEQ !OutputDay! (
 
 				
 
@@ -67,8 +67,7 @@ IF EXIST %OutputFile% (
 				SET /A OutputHour=!OutputHour!+!outoff!
 
 				IF !InputHour! GTR !OutputHour! (
-					glslc.exe %1 -o %OutputFile%
-					goto :eof
+					goto :WRITEOUT
 				)
 
 				IF !InputHour! LSS !OutputHour! (
@@ -81,15 +80,16 @@ IF EXIST %OutputFile% (
 				IF "!InputMinutes:~0,1!"=="0" SET InputMinutes=!InputMinutes:~1,1!
 				IF "!OutputMinutes:~0,1!"=="0" SET OutputMinutes=!OutputMinutes:~1,1!
 
-				IF !InputMinutes! GEQ !OutputMinutes! (
-					glslc.exe %1 -o %OutputFile%
+				IF !InputMinutes! LSS !OutputMinutes! (
+					goto :eof
 				)
 			)
 		)
 	)
-) else (
-	glslc.exe %1 -o %OutputFile%
-)
+) 
+
+:WRITEOUT
+glslc.exe %1 -o %OutputFile%
 
 GOTO :eof
 
