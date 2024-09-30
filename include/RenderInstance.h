@@ -277,7 +277,7 @@ public:
 		instanceDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		instanceDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		instanceDebugInfo.pfnUserCallback = ::VKUtils::debugCallback;
-		instanceDebugInfo.pUserData = nullptr; // Optional
+		instanceDebugInfo.pUserData = nullptr; 
 
 
 		createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
@@ -293,7 +293,7 @@ public:
 		debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		debugInfo.pfnUserCallback = ::VKUtils::debugCallback;
-		debugInfo.pUserData = nullptr; // Optional
+		debugInfo.pUserData = nullptr; 
 
 		result = ::VKUtils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
 
@@ -589,9 +589,9 @@ public:
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 		vertexInputInfo.vertexBindingDescriptionCount = 0;
-		vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
+		vertexInputInfo.pVertexBindingDescriptions = nullptr; 
 		vertexInputInfo.vertexAttributeDescriptionCount = 0;
-		vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+		vertexInputInfo.pVertexAttributeDescriptions = nullptr; 
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -613,48 +613,48 @@ public:
 		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 		rasterizer.depthBiasEnable = VK_FALSE;
-		rasterizer.depthBiasConstantFactor = 0.0f; // Optional
-		rasterizer.depthBiasClamp = 0.0f; // Optional
-		rasterizer.depthBiasSlopeFactor = 0.0f; // Optional
+		rasterizer.depthBiasConstantFactor = 0.0f; 
+		rasterizer.depthBiasClamp = 0.0f; 
+		rasterizer.depthBiasSlopeFactor = 0.0f; 
 
 
 		VkPipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		multisampling.sampleShadingEnable = VK_FALSE;
 		multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-		multisampling.minSampleShading = 1.0f; // Optional
-		multisampling.pSampleMask = nullptr; // Optional
-		multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-		multisampling.alphaToOneEnable = VK_FALSE; // Optional
+		multisampling.minSampleShading = 1.0f; 
+		multisampling.pSampleMask = nullptr; 
+		multisampling.alphaToCoverageEnable = VK_FALSE; 
+		multisampling.alphaToOneEnable = VK_FALSE; 
 
 		VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 		colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 		colorBlendAttachment.blendEnable = VK_FALSE;
-		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+		colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; 
+		colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; 
+		colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; 
+		colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; 
+		colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; 
+		colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; 
 
 		VkPipelineColorBlendStateCreateInfo colorBlending{};
 		colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 		colorBlending.logicOpEnable = VK_FALSE;
-		colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+		colorBlending.logicOp = VK_LOGIC_OP_COPY; 
 		colorBlending.attachmentCount = 1;
 		colorBlending.pAttachments = &colorBlendAttachment;
-		colorBlending.blendConstants[0] = 0.0f; // Optional
-		colorBlending.blendConstants[1] = 0.0f; // Optional
-		colorBlending.blendConstants[2] = 0.0f; // Optional
-		colorBlending.blendConstants[3] = 0.0f; // Optional
+		colorBlending.blendConstants[0] = 0.0f; 
+		colorBlending.blendConstants[1] = 0.0f; 
+		colorBlending.blendConstants[2] = 0.0f; 
+		colorBlending.blendConstants[3] = 0.0f; 
 
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.setLayoutCount = 0; // Optional
-		pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
-		pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
-		pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
+		pipelineLayoutInfo.setLayoutCount = 0; 
+		pipelineLayoutInfo.pSetLayouts = nullptr; 
+		pipelineLayoutInfo.pushConstantRangeCount = 0; 
+		pipelineLayoutInfo.pPushConstantRanges = nullptr; 
 
 		if (vkCreatePipelineLayout(logicalDevice, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create pipeline layout!");
@@ -670,7 +670,7 @@ public:
 		pipelineInfo.pViewportState = &viewportState;
 		pipelineInfo.pRasterizationState = &rasterizer;
 		pipelineInfo.pMultisampleState = &multisampling;
-		pipelineInfo.pDepthStencilState = nullptr; // Optional
+		pipelineInfo.pDepthStencilState = nullptr; 
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = &dynamicState;
 		pipelineInfo.layout = pipelineLayout;
@@ -739,6 +739,82 @@ public:
 		}
 	}
 
+	void CreateCommandPool()
+	{
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		poolInfo.queueFamilyIndex = graphicsIdx;
+
+		if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create command pool!");
+		}
+	}
+
+	void CreateCommandBuffer()
+	{
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool = commandPool;
+		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = 1;
+
+		if (vkAllocateCommandBuffers(logicalDevice, &allocInfo, &commandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate command buffers!");
+		}
+	}
+
+	void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex)
+	{
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = 0; 
+		beginInfo.pInheritanceInfo = nullptr; 
+
+		if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("failed to begin recording command buffer!");
+		}
+
+		VkRenderPassBeginInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = renderPass;
+		renderPassInfo.framebuffer = swapChainFramebuffers[imageIndex];
+		renderPassInfo.renderArea.offset = { 0, 0 };
+		renderPassInfo.renderArea.extent = swapChainExtent;
+
+		VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
+		renderPassInfo.clearValueCount = 1;
+
+		renderPassInfo.pClearValues = &clearColor;
+
+		vkCmdBeginRenderPass(cb, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+		VkViewport viewport{};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = static_cast<float>(swapChainExtent.width);
+		viewport.height = static_cast<float>(swapChainExtent.height);
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+		vkCmdSetViewport(cb, 0, 1, &viewport);
+
+		VkRect2D scissor{};
+		scissor.offset = { 0, 0 };
+		scissor.extent = swapChainExtent;
+		vkCmdSetScissor(cb, 0, 1, &scissor);
+
+		vkCmdDraw(cb, 3, 1, 0, 0);
+
+		vkCmdEndRenderPass(cb);
+
+		if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
+			throw std::runtime_error("failed to record command buffer!");
+		}
+
+	}
+
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures)
 	{
 		vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -769,10 +845,11 @@ public:
 		CreateRenderPass();
 		CreateFrameBuffers();
 		CreateGraphicsPipelineTemp();
+		CreateCommandPool();
+		CreateCommandBuffer();
 	}
 
 	
-
 	void DestroyVulkanRenderer()
 	{
 		DestroyRenderInstance();
@@ -787,12 +864,16 @@ public:
 
 	void DestroyRenderInstance()
 	{
+		
 
+		if (commandPool)
+		{
+			vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
+		}
 
 		for (auto framebuffer : swapChainFramebuffers) {
 			if (framebuffer) vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
 		}
-
 
 		if (graphicsPipeline)
 		{
@@ -820,11 +901,9 @@ public:
 			vkDestroyShaderModule(logicalDevice, vertShaderModule, nullptr);
 		}
 
-
 		for (auto& imageView : swapChainImageViews) {
 			vkDestroyImageView(logicalDevice, imageView, nullptr);
 		}
-
 
 		if (swapChain)
 		{
@@ -868,16 +947,20 @@ private:
 
 	//default shader will expand
 
-	VkShaderModule vertShaderModule;
-	VkShaderModule fragShaderModule;
+	VkShaderModule vertShaderModule = VK_NULL_HANDLE;
+	VkShaderModule fragShaderModule = VK_NULL_HANDLE;
 
-	VkPipelineLayout pipelineLayout;
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
-	VkRenderPass renderPass;
+	VkRenderPass renderPass = VK_NULL_HANDLE;
 
-	VkPipeline graphicsPipeline;
+	VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 
 	std::vector<VkFramebuffer> swapChainFramebuffers;
+
+	VkCommandPool commandPool = VK_NULL_HANDLE;
+
+	VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
 
 	GLFWwindow* window = nullptr;
 

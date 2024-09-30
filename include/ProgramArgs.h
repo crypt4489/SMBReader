@@ -8,6 +8,7 @@
 #include "Exporter.h"
 #include "RenderInstance.h"
 #include "SMB.h"
+#include "VertexTypes.h"
 class ProgramArgs
 {
 public:
@@ -49,6 +50,7 @@ private:
 		//FileManager::SetCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
 		//mainSMB->LoadFile(inputFile);
 		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
+
 		RenderInstance instance;
 		instance.CreateVulkanRenderer();
 		instance.DestroyVulkanRenderer();

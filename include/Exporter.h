@@ -1,16 +1,42 @@
 #pragma once
 #include <cstdint>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <regex>
 #include "FileManager.h"
 #include "DXTCompression.h"
 #include "SMB.h"
-
+#include "VertexTypes.h"
 #include "Texture.h"
+
+namespace ExportHelper
+{
+	inline std::ostream& operator<<(std::ostream& os, const glm::vec4& vec)
+	{
+		os << std::vformat("{:6f} {:6f} {:6f} {:6f}\n", std::make_format_args(vec.x, vec.y, vec.z, vec.w));
+		return os;
+	}
+
+	inline std::ostream& operator<<(std::ostream& os, const glm::vec3& vec)
+	{
+		os << std::vformat("{:6f} {:6f} {:6f}\n", std::make_format_args(vec.x, vec.y, vec.z));
+		return os;
+	}
+
+	inline std::ostream& operator<<(std::ostream& os, const glm::vec2& vec)
+	{
+		os << std::vformat("{:6f} {:6f}\n", std::make_format_args(vec.x, vec.y));
+		return os;
+	}
+}
+
 class Exporter
 {
+
+
 public:
+	
 	static void ExportChunksFromFile(SMBFile &smb)
 	{
 		
@@ -35,7 +61,7 @@ public:
 	}
 
 	
-	static void ExportTextureFromFile(SMBFile &smb, const SMBChunk &chunk)
+	static void ExportTextureFromFile(const SMBFile &smb, const SMBChunk &chunk)
 	{
 		std::string name = FileManager::ExtractFileNameFromPath(chunk.fileName);
 		auto file = smb.fileHandle.second;
@@ -45,11 +71,16 @@ public:
 		Texture tex {};
 		file->read(reinterpret_cast<char*>(&tex), sizeof(Texture));
 		file->seekg(chunk.contigOffset + smb.fileOffset, std::ios_base::beg);
+
+
 		int writeWidth = tex.width;
 		int	writeHeight = tex.height;
+
+
 		size_t compressedsize = 0;
 		std::vector<char> image(writeWidth * writeHeight * 4);
 		std::vector<char> input;
+
 		for (uint32_t i = 0; i < tex.miplevels; i++)
 		{
 			std::string writeFileName = name + std::to_string(i + 1) + ".bmp";
@@ -103,9 +134,37 @@ public:
 			writeHeight >>= 1;
 			writeWidth >>= 1;
 			image.resize(writeWidth * writeHeight * 4);
-
 		}
+	}
+
+	static void ExportToOBJFormat(std::vector<Vertex> &vertices, std::string &outputFile)
+	{
+		using ExportHelper::operator<<;
 		
-	} 
+		auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out);
+
+		if (!fileRet)
+		{
+			throw std::runtime_error("Cannot open file for OBJ export " + outputFile);
+		}
+
+		FileManager::FileHandle fileHandle = fileRet.value();
+
+		auto fileStream = fileHandle.second;
+
+		for (const auto& vert : vertices) {
+			*fileStream << "v " << vert.POSITION;
+		}
+
+		for (const auto& vert : vertices) {
+			*fileStream << "vt " << vert.TEXTURE;
+		}
+
+		for (const auto& vert : vertices) {
+			*fileStream << "vn " << vert.NORMAL;
+		}
+ 
+		FileManager::CloseFile(fileHandle.first);
+	}
 };
 

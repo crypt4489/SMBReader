@@ -188,6 +188,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMB.h" />
     <ClInclude Include="include\Texture.h" />
+    <ClInclude Include="include\VertexTypes.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />
