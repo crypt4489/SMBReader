@@ -60,13 +60,13 @@ namespace TexUtils
 		static_assert(sizeof(BitmapFileHeader) == 14);
 		static_assert(sizeof(BitmapInfoHeader) == 40);
 
-		inline void WriteOutBMPHeaders(std::shared_ptr<std::fstream> stream, uint32_t width, uint32_t height)
+		inline void WriteOutBMPHeaders(std::fstream &stream, uint32_t width, uint32_t height)
 		{
 			BitmapFileHeader fileheader{ 0x4d42, 14 + 40 + (width * height * 4), 0, 0, 0x36 };
 			BitmapInfoHeader infoheader{ 40, width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 
-			stream->write(reinterpret_cast<char*>(&fileheader.bfType), sizeof(BitmapFileHeader));
-			stream->write(reinterpret_cast<char*>(&infoheader.biSize), sizeof(BitmapInfoHeader));
+			stream.write(reinterpret_cast<char*>(&fileheader.bfType), sizeof(BitmapFileHeader));
+			stream.write(reinterpret_cast<char*>(&infoheader.biSize), sizeof(BitmapInfoHeader));
 		}
 	}
 }

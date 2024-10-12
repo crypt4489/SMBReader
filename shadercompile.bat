@@ -79,22 +79,21 @@ IF EXIST %OutputFile% (
 				SET /A InputHour=!InputHour!+!inOfF!
 				SET /A OutputHour=!OutputHour!+!outoff!
 
-				IF !InputHour! GTR !OutputHour! (
-					goto :WRITEOUT
-				)
+				IF !InputHour! LEQ !OutputHour! (
 
-				IF !InputHour! LSS !OutputHour! ( 
-					goto :eof
-				)
+					IF !InputHour! LSS !OutputHour! ( 
+						goto :eof
+					)
 
-				SET InputMinutes=!InputFileTime:~14,2!
-				SET OutputMinutes=!OutputFileTime:~14,2!
+					SET InputMinutes=!InputFileTime:~14,2!
+					SET OutputMinutes=!OutputFileTime:~14,2!
 
-				IF "!InputMinutes:~0,1!"=="0" SET InputMinutes=!InputMinutes:~1,1!
-				IF "!OutputMinutes:~0,1!"=="0" SET OutputMinutes=!OutputMinutes:~1,1!
+					IF "!InputMinutes:~0,1!"=="0" SET InputMinutes=!InputMinutes:~1,1!
+					IF "!OutputMinutes:~0,1!"=="0" SET OutputMinutes=!OutputMinutes:~1,1!
 
-				IF !InputMinutes! LSS !OutputMinutes! (
-					goto :eof
+					IF !InputMinutes! LSS !OutputMinutes! (
+						goto :eof
+					)
 				)
 			)
 		)

@@ -53,6 +53,7 @@ private:
 
 		RenderInstance instance;
 		instance.CreateVulkanRenderer();
+		instance.RenderLoop();
 		instance.DestroyVulkanRenderer();
 		
 	}
