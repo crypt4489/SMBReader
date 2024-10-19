@@ -530,6 +530,62 @@ public:
 		}
 	}
 
+	void CreateFrameBuffers()
+	{
+		swapChainFramebuffers.resize(swapChainImageViews.size());
+		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
+			VkImageView attachments[] = {
+				swapChainImageViews[i]
+			};
+
+			VkFramebufferCreateInfo framebufferInfo{};
+			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+			framebufferInfo.renderPass = renderPass;
+			framebufferInfo.attachmentCount = 1;
+			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.width = swapChainExtent.width;
+			framebufferInfo.height = swapChainExtent.height;
+			framebufferInfo.layers = 1;
+
+			if (vkCreateFramebuffer(logicalDevice, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create framebuffer #" + std::to_string(i) + "!");
+			}
+		}
+	}
+
+	void DestroySwapChain()
+	{
+		for (auto framebuffer : swapChainFramebuffers) {
+			if (framebuffer) vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
+		}
+
+		for (auto imageView : swapChainImageViews) {
+			if (imageView) vkDestroyImageView(logicalDevice, imageView, nullptr);
+		}
+
+		if (swapChain) {
+			vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
+		}
+	}
+
+	void RecreateSwapChain() {
+
+		int width = 0, height = 0;
+		glfwGetFramebufferSize(window, &width, &height);
+		while (width == 0 || height == 0) {
+			glfwGetFramebufferSize(window, &width, &height);
+			glfwWaitEvents();
+		}
+
+		vkDeviceWaitIdle(logicalDevice);
+
+		DestroySwapChain();
+
+		CreateSwapChain();
+		CreateVKSWCImageViews();
+		CreateFrameBuffers();
+	}
+
 	std::vector<char> CreateShader(std::string name)
 	{
 		auto ret = FileManager::OpenFile(name, std::ios::ate | std::ios::binary | std::ios::in);
@@ -726,29 +782,6 @@ public:
 		}
 	}
 
-	void CreateFrameBuffers()
-	{
-		swapChainFramebuffers.resize(swapChainImageViews.size());
-		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			VkImageView attachments[] = {
-				swapChainImageViews[i]
-			};
-
-			VkFramebufferCreateInfo framebufferInfo{};
-			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-			framebufferInfo.renderPass = renderPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = attachments;
-			framebufferInfo.width = swapChainExtent.width;
-			framebufferInfo.height = swapChainExtent.height;
-			framebufferInfo.layers = 1;
-
-			if (vkCreateFramebuffer(logicalDevice, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create framebuffer #" + std::to_string(i) + "!");
-			}
-		}
-	}
-
 	void CreateCommandPool()
 	{
 		VkCommandPoolCreateInfo poolInfo{};
@@ -852,11 +885,21 @@ public:
 	{
 
 		vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
-		vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
+		
 
 		uint32_t imageIndex;
-		vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		VkResult result = vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 		
+		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+			RecreateSwapChain();
+			return;
+		}
+		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+			throw std::runtime_error("failed to acquire swap chain image!");
+		}
+
+		vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
+
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
 		RecordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
@@ -891,12 +934,15 @@ public:
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
-		presentInfo.pResults = nullptr; // Optional
+		presentInfo.pResults = nullptr; 
 
-		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
-		if (result != VK_SUCCESS)
-		{
-			throw std::runtime_error("Cannot present image");
+		result = vkQueuePresentKHR(presentQueue, &presentInfo);
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resizeWindow) {
+			resizeWindow = false;
+			RecreateSwapChain();
+		}
+		else if (result != VK_SUCCESS) {
+			throw std::runtime_error("failed to present swap chain image!");
 		}
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;;
 	}
@@ -919,10 +965,17 @@ public:
 		if (!good) throw std::runtime_error("Cannot create window");
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 
 		window = glfwCreateWindow(800, 600, "SMB File Viewer", nullptr, nullptr);
+		glfwSetWindowUserPointer(window, this);
+		glfwSetFramebufferSizeCallback(window, frameResizeCB);
 
+	}
+
+	static void frameResizeCB(GLFWwindow* window, int width, int height)
+	{
+		auto renderInst = reinterpret_cast<RenderInstance*>(glfwGetWindowUserPointer(window));
+		renderInst->SetResizeBool(true);
 	}
 
 	void CreateVulkanRenderer()
@@ -956,6 +1009,7 @@ public:
 
 	void DestroyRenderInstance()
 	{
+		DestroySwapChain();
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
@@ -978,10 +1032,6 @@ public:
 		if (commandPool)
 		{
 			vkDestroyCommandPool(logicalDevice, commandPool, nullptr);
-		}
-
-		for (auto framebuffer : swapChainFramebuffers) {
-			if (framebuffer) vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
 		}
 
 		if (graphicsPipeline)
@@ -1010,15 +1060,6 @@ public:
 			vkDestroyShaderModule(logicalDevice, vertShaderModule, nullptr);
 		}
 
-		for (auto& imageView : swapChainImageViews) {
-			vkDestroyImageView(logicalDevice, imageView, nullptr);
-		}
-
-		if (swapChain)
-		{
-			vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
-		}
-		
 		if (logicalDevice)
 		{
 			vkDeviceWaitIdle(logicalDevice);
@@ -1043,6 +1084,11 @@ public:
 		vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
 		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+	}
+
+	void SetResizeBool(bool set)
+	{
+		resizeWindow = set;
 	}
 
 private:
@@ -1092,6 +1138,8 @@ private:
 	static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
 	uint32_t currentFrame = 0;
+
+	bool resizeWindow = false;
 
 	bool isDeviceSuitable(VkPhysicalDevice device)
 	{

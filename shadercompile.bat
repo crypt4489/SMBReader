@@ -43,6 +43,8 @@ IF EXIST %OutputFile% (
 			SET /A InputDay=!InputDay!
 			SET /A OutputDay=!OutputDay!
 
+			IF "!InputDay:~0,1!" == "0" SET InputDay=!InputDay:~1,1!
+			IF "!OutputDay:~0,1!" == "0" SET OutputDay=!OutputDay:~1,1!
 
 			IF !InputDay! LEQ !OutputDay! (
 
