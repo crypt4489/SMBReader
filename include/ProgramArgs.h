@@ -12,7 +12,7 @@
 class ProgramArgs
 {
 public:
-	explicit ProgramArgs(int argc, char** argv) : justexport(false), mainSMB(std::make_unique<SMBFile>())
+	explicit ProgramArgs(int argc, char** argv) : justexport(false), mainSMB(new SMBFile())
 	{
 		if (argc <= 1)
 		{
@@ -42,6 +42,7 @@ public:
 		inputFile = in;
 	}
 
+
 	
 
 private:
@@ -51,13 +52,15 @@ private:
 		//mainSMB->LoadFile(inputFile);
 		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
 
-		RenderInstance instance;
-		instance.CreateVulkanRenderer();
-		instance.RenderLoop();
-		instance.DestroyVulkanRenderer();
+		::VK::Renderer::gRenderInstance = new RenderInstance();
+		::VK::Renderer::gRenderInstance->CreateVulkanRenderer();
+		::VK::Renderer::gRenderInstance->RenderLoop();
+		::VK::Renderer::gRenderInstance->DestroyVulkanRenderer();
+		delete ::VK::Renderer::gRenderInstance;
+		delete mainSMB;
 		
 	}
-	std::unique_ptr<SMBFile> mainSMB;
+	SMBFile *mainSMB;
 	bool justexport;
 	std::filesystem::path inputFile;
 };

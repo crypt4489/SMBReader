@@ -40,11 +40,11 @@ IF EXIST %OutputFile% (
 			SET InputDay=!InputFileTime:~3,2!
 			SET OutputDay=!OutputFileTime:~3,2!
 
-			SET /A InputDay=!InputDay!
-			SET /A OutputDay=!OutputDay!
-
 			IF "!InputDay:~0,1!" == "0" SET InputDay=!InputDay:~1,1!
 			IF "!OutputDay:~0,1!" == "0" SET OutputDay=!OutputDay:~1,1!
+
+			SET /A InputDay=!InputDay!
+			SET /A OutputDay=!OutputDay!
 
 			IF !InputDay! LEQ !OutputDay! (
 
@@ -93,7 +93,11 @@ IF EXIST %OutputFile% (
 					IF "!InputMinutes:~0,1!"=="0" SET InputMinutes=!InputMinutes:~1,1!
 					IF "!OutputMinutes:~0,1!"=="0" SET OutputMinutes=!OutputMinutes:~1,1!
 
-					IF !InputMinutes! LSS !OutputMinutes! (
+					
+					SET /A InputMinutes=!InputMinutes!
+					SET /A OutputMinutes=!OutputMinutes!
+
+					IF !InputMinutes! LEQ !OutputMinutes! (
 						goto :eof
 					)
 				)

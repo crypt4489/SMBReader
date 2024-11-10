@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <fstream>
+#include <vector>
 class Texture
 {
 public:
@@ -8,6 +9,7 @@ public:
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
+	std::vector<char> data;
 	friend std::ostream& operator<<(std::ostream& os, const Texture& tex)
 	{
 		os  << tex.type << "\n"
@@ -62,8 +64,8 @@ namespace TexUtils
 
 		inline void WriteOutBMPHeaders(std::fstream &stream, uint32_t width, uint32_t height)
 		{
-			BitmapFileHeader fileheader{ 0x4d42, 14 + 40 + (width * height * 4), 0, 0, 0x36 };
-			BitmapInfoHeader infoheader{ 40, width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
+			BitmapFileHeader fileheader{ 0x4d42, sizeof(BitmapFileHeader) + sizeof(BitmapInfoHeader) + (width * height * 4), 0, 0, 0x36 };
+			BitmapInfoHeader infoheader{ sizeof(BitmapInfoHeader), width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 
 			stream.write(reinterpret_cast<char*>(&fileheader.bfType), sizeof(BitmapFileHeader));
 			stream.write(reinterpret_cast<char*>(&infoheader.biSize), sizeof(BitmapInfoHeader));

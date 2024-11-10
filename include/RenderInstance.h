@@ -20,163 +20,217 @@
 #include "FileManager.h"
 
 
+class RenderInstance;
+
 namespace {
-	namespace VKUtils {
+	namespace VK {
 
-		struct SwapChainSupportDetails {
-			VkSurfaceCapabilitiesKHR capabilities;
-			std::vector<VkSurfaceFormatKHR> formats;
-			std::vector<VkPresentModeKHR> presentModes;
-		};
-
-		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
-			SwapChainSupportDetails details;
-
-			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-			uint32_t formatCount;
-			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-			if (formatCount) {
-				details.formats.resize(formatCount);
-				vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-			}
-
-			uint32_t presentModeCount;
-			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-			if (presentModeCount) {
-				details.presentModes.resize(presentModeCount);
-				vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-			}
-
-			return details;
+		namespace Renderer {
+			RenderInstance* gRenderInstance;
 		}
 
-		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props)
-		{
-			// Extract and display API version
-			uint32_t apiVersionMajor = VK_VERSION_MAJOR(props.apiVersion);
-			uint32_t apiVersionMinor = VK_VERSION_MINOR(props.apiVersion);
-			uint32_t apiVersionPatch = VK_VERSION_PATCH(props.apiVersion);
-			os << "API Version: " << apiVersionMajor << "." << apiVersionMinor << "." << apiVersionPatch << "\n";
+		namespace Utils {
 
-			// Device properties
-			os << "Device ID: " << props.deviceID << "\n";
-			os << "Vendor ID: " << props.vendorID << "\n";
-			os << "Device Name: " << props.deviceName << "\n";
+			struct SwapChainSupportDetails {
+				VkSurfaceCapabilitiesKHR capabilities{};
+				std::vector<VkSurfaceFormatKHR> formats;
+				std::vector<VkPresentModeKHR> presentModes;
+			};
 
-			// Device type (as string)
-			os << "Device Type: ";
-			switch (props.deviceType)
+			SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+				SwapChainSupportDetails details;
+
+				vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
+
+				uint32_t formatCount;
+				vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
+
+				if (formatCount) {
+					details.formats.resize(formatCount);
+					vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+				}
+
+				uint32_t presentModeCount;
+				vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
+
+				if (presentModeCount) {
+					details.presentModes.resize(presentModeCount);
+					vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+				}
+
+				return details;
+			}
+
+			std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props)
 			{
-			case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: os << "Integrated GPU"; break;
-			case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   os << "Discrete GPU"; break;
-			case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    os << "Virtual GPU"; break;
-			case VK_PHYSICAL_DEVICE_TYPE_CPU:            os << "CPU"; break;
-			default:                                     os << "Unknown"; break;
+				// Extract and display API version
+				uint32_t apiVersionMajor = VK_VERSION_MAJOR(props.apiVersion);
+				uint32_t apiVersionMinor = VK_VERSION_MINOR(props.apiVersion);
+				uint32_t apiVersionPatch = VK_VERSION_PATCH(props.apiVersion);
+				os << "API Version: " << apiVersionMajor << "." << apiVersionMinor << "." << apiVersionPatch << "\n";
+
+				// Device properties
+				os << "Device ID: " << props.deviceID << "\n";
+				os << "Vendor ID: " << props.vendorID << "\n";
+				os << "Device Name: " << props.deviceName << "\n";
+
+				// Device type (as string)
+				os << "Device Type: ";
+				switch (props.deviceType)
+				{
+				case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: os << "Integrated GPU"; break;
+				case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:   os << "Discrete GPU"; break;
+				case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:    os << "Virtual GPU"; break;
+				case VK_PHYSICAL_DEVICE_TYPE_CPU:            os << "CPU"; break;
+				default:                                     os << "Unknown"; break;
+				}
+				os << "\n";
+
+				// Other properties
+				os << "Driver Version: " << props.driverVersion << "\n";
+				os << "Limits: Max Image Dimension 2D: " << props.limits.maxImageDimension2D << "\n";
+
+				return os;
 			}
-			os << "\n";
-
-			// Other properties
-			os << "Driver Version: " << props.driverVersion << "\n";
-			os << "Limits: Max Image Dimension 2D: " << props.limits.maxImageDimension2D << "\n";
-
-			return os;
-		}
 
 
-		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceMemoryProperties& props)
-		{
-			uint32_t i;
-
-			for (i = 0; i < props.memoryHeapCount; i++)
+			std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceMemoryProperties& props)
 			{
-				os << "Heap Size : ";
-				os << ((double)props.memoryHeaps[i].size / 1'000'000'000) << " GBs\n";
-				os << "Heap Flags : ";
-				os << props.memoryHeaps[i].flags << "\n";
+				uint32_t i;
+
+				for (i = 0; i < props.memoryHeapCount; i++)
+				{
+					os << "Heap Size : ";
+					os << ((double)props.memoryHeaps[i].size / 1'000'000'000) << " GBs\n";
+					os << "Heap Flags : ";
+					os << props.memoryHeaps[i].flags << "\n";
+				}
+
+				for (i = 0; i < props.memoryTypeCount; i++)
+				{
+					os << "Memory Type Heap Index : ";
+					os << props.memoryTypes[i].heapIndex << "\n";
+					os << "Memory Type Property Flags : ";
+					os << props.memoryTypes[i].propertyFlags << "\n";
+				}
+
+				return os;
 			}
 
-			for (i = 0; i < props.memoryTypeCount; i++)
+			std::ostream& operator<<(std::ostream& os, const VkQueueFamilyProperties& props)
 			{
-				os << "Memory Type Heap Index : ";
-				os << props.memoryTypes[i].heapIndex << "\n";
-				os << "Memory Type Property Flags : ";
-				os << props.memoryTypes[i].propertyFlags << "\n";
+
+				os << "Queue Flags : \n";
+				if (props.queueFlags & VK_QUEUE_TRANSFER_BIT) os << "VK_QUEUE_TRANSFER_BIT\n";
+				if (props.queueFlags & VK_QUEUE_COMPUTE_BIT) os << "VK_QUEUE_COMPUTE_BIT\n";
+				if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) os << "VK_QUEUE_GRAPHICS_BIT\n";
+				if (props.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) os << "VK_QUEUE_SPARSE_BINDING_BIT\n";
+
+				os << "Queue Count : " << props.queueCount << "\n";
+				os << "Time Stamp Valid Bits : " << props.timestampValidBits << "\n";
+				os << "Min Image Transfer Granularity (depth, height, width) : \n";
+				os << props.minImageTransferGranularity.depth << " " << props.minImageTransferGranularity.height << " " << props.minImageTransferGranularity.width << "\n";
+
+				return os;
 			}
 
-			return os;
-		}
-
-		std::ostream& operator<<(std::ostream& os, const VkQueueFamilyProperties& props)
-		{
-
-			os << "Queue Flags : \n";
-			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT) os << "VK_QUEUE_TRANSFER_BIT\n";
-			if (props.queueFlags & VK_QUEUE_COMPUTE_BIT) os << "VK_QUEUE_COMPUTE_BIT\n";
-			if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) os << "VK_QUEUE_GRAPHICS_BIT\n";
-			if (props.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) os << "VK_QUEUE_SPARSE_BINDING_BIT\n";
-
-			os << "Queue Count : " << props.queueCount << "\n";
-			os << "Time Stamp Valid Bits : " << props.timestampValidBits << "\n";
-			os << "Min Image Transfer Granularity (depth, height, width) : \n";
-			os << props.minImageTransferGranularity.depth << " " << props.minImageTransferGranularity.height << " " << props.minImageTransferGranularity.width << "\n";
-
-			return os;
-		}
 
 
 
+			VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+				VkDebugUtilsMessageTypeFlagsEXT messageType,
+				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+				void* pUserData) {
 
-		VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-			VkDebugUtilsMessageTypeFlagsEXT messageType,
-			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			void* pUserData) {
+				if (messageSeverity < VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+					return VK_FALSE;
+				}
 
-			if (messageSeverity < VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+				std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+
 				return VK_FALSE;
 			}
 
-			std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
 
-			return VK_FALSE;
-		}
+			static VkDebugUtilsMessengerEXT debugMessenger;
 
-
-		static VkDebugUtilsMessengerEXT debugMessenger;
-
-		VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator) {
-			auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
-			if (func) {
-				return func(instance, pCreateInfo, pAllocator, &debugMessenger);
+			VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator) {
+				auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
+				if (func) {
+					return func(instance, pCreateInfo, pAllocator, &debugMessenger);
+				}
+				else {
+					return VK_ERROR_EXTENSION_NOT_PRESENT;
+				}
 			}
-			else {
-				return VK_ERROR_EXTENSION_NOT_PRESENT;
+
+			void DestroyDebugUtilsMessengerEXT(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
+
+				if (!debugMessenger) return;
+
+				auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+				if (func) {
+					func(instance, debugMessenger, pAllocator);
+				}
 			}
-		}
 
-		void DestroyDebugUtilsMessengerEXT(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
+			uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+				VkPhysicalDeviceMemoryProperties memProperties;
+				vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
-			if (!debugMessenger) return;
+				for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+					if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+						return i;
+					}
+				}
 
-			auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
-			if (func) {
-				func(instance, debugMessenger, pAllocator);
+				throw std::runtime_error("failed to find suitable memory type!");
 			}
-		}
 
-		VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
-			VkShaderModuleCreateInfo createInfo{};
-			createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-			createInfo.codeSize = code.size();
-			createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
-			VkShaderModule shaderModule;
-			if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create shader module!");
+			VkShaderModule createShaderModule(VkDevice device, const std::vector<char>& code) {
+				VkShaderModuleCreateInfo createInfo{};
+				createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+				createInfo.codeSize = code.size();
+				createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+				VkShaderModule shaderModule;
+				if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create shader module!");
+				}
+				return shaderModule;
 			}
-			return shaderModule;
+
+			std::pair<VkBuffer, VkDeviceMemory> createBuffer(VkDevice device, VkPhysicalDevice physicalDevice,
+				VkDeviceSize bufferSize, 
+				VkMemoryPropertyFlags memprops, VkSharingMode sharingMode, 
+				VkBufferUsageFlags usage)
+			{
+				VkBuffer buffer;
+				VkDeviceMemory bufferMemory;
+				VkBufferCreateInfo bufferInfo{};
+				bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+				bufferInfo.size = bufferSize;
+				bufferInfo.sharingMode = sharingMode;
+				bufferInfo.usage = usage;
+				if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+					throw std::runtime_error("failed to create buffer!");
+				}
+
+				VkMemoryRequirements memRequirements;
+				vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+				VkMemoryAllocateInfo allocInfo{};
+				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+				allocInfo.allocationSize = memRequirements.size;
+				allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, memprops);
+
+				if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
+					throw std::runtime_error("failed to allocate buffer memory!");
+				}
+
+				vkBindBufferMemory(device, buffer, bufferMemory, 0);
+
+				return std::make_pair<>(buffer, bufferMemory);
+			}
 		}
 	}
 }
@@ -276,7 +330,7 @@ public:
 		instanceDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		instanceDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		instanceDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		instanceDebugInfo.pfnUserCallback = ::VKUtils::debugCallback;
+		instanceDebugInfo.pfnUserCallback = ::VK::Utils::debugCallback;
 		instanceDebugInfo.pUserData = nullptr; 
 
 
@@ -292,10 +346,10 @@ public:
 		debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		debugInfo.pfnUserCallback = ::VKUtils::debugCallback;
+		debugInfo.pfnUserCallback = ::VK::Utils::debugCallback;
 		debugInfo.pUserData = nullptr; 
 
-		result = ::VKUtils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
+		result = ::VK::Utils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
 
 		if (result != VK_SUCCESS)
 		{
@@ -353,7 +407,7 @@ public:
 				return score;
 				}(), i));
 
-			::VKUtils::operator<<(std::cout, deviceProperties);
+			::VK::Utils::operator<<(std::cout, deviceProperties);
 		}
 
 		auto bestCase = gpuScores.rbegin();
@@ -367,7 +421,7 @@ public:
 
 		VkPhysicalDeviceMemoryProperties memProperties{};
 		vkGetPhysicalDeviceMemoryProperties(gpu, &memProperties);
-		::VKUtils::operator<<(std::cout, memProperties);
+		::VK::Utils::operator<<(std::cout, memProperties);
 
 		uint32_t queueFamilyCount;
 
@@ -440,7 +494,7 @@ public:
 		vkGetDeviceQueue(logicalDevice, graphicsIdx, 0, &graphicsQueue);
 		vkGetDeviceQueue(logicalDevice, presentIdx, 0, &presentQueue);
 
-		//::VKUtils::SwapChainSupportDetails supportDetails = ::VKUtils::querySwapChainSupport(gpu, renderSurface);
+		//::VK::Utils::SwapChainSupportDetails supportDetails = ::VK::Utils::querySwapChainSupport(gpu, renderSurface);
 	}
 
 	void CreateDrawingSurface()
@@ -454,7 +508,7 @@ public:
 
 	void CreateSwapChain()
 	{
-		::VKUtils::SwapChainSupportDetails swapChainSupport = ::VKUtils::querySwapChainSupport(gpu, renderSurface);
+		::VK::Utils::SwapChainSupportDetails swapChainSupport = ::VK::Utils::querySwapChainSupport(gpu, renderSurface);
 
 		VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 		VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -615,8 +669,8 @@ public:
 		auto vertShaderCode = CreateShader("typicalvert.vert.spv");
 		auto fragShaderCode = CreateShader("typicalfrag.frag.spv");
 
-		vertShaderModule = ::VKUtils::createShaderModule(logicalDevice, vertShaderCode);
-		fragShaderModule = ::VKUtils::createShaderModule(logicalDevice, fragShaderCode);
+		vertShaderModule = ::VK::Utils::createShaderModule(logicalDevice, vertShaderCode);
+		fragShaderModule = ::VK::Utils::createShaderModule(logicalDevice, fragShaderCode);
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -651,7 +705,7 @@ public:
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+		inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 		inputAssembly.primitiveRestartEnable = VK_FALSE;
 
 
@@ -849,7 +903,7 @@ public:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(cb, 0, 1, &scissor);
 
-		vkCmdDraw(cb, 3, 1, 0, 0);
+		vkCmdDraw(cb, 4, 1, 0, 0);
 
 		vkCmdEndRenderPass(cb);
 
@@ -944,7 +998,7 @@ public:
 		else if (result != VK_SUCCESS) {
 			throw std::runtime_error("failed to present swap chain image!");
 		}
-		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;;
+		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}
 
 	void RenderLoop()
@@ -1071,7 +1125,7 @@ public:
 			vkDestroySurfaceKHR(instance, renderSurface, nullptr);
 		}
 
-		::VKUtils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
+		::VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
 
 		if (instance)
 		{
@@ -1089,6 +1143,16 @@ public:
 	void SetResizeBool(bool set)
 	{
 		resizeWindow = set;
+	}
+
+	VkDevice GetVulkanDevice() const
+	{
+		return logicalDevice;
+	}
+
+	VkPhysicalDevice GetVulkanPhysicalDevice() const
+	{
+		return gpu;
 	}
 
 private:
@@ -1149,7 +1213,7 @@ private:
 		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
 		vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
 
-		::VKUtils::SwapChainSupportDetails supportDetails;
+		::VK::Utils::SwapChainSupportDetails supportDetails;
 
 		for (auto& requested : deviceExtensions)
 		{
@@ -1161,7 +1225,7 @@ private:
 			}
 		}
 
-		supportDetails = ::VKUtils::querySwapChainSupport(device, renderSurface);
+		supportDetails = ::VK::Utils::querySwapChainSupport(device, renderSurface);
 
 		if (supportDetails.formats.empty() || supportDetails.presentModes.empty())
 		{

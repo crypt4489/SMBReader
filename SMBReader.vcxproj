@@ -179,6 +179,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\RenderInstance.cpp" />
     <ClCompile Include="src\SMB.cpp" />
     <ClCompile Include="src\Texture.cpp" />
+    <ClCompile Include="src\TextureVKImpl.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h" />
@@ -188,6 +189,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMB.h" />
     <ClInclude Include="include\Texture.h" />
+    <ClInclude Include="include\TextureVKImpl.h" />
     <ClInclude Include="include\VertexTypes.h" />
   </ItemGroup>
   <ItemGroup>
