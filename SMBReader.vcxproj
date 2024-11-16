@@ -180,6 +180,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\SMB.cpp" />
     <ClCompile Include="src\Texture.cpp" />
     <ClCompile Include="src\TextureVKImpl.cpp" />
+    <ClCompile Include="src\VKPipelineObject.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h" />
@@ -191,6 +192,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\Texture.h" />
     <ClInclude Include="include\TextureVKImpl.h" />
     <ClInclude Include="include\VertexTypes.h" />
+    <ClInclude Include="include\VKPipelineObject.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />
@@ -199,6 +201,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
   </ItemGroup>
   <ItemGroup>
     <None Include="shadercompile.bat" />
+    <None Include="shaders\typicaltextured.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

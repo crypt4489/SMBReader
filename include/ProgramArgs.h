@@ -9,6 +9,7 @@
 #include "RenderInstance.h"
 #include "SMB.h"
 #include "VertexTypes.h"
+#include "VKPipelineObject.h"
 class ProgramArgs
 {
 public:
@@ -52,10 +53,20 @@ private:
 		//mainSMB->LoadFile(inputFile);
 		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
 
-		::VK::Renderer::gRenderInstance = new RenderInstance();
-		::VK::Renderer::gRenderInstance->CreateVulkanRenderer();
-		::VK::Renderer::gRenderInstance->RenderLoop();
-		::VK::Renderer::gRenderInstance->DestroyVulkanRenderer();
+		
+
+		auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
+		rend->CreateVulkanRenderer();
+
+		VKPipelineObject* pipe = new VKPipelineObject();
+
+		rend->AddPipeline(pipe->GetPipeline());
+		rend->RenderLoop();
+
+		delete pipe;
+
+		rend->DestroyVulkanRenderer();
+
 		delete ::VK::Renderer::gRenderInstance;
 		delete mainSMB;
 		
