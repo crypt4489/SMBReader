@@ -1,14 +1,17 @@
 #pragma once
+
 #include <cstdint>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <regex>
+
 #include "FileManager.h"
 #include "DXTCompression.h"
 #include "SMB.h"
+#include "SMBTexture.h"
 #include "VertexTypes.h"
-#include "Texture.h"
+
 
 namespace ExportHelper
 {
@@ -63,25 +66,9 @@ public:
 	{
 		std::string name = FileManager::ExtractFileNameFromPath(chunk.fileName);
 		
-		auto &file = *smb.fileHandle.second;
 		auto pathToTextures = FileManager::SetupDirectory(name);
 
-		std::streamoff offset = chunk.offsetInHeader + 21LL;
-		file.seekg(offset, std::ios_base::beg);
-
-		Texture tex {};
-
-		file.read(reinterpret_cast<char*>(&tex), sizeof(Texture));
-		file.seekg(chunk.contigOffset + smb.fileOffset, std::ios_base::beg);
-
-
-		int writeWidth = tex.width;
-		int	writeHeight = tex.height;
-
-
-		size_t compressedsize = 0;
-		std::vector<char> image(writeWidth * writeHeight * 4);
-		std::vector<char> input;
+		SMBTexture tex(smb, chunk);
 
 		for (uint32_t i = 0; i < tex.miplevels; i++)
 		{
@@ -89,30 +76,8 @@ public:
 
 			auto writePath = pathToTextures / writeFileName;
 
-			switch (tex.type)
-			{
-			case 7:
-				std::cerr << "X8L8U8V8 format is not exportable\n";
-				return;
-			case 12:
-				compressedsize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
-				input.resize(compressedsize);
-				file.read(input.data(), compressedsize);
-				DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned long*>(image.data()));
-				break;
-			case 14:
-				compressedsize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
-				input.resize(compressedsize);
-				file.read(input.data(), compressedsize);
-				DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned char*>(image.data()));
-				break;
-			case 18:
-				file.read(image.data(), writeWidth * writeHeight * 4);
-				break;
-			default:
-				std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
-				return;
-			}
+			uint32_t writeWidth = tex.width >> i;
+			uint32_t writeHeight = tex.height >> i;
 
 			auto outputfilehandle = FileManager::OpenFile(writePath, std::ios::binary | std::ios::out);
 			
@@ -126,18 +91,16 @@ public:
 
 			TexUtils::BMP::WriteOutBMPHeaders(outputFile, writeWidth, writeHeight);
 
-			TexUtils::BGRATexture(image.data(), writeHeight, writeWidth);
+			std::vector<char> bgra = tex.data[i];
 
-			outputFile.write(image.data(), writeWidth * writeHeight * 4);
+			TexUtils::BGRATexture(bgra.data(), tex.width >> i, tex.width >> i);
+
+			outputFile.write(bgra.data(), writeWidth * writeHeight * 4);
 
 			FileManager::CloseFile(outputfilehandle->first);
 
-			image.clear();
-
 			writeHeight >>= 1;
 			writeWidth >>= 1;
-
-			image.resize(writeWidth * writeHeight * 4);
 		}
 	}
 

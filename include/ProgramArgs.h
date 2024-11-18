@@ -17,7 +17,7 @@ public:
 	{
 		if (argc <= 1)
 		{
-			//ScanSTDIN();
+			ScanSTDIN();
 		}
 		else 
 		{
@@ -49,25 +49,31 @@ public:
 private:
 	void Process()
 	{
-		//FileManager::SetCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
-		//mainSMB->LoadFile(inputFile);
-		//if (justexport) Exporter::ExportChunksFromFile(*mainSMB);
+		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
 
+		mainSMB->LoadFile(inputFile);
+
+		if (justexport)
+		{
+			Exporter::ExportChunksFromFile(*mainSMB);
+		}
+		else 
+		{
+			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
+			rend->CreateVulkanRenderer();
+
+			VKPipelineObject* pipe = new VKPipelineObject();
+
+			rend->AddPipeline(pipe->GetPipeline());
+			rend->RenderLoop();
+
+			delete pipe;
+
+			rend->DestroyVulkanRenderer();
+
+			delete ::VK::Renderer::gRenderInstance;
+		}
 		
-
-		auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
-		rend->CreateVulkanRenderer();
-
-		VKPipelineObject* pipe = new VKPipelineObject();
-
-		rend->AddPipeline(pipe->GetPipeline());
-		rend->RenderLoop();
-
-		delete pipe;
-
-		rend->DestroyVulkanRenderer();
-
-		delete ::VK::Renderer::gRenderInstance;
 		delete mainSMB;
 		
 	}

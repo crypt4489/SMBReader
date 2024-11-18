@@ -3,11 +3,11 @@
 
 #include "ProgramArgs.h"
 #include "RenderInstance.h"
-#include "Texture.h"
+#include "SMBTexture.h"
 class TextureVKImpl
 {
 public:
-	TextureVKImpl(Texture &tex) :  
+	TextureVKImpl(SMBTexture &tex) :  
 		image(VK_NULL_HANDLE), 
 		imageView(VK_NULL_HANDLE), 
 		sampler(VK_NULL_HANDLE) 
@@ -35,7 +35,7 @@ public:
 	VkImageView imageView;
 	VkSampler sampler;
 
-	void CreateImageResources(Texture &tex)
+	void CreateImageResources(SMBTexture &tex)
 	{
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
 		VkPhysicalDevice gpu = ::VK::Renderer::gRenderInstance->GetVulkanPhysicalDevice();
@@ -52,7 +52,7 @@ public:
 
 		void* data;
 		vkMapMemory(device, stagingMemory, 0, imageSize, 0, &data);
-		std::memcpy(data, tex.data.data(), imageSize);
+		std::memcpy(data, tex.data[0].data(), imageSize);
 		vkUnmapMemory(device, stagingMemory);
 
 		VkImageCreateInfo imageInfo{};

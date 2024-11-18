@@ -13,9 +13,7 @@ public:
 
 	VKPipelineObject()
 	{
-		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
-		CreatePipelineLayout(device);
-		CreatePipeline(device, ::VK::Renderer::gRenderInstance->GetRenderPass());
+		CreatePipelineObject();
 	}
 
 	~VKPipelineObject()
@@ -32,17 +30,62 @@ public:
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		}
 
-		for (auto shader : shaders)
+		for (auto &shader : shaders)
 		{
 			vkDestroyShaderModule(device, shader, nullptr);
+		}
+
+		if (descriptorSetLayout)
+		{
+			vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 		}
 
 		shaders.clear();
 	}
 
+	void CreatePipelineObject() {
+		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+		CreateDescriptorSetLayout(device);
+		CreateDescriptorSets(device);
+		CreatePipelineLayout(device);
+		CreatePipeline(device, ::VK::Renderer::gRenderInstance->GetRenderPass());
+	}
+
 	VkPipeline GetPipeline() const
 	{
 		return graphicsPipeline;
+	}
+
+	void AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding)
+	{
+		VkDescriptorSetLayoutBinding layoutBinding{};
+		layoutBinding.binding = binding;
+		layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		layoutBinding.descriptorCount = 1;
+		layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		descSetBindings.push_back(layoutBinding);
+
+		uint32_t frames = ::VK::Renderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
+
+		for (uint32_t frame = 0; frame < frames; frame++)
+		{
+			VkDescriptorImageInfo imageInfo{};
+			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageInfo.imageView = view;
+			imageInfo.sampler = sampler;
+
+			VkWriteDescriptorSet descriptorWrite{};
+
+			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			//descriptorWrite.dstSet = descriptorSets[i];
+			descriptorWrite.dstBinding = 1;
+			descriptorWrite.dstArrayElement = 0;
+			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			descriptorWrite.descriptorCount = 1;
+			descriptorWrite.pImageInfo = &imageInfo;
+			descriptorWrites.push_back(descriptorWrite);
+		}
 	}
 
 
@@ -52,22 +95,77 @@ private:
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
 	std::vector<VkShaderModule> shaders;
-
+	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
+	std::vector<VkDescriptorSet> descriptorSets;
+	std::vector<VkWriteDescriptorSet> descriptorWrites;
 	
 
-	void CreateDescriptorSetLayout()
+	void CreateDescriptorSetLayout(VkDevice device)
 	{
+		if (!descSetBindings.size())
+			return;
 
+		//VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = static_cast<uint32_t>(descSetBindings.size());
+		layoutInfo.pBindings = descSetBindings.data();
+
+		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create descriptor set layout!");
+		}
+
+		descSetBindings.clear();
+	}
+
+	void CreateDescriptorSets(VkDevice device)
+	{
+		if (!descriptorWrites.size())
+			return;
+		uint32_t frames = ::VK::Renderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
+		std::vector<VkDescriptorSetLayout> layouts(frames, descriptorSetLayout);
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = ::VK::Renderer::gRenderInstance->GetDescriptorPool();
+		allocInfo.descriptorSetCount = frames;
+		allocInfo.pSetLayouts = layouts.data();
+
+		descriptorSets.resize(frames);
+
+		if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate descriptor sets!");
+		}
+
+		for (uint32_t i = 0; i < descriptorWrites.size(); i+=frames)
+		{
+			for (uint32_t frame = 0; frame < frames; frame++)
+			{
+				descriptorWrites[i + frame].dstSet = descriptorSets[frame];
+			}
+		}
+
+		descriptorWrites.clear();
+
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+		
 	}
 
 	void CreatePipelineLayout(VkDevice device)
 	{
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		/*pipelineLayoutInfo.setLayoutCount = 1;
-		pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; */
-		pipelineLayoutInfo.setLayoutCount = 0;
-		pipelineLayoutInfo.pSetLayouts = nullptr;
+		if (descriptorSetLayout)
+		{
+			pipelineLayoutInfo.setLayoutCount = 1;
+			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+		}
+		else 
+		{
+			pipelineLayoutInfo.setLayoutCount = 0;
+			pipelineLayoutInfo.pSetLayouts = nullptr;
+		}
+		
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -100,7 +198,7 @@ private:
 		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
 
 
-		std::vector<VkDynamicState> dynamicStates = {
+		std::array<VkDynamicState, 2> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
 			VK_DYNAMIC_STATE_SCISSOR
 		};

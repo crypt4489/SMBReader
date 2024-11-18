@@ -172,24 +172,26 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="src\AppTexture.cpp" />
     <ClCompile Include="src\Exporter.cpp" />
     <ClCompile Include="src\FileManager.cpp" />
     <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\DXTCompression.cpp" />
     <ClCompile Include="src\RenderInstance.cpp" />
     <ClCompile Include="src\SMB.cpp" />
-    <ClCompile Include="src\Texture.cpp" />
+    <ClCompile Include="src\SMBTexture.cpp" />
     <ClCompile Include="src\TextureVKImpl.cpp" />
     <ClCompile Include="src\VKPipelineObject.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\AppTexture.h" />
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
     <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\DXTCompression.h" />
     <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMB.h" />
-    <ClInclude Include="include\Texture.h" />
+    <ClInclude Include="include\SMBTexture.h" />
     <ClInclude Include="include\TextureVKImpl.h" />
     <ClInclude Include="include\VertexTypes.h" />
     <ClInclude Include="include\VKPipelineObject.h" />

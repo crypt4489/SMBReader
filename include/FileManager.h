@@ -81,12 +81,12 @@ public:
 		return pathToDir;
 	}
 
-	static void SetCurrentDirectory(std::string name)
+	static void SetFileCurrentDirectory(std::string name)
 	{
 		currDir = SetupDirectory(name);
 	}
 
-	static void SetCurrentDirectory(std::filesystem::path path)
+	static void SetFileCurrentDirectory(std::filesystem::path path)
 	{
 		currDir = path;
 	}

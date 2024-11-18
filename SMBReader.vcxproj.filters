@@ -36,7 +36,7 @@
     <ClCompile Include="src\SMB.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\Texture.cpp">
+    <ClCompile Include="src\SMBTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\RenderInstance.cpp">
@@ -46,6 +46,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\VKPipelineObject.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AppTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -65,7 +68,7 @@
     <ClInclude Include="include\SMB.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\Texture.h">
+    <ClInclude Include="include\SMBTexture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\RenderInstance.h">
@@ -78,6 +81,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\VKPipelineObject.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AppTexture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
