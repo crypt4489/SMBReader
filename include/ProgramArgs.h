@@ -5,6 +5,7 @@
 #include <algorithm> 
 #include <cctype>
 #include <locale>
+#include "AppTexture.h"
 #include "Exporter.h"
 #include "RenderInstance.h"
 #include "SMB.h"
@@ -59,14 +60,29 @@ private:
 		}
 		else 
 		{
+			int j = 0;
+			auto& ref = mainSMB->chunks;
+			for (int i = 0; i < mainSMB->chunks.size(); i++)
+			{
+				if (ref[i].chunkType == TEXTURE)
+				{
+					j = i;
+					break;
+				}
+			}
 			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
 			rend->CreateVulkanRenderer();
 
 			VKPipelineObject* pipe = new VKPipelineObject();
+			AppTexture *tex = new AppTexture(*mainSMB, ref[j]);
+
+			pipe->AddPixelShaderImageDescription(tex->vkImpl->imageView, tex->vkImpl->sampler, 0);
+			pipe->CreatePipelineObject();
 
 			rend->AddPipeline(pipe->GetPipeline());
 			rend->RenderLoop();
 
+			delete tex;
 			delete pipe;
 
 			rend->DestroyVulkanRenderer();

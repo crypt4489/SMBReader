@@ -1,7 +1,5 @@
 #pragma once
-#include <vulkan/vulkan.h>
 
-#include "ProgramArgs.h"
 #include "RenderInstance.h"
 #include "SMBTexture.h"
 class TextureVKImpl
@@ -13,7 +11,7 @@ public:
 		sampler(VK_NULL_HANDLE) 
 	{
 		CreateImageResources(tex);
-		CreateImageViews();
+		CreateImageViews(tex);
 	};
 
 	~TextureVKImpl()
@@ -30,10 +28,13 @@ public:
 			vkDestroyImage(device, image, nullptr);
 		}
 	}
+
 	VkImage image;
 	VkDeviceMemory imageMemory;
 	VkImageView imageView;
 	VkSampler sampler;
+
+	VkFormat format;
 
 	void CreateImageResources(SMBTexture &tex)
 	{
@@ -42,7 +43,7 @@ public:
 		VkQueue queue = ::VK::Renderer::gRenderInstance->GetGraphicsQueue();
 		VkCommandPool pool = ::VK::Renderer::gRenderInstance->GetVulkanCommandPool();
 
-		VkDeviceSize imageSize = 0;
+		VkDeviceSize imageSize = static_cast<VkDeviceSize>(tex.imageSizes[0]);
 
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingMemory;
@@ -64,7 +65,7 @@ public:
 		imageInfo.mipLevels = 1;
 		imageInfo.arrayLayers = 1;
 
-		imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		format = imageInfo.format = ConvertSMBToVkFormat(tex.type);
 		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -90,17 +91,17 @@ public:
 
 		vkBindImageMemory(device, image, imageMemory, 0);
 
-		TransitionImageLayout(device, pool, queue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		TransitionImageLayout(device, pool, queue, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		::VK::Utils::CopyBufferToImage(device, pool, queue, stagingBuffer, image, tex.width, tex.height);
 
-		TransitionImageLayout(device, pool, queue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		TransitionImageLayout(device, pool, queue, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 		vkDestroyBuffer(device, stagingBuffer, nullptr);
 		vkFreeMemory(device, stagingMemory, nullptr);
 	}
 
-	void CreateImageViews()
+	void CreateImageViews(SMBTexture &tex)
 	{
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
 
@@ -108,7 +109,7 @@ public:
 		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		viewInfo.image = image;
 		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		viewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		viewInfo.format = format;
 		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		viewInfo.subresourceRange.baseMipLevel = 0;
 		viewInfo.subresourceRange.levelCount = 1;
@@ -207,6 +208,24 @@ public:
 		);
 
 		::VK::Utils::EndOneTimeCommands(device, queue, pool, commandBuffer);
+	}
+private:
+	VkFormat ConvertSMBToVkFormat(SMBImageFormat format)
+	{
+		VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
+		switch (format)
+		{
+		case SMBImageFormat::DXT1:
+			vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+			break;
+		case SMBImageFormat::DXT3:
+			vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
+			break;
+		case SMBImageFormat::R8G8B8A8:
+			vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+			break;
+		}
+		return vkFormat;
 	}
 };
 

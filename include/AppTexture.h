@@ -15,7 +15,7 @@ public:
 	~AppTexture()
 	{
 		delete smbTex;
-		delete vkImpl;
+		if (vkImpl) delete vkImpl;
 	}
 
 	SMBTexture* smbTex;

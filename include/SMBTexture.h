@@ -6,10 +6,45 @@
 #include "DXTCompression.h"
 #include "SMB.h"
 
+
+//either DX8 or DX9 format, mix of both in the SMB archives
+enum class SMBImageFormat : uint32_t
+{
+	X8L8U8V8 = 7,
+	DXT1 = 12,
+	DXT3 = 14,
+	R8G8B8A8 = 18,
+	IMAGE_UNKNOWN = 0x7fffffff
+};
+
+inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
+{
+	switch (format)
+	{
+	case SMBImageFormat::X8L8U8V8:
+		os << "X8L8U8V8 format";
+		break;
+	case SMBImageFormat::DXT1:
+		os << "DXT1";
+		break;
+	case SMBImageFormat::DXT3:
+		os << "DXT3";
+		break;
+	case SMBImageFormat::R8G8B8A8:
+		os << "R8G8B8A8";
+		break;
+	default:
+		std::cerr << "Unsupported/Unknown texture type";
+		break;
+	}
+
+	return os;
+}
+
 class SMBTexture
 {
 public:
-	uint32_t type;
+	SMBImageFormat type;
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
@@ -17,7 +52,7 @@ public:
 	std::vector<std::vector<char>> data;
 
 
-	SMBTexture(uint32_t _type, uint32_t _width, uint32_t _height, uint32_t _mips) 
+	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips) 
 		: type(_type), width(_width), height(_height), miplevels(_mips)
 	{
 		data.resize(_mips);
@@ -30,7 +65,7 @@ public:
 		std::copy(_data.begin(), _data.end(), ref.begin());
 	}
 
-	SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
+	SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(SMBImageFormat::IMAGE_UNKNOWN), height(0), width(0), miplevels(0)
 	{
 		auto& file = *smb.fileHandle.second;
 		std::streamoff offset = chunk.offsetInHeader + 21LL;
@@ -57,32 +92,36 @@ public:
 			imageSizes[i] = writeWidth * writeHeight * 4;
 			switch (type)
 			{
-			case 7:
+			case SMBImageFormat::X8L8U8V8:
 				std::cerr << "X8L8U8V8 format is not exportable\n";
 				return;
-			case 12:
+			case SMBImageFormat::DXT1:
 				compressedsize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 				input.resize(compressedsize);
 				file.read(input.data(), compressedsize);
 				DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned long*>(image.data()));
 				break;
-			case 14:
+			case SMBImageFormat::DXT3:
 				compressedsize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 				input.resize(compressedsize);
 				file.read(input.data(), compressedsize);
 				DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned char*>(image.data()));
 				break;
-			case 18:
+			case SMBImageFormat::R8G8B8A8:
 				file.read(image.data(), writeWidth * writeHeight * 4);
 				break;
 			default:
-				std::cerr << "Unsupported/Unknown texture type " << type << "\n";
+				std::cerr << type << "\n";
+				data.clear();
+				imageSizes.clear();
 				return;
 			}
 
 			writeHeight >>= 1;
 			writeWidth >>= 1;			
 		}
+
+		type = SMBImageFormat::R8G8B8A8;
 	}
 
 

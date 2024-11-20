@@ -13,7 +13,7 @@ public:
 
 	VKPipelineObject()
 	{
-		CreatePipelineObject();
+		//CreatePipelineObject();
 	}
 
 	~VKPipelineObject()
@@ -145,10 +145,10 @@ private:
 			}
 		}
 
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+
 		descriptorWrites.clear();
 
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-		
 	}
 
 	void CreatePipelineLayout(VkDevice device)
