@@ -182,6 +182,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\SMBTexture.cpp" />
     <ClCompile Include="src\TextureVKImpl.cpp" />
     <ClCompile Include="src\VKPipelineObject.cpp" />
+    <ClCompile Include="src\VkRenderLoop.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\AppTexture.h" />
@@ -195,6 +196,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\TextureVKImpl.h" />
     <ClInclude Include="include\VertexTypes.h" />
     <ClInclude Include="include\VKPipelineObject.h" />
+    <ClInclude Include="include\VkRenderLoop.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />

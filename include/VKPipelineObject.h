@@ -88,6 +88,16 @@ public:
 		}
 	}
 
+	void Draw(VkCommandBuffer cb, uint32_t vertexCount, uint32_t frame)
+	{
+		if (descriptorSetLayout)
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[frame], 0, nullptr);
+
+		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+		vkCmdDraw(cb, vertexCount, 1, 0, 0);
+	}
+
 
 private:
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;

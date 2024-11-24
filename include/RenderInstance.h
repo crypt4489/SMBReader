@@ -813,7 +813,7 @@ public:
 		}
 	}
 
-	void RecordCommandBuffer(VkCommandBuffer cb, uint32_t imageIndex)
+	void BeginCommandBufferRecording(VkCommandBuffer cb, uint32_t imageIndex)
 	{
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -852,16 +852,15 @@ public:
 		scissor.extent = swapChainExtent;
 		vkCmdSetScissor(cb, 0, 1, &scissor);
 
-		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelinesInFlight[0]);
+	}
 
-		vkCmdDraw(cb, 4, 1, 0, 0);
-
+	void EndCommandBufferRecording(VkCommandBuffer cb)
+	{
 		vkCmdEndRenderPass(cb);
 
 		if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
 			throw std::runtime_error("failed to record command buffer!");
 		}
-
 	}
 
 	void CreateSyncObjects()
@@ -886,18 +885,16 @@ public:
 		}
 	}
 
-	void DrawFrame()
+	uint32_t BeginFrame()
 	{
-
 		vkWaitForFences(logicalDevice, 1, &inFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 		
-
 		uint32_t imageIndex;
 		VkResult result = vkAcquireNextImageKHR(logicalDevice, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 		
 		if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 			RecreateSwapChain();
-			return;
+			return 0xFFFFFFFF;
 		}
 		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 			throw std::runtime_error("failed to acquire swap chain image!");
@@ -906,14 +903,23 @@ public:
 		vkResetFences(logicalDevice, 1, &inFlightFences[currentFrame]);
 
 		vkResetCommandBuffer(commandBuffers[currentFrame], 0);
-		RecordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+
+		BeginCommandBufferRecording(commandBuffers[currentFrame], imageIndex);
+
+		return imageIndex;
+	}
+
+	void SubmitFrame(uint32_t imageIndex)
+	{
+
+		EndCommandBufferRecording(commandBuffers[currentFrame]);
 
 		VkSubmitInfo submitInfo{};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame]};
+		VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-		
+
 		submitInfo.waitSemaphoreCount = 1;
 		submitInfo.pWaitSemaphores = waitSemaphores;
 		submitInfo.pWaitDstStageMask = waitStages;
@@ -921,7 +927,7 @@ public:
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
 
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame]};
+		VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
@@ -939,9 +945,9 @@ public:
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
-		presentInfo.pResults = nullptr; 
+		presentInfo.pResults = nullptr;
 
-		result = vkQueuePresentKHR(presentQueue, &presentInfo);
+		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resizeWindow) {
 			resizeWindow = false;
 			RecreateSwapChain();
@@ -956,29 +962,31 @@ public:
 	{
 		std::array<VkDescriptorPoolSize, 2> poolSizes{};
 		poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 		poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolSizes[1].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
 		poolInfo.pPoolSizes = poolSizes.data();
-		poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+		poolInfo.maxSets = MAX_FRAMES_IN_FLIGHT;
 
 		if (vkCreateDescriptorPool(logicalDevice, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create descriptor pool!");
 		}
 	}
 
-	void RenderLoop()
+	bool ShouldCloseWindow()
 	{
-		while (!glfwWindowShouldClose(window))
-		{
-			glfwPollEvents();
-			DrawFrame();
-		}
-		
+		if (glfwWindowShouldClose(window))
+			return true;
+		glfwPollEvents();
+		return false;
+	}
+
+	void WaitOnQueues()
+	{
 		vkQueueWaitIdle(graphicsQueue);
 		vkQueueWaitIdle(presentQueue);
 	}
@@ -1131,17 +1139,12 @@ public:
 		return descriptorPool;
 	}
 
-	void AddPipeline(VkPipeline pipeline)
+	VkCommandBuffer GetCurrentCommandBuffer() const
 	{
-		if (std::find(pipelinesInFlight.begin(), pipelinesInFlight.end(), pipeline) == std::end(pipelinesInFlight))
-			pipelinesInFlight.push_back(pipeline);
+		return commandBuffers[currentFrame];
 	}
 
-	void RemovePipeline(VkPipeline pipeline)
-	{
-		auto n = std::erase_if(pipelinesInFlight, [pipeline](VkPipeline p) { return p == pipeline; });
-		if (!n) std::cout << "Removed pipeline not already added\n";
-	}
+
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -1188,8 +1191,6 @@ private:
 	uint32_t currentFrame = 0;
 
 	bool resizeWindow = false;
-
-	std::vector<VkPipeline> pipelinesInFlight;
 
 	bool isDeviceSuitable(VkPhysicalDevice device)
 	{

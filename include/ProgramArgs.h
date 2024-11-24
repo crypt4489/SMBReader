@@ -10,6 +10,7 @@
 #include "RenderInstance.h"
 #include "SMB.h"
 #include "VertexTypes.h"
+#include "VkRenderLoop.h"
 #include "VKPipelineObject.h"
 class ProgramArgs
 {
@@ -73,14 +74,16 @@ private:
 			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
 			rend->CreateVulkanRenderer();
 
+			VkRenderLoop loop{};
+
 			VKPipelineObject* pipe = new VKPipelineObject();
 			AppTexture *tex = new AppTexture(*mainSMB, ref[j]);
 
 			pipe->AddPixelShaderImageDescription(tex->vkImpl->imageView, tex->vkImpl->sampler, 0);
 			pipe->CreatePipelineObject();
 
-			rend->AddPipeline(pipe->GetPipeline());
-			rend->RenderLoop();
+			loop.AddPipeline(pipe);
+			loop.RenderLoop(rend);
 
 			delete tex;
 			delete pipe;
