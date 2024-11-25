@@ -40,9 +40,8 @@ public:
 		std::cout << "\n";	
 		size_t size = in.length(), off = 0;
 		if (in[off] == '\"') off++;
-		if (in[size] == '\"') size--;
-		in = in.substr(off, size-off);			
-		inputFile = in;
+		if (in[size-1] == '\"') size--;		
+		inputFile = in.substr(off, size - off);
 	}
 
 
@@ -79,6 +78,9 @@ private:
 			VKPipelineObject* pipe = new VKPipelineObject();
 			AppTexture *tex = new AppTexture(*mainSMB, ref[j]);
 
+
+			pipe->AddShader("typicaltextured.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			pipe->AddShader("typicaltextured.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 			pipe->AddPixelShaderImageDescription(tex->vkImpl->imageView, tex->vkImpl->sampler, 0);
 			pipe->CreatePipelineObject();
 

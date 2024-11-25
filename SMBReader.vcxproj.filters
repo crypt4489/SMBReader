@@ -107,5 +107,8 @@
     <None Include="shaders\typicaltextured.vert">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\typicaltextured.frag">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

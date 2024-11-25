@@ -1144,6 +1144,11 @@ public:
 		return commandBuffers[currentFrame];
 	}
 
+	uint32_t GetCurrentFrame() const
+	{
+		return currentFrame;
+	}
+
 
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;

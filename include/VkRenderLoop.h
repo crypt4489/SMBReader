@@ -16,7 +16,7 @@ public:
 			VkCommandBuffer cb = inst->GetCurrentCommandBuffer();
 			for (auto& pipe : pipelinesInFlight)
 			{
-				pipe->Draw(cb, 4, index);
+				pipe->Draw(cb, 4, inst->GetCurrentFrame());
 			}
 			inst->SubmitFrame(index);
 		}

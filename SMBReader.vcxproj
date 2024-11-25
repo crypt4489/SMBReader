@@ -205,6 +205,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
   </ItemGroup>
   <ItemGroup>
     <None Include="shadercompile.bat" />
+    <None Include="shaders\typicaltextured.frag" />
     <None Include="shaders\typicaltextured.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

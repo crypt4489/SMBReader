@@ -74,16 +74,17 @@ public:
 			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			imageInfo.imageView = view;
 			imageInfo.sampler = sampler;
+			imageInfos.push_back(imageInfo);
 
 			VkWriteDescriptorSet descriptorWrite{};
 
 			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			//descriptorWrite.dstSet = descriptorSets[i];
-			descriptorWrite.dstBinding = 1;
+			descriptorWrite.dstBinding = binding;
 			descriptorWrite.dstArrayElement = 0;
 			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			descriptorWrite.descriptorCount = 1;
-			descriptorWrite.pImageInfo = &imageInfo;
+			//descriptorWrite.pImageInfo = &imageInfos.back();
 			descriptorWrites.push_back(descriptorWrite);
 		}
 	}
@@ -98,6 +99,14 @@ public:
 		vkCmdDraw(cb, vertexCount, 1, 0, 0);
 	}
 
+	void AddShader(const std::string name, VkShaderStageFlagBits flags)
+	{
+		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+		auto shaderCode = ::VK::Renderer::gRenderInstance->CreateShader(name);
+		shaders.push_back(::VK::Utils::createShaderModule(device, shaderCode));
+		shaderFlags.push_back(flags);
+	}
+
 
 private:
 	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
@@ -105,9 +114,11 @@ private:
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
 	std::vector<VkShaderModule> shaders;
+	std::vector<VkShaderStageFlagBits> shaderFlags;
 	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
 	std::vector<VkDescriptorSet> descriptorSets;
 	std::vector<VkWriteDescriptorSet> descriptorWrites;
+	std::vector< VkDescriptorImageInfo> imageInfos;
 	
 
 	void CreateDescriptorSetLayout(VkDevice device)
@@ -152,12 +163,14 @@ private:
 			for (uint32_t frame = 0; frame < frames; frame++)
 			{
 				descriptorWrites[i + frame].dstSet = descriptorSets[frame];
+				descriptorWrites[i + frame].pImageInfo = &imageInfos[i + frame];
 			}
 		}
 
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 
 		descriptorWrites.clear();
+		imageInfos.clear();
 
 	}
 
@@ -186,22 +199,17 @@ private:
 
 	void CreatePipeline(VkDevice device, VkRenderPass renderPass)
 	{
-		// remember to fix the directory these are stored in for all builds
-		auto vertShaderCode = ::VK::Renderer::gRenderInstance->CreateShader("typicalvert.vert.spv");
-		auto fragShaderCode = ::VK::Renderer::gRenderInstance->CreateShader("typicalfrag.frag.spv");
-
-		shaders.push_back(::VK::Utils::createShaderModule(device, vertShaderCode));
-		shaders.push_back(::VK::Utils::createShaderModule(device, fragShaderCode));
+		// remember to fix the directory these are stored in for all build
 
 		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+		vertShaderStageInfo.stage = shaderFlags[0];
 		vertShaderStageInfo.module = shaders[0];
 		vertShaderStageInfo.pName = "main";
 
 		VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+		fragShaderStageInfo.stage = shaderFlags[1];
 		fragShaderStageInfo.module = shaders[1];
 		fragShaderStageInfo.pName = "main";
 

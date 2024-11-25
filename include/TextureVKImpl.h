@@ -12,11 +12,22 @@ public:
 	{
 		CreateImageResources(tex);
 		CreateImageViews(tex);
+		CreateImageSampler();
 	};
 
 	~TextureVKImpl()
 	{
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+
+		if (sampler)
+		{
+			vkDestroySampler(device, sampler, nullptr);
+		}
+
+		if (imageView)
+		{
+			vkDestroyImageView(device, imageView, nullptr);
+		}
 
 		if (imageMemory)
 		{

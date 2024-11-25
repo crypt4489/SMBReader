@@ -81,34 +81,32 @@ public:
 		int writeWidth = width;
 		int	writeHeight = height;
 
-		size_t compressedsize = 0;
-		
-		std::vector<char> input;
+		size_t size = 0;
 
 		for (uint32_t i = 0; i < miplevels; i++)
 		{
 			std::vector<char> &image = data[i];
-			image.resize(writeWidth * writeHeight * 4);
-			imageSizes[i] = writeWidth * writeHeight * 4;
+			
 			switch (type)
 			{
-			case SMBImageFormat::X8L8U8V8:
-				std::cerr << "X8L8U8V8 format is not exportable\n";
-				return;
+			//case SMBImageFormat::X8L8U8V8:
+			//	std::cerr << "X8L8U8V8 format is not exportable\n";
+			//	return;
 			case SMBImageFormat::DXT1:
-				compressedsize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
-				input.resize(compressedsize);
-				file.read(input.data(), compressedsize);
-				DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned long*>(image.data()));
+				size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
+				image.resize(size);
+				file.read(image.data(), size);
+				//DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned long*>(image.data()));
 				break;
 			case SMBImageFormat::DXT3:
-				compressedsize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
-				input.resize(compressedsize);
-				file.read(input.data(), compressedsize);
-				DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned char*>(image.data()));
+				size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
+				image.resize(size);
+				file.read(image.data(), size);
+				//DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned char*>(image.data()));
 				break;
 			case SMBImageFormat::R8G8B8A8:
-				file.read(image.data(), writeWidth * writeHeight * 4);
+				size = writeWidth * writeHeight * 4;
+				file.read(image.data(), size);
 				break;
 			default:
 				std::cerr << type << "\n";
@@ -117,11 +115,11 @@ public:
 				return;
 			}
 
+			imageSizes[i] = static_cast<uint32_t>(size);
+
 			writeHeight >>= 1;
 			writeWidth >>= 1;			
 		}
-
-		type = SMBImageFormat::R8G8B8A8;
 	}
 
 
