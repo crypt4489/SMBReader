@@ -68,12 +68,14 @@ public:
 
 		uint32_t frames = ::VK::Renderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
 
+		VkDescriptorImageInfo imageInfo{};
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.imageView = view;
+		imageInfo.sampler = sampler;
+
 		for (uint32_t frame = 0; frame < frames; frame++)
 		{
-			VkDescriptorImageInfo imageInfo{};
-			imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageInfo.imageView = view;
-			imageInfo.sampler = sampler;
+			
 			imageInfos.push_back(imageInfo);
 
 			VkWriteDescriptorSet descriptorWrite{};
