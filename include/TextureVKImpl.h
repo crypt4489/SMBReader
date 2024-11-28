@@ -92,7 +92,7 @@ public:
 		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 		imageInfo.flags = 0;
 
-		std::tie(image, imageMemory) = ::VK::Utils::CreateImage(device, gpu, imageInfo);
+		std::tie(image, imageMemory) = ::VK::Utils::CreateImage(device, gpu, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		::VK::Utils::TransitionImageLayout(device, pool, queue, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, tex.miplevels, 1);
 

@@ -13,6 +13,7 @@ public:
 		while (!inst->ShouldCloseWindow())
 		{
 			auto index = inst->BeginFrame();
+			if (index == 0xFFFFFFFF) continue;
 			VkCommandBuffer cb = inst->GetCurrentCommandBuffer();
 			for (auto& pipe : pipelinesInFlight)
 			{

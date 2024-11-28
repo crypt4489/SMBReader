@@ -276,7 +276,7 @@ namespace {
 				EndOneTimeCommands(device, queue, pool, commandBuffer);
 			}
 
-			std::pair<VkImage, VkDeviceMemory> CreateImage(VkDevice device, VkPhysicalDevice gpu, VkImageCreateInfo &imageInfo)
+			std::pair<VkImage, VkDeviceMemory> CreateImage(VkDevice device, VkPhysicalDevice gpu, VkImageCreateInfo &imageInfo, VkMemoryPropertyFlags properties)
 			{
 				VkImage image;
 				VkDeviceMemory imageMemory;
@@ -291,7 +291,7 @@ namespace {
 				VkMemoryAllocateInfo allocInfo{};
 				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 				allocInfo.allocationSize = memRequirements.size;
-				allocInfo.memoryTypeIndex = ::VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+				allocInfo.memoryTypeIndex = ::VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, properties);
 
 				if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
 					throw std::runtime_error("failed to allocate image memory!");
@@ -398,10 +398,6 @@ namespace {
 			}
 
 		}
-
-		
-
-		
 	}
 }
 
@@ -590,6 +586,8 @@ public:
 
 		gpu = bestCase->second;
 
+		msaaSamples = GetMaxMSAALevels();
+
 		VkPhysicalDeviceMemoryProperties memProperties{};
 		vkGetPhysicalDeviceMemoryProperties(gpu, &memProperties);
 		::VK::Utils::operator<<(std::cout, memProperties);
@@ -760,15 +758,16 @@ public:
 	{
 		swapChainFramebuffers.resize(swapChainImageViews.size());
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			VkImageView attachments[] = {
+			std::array<VkImageView, 2> attachments = {
+				colorImageView,
 				swapChainImageViews[i]
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
 			framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 			framebufferInfo.renderPass = renderPass;
-			framebufferInfo.attachmentCount = 1;
-			framebufferInfo.pAttachments = attachments;
+			framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+			framebufferInfo.pAttachments = attachments.data();
 			framebufferInfo.width = swapChainExtent.width;
 			framebufferInfo.height = swapChainExtent.height;
 			framebufferInfo.layers = 1;
@@ -781,6 +780,11 @@ public:
 
 	void DestroySwapChain()
 	{
+
+		if (colorImageView) vkDestroyImageView(logicalDevice, colorImageView, nullptr);
+		if (colorImage) vkDestroyImage(logicalDevice, colorImage, nullptr);
+		if (colorImageMemory) vkFreeMemory(logicalDevice, colorImageMemory, nullptr);
+
 		for (auto framebuffer : swapChainFramebuffers) {
 			if (framebuffer) vkDestroyFramebuffer(logicalDevice, framebuffer, nullptr);
 		}
@@ -809,6 +813,7 @@ public:
 
 		CreateSwapChain();
 		CreateVKSWCImageViews();
+		CreateMSAAColorResources();
 		CreateFrameBuffers();
 	}
 
@@ -839,22 +844,37 @@ public:
 	{
 		VkAttachmentDescription colorAttachment{};
 		colorAttachment.format = swapChainImageFormat;
-		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.samples = msaaSamples;
 		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentDescription colorAttachmentResolve{};
+		colorAttachmentResolve.format = swapChainImageFormat;
+		colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 		VkAttachmentReference colorAttachmentRef{};
 		colorAttachmentRef.attachment = 0;
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
+		VkAttachmentReference colorAttachmentResolveRef{};
+		colorAttachmentResolveRef.attachment = 1;
+		colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
 		VkSubpassDependency dependency{};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -864,10 +884,11 @@ public:
 		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
+		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, colorAttachmentResolve };
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = 1;
-		renderPassInfo.pAttachments = &colorAttachment;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		renderPassInfo.pAttachments = attachments.data();
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
 		renderPassInfo.dependencyCount = 1;
@@ -1068,6 +1089,44 @@ public:
 		}
 	}
 
+	void CreateMSAAColorResources() {
+
+
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = swapChainExtent.width;
+		imageInfo.extent.height = swapChainExtent.height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = 1;
+		imageInfo.arrayLayers = 1;
+
+		imageInfo.format = swapChainImageFormat;
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage =
+			VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | 
+			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = msaaSamples;
+		imageInfo.flags = 0;
+
+		std::tie(colorImage, colorImageMemory) = ::VK::Utils::CreateImage(logicalDevice, gpu, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = colorImage;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = swapChainImageFormat;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewInfo.subresourceRange.layerCount = 1;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = 1;
+
+		colorImageView = ::VK::Utils::CreateImageView(logicalDevice, viewInfo);
+	}
+
 	bool ShouldCloseWindow()
 	{
 		if (glfwWindowShouldClose(window))
@@ -1111,6 +1170,7 @@ public:
 		CreateSwapChain();
 		CreateVKSWCImageViews();
 		CreateRenderPass();
+		CreateMSAAColorResources();
 		CreateFrameBuffers();
 		CreateCommandPool();
 		CreateCommandBuffer();
@@ -1240,6 +1300,11 @@ public:
 		return currentFrame;
 	}
 
+	VkSampleCountFlagBits GetMSAASamples() const
+	{
+		return msaaSamples;
+	}
+
 
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
@@ -1287,6 +1352,29 @@ private:
 	uint32_t currentFrame = 0;
 
 	bool resizeWindow = false;
+
+	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	VkImage colorImage = VK_NULL_HANDLE;
+	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
+	VkImageView colorImageView = VK_NULL_HANDLE;
+
+	VkSampleCountFlagBits GetMaxMSAALevels()
+	{
+		VkPhysicalDeviceProperties physicalDeviceProperties;
+		vkGetPhysicalDeviceProperties(gpu, &physicalDeviceProperties);
+
+		VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+
+		if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+		if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+		if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+		if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+		if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+		if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+		return VK_SAMPLE_COUNT_1_BIT;
+	}
 
 	bool isDeviceSuitable(VkPhysicalDevice device)
 	{
