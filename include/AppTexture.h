@@ -1,13 +1,13 @@
 #pragma once
 
-#include "SMB.h"
+#include "SMBFile.h"
 #include "SMBTexture.h"
-#include "TextureVKImpl.h"
+#include "VKTexture.h"
 class AppTexture
 {
 public:
 
-	AppTexture(const SMBFile& smb, const SMBChunk& chunk) : smbTex(new SMBTexture(smb, chunk)), vkImpl(new TextureVKImpl(*smbTex))
+	AppTexture(const SMBFile& smb, const SMBChunk& chunk) : smbTex(new SMBTexture(smb, chunk)), vkImpl(new VKTexture(*smbTex))
 	{
 		
 	}
@@ -19,6 +19,6 @@ public:
 	}
 
 	SMBTexture* smbTex;
-	TextureVKImpl* vkImpl;
+	VKTexture* vkImpl;
 };
 

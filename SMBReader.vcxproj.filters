@@ -33,7 +33,7 @@
     <ClCompile Include="src\DXTCompression.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\SMB.cpp">
+    <ClCompile Include="src\SMBFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\SMBTexture.cpp">
@@ -42,7 +42,7 @@
     <ClCompile Include="src\RenderInstance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\TextureVKImpl.cpp">
+    <ClCompile Include="src\VKTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\VKPipelineObject.cpp">
@@ -51,7 +51,10 @@
     <ClCompile Include="src\AppTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\VkRenderLoop.cpp">
+    <ClCompile Include="src\VKRenderLoop.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\ApplicationLoop.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -68,7 +71,7 @@
     <ClInclude Include="include\DXTCompression.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\SMB.h">
+    <ClInclude Include="include\SMBFile.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\SMBTexture.h">
@@ -80,7 +83,7 @@
     <ClInclude Include="include\VertexTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\TextureVKImpl.h">
+    <ClInclude Include="include\VKTexture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\VKPipelineObject.h">
@@ -89,7 +92,10 @@
     <ClInclude Include="include\AppTexture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\VkRenderLoop.h">
+    <ClInclude Include="include\VKRenderLoop.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\ApplicationLoop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

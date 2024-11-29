@@ -3,10 +3,11 @@
 #include "RenderInstance.h"
 #include "VKPipelineObject.h"
 
-class VkRenderLoop
+class VKRenderLoop
 {
 public:
 
+	VKRenderLoop() = default;
 
 	void RenderLoop(RenderInstance* inst)
 	{

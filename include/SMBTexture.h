@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "DXTCompression.h"
-#include "SMB.h"
+#include "SMBFile.h"
 
 
 //either DX8 or DX9 format, mix of both in the SMB archives

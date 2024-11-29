@@ -1,21 +1,18 @@
 #pragma once
 #include <filesystem>
-#include <functional>
-#include <iostream>
-#include <algorithm> 
+#include <iostream> 
 #include <cctype>
 #include <locale>
 #include "AppTexture.h"
 #include "Exporter.h"
 #include "RenderInstance.h"
-#include "SMB.h"
 #include "VertexTypes.h"
-#include "VkRenderLoop.h"
+#include "VKRenderLoop.h"
 #include "VKPipelineObject.h"
 class ProgramArgs
 {
 public:
-	explicit ProgramArgs(int argc, char** argv) : justexport(false), mainSMB(new SMBFile())
+	explicit ProgramArgs(int argc, char** argv) : justexport(false)
 	{
 		if (argc <= 1)
 		{
@@ -25,8 +22,6 @@ public:
 		{
 
 		}
-
-		Process();
 	}
 
 
@@ -43,62 +38,7 @@ public:
 		if (in[size-1] == '\"') size--;		
 		inputFile = in.substr(off, size - off);
 	}
-
-
 	
-
-private:
-	void Process()
-	{
-		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(inputFile.string()));
-
-		mainSMB->LoadFile(inputFile);
-
-		if (justexport)
-		{
-			Exporter::ExportChunksFromFile(*mainSMB);
-		}
-		else 
-		{
-			int j = 0;
-			auto& ref = mainSMB->chunks;
-			for (int i = 0; i < mainSMB->chunks.size(); i++)
-			{
-				if (ref[i].chunkType == TEXTURE)
-				{
-					j = i;
-					break;
-				}
-			}
-			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
-			rend->CreateVulkanRenderer();
-
-			VkRenderLoop loop{};
-
-			VKPipelineObject* pipe = new VKPipelineObject();
-			AppTexture *tex = new AppTexture(*mainSMB, ref[j]);
-
-
-			pipe->AddShader("typicaltextured.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-			pipe->AddShader("typicaltextured.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-			pipe->AddPixelShaderImageDescription(tex->vkImpl->imageView, tex->vkImpl->sampler, 0);
-			pipe->CreatePipelineObject();
-
-			loop.AddPipeline(pipe);
-			loop.RenderLoop(rend);
-
-			delete tex;
-			delete pipe;
-
-			rend->DestroyVulkanRenderer();
-
-			delete ::VK::Renderer::gRenderInstance;
-		}
-		
-		delete mainSMB;
-		
-	}
-	SMBFile *mainSMB;
 	bool justexport;
 	std::filesystem::path inputFile;
 };

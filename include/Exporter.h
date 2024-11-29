@@ -8,7 +8,7 @@
 
 #include "FileManager.h"
 #include "DXTCompression.h"
-#include "SMB.h"
+#include "SMBFile.h"
 #include "SMBTexture.h"
 #include "VertexTypes.h"
 

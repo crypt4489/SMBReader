@@ -1,9 +1,11 @@
+#include "ApplicationLoop.h"
 #include "ProgramArgs.h"
 int main(int argc, char **argv)
 {
 	try 
 	{
 		ProgramArgs args(argc, argv);
+		ApplicationLoop app(args);
 	}
 	catch (std::exception& e)
 	{

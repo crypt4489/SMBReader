@@ -3,10 +3,10 @@
 
 #include "RenderInstance.h"
 #include "SMBTexture.h"
-class TextureVKImpl
+class VKTexture
 {
 public:
-	TextureVKImpl(SMBTexture& tex) :
+	VKTexture(SMBTexture& tex) :
 		image(VK_NULL_HANDLE),
 		imageView(VK_NULL_HANDLE),
 		sampler(VK_NULL_HANDLE)
@@ -16,7 +16,7 @@ public:
 		CreateImageSampler(tex);
 	};
 
-	~TextureVKImpl()
+	~VKTexture()
 	{
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
 
