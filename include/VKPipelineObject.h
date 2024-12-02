@@ -30,17 +30,10 @@ public:
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 		}
 
-		for (auto &shader : shaders)
-		{
-			vkDestroyShaderModule(device, shader, nullptr);
-		}
-
 		if (descriptorSetLayout)
 		{
 			vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 		}
-
-		shaders.clear();
 	}
 
 	void CreatePipelineObject() {
@@ -101,12 +94,15 @@ public:
 		vkCmdDraw(cb, vertexCount, 1, 0, 0);
 	}
 
-	void AddShader(const std::string name, VkShaderStageFlagBits flags)
+	void AddShader(const std::string &name, VkShaderStageFlagBits flags)
 	{
-		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
-		auto shaderCode = ::VK::Renderer::gRenderInstance->CreateShader(name);
-		shaders.push_back(::VK::Utils::createShaderModule(device, shaderCode));
-		shaderFlags.push_back(flags);
+		VkShaderModule mod = ::VK::Renderer::gRenderInstance->GetShaderFromCache(name);
+		VkPipelineShaderStageCreateInfo shaderStageInfo{};
+		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		shaderStageInfo.stage = flags;
+		shaderStageInfo.module = mod;
+		shaderStageInfo.pName = "main";
+		shaderInfos.push_back(shaderStageInfo);
 	}
 
 
@@ -115,12 +111,11 @@ private:
 	VkPipeline graphicsPipeline = VK_NULL_HANDLE;
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
-	std::vector<VkShaderModule> shaders;
-	std::vector<VkShaderStageFlagBits> shaderFlags;
+	std::vector<VkPipelineShaderStageCreateInfo> shaderInfos;
 	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
 	std::vector<VkDescriptorSet> descriptorSets;
 	std::vector<VkWriteDescriptorSet> descriptorWrites;
-	std::vector< VkDescriptorImageInfo> imageInfos;
+	std::vector<VkDescriptorImageInfo> imageInfos;
 	
 
 	void CreateDescriptorSetLayout(VkDevice device)
@@ -203,20 +198,12 @@ private:
 	{
 		// remember to fix the directory these are stored in for all build
 
-		VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-		vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		vertShaderStageInfo.stage = shaderFlags[0];
-		vertShaderStageInfo.module = shaders[0];
-		vertShaderStageInfo.pName = "main";
-
-		VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-		fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-		fragShaderStageInfo.stage = shaderFlags[1];
-		fragShaderStageInfo.module = shaders[1];
-		fragShaderStageInfo.pName = "main";
-
-		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages = { vertShaderStageInfo, fragShaderStageInfo };
-
+	
+		if (!shaderInfos.size())
+		{
+			std::cerr << " No shaders for object\n";
+			return;
+		}
 
 		std::array<VkDynamicState, 2> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
@@ -292,8 +279,8 @@ private:
 
 		VkGraphicsPipelineCreateInfo pipelineInfo{};
 		pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-		pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
-		pipelineInfo.pStages = shaderStages.data();
+		pipelineInfo.stageCount = static_cast<uint32_t>(shaderInfos.size());
+		pipelineInfo.pStages = shaderInfos.data();
 
 		pipelineInfo.pVertexInputState = &vertexInputInfo;
 		pipelineInfo.pInputAssemblyState = &inputAssembly;

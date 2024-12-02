@@ -181,6 +181,8 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\RenderInstance.cpp" />
     <ClCompile Include="src\SMBFile.cpp" />
     <ClCompile Include="src\SMBTexture.cpp" />
+    <ClCompile Include="src\ThreadPool.cpp" />
+    <ClCompile Include="src\VKShaderCache.cpp" />
     <ClCompile Include="src\VKTexture.cpp" />
     <ClCompile Include="src\VKPipelineObject.cpp" />
     <ClCompile Include="src\VKRenderLoop.cpp" />
@@ -195,10 +197,13 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMBFile.h" />
     <ClInclude Include="include\SMBTexture.h" />
+    <ClInclude Include="include\ThreadPool.h" />
+    <ClInclude Include="include\VKShaderCache.h" />
     <ClInclude Include="include\VKTexture.h" />
     <ClInclude Include="include\VertexTypes.h" />
     <ClInclude Include="include\VKPipelineObject.h" />
     <ClInclude Include="include\VKRenderLoop.h" />
+    <ClInclude Include="include\VKUtilities.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />

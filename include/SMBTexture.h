@@ -67,7 +67,9 @@ public:
 
 	SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(SMBImageFormat::IMAGE_UNKNOWN), height(0), width(0), miplevels(0)
 	{
-		auto& file = *smb.fileHandle.second;
+		auto fileHandle = FileManager::GetFile(smb.id);
+
+		auto &file = fileHandle->streamHandle;
 		std::streamoff offset = chunk.offsetInHeader + 21LL;
 		file.seekg(offset, std::ios_base::beg);
 

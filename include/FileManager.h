@@ -1,74 +1,111 @@
 #pragma once
+#include <array>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <optional>
 #include <regex>
-#include <unordered_map>
 #include <utility>
-#include <cstdint>
+
+
+class FileID
+{
+public:
+	FileID() = delete;
+	explicit FileID(uint32_t _id) : ID(_id) {};
+	//delete copies / integer assignment
+	constexpr FileID& operator=(uint32_t) = delete;
+	constexpr FileID& operator=(FileID&) = delete;
+	FileID(FileID&) = delete;
+
+	//keep moves
+	FileID(FileID&&) = default;
+	constexpr FileID& operator=(FileID&&) = default;
+
+	constexpr uint32_t operator()() const {
+		return ID;
+	}
+private:
+	uint32_t ID;
+};
+
+struct FileHandle
+{
+	FileHandle(std::fstream& stream, std::ios::openmode _flags) : streamHandle(std::move(stream)), flags(_flags) 
+	{
+		if (flags & std::ios::in)
+		{
+			size = static_cast<uint64_t>(streamHandle.tellg());
+			streamHandle.seekg(0);
+		}
+		else 
+		{
+			size = 0;
+		}
+	};
+	std::fstream streamHandle;
+	std::ios::openmode flags;
+	uint64_t size;
+};
+
 class FileManager
 {
 public:
 
-	typedef std::pair<uint32_t, std::shared_ptr<std::fstream>> FileHandle;
-
-	static std::optional<FileHandle> OpenFile(const std::string name, std::ios::openmode flags)
+	static std::optional<FileID> OpenFile(const std::string& name, std::ios::openmode flags, FileHandle* &outHandle)
 	{
-		auto handle = std::make_shared<std::fstream>();
-
-		handle->open(name, flags);
-
-		if (!handle->is_open())
-		{
-			return std::nullopt;
-		}
-
-		filesopen[globalId] = handle;
-
-		std::pair res = std::make_pair(globalId++, handle);
-
-		return res;
+		return HandleOpening(name, flags, outHandle);
 	}
 
-	static std::optional<FileHandle> OpenFile(const std::filesystem::path name, std::ios::openmode flags)
+	static std::optional<FileID> OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle* &outHandle)
 	{
-		auto handle = std::make_shared<std::fstream>();
-
-		handle->open(name, flags);
-
-		if (!handle->is_open())
-		{
-			return std::nullopt;
-		}
-
-		filesopen[globalId] = handle;
-
-		std::pair res = std::make_pair(globalId++, handle);
-
-		return res;
+		return HandleOpening(name.string(), flags, outHandle);
 	}
 
-	static std::optional<std::shared_ptr<std::fstream>> GetFile(uint32_t id)
+	static int ReadFileInFull(const std::string& name, std::vector<char> &buffer)
 	{
-		auto mapObject = filesopen.find(id);
-		if (mapObject == filesopen.end())
+		std::fstream stream;
+
+		stream.open(name, std::ios::binary | std::ios::in | std::ios::ate);
+
+		if (!stream.is_open())
 		{
-			return std::nullopt;
+			return 1;
 		}
-		return mapObject->second;
+
+		std::streampos fileEnd = stream.tellg();
+
+		buffer.resize(fileEnd);
+
+		stream.seekg(0);
+
+		stream.read(buffer.data(), fileEnd);
+
+		stream.close();
+
+		return 0;
 	}
 
-	static void CloseFile(uint32_t id)
+	static FileHandle* GetFile(const FileID &id)
 	{
-		auto ret = GetFile(id);
+		if (id() >= MAXFILES) throw std::invalid_argument("You did what?");
+		return filesopen[id()];
+	}
+
+	static void RemoveOpenFile(const FileID &id)
+	{
+		FileHandle *ret = GetFile(id);
+
 		if (!ret)
-		{
 			return;
+
+		if (ret->streamHandle.is_open())
+		{
+			ret->streamHandle.close();
 		}
-		std::shared_ptr<std::fstream> file = ret.value();
-		file->close();
-		filesopen.erase(id);
+		delete ret;
+		filesopen[id()] = nullptr;
 	}
 
 	static std::filesystem::path SetupDirectory(std::string nameOfDir)
@@ -133,10 +170,53 @@ public:
 		return currDir;
 	}
 
-
+	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
+	static constexpr uint32_t MAXFILES = 10;
 private:
-	static uint32_t globalId;
-	static std::unordered_map<uint32_t, std::shared_ptr<std::fstream>> filesopen;
+
+	static uint32_t FindAvailableHandle()
+	{
+		uint32_t i = 0;
+		for (; i < MAXFILES; i++) {
+			if (filesopen[i] == nullptr)
+				break;
+		}
+		return i;
+	}
+
+	static std::optional<FileID> HandleOpening(const std::string& name, std::ios::openmode flags, FileHandle* &outHandle)
+	{
+		uint32_t index = FindAvailableHandle();
+
+		if (index == NOHANDLE)
+		{
+			return std::nullopt;
+		}
+
+		std::fstream stream;
+
+		std::ios::openmode openingFlags = flags;
+
+		if (flags & std::ios::in)
+		{
+			openingFlags |= std::ios::ate;
+		}
+
+		stream.open(name, openingFlags);
+
+		if (!stream.is_open())
+		{
+			return std::nullopt;
+		}
+
+		FileHandle* handle = new FileHandle(stream, flags);
+
+		filesopen[index] = outHandle = handle;
+
+		return FileID(index);
+	}
+
+	static std::array<FileHandle*, MAXFILES> filesopen;
 	static std::filesystem::path currDir;
 	static std::regex filenamePattern;
 };

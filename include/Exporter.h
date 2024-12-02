@@ -79,7 +79,9 @@ public:
 			uint32_t writeWidth = tex.width >> i;
 			uint32_t writeHeight = tex.height >> i;
 
-			auto outputfilehandle = FileManager::OpenFile(writePath, std::ios::binary | std::ios::out);
+			FileHandle* handle;
+
+			auto outputfilehandle = FileManager::OpenFile(writePath, std::ios::binary | std::ios::out, handle);
 			
 			if (!outputfilehandle)
 			{
@@ -87,7 +89,7 @@ public:
 				return;
 			}
 
-			auto &outputFile = *outputfilehandle->second;
+			auto &outputFile = handle->streamHandle;
 
 			TexUtils::BMP::WriteOutBMPHeaders(outputFile, writeWidth, writeHeight);
 
@@ -97,27 +99,25 @@ public:
 
 			outputFile.write(bgra.data(), writeWidth * writeHeight * 4);
 
-			FileManager::CloseFile(outputfilehandle->first);
-
-			writeHeight >>= 1;
-			writeWidth >>= 1;
+			FileManager::RemoveOpenFile(outputfilehandle.value());
 		}
 	}
 
 	static void ExportToOBJFormat(std::vector<Vertex> &vertices, std::string &outputFile)
 	{
 		using ExportHelper::operator<<;
+
+		FileHandle* handle;
 		
-		auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out);
+		auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out, handle);
 
 		if (!fileRet)
 		{
 			throw std::runtime_error("Cannot open file for OBJ export " + outputFile);
 		}
 
-		FileManager::FileHandle fileHandle = fileRet.value();
 
-		auto &fileStream = *fileHandle.second;
+		auto &fileStream = handle->streamHandle;
 
 		for (const auto& vert : vertices) {
 			fileStream << "v " << vert.POSITION;
@@ -131,7 +131,7 @@ public:
 			fileStream << "vn " << vert.NORMAL;
 		}
  
-		FileManager::CloseFile(fileHandle.first);
+		FileManager::RemoveOpenFile(fileRet.value());
 	}
 };
 

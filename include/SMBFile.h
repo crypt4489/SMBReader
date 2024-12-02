@@ -64,74 +64,85 @@ public:
 	uint32_t endcode;
 	std::string name;
 	std::vector<SMBChunk> chunks;
-	FileManager::FileHandle fileHandle;
+	FileID id;
+
+	SMBFile() = delete;
+
+	SMBFile(std::filesystem::path& path) : id(LoadFile(path))
+	{
+	}
+
+	SMBFile(std::string& file) : id(LoadFile(file))
+	{
+	}
 
 	~SMBFile()
 	{
-		FileManager::CloseFile(fileHandle.first);
+		FileManager::RemoveOpenFile(id);
 	}
 
-	void LoadFile(std::filesystem::path path)
+	FileID LoadFile(std::filesystem::path& path)
 	{
-		auto ret = FileManager::OpenFile(path, std::ios::binary | std::ios::in);
+		FileHandle* handle;
+
+		auto ret = FileManager::OpenFile(path, std::ios::binary | std::ios::in, handle);
 
 		if (!ret)
 		{
 			throw std::runtime_error("SMB file is unable to be opened");
 		}
 
-		fileHandle = ret.value();
+		ProcessFile(handle->streamHandle);
 
-		ProcessFile();
+		return std::move(ret.value());
 	}
 
-	void LoadFile(std::string name)
+	FileID LoadFile(const std::string& name)
 	{
-		auto ret = FileManager::OpenFile(name, std::ios::binary | std::ios::in);
+		FileHandle* handle;
+
+		auto ret = FileManager::OpenFile(name, std::ios::binary | std::ios::in, handle);
 
 		if (!ret)
 		{
 			throw std::runtime_error("SMB file is unable to be opened");
 		}
 
-		fileHandle = ret.value();
+		ProcessFile(handle->streamHandle);
 
-		ProcessFile();
+		return std::move(ret.value());
 	}
 private:
-	void ReadHeader()
+	void ReadHeader(std::fstream &fh)
 	{
-		if (!fileHandle.second) return;
-		auto fh = fileHandle.second;
-		fh->read(reinterpret_cast<char*>(&magic), 8);
+		fh.read(reinterpret_cast<char*>(&magic), 8);
 		int stringsize = 0;
-		fh->read(reinterpret_cast<char*>(&stringsize), 4);
+		fh.read(reinterpret_cast<char*>(&stringsize), 4);
 		name.resize(stringsize);
-		fh->read(name.data(), stringsize);
-		fh->read(reinterpret_cast<char*>(&fileOffset), 36);
+		fh.read(name.data(), stringsize);
+		fh.read(reinterpret_cast<char*>(&fileOffset), 36);
 		chunks.resize(numResources);
 	}
 
-	void ReadChunk(SMBChunk &chunk)
+	void ReadChunk(std::fstream &fh, SMBChunk &chunk)
 	{
-		if (!fileHandle.second) return;
-		auto fh = fileHandle.second;
-		fh->read(reinterpret_cast<char*>(&chunk.magic), 44);
+
+		fh.read(reinterpret_cast<char*>(&chunk.magic), 44);
 		chunk.fileName.resize(chunk.stringsize);
-		fh->read(chunk.fileName.data(), chunk.stringsize);
-		chunk.offsetInHeader = fh->tellg();
+		fh.read(chunk.fileName.data(), chunk.stringsize);
+		chunk.offsetInHeader = fh.tellg();
 		std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16LL));
 		std::streamoff next = chunk.offsetInHeader + offset;
-		fh->seekg(next, std::ios_base::beg);
+		fh.seekg(next, std::ios_base::beg);
 	}
 
-	void ProcessFile()
+	void ProcessFile(std::fstream &fh)
 	{
-		ReadHeader();
+		ReadHeader(fh);
 
 		for (auto& i : chunks)
 		{
-			ReadChunk(i);
+			ReadChunk(fh, i);
 		}
 	}
 };

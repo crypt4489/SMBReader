@@ -18,17 +18,14 @@ private:
 
 	void Execute()
 	{
-		SMBFile mainSMB{};
+		SMBFile mainSMB(args.inputFile);
 		if (args.justexport)
 		{
 			FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));
-			mainSMB.LoadFile(args.inputFile);
 			Exporter::ExportChunksFromFile(mainSMB);
 		}
 		else
 		{
-			mainSMB.LoadFile(args.inputFile);
-
 			int j = 0;
 			auto& ref = mainSMB.chunks;
 			for (int i = 0; i < ref.size(); i++)
