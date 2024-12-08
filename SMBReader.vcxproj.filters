@@ -57,7 +57,7 @@
     <ClCompile Include="src\ApplicationLoop.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\ThreadPool.cpp">
+    <ClCompile Include="src\ThreadManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\VKShaderCache.cpp">
@@ -104,7 +104,7 @@
     <ClInclude Include="include\ApplicationLoop.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\ThreadPool.h">
+    <ClInclude Include="include\ThreadManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\VKShaderCache.h">
