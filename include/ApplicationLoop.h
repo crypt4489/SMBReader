@@ -1,10 +1,14 @@
 #pragma once
 
+#include <functional>
+#include <syncstream>
+
 #include "AppTexture.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
 #include "RenderInstance.h"
 #include "SMBFile.h"
+#include "ThreadManager.h"
 #include "VertexTypes.h"
 #include "VKPipelineObject.h"
 #include "VKRenderLoop.h"
@@ -26,6 +30,9 @@ private:
 		}
 		else
 		{
+			auto daemon = std::mem_fn(&ApplicationLoop::ScanSTDIN);
+			ThreadManager::LaunchBackgroundThread(std::bind(daemon, this, std::placeholders::_1));
+
 			int j = 0;
 			auto& ref = mainSMB.chunks;
 			for (int i = 0; i < ref.size(); i++)
@@ -59,6 +66,22 @@ private:
 			rend->DestroyVulkanRenderer();
 
 			delete ::VK::Renderer::gRenderInstance;
+
+			ThreadManager::DestroyThreadManager();
+		}
+	}
+
+	void ScanSTDIN(std::stop_token stoken)
+	{
+		std::string in;
+		std::getline(std::cin, in);
+		while (!stoken.stop_requested())
+		{
+			std::getline(std::cin, in);
+			std::osyncstream(std::cout) << "You wrote this : " << in << "!\n";
+			
+			//std::this_thread::sleep_for(std::chrono::seconds(1));
+			std::osyncstream(std::cout) << "come on" << stoken.stop_requested() << "\n";
 		}
 	}
 
