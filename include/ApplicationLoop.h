@@ -3,6 +3,10 @@
 #include <functional>
 #include <syncstream>
 
+#if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
+#include <Windows.h>
+#endif
+
 #include "AppTexture.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
@@ -73,16 +77,56 @@ private:
 
 	void ScanSTDIN(std::stop_token stoken)
 	{
-		std::string in;
-		std::getline(std::cin, in);
+		HANDLE stdInHandle = GetStdHandle(STD_INPUT_HANDLE);
+
+		if (stdInHandle == INVALID_HANDLE_VALUE)
+		{
+			std::osyncstream(std::cerr) << "Cannot open handle to STD INPUT\n";
+			return;
+		}
+
+		DWORD fdMode;
+
+		GetConsoleMode(stdInHandle, &fdMode);
+
+		fdMode &= ~(ENABLE_MOUSE_INPUT);
+		fdMode |= ENABLE_PROCESSED_INPUT;
+
+		SetConsoleMode(stdInHandle, fdMode);
+
+		DWORD numberOfBytesRead;
+		DWORD events;
+		char inputBuffer[1024];
 		while (!stoken.stop_requested())
 		{
-			std::getline(std::cin, in);
-			std::osyncstream(std::cout) << "You wrote this : " << in << "!\n";
+			events = WaitForSingleObject(stdInHandle, 0);
+			std::osyncstream(std::cerr) << "Just Polling" << events << "\n";
+			if (events == WAIT_OBJECT_0)
+			{
+				BOOL read = ReadFile(stdInHandle, inputBuffer, 1024, &numberOfBytesRead, NULL);
+				
+				if (!read)
+				{
+					std::osyncstream(std::cerr) << "Broken stream (somehow)\n";
+					break;
+				}
+
+				if (numberOfBytesRead <= 2)
+					continue;
+
+				std::osyncstream(std::cerr) << "Number of bytes read : " << numberOfBytesRead << "\n";
+				std::string output(inputBuffer, numberOfBytesRead);
+				std::osyncstream(std::cerr) << output;
+			} 
+			else if (events == WAIT_TIMEOUT)
+			{
+				std::osyncstream(std::cerr) << "Just Waiting\n";
+				std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+			}
 			
-			//std::this_thread::sleep_for(std::chrono::seconds(1));
-			std::osyncstream(std::cout) << "come on" << stoken.stop_requested() << "\n";
 		}
+		std::osyncstream(std::cout) << "Just Waiting here\n";
+		CloseHandle(stdInHandle);
 	}
 
 	ProgramArgs& args;

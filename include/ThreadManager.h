@@ -11,6 +11,7 @@
 
 class Semaphore
 {
+public:
     explicit Semaphore(int c = 1) : count(c) {};
 
     void Wait()
@@ -20,7 +21,7 @@ class Semaphore
         count--;
     }
 
-    bool wait(std::chrono::milliseconds timeout)
+    bool Wait(std::chrono::milliseconds timeout)
     {
         std::unique_lock guard(lock);
         if (!cv.wait_for(guard, timeout, [this]() { return count > 0; }))
@@ -45,6 +46,16 @@ private:
     int count;
     std::mutex lock;
     std::condition_variable cv;
+};
+
+class SemaphoreGuard
+{
+public:
+    SemaphoreGuard(Semaphore& _s) : sema(_s) { sema.Wait(); }
+    ~SemaphoreGuard() { sema.Notify(); }
+
+private:
+    Semaphore& sema;
 };
 
 class ThreadManager
