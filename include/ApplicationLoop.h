@@ -89,44 +89,62 @@ private:
 
 		GetConsoleMode(stdInHandle, &fdMode);
 
-		fdMode &= ~(ENABLE_MOUSE_INPUT);
+		//fdMode &= ~(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT);
 		fdMode |= ENABLE_PROCESSED_INPUT;
 
 		SetConsoleMode(stdInHandle, fdMode);
 
 		DWORD numberOfBytesRead;
 		DWORD events;
+		INPUT_RECORD record;
+
 		char inputBuffer[1024];
+
+		std::this_thread::sleep_for(std::chrono::seconds(2));
+
+		std::osyncstream(std::cout) << "Ready for commands... \n" << "Hit enter and then write command > ";
+
 		while (!stoken.stop_requested())
 		{
-			events = WaitForSingleObject(stdInHandle, 0);
-			std::osyncstream(std::cerr) << "Just Polling" << events << "\n";
-			if (events == WAIT_OBJECT_0)
-			{
-				BOOL read = ReadFile(stdInHandle, inputBuffer, 1024, &numberOfBytesRead, NULL);
-				
-				if (!read)
-				{
-					std::osyncstream(std::cerr) << "Broken stream (somehow)\n";
-					break;
-				}
 
-				if (numberOfBytesRead <= 2)
-					continue;
+			DWORD ret = WaitForSingleObject(stdInHandle, 500);
 
-				std::osyncstream(std::cerr) << "Number of bytes read : " << numberOfBytesRead << "\n";
-				std::string output(inputBuffer, numberOfBytesRead);
-				std::osyncstream(std::cerr) << output;
-			} 
-			else if (events == WAIT_TIMEOUT)
-			{
-				std::osyncstream(std::cerr) << "Just Waiting\n";
-				std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+			if (ret == WAIT_TIMEOUT) continue;
+
+			BOOL success = ReadConsoleInput(stdInHandle, &record, 1, &events);
+
+			if (!success) {
+				std::osyncstream(std::cerr) << "Cannot get ReadConsoleInput\n"; 
+				break;
 			}
-			
+
+			switch (record.EventType) {
+			case KEY_EVENT:
+				// Handle KEY_EVENT
+				if (record.Event.KeyEvent.bKeyDown) {
+					if (record.Event.KeyEvent.uChar.AsciiChar == VK_RETURN)
+					{
+						break;
+					}
+				}
+			default:
+				continue;
+			}
+
+			success = ReadFile(stdInHandle, inputBuffer, 1024, &numberOfBytesRead, NULL);
+
+			if (!success)
+			{
+				std::osyncstream(std::cerr) << "Cannot get ReadFile from stdinput\n";
+				break;
+			}
+
+			if (numberOfBytesRead <= 2)
+				continue;
+
+			std::string output(inputBuffer, numberOfBytesRead);
+			std::osyncstream(std::cout) << "Hit enter and then write command > ";
 		}
-		std::osyncstream(std::cout) << "Just Waiting here\n";
-		CloseHandle(stdInHandle);
 	}
 
 	ProgramArgs& args;
