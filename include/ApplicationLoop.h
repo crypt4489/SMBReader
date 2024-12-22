@@ -1,27 +1,36 @@
 #pragma once
 
 #include <functional>
+#include <unordered_map>
+#include <queue>
 #include <syncstream>
 
 #if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
 
-#include "AppTexture.h"
+#include "AppTypes.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
 #include "RenderInstance.h"
 #include "SMBFile.h"
 #include "ThreadManager.h"
-#include "VertexTypes.h"
-#include "VKPipelineObject.h"
 #include "VKRenderLoop.h"
 
 class ApplicationLoop
 {
 public:
-	ApplicationLoop(ProgramArgs& _args) : vkLoop(new VKRenderLoop()), args(_args) { Execute(); }
-	~ApplicationLoop() { delete vkLoop; }
+	ApplicationLoop(ProgramArgs& _args) : vkLoop(nullptr), 
+		args(_args), 
+		queueSema(Semaphore()), 
+		objsSema(Semaphore()), 
+		running(true) 
+	{ 
+		commandMap["end"] = std::bind(std::mem_fn(&ApplicationLoop::SetRunning), this, false);
+
+		Execute(); 
+	}
+	~ApplicationLoop() { delete vkLoop; delete mainWindow; }
 private:
 
 	void Execute()
@@ -34,38 +43,40 @@ private:
 		}
 		else
 		{
-			auto daemon = std::mem_fn(&ApplicationLoop::ScanSTDIN);
-			ThreadManager::LaunchBackgroundThread(std::bind(daemon, this, std::placeholders::_1));
+			
+			ThreadManager::LaunchBackgroundThread(
+				std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN), 
+					this, std::placeholders::_1));
 
-			int j = 0;
-			auto& ref = mainSMB.chunks;
-			for (int i = 0; i < ref.size(); i++)
-			{
-				if (ref[i].chunkType == TEXTURE)
-				{
-					j = i;
-					break;
-				}
-			}
 
 			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
-			rend->CreateVulkanRenderer();
 
+			mainWindow = new WindowManager();
 
-			VKPipelineObject* pipe = new VKPipelineObject();
-			AppTexture* tex = new AppTexture(mainSMB, ref[j]);
+			mainWindow->CreateWindowInstance();
+			
+			rend->CreateVulkanRenderer(mainWindow);
+			
+			vkLoop = new VKRenderLoop(std::ref(*rend));
+			
+			renderables.push_back(new GenericObject(mainSMB, RenderingBackend::VULKAN));
 
+			while (running)
+			{
+				if (mainWindow->ShouldCloseWindow()) break;
 
-			pipe->AddShader("typicaltextured.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-			pipe->AddShader("typicaltextured.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-			pipe->AddPixelShaderImageDescription(tex->vkImpl->imageView, tex->vkImpl->sampler, 0);
-			pipe->CreatePipelineObject();
+				vkLoop->RenderLoop(std::ref(renderables));
 
-			vkLoop->AddPipeline(pipe);
-			vkLoop->RenderLoop(rend);
+				ProcessCommands();
+			}
 
-			delete tex;
-			delete pipe;
+			rend->WaitOnQueues();
+
+			for (auto renderable : renderables)
+			{
+				delete renderable;
+			}
+
 
 			rend->DestroyVulkanRenderer();
 
@@ -73,6 +84,32 @@ private:
 
 			ThreadManager::DestroyThreadManager();
 		}
+	}
+
+	void ProcessCommands()
+	{
+		queueSema.Wait();
+		if (!commands.size()) {
+			queueSema.Notify();
+			return;
+		}
+		std::string com = std::move(commands.front());
+		commands.pop();
+		queueSema.Notify();
+		auto mapFunc = commandMap.find(com);
+		if (mapFunc == std::end(commandMap)) return;
+		mapFunc->second();
+	}
+
+	void AddCommandTS(std::string& com)
+	{
+		SemaphoreGuard lock(std::ref(queueSema));
+		commands.push(com);
+	}
+
+	void SetRunning(bool set = false)
+	{
+		running = set;
 	}
 
 	void ScanSTDIN(std::stop_token stoken)
@@ -84,15 +121,6 @@ private:
 			std::osyncstream(std::cerr) << "Cannot open handle to STD INPUT\n";
 			return;
 		}
-
-		DWORD fdMode;
-
-		GetConsoleMode(stdInHandle, &fdMode);
-
-		//fdMode &= ~(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT);
-		fdMode |= ENABLE_PROCESSED_INPUT;
-
-		SetConsoleMode(stdInHandle, fdMode);
 
 		DWORD numberOfBytesRead;
 		DWORD events;
@@ -142,12 +170,23 @@ private:
 			if (numberOfBytesRead <= 2)
 				continue;
 
-			std::string output(inputBuffer, numberOfBytesRead);
+			std::string output(inputBuffer, numberOfBytesRead-2);
+
+			this->AddCommandTS(output);
+
+			if (output == "end") break;
+
 			std::osyncstream(std::cout) << "Hit enter and then write command > ";
 		}
 	}
 
 	ProgramArgs& args;
 	VKRenderLoop* vkLoop;
+	Semaphore queueSema, objsSema;
+	std::queue<std::string> commands;
+	std::unordered_map<std::string, std::function<void()>> commandMap;
+	std::vector<GenericObject*> renderables;
+	bool running;
+	WindowManager *mainWindow;
 };
 

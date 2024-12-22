@@ -16,6 +16,32 @@ public:
 		CreateImageSampler(tex);
 	};
 
+	VKTexture(VKTexture&& other) noexcept
+	{
+		this->image = other.image;
+		this->imageMemory = other.imageMemory;
+		this->imageView = other.imageView;
+		this->sampler = other.sampler;
+		this->format = other.format;
+		other.image = VK_NULL_HANDLE;
+		other.imageMemory = VK_NULL_HANDLE;
+		other.imageView = VK_NULL_HANDLE;
+		other.sampler = VK_NULL_HANDLE;
+	}
+
+	VKTexture(VKTexture& other) noexcept
+	{
+		this->image = other.image;
+		this->imageMemory = other.imageMemory;
+		this->imageView = other.imageView;
+		this->sampler = other.sampler;
+		this->format = other.format;
+		other.image = VK_NULL_HANDLE;
+		other.imageMemory = VK_NULL_HANDLE;
+		other.imageView = VK_NULL_HANDLE;
+		other.sampler = VK_NULL_HANDLE;
+	}
+
 	~VKTexture()
 	{
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();

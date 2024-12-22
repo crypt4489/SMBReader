@@ -1,13 +1,5 @@
 #pragma once
 
-#define VK_USE_PLATFORM_WIN32_KHR
-#define GLFW_INCLUDE_VULKAN
-#include "GLFW/include/GLFW/glfw3.h"
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include "GLFW/include/GLFW/glfw3native.h"
-#undef min
-#undef max
-
 
 #include <algorithm>
 #include <array>
@@ -20,13 +12,13 @@
 
 #include "FileManager.h"
 #include "VKShaderCache.h"
-
-
-
+#include "WindowManager.h"
 
 class RenderInstance
 {
 public:
+
+	RenderInstance() = default;
 
 	void CreateRenderInstance()
 	{
@@ -291,7 +283,7 @@ public:
 
 	void CreateDrawingSurface()
 	{
-		VkResult res = glfwCreateWindowSurface(instance, window, nullptr, &renderSurface);
+		VkResult res = glfwCreateWindowSurface(instance, windowMan->GetWindow(), nullptr, &renderSurface);
 
 		if (res != VK_SUCCESS) {
 			throw std::runtime_error("failed to create window surface!");
@@ -423,9 +415,9 @@ public:
 	void RecreateSwapChain() {
 
 		int width = 0, height = 0;
-		glfwGetFramebufferSize(window, &width, &height);
+		glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
 		while (width == 0 || height == 0) {
-			glfwGetFramebufferSize(window, &width, &height);
+			glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
 			glfwWaitEvents();
 		}
 
@@ -732,31 +724,10 @@ public:
 		colorImageView = ::VK::Utils::CreateImageView(logicalDevice, viewInfo);
 	}
 
-	bool ShouldCloseWindow()
-	{
-		if (glfwWindowShouldClose(window))
-			return true;
-		glfwPollEvents();
-		return false;
-	}
-
 	void WaitOnQueues()
 	{
 		vkQueueWaitIdle(graphicsQueue);
 		vkQueueWaitIdle(presentQueue);
-	}
-
-	void CreateGLFWWindow()
-	{
-		bool good = glfwInit();
-		if (!good) throw std::runtime_error("Cannot create window");
-
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-		window = glfwCreateWindow(800, 600, "SMB File Viewer", nullptr, nullptr);
-		glfwSetWindowUserPointer(window, this);
-		glfwSetFramebufferSizeCallback(window, frameResizeCB);
-
 	}
 
 	static void frameResizeCB(GLFWwindow* window, int width, int height)
@@ -765,9 +736,11 @@ public:
 		renderInst->SetResizeBool(true);
 	}
 
-	void CreateVulkanRenderer()
+	void CreateVulkanRenderer(WindowManager *window)
 	{
-		CreateGLFWWindow();
+		this->windowMan = window;
+		windowMan->SetWindowResizeCallback(frameResizeCB);
+		glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 		CreateRenderInstance();
 		CreateDrawingSurface();
 		CreateGPUReferenceAndLogicalDevice();
@@ -786,13 +759,6 @@ public:
 	void DestroyVulkanRenderer()
 	{
 		DestroyRenderInstance();
-		DestroyGLFWWindow();
-	}
-
-	void DestroyGLFWWindow()
-	{
-		glfwDestroyWindow(window);
-		glfwTerminate();
 	}
 
 	void DestroyRenderInstance()
@@ -948,7 +914,7 @@ private:
 	std::vector<VkSemaphore> renderFinishedSemaphores{};
 	std::vector<VkFence> inFlightFences{};
 
-	GLFWwindow* window = nullptr;
+	WindowManager *windowMan;
 
 	std::vector<const char*> instanceExtensions{};
 	std::vector<const char*> instanceLayers{};
@@ -1041,7 +1007,7 @@ private:
 		}
 		else {
 			int width, height;
-			glfwGetFramebufferSize(window, &width, &height);
+			glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
 
 			VkExtent2D actualExtent = {
 				static_cast<uint32_t>(width),

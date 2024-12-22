@@ -14,8 +14,22 @@ public:
 
 	~AppTexture()
 	{
-		delete smbTex;
+		if (smbTex) delete smbTex;
 		if (vkImpl) delete vkImpl;
+	}
+
+	AppTexture(AppTexture&& other) noexcept {
+		this->smbTex = other.smbTex;
+		this->vkImpl = other.vkImpl;
+		other.smbTex = nullptr;
+		other.vkImpl = nullptr;
+	}
+
+	AppTexture(AppTexture& other) noexcept {
+		this->smbTex = other.smbTex;
+		this->vkImpl = other.vkImpl;
+		other.smbTex = nullptr;
+		other.vkImpl = nullptr;
 	}
 
 	SMBTexture* smbTex;

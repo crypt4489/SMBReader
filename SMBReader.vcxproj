@@ -187,10 +187,12 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\VKTexture.cpp" />
     <ClCompile Include="src\VKPipelineObject.cpp" />
     <ClCompile Include="src\VKRenderLoop.cpp" />
+    <ClCompile Include="src\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\ApplicationLoop.h" />
     <ClInclude Include="include\AppTexture.h" />
+    <ClInclude Include="include\AppTypes.h" />
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
     <ClInclude Include="include\GenericObject.h" />
@@ -206,6 +208,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\VKPipelineObject.h" />
     <ClInclude Include="include\VKRenderLoop.h" />
     <ClInclude Include="include\VKUtilities.h" />
+    <ClInclude Include="include\WindowManager.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />

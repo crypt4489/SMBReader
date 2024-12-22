@@ -59,6 +59,9 @@ public:
 		imageSizes.resize(_mips);
 	}
 
+	SMBTexture(SMBTexture&& other) = default;
+	SMBTexture(SMBTexture& other) = default;
+
 	void MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data)
 	{
 		auto ref = data.at(miplevel);
@@ -108,6 +111,7 @@ public:
 				break;
 			case SMBImageFormat::R8G8B8A8:
 				size = writeWidth * writeHeight * 4;
+				image.resize(size);
 				file.read(image.data(), size);
 				break;
 			default:
