@@ -108,7 +108,7 @@ public:
 		filesopen[id()] = nullptr;
 	}
 
-	static std::filesystem::path SetupDirectory(std::string nameOfDir)
+	static std::filesystem::path SetupDirectory(std::string &nameOfDir)
 	{
 		std::filesystem::path pathToDir = currDir / nameOfDir;
 		if (!std::filesystem::exists(pathToDir))
@@ -123,12 +123,17 @@ public:
 		currDir = SetupDirectory(name);
 	}
 
-	static void SetFileCurrentDirectory(std::filesystem::path path)
+	static void SetFileCurrentDirectory(std::string &name)
+	{
+		currDir = SetupDirectory(name);
+	}
+
+	static void SetFileCurrentDirectory(std::filesystem::path &path)
 	{
 		currDir = path;
 	}
 
-	static std::string ExtractFileNameFromPath(const std::string path)
+	static std::string ExtractFileNameFromPath(const std::string &path)
 	{
 		std::smatch match;
 
@@ -146,7 +151,7 @@ public:
 		return name;
 	}
 
-	static std::string ExtractFileNameFromPath(std::filesystem::path path)
+	static std::string ExtractFileNameFromPath(std::filesystem::path &path)
 	{
 
 		std::smatch match;

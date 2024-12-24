@@ -78,7 +78,7 @@ public:
 		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
 		VkPhysicalDevice gpu = ::VK::Renderer::gRenderInstance->GetVulkanPhysicalDevice();
 		VkQueue queue = ::VK::Renderer::gRenderInstance->GetGraphicsQueue();
-		VkCommandPool pool = ::VK::Renderer::gRenderInstance->GetVulkanCommandPool();
+		VkCommandPool pool = ::VK::Renderer::gRenderInstance->GetVulkanTransferCommandPool();
 
 		VkDeviceSize imagesSize = static_cast<VkDeviceSize>(std::accumulate(tex.imageSizes.begin(), tex.imageSizes.end(), 0));
 
@@ -120,18 +120,28 @@ public:
 
 		std::tie(image, imageMemory) = ::VK::Utils::CreateImage(device, gpu, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
+		::VK::Renderer::gRenderInstance->GetGraphicsSemaphore().Wait();
+
 		::VK::Utils::TransitionImageLayout(device, pool, queue, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, tex.miplevels, 1);
+
+		::VK::Renderer::gRenderInstance->GetGraphicsSemaphore().Notify();
 
 		VkDeviceSize offset = 0U;
 
 		for (auto i = 0U; i < tex.miplevels; i++) {
+
+			SemaphoreGuard lock(::VK::Renderer::gRenderInstance->GetGraphicsSemaphore());
 
 			::VK::Utils::CopyBufferToImage(device, pool, queue, stagingBuffer, image, tex.width >> i, tex.height >> i, i, offset, {0, 0, 0});
 
 			offset += static_cast<VkDeviceSize>(sizes[i]);
 		}
 
+		::VK::Renderer::gRenderInstance->GetGraphicsSemaphore().Wait();
+
 		::VK::Utils::TransitionImageLayout(device, pool, queue, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, tex.miplevels, 1);
+
+		::VK::Renderer::gRenderInstance->GetGraphicsSemaphore().Notify();
 	
 		vkFreeMemory(device, stagingMemory, nullptr);
 		vkDestroyBuffer(device, stagingBuffer, nullptr);

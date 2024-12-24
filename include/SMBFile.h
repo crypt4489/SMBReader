@@ -68,11 +68,11 @@ public:
 
 	SMBFile() = delete;
 
-	SMBFile(std::filesystem::path& path) : id(LoadFile(path))
+	SMBFile(const std::filesystem::path& path) : id(LoadFile(path))
 	{
 	}
 
-	SMBFile(std::string& file) : id(LoadFile(file))
+	SMBFile(const std::string& file) : id(LoadFile(file))
 	{
 	}
 
@@ -81,7 +81,7 @@ public:
 		FileManager::RemoveOpenFile(id);
 	}
 
-	FileID LoadFile(std::filesystem::path& path)
+	FileID LoadFile(const std::filesystem::path& path)
 	{
 		FileHandle* handle;
 

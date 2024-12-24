@@ -65,14 +65,14 @@ public:
 
     static std::vector<std::jthread> backgroundTasks;
 
-    static bool ASyncThreadsDone()
+    static void ASyncThreadsDone()
     {
-        size_t sizeBefore = threadsFlags.size();
-        threadsFlags.erase(std::remove_if(threadsFlags.begin(),
-            threadsFlags.end(),
-            [](auto& x) { return x.second->load(); }),
-            threadsFlags.end());
-        return sizeBefore == threadsFlags.size();
+        if (threadsFlags.size()) {
+            threadsFlags.erase(std::remove_if(threadsFlags.begin(),
+                threadsFlags.end(),
+                [](auto& x) { return x.second->load(); }),
+                threadsFlags.end());
+        }
     }
 
     static void DestroyThreadManager()

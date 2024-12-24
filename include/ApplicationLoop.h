@@ -1,10 +1,11 @@
 #pragma once
 
+#include <any>
 #include <functional>
-#include <unordered_map>
+#include <optional>
 #include <queue>
 #include <syncstream>
-
+#include <unordered_map>
 #if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
@@ -24,66 +25,102 @@ public:
 		args(_args), 
 		queueSema(Semaphore()), 
 		objsSema(Semaphore()), 
-		running(true) 
+		running(true),
+		cleaned(false)
 	{ 
-		commandMap["end"] = std::bind(std::mem_fn(&ApplicationLoop::SetRunning), this, false);
-
 		Execute(); 
 	}
-	~ApplicationLoop() { delete vkLoop; delete mainWindow; }
+	~ApplicationLoop() { if (!cleaned) CleanupRuntime();  delete vkLoop; delete mainWindow; }
 private:
+
+	void InitializeCommandMap()
+	{
+		commandMap["end"] = [this](std::optional<std::vector<std::any>> args)
+			{
+				SetRunning(false);
+			};
+
+		commandMap["load"] = [this](std::optional<std::vector<std::any>> args)
+			{
+				LoadThreadedWrapper(std::any_cast<std::string>(args->at(0)));
+			};
+	}
 
 	void Execute()
 	{
-		SMBFile mainSMB(args.inputFile);
+		
 		if (args.justexport)
 		{
+			SMBFile mainSMB(args.inputFile);
 			FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));
 			Exporter::ExportChunksFromFile(mainSMB);
+			cleaned = true;
 		}
 		else
 		{
-			
-			ThreadManager::LaunchBackgroundThread(
-				std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN), 
-					this, std::placeholders::_1));
+			InitializeCommandMap();
 
+			InitializeRuntime();
 
-			auto rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
-
-			mainWindow = new WindowManager();
-
-			mainWindow->CreateWindowInstance();
-			
-			rend->CreateVulkanRenderer(mainWindow);
-			
-			vkLoop = new VKRenderLoop(std::ref(*rend));
-			
-			renderables.push_back(new GenericObject(mainSMB, RenderingBackend::VULKAN));
+			commandMap["load"]({ args.inputFile.string() });
 
 			while (running)
 			{
 				if (mainWindow->ShouldCloseWindow()) break;
 
+				objsSema.Wait();
+
 				vkLoop->RenderLoop(std::ref(renderables));
 
+				objsSema.Notify();
+
 				ProcessCommands();
+
+				ThreadManager::ASyncThreadsDone();
 			}
 
-			rend->WaitOnQueues();
-
-			for (auto renderable : renderables)
-			{
-				delete renderable;
-			}
-
-
-			rend->DestroyVulkanRenderer();
-
-			delete ::VK::Renderer::gRenderInstance;
-
-			ThreadManager::DestroyThreadManager();
+			CleanupRuntime();
 		}
+	}
+
+	void InitializeRuntime()
+	{
+		ThreadManager::LaunchBackgroundThread(
+			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
+				this, std::placeholders::_1));
+
+
+		rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
+
+		mainWindow = new WindowManager();
+
+		mainWindow->CreateWindowInstance();
+
+		rend->CreateVulkanRenderer(mainWindow);
+
+		vkLoop = new VKRenderLoop(std::ref(*rend));
+	}
+
+	void CleanupRuntime()
+	{
+
+
+		rend->WaitOnQueues();
+
+		for (auto renderable : renderables)
+		{
+			delete renderable;
+		}
+
+		renderables.clear();
+
+		rend->DestroyVulkanRenderer();
+
+		delete ::VK::Renderer::gRenderInstance;
+
+		ThreadManager::DestroyThreadManager();
+
+		cleaned = true;
 	}
 
 	void ProcessCommands()
@@ -93,23 +130,65 @@ private:
 			queueSema.Notify();
 			return;
 		}
-		std::string com = std::move(commands.front());
+		std::vector<std::any> com = std::move(commands.front());
 		commands.pop();
 		queueSema.Notify();
-		auto mapFunc = commandMap.find(com);
+		if (!com.size()) { std::cerr << "what are you doing\n"; return; }
+		auto mapFunc = commandMap.find(std::any_cast<std::string>(com[0]));
 		if (mapFunc == std::end(commandMap)) return;
-		mapFunc->second();
+		mapFunc->second({com.begin()+1, com.end()});
 	}
 
-	void AddCommandTS(std::string& com)
+	void AddCommandTS(std::vector<std::any>& com)
 	{
 		SemaphoreGuard lock(std::ref(queueSema));
-		commands.push(com);
+		commands.push(std::move(com));
 	}
 
 	void SetRunning(bool set = false)
 	{
 		running = set;
+	}
+
+	void LoadObject(const std::string& file)
+	{
+		SMBFile SMB(file);
+
+		GenericObject* obj = new GenericObject(SMB, RenderingBackend::VULKAN);
+
+		SemaphoreGuard lock(objsSema);
+
+		renderables.push_back(obj);
+	}
+
+	void LoadThreadedWrapper(const std::string file)
+	{
+		ThreadManager::LaunchASyncThread(std::bind(std::mem_fn(&ApplicationLoop::LoadObjectThreaded), this, std::placeholders::_1, file));
+	}
+
+	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file)
+	{
+		std::this_thread::sleep_for(std::chrono::seconds(2));
+
+		this->LoadObject(file);
+
+		flag->store(true);
+	}
+
+	void FindWords(std::string words, std::vector<std::any> &out)
+	{
+		size_t size = words.length();
+		int i = 0, j = 1;
+		while (j < size) {
+			if (words[j] == 0x20)
+			{
+				out.push_back(words.substr(i, (j - i)));
+				j++;
+				i = j;
+			}
+			j++;
+		}
+		out.push_back(words.substr(i, (j - i)));
 	}
 
 	void ScanSTDIN(std::stop_token stoken)
@@ -172,7 +251,11 @@ private:
 
 			std::string output(inputBuffer, numberOfBytesRead-2);
 
-			this->AddCommandTS(output);
+			std::vector<std::any> comandargs{};
+
+			FindWords(output, comandargs);
+
+			this->AddCommandTS(comandargs);
 
 			if (output == "end") break;
 
@@ -183,10 +266,11 @@ private:
 	ProgramArgs& args;
 	VKRenderLoop* vkLoop;
 	Semaphore queueSema, objsSema;
-	std::queue<std::string> commands;
-	std::unordered_map<std::string, std::function<void()>> commandMap;
+	std::queue<std::vector<std::any>> commands;
+	std::unordered_map<std::string, std::function<void(std::vector<std::any>)>> commandMap;
 	std::vector<GenericObject*> renderables;
-	bool running;
-	WindowManager *mainWindow;
+	bool running, cleaned;
+	WindowManager* mainWindow;
+	RenderInstance* rend;
 };
 

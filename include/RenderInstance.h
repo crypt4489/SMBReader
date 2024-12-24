@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include "FileManager.h"
+#include "ThreadManager.h"
 #include "VKShaderCache.h"
 #include "WindowManager.h"
 
@@ -18,7 +19,10 @@ class RenderInstance
 {
 public:
 
-	RenderInstance() = default;
+	RenderInstance() : graphicsSemaphore(Semaphore(1))
+	{
+
+	};
 
 	void CreateRenderInstance()
 	{
@@ -222,23 +226,34 @@ public:
 		{
 			VkBool32 presentSupport = VK_FALSE;
 			vkGetPhysicalDeviceSurfaceSupportKHR(gpu, counter, renderSurface, &presentSupport);
+
+			::VK::Utils::operator<<(std::cout, props);
+
+			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT && graphicsIdx >= 0 && presentIdx >= 0)
+			{
+				transferIdx = counter;
+			}
+
 			if (presentSupport) presentIdx = counter;
 
 			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT && 
 				props.queueFlags & VK_QUEUE_COMPUTE_BIT && 
 				props.queueFlags & VK_QUEUE_GRAPHICS_BIT) graphicsIdx = counter;
 
-			if (graphicsIdx >= 0 && presentIdx >= 0) break;
+			
+
+			if (graphicsIdx >= 0 && presentIdx >= 0 && transferIdx >= 0) break;
 
 			counter++;
 		}
 
-		if (graphicsIdx == -1 || presentIdx == -1) 
+		if (graphicsIdx == -1 || presentIdx == -1 || transferIdx == -1) 
 		{
-			throw std::runtime_error("Cannot find a device with a queue that has COMPUTE, TRANSFER and GRAPHICS bits set and/or a presentation queue");
+			throw std::runtime_error("Cannot find a device with a queue that has COMPUTE,"
+				"TRANSFER and GRAPHICS bits set and /or a presentation queue or specific transfer queue");
 		}
 
-		std::set queueIndices = { graphicsIdx, presentIdx };
+		std::set queueIndices = { graphicsIdx, presentIdx, transferIdx };
 		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
 		float queuePriority = 1.0f;
@@ -277,6 +292,7 @@ public:
 
 		vkGetDeviceQueue(logicalDevice, graphicsIdx, 0, &graphicsQueue);
 		vkGetDeviceQueue(logicalDevice, presentIdx, 0, &presentQueue);
+		vkGetDeviceQueue(logicalDevice, transferIdx, 0, &transferQueue);
 
 		//::VK::Utils::SwapChainSupportDetails supportDetails = ::VK::Utils::querySwapChainSupport(gpu, renderSurface);
 	}
@@ -496,7 +512,7 @@ public:
 		}
 	}
 
-	void CreateCommandPool()
+	void CreateGraphicsCommandPool()
 	{
 		VkCommandPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -504,6 +520,20 @@ public:
 		poolInfo.queueFamilyIndex = graphicsIdx;
 
 		if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &commandPool) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create command pool!");
+		}
+	}
+
+	void CreateTransferCommandPool()
+	{
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		//poolInfo.queueFamilyIndex = transferIdx;
+
+		poolInfo.queueFamilyIndex = graphicsIdx;
+
+		if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &transferPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create command pool!");
 		}
 	}
@@ -640,6 +670,8 @@ public:
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
+		graphicsSemaphore.Wait();
+
 		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw command buffer!");
 		}
@@ -657,6 +689,9 @@ public:
 		presentInfo.pResults = nullptr;
 
 		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+		graphicsSemaphore.Notify();
+
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resizeWindow) {
 			resizeWindow = false;
 			RecreateSwapChain();
@@ -750,7 +785,8 @@ public:
 		CreateRenderPass();
 		CreateMSAAColorResources();
 		CreateFrameBuffers();
-		CreateCommandPool();
+		CreateGraphicsCommandPool();
+		CreateTransferCommandPool();
 		CreateCommandBuffer();
 		CreateSyncObjects();
 	}
@@ -783,6 +819,11 @@ public:
 			{
 				vkDestroySemaphore(logicalDevice, imageAvailableSemaphores[i], nullptr);
 			}
+		}
+
+		if (transferPool)
+		{
+			vkDestroyCommandPool(logicalDevice, transferPool, nullptr);
 		}
 
 		if (commandPool)
@@ -843,7 +884,7 @@ public:
 		return gpu;
 	}
 
-	VkCommandPool GetVulkanCommandPool() const
+	VkCommandPool GetVulkanGraphincsCommandPool() const
 	{
 		return commandPool;
 	}
@@ -851,6 +892,16 @@ public:
 	VkQueue GetGraphicsQueue() const
 	{
 		return graphicsQueue;
+	}
+
+	VkCommandPool GetVulkanTransferCommandPool() const
+	{
+		return transferPool;
+	}
+
+	VkQueue GetTransferQueue() const
+	{
+		return transferQueue;
 	}
 
 	VkRenderPass GetRenderPass() const
@@ -878,6 +929,10 @@ public:
 		return msaaSamples;
 	}
 
+	Semaphore& GetGraphicsSemaphore()
+	{
+		return graphicsSemaphore;
+	}
 
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
@@ -888,8 +943,8 @@ private:
 	VkDevice logicalDevice = VK_NULL_HANDLE;
 	VkPhysicalDevice gpu = VK_NULL_HANDLE;
 
-	VkQueue graphicsQueue = VK_NULL_HANDLE, presentQueue = VK_NULL_HANDLE;
-	int graphicsIdx = -1, presentIdx = -1;
+	VkQueue graphicsQueue = VK_NULL_HANDLE, presentQueue = VK_NULL_HANDLE, transferQueue = VK_NULL_HANDLE;
+	int graphicsIdx = -1, presentIdx = -1, transferIdx = -1;
 
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 
@@ -907,6 +962,9 @@ private:
 	std::vector<VkFramebuffer> swapChainFramebuffers;
 
 	VkCommandPool commandPool = VK_NULL_HANDLE;
+	VkCommandPool transferPool = VK_NULL_HANDLE;
+
+	Semaphore graphicsSemaphore;
 
 	std::vector<VkCommandBuffer> commandBuffers{};
 
@@ -914,7 +972,7 @@ private:
 	std::vector<VkSemaphore> renderFinishedSemaphores{};
 	std::vector<VkFence> inFlightFences{};
 
-	WindowManager *windowMan;
+	WindowManager *windowMan = nullptr;
 
 	std::vector<const char*> instanceExtensions{};
 	std::vector<const char*> instanceLayers{};
