@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include "FileManager.h"
+#include "GlslangCompiler.h"
 #include "VKUtilities.h"
 class VKShaderID
 {
@@ -31,12 +32,12 @@ class VKShaderCache
 public:
 	VKShaderCache() = default;
 
-	VkShaderModule GetShader(VkDevice &device, const std::string& name)
+	VkShaderModule GetShader(VkDevice &device, const std::string& name, VkShaderStageFlags flags)
 	{
 		auto found = shaders.find(name);
 		if (found == std::end(shaders))
 		{
-			auto ret = shaders[name] = CreateShader(device, name);
+			auto ret = shaders[name] = CreateShader(device, name, flags);
 			return ret;
 		}
 		return found->second;
@@ -51,15 +52,31 @@ public:
 	}
 private:
 
-	VkShaderModule CreateShader(VkDevice &logicalDevice, const std::string& name)
+	VkShaderModule CreateShader(VkDevice &logicalDevice, const std::string& name, VkShaderStageFlags flags)
 	{
 		std::vector<char> buffer;
 
-		auto ret = FileManager::ReadFileInFull(name, buffer);
+		VkShaderModule mod = VK_NULL_HANDLE;
+		//if exists, it was compiled, otherwise it wasn't
+		if (FileManager::FileExists(name)) {
+			auto ret = FileManager::ReadFileInFull(name, buffer);
 
-		if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
+			if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
 
-		VkShaderModule mod = ::VK::Utils::createShaderModule(logicalDevice, buffer);
+			mod = ::VK::Utils::createShaderModule(logicalDevice, buffer);
+		}
+		else 
+		{
+			std::string uncompiled = name.substr(0, name.length() - 4);
+
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+
+			if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
+
+			if (buffer[buffer.size()-1] != '\0') buffer.push_back('\0');
+
+			mod = GLSLANG::CompileShader(logicalDevice, buffer, flags);
+		} 
 
 		return mod;
 	}

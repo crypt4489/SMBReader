@@ -447,9 +447,9 @@ public:
 		CreateFrameBuffers();
 	}
 
-	VkShaderModule GetShaderFromCache(const std::string& name)
+	VkShaderModule GetShaderFromCache(const std::string& name, VkShaderStageFlags flags)
 	{
-		return shaderCache.GetShader(logicalDevice, name);
+		return shaderCache.GetShader(logicalDevice, name, flags);
 	}
 
 

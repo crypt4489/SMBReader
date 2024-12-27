@@ -132,7 +132,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;$(SolutionDir)lib\windows\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>glfw3.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>shaderc_combinedd.lib;shadercd.lib;SPIRV-Tools-reduced.lib;SPIRV-Tools-optd.lib;SPIRV-Tools-lintd.lib;SPIRV-Tools-linkd.lib;SPIRV-Tools-diffd.lib;SPIRV-Toolsd.lib;SPIRVd.lib;OSDependentd.lib;MachineIndependentd.lib;glslang-default-resource-limitsd.lib;glslangd.lib;glfw3.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>XCOPY "$(SolutionDir)lib\windows\x64\*.DLL" "$(OutDir)" /D /K /Y
@@ -177,6 +177,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\Exporter.cpp" />
     <ClCompile Include="src\FileManager.cpp" />
     <ClCompile Include="src\GenericObject.cpp" />
+    <ClCompile Include="src\GlslangCompiler.cpp" />
     <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\DXTCompression.cpp" />
     <ClCompile Include="src\RenderInstance.cpp" />
@@ -196,6 +197,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
     <ClInclude Include="include\GenericObject.h" />
+    <ClInclude Include="include\GlslangCompiler.h" />
     <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\DXTCompression.h" />
     <ClInclude Include="include\RenderInstance.h" />

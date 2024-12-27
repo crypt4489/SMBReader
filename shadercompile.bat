@@ -107,7 +107,7 @@ IF EXIST %OutputFile% (
 ) 
 
 :WRITEOUT
-glslc.exe %1 -o %OutputFile%
+glslc.exe --target-spv=spv1.6 %1 -o %OutputFile%
 
 GOTO :eof
 

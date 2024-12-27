@@ -96,7 +96,7 @@ public:
 
 	void AddShader(const std::string &name, VkShaderStageFlagBits flags)
 	{
-		VkShaderModule mod = ::VK::Renderer::gRenderInstance->GetShaderFromCache(name);
+		VkShaderModule mod = ::VK::Renderer::gRenderInstance->GetShaderFromCache(name, flags);
 		VkPipelineShaderStageCreateInfo shaderStageInfo{};
 		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		shaderStageInfo.stage = flags;

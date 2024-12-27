@@ -175,6 +175,11 @@ public:
 		return currDir;
 	}
 
+	static bool FileExists(const std::string& name)
+	{
+		return std::filesystem::exists(name);
+	}
+
 	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
 	static constexpr uint32_t MAXFILES = 10;
 private:
