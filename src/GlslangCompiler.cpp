@@ -3,6 +3,10 @@
 
 namespace GLSLANG
 {
+    static bool notProcessInitialized = true;
+
+    static TBuiltInResource gpuResource{};
+
     void resource()
     {
         gpuResource.maxLights = 32;

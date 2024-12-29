@@ -188,6 +188,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\VKTexture.cpp" />
     <ClCompile Include="src\VKPipelineObject.cpp" />
     <ClCompile Include="src\VKRenderLoop.cpp" />
+    <ClCompile Include="src\VKUtilities.cpp" />
     <ClCompile Include="src\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>

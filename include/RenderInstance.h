@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <iostream>
 #include <vector>
 #include <limits>
@@ -15,11 +16,65 @@
 #include "VKShaderCache.h"
 #include "WindowManager.h"
 
+
+class QueueManager
+{
+public:
+
+	QueueManager(std::vector<uint32_t> _cqs, int32_t _mqc, uint32_t _qfi, VkCommandPool& _p, VkDevice& _d) :
+		bitmap(0U),
+		maxQueueCount(_mqc),
+		queueFamilyIndex(_qfi),
+		pool(_p), 
+		device(_d),
+		sema(Semaphore(_mqc))
+	{
+
+		assert(maxQueueCount <= 16);
+
+		for (uint32_t i = 0; i < _cqs.size(); i++)
+		{
+			bitmap |= (1 << _cqs[i]);
+		}
+	}
+
+	std::optional<std::tuple<VkQueue, VkCommandPool, int32_t>> GetQueue()
+	{
+		sema.Wait();
+		for (int32_t i = 0; i < maxQueueCount; i++)
+		{
+			uint32_t mask = (1 << i);
+			if ((bitmap & mask) == 0)
+			{
+				bitmap |= mask;
+				VkQueue queue;
+				vkGetDeviceQueue(device, queueFamilyIndex, i, &queue);
+				return std::tuple<VkQueue, VkCommandPool, int32_t> (queue, pool, i);
+			}
+		}
+		return std::nullopt;
+	}
+
+	void ReturnQueue(int32_t queueNum)
+	{
+		bitmap &= ~(1U << queueNum);
+		sema.Notify();
+	}
+private:
+	uint16_t bitmap;
+	const int32_t maxQueueCount;
+	const uint32_t queueFamilyIndex;
+	VkCommandPool& pool;
+	VkDevice& device;
+	Semaphore sema;
+};
+
+
 class RenderInstance
 {
 public:
 
-	RenderInstance() : graphicsSemaphore(Semaphore(1))
+	RenderInstance() : transferSemaphore(Semaphore(1))
 	{
 
 	};
@@ -229,40 +284,44 @@ public:
 
 			::VK::Utils::operator<<(std::cout, props);
 
-			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT && graphicsIdx >= 0 && presentIdx >= 0)
-			{
-				transferIdx = counter;
-			}
-
 			if (presentSupport) presentIdx = counter;
 
-			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT && 
-				props.queueFlags & VK_QUEUE_COMPUTE_BIT && 
-				props.queueFlags & VK_QUEUE_GRAPHICS_BIT) graphicsIdx = counter;
+			if (props.queueFlags & VK_QUEUE_TRANSFER_BIT &&
+				props.queueFlags & VK_QUEUE_COMPUTE_BIT &&
+				props.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+				graphicsIdx = counter;
+				graphicsMaxQueueCount = props.queueCount;
+			}
 
-			
 
-			if (graphicsIdx >= 0 && presentIdx >= 0 && transferIdx >= 0) break;
+			if (graphicsIdx >= 0 && presentIdx >= 0)
+			{
+				break;
+			}
 
 			counter++;
 		}
 
-		if (graphicsIdx == -1 || presentIdx == -1 || transferIdx == -1) 
+		if (graphicsIdx == -1 || presentIdx == -1) 
 		{
 			throw std::runtime_error("Cannot find a device with a queue that has COMPUTE,"
-				"TRANSFER and GRAPHICS bits set and /or a presentation queue or specific transfer queue");
+				"TRANSFER and GRAPHICS bits set");
 		}
 
-		std::set queueIndices = { graphicsIdx, presentIdx, transferIdx };
+		std::set queueIndices = { graphicsIdx, presentIdx };
 		std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
-		float queuePriority = 1.0f;
+		std::vector<float> queuePriorties(graphicsMaxQueueCount, 1.0f);
 		for (int queueFamily : queueIndices) {
 			VkDeviceQueueCreateInfo queueCreateInfo{};
 			queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 			queueCreateInfo.queueFamilyIndex = queueFamily;
-			queueCreateInfo.queueCount = 1;
-			queueCreateInfo.pQueuePriorities = &queuePriority;
+			if (queueFamily == graphicsIdx)
+				queueCreateInfo.queueCount = graphicsMaxQueueCount;
+			else
+				queueCreateInfo.queueCount = 1;
+			
+			queueCreateInfo.pQueuePriorities = queuePriorties.data();
 			queueCreateInfos.push_back(queueCreateInfo);
 		}
 
@@ -292,7 +351,7 @@ public:
 
 		vkGetDeviceQueue(logicalDevice, graphicsIdx, 0, &graphicsQueue);
 		vkGetDeviceQueue(logicalDevice, presentIdx, 0, &presentQueue);
-		vkGetDeviceQueue(logicalDevice, transferIdx, 0, &transferQueue);
+
 
 		//::VK::Utils::SwapChainSupportDetails supportDetails = ::VK::Utils::querySwapChainSupport(gpu, renderSurface);
 	}
@@ -388,9 +447,10 @@ public:
 	{
 		swapChainFramebuffers.resize(swapChainImageViews.size());
 		for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-			std::array<VkImageView, 2> attachments = {
+			std::array<VkImageView, 3> attachments = {
 				colorImageView,
-				swapChainImageViews[i]
+				depthImageView,
+				swapChainImageViews[i],
 			};
 
 			VkFramebufferCreateInfo framebufferInfo{};
@@ -408,6 +468,39 @@ public:
 		}
 	}
 
+	void CreateDepthImage()
+	{
+		
+		VkImageCreateInfo info{};
+		info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		info.imageType = VK_IMAGE_TYPE_2D;
+		info.format = depthFormat;
+		info.extent = { swapChainExtent.width, swapChainExtent.height, 1 };
+		info.mipLevels = 1;
+		info.arrayLayers = 1;
+		info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		info.samples = msaaSamples;
+		info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		std::tie(depthImage, depthMemory) = ::VK::Utils::CreateImage(logicalDevice, gpu, info, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+		viewInfo.subresourceRange.levelCount = 1;
+		viewInfo.format = depthFormat;
+		viewInfo.image = depthImage;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+
+		depthImageView = ::VK::Utils::CreateImageView(logicalDevice, viewInfo);
+
+		::VK::Utils::TransitionImageLayout(logicalDevice, commandPool, graphicsQueue, depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1, 1);
+	}
+
 	void DestroySwapChain()
 	{
 
@@ -422,6 +515,10 @@ public:
 		for (auto imageView : swapChainImageViews) {
 			if (imageView) vkDestroyImageView(logicalDevice, imageView, nullptr);
 		}
+
+		vkDestroyImageView(logicalDevice, depthImageView, nullptr);
+		vkDestroyImage(logicalDevice, depthImage, nullptr);
+		vkFreeMemory(logicalDevice, depthMemory, nullptr);
 
 		if (swapChain) {
 			vkDestroySwapchainKHR(logicalDevice, swapChain, nullptr);
@@ -444,6 +541,7 @@ public:
 		CreateSwapChain();
 		CreateVKSWCImageViews();
 		CreateMSAAColorResources();
+		CreateDepthImage();
 		CreateFrameBuffers();
 	}
 
@@ -475,29 +573,44 @@ public:
 		colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+		VkAttachmentDescription depthAttachment{};
+		depthAttachment.format = depthFormat;
+		depthAttachment.samples = msaaSamples;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
 		VkAttachmentReference colorAttachmentRef{};
 		colorAttachmentRef.attachment = 0;
 		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 		VkAttachmentReference colorAttachmentResolveRef{};
-		colorAttachmentResolveRef.attachment = 1;
+		colorAttachmentResolveRef.attachment = 2;
 		colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthAttachmentRef{};
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &colorAttachmentRef;
 		subpass.pResolveAttachments = &colorAttachmentResolveRef;
+		subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
 		VkSubpassDependency dependency{};
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
 		dependency.dstSubpass = 0;
-		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		dependency.srcAccessMask = 0;
-		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-		std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, colorAttachmentResolve };
+		std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -529,13 +642,13 @@ public:
 		VkCommandPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		//poolInfo.queueFamilyIndex = transferIdx;
-
 		poolInfo.queueFamilyIndex = graphicsIdx;
 
 		if (vkCreateCommandPool(logicalDevice, &poolInfo, nullptr, &transferPool) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create command pool!");
 		}
+
+		gptManager = new QueueManager({ 0 }, graphicsMaxQueueCount, graphicsIdx, transferPool, logicalDevice);
 	}
 
 	void CreateCommandBuffer()
@@ -570,10 +683,12 @@ public:
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = swapChainExtent;
 
-		VkClearValue clearColor = { {{0.0f, 0.0f, 0.0f, 1.0f}} };
-		renderPassInfo.clearValueCount = 1;
+		std::array<VkClearValue, 2> clearValues{};
+		clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+		clearValues[1].depthStencil = { 1.0f, 0 };
 
-		renderPassInfo.pClearValues = &clearColor;
+		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+		renderPassInfo.pClearValues = clearValues.data();
 
 		vkCmdBeginRenderPass(cb, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -670,8 +785,6 @@ public:
 		submitInfo.signalSemaphoreCount = 1;
 		submitInfo.pSignalSemaphores = signalSemaphores;
 
-		graphicsSemaphore.Wait();
-
 		if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to submit draw command buffer!");
 		}
@@ -689,8 +802,6 @@ public:
 		presentInfo.pResults = nullptr;
 
 		VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
-
-		graphicsSemaphore.Notify();
 
 		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resizeWindow) {
 			resizeWindow = false;
@@ -776,17 +887,37 @@ public:
 		this->windowMan = window;
 		windowMan->SetWindowResizeCallback(frameResizeCB);
 		glfwSetWindowUserPointer(windowMan->GetWindow(), this);
+
+		
+
 		CreateRenderInstance();
 		CreateDrawingSurface();
 		CreateGPUReferenceAndLogicalDevice();
+
+		depthFormat = ::VK::Utils::findSupportedFormat(gpu,
+			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
 		CreateDescriptorPool();
+
 		CreateSwapChain();
 		CreateVKSWCImageViews();
-		CreateRenderPass();
+
+		
 		CreateMSAAColorResources();
-		CreateFrameBuffers();
+		
+		
+
 		CreateGraphicsCommandPool();
 		CreateTransferCommandPool();
+		
+		CreateDepthImage();
+
+		CreateRenderPass();
+
+		CreateFrameBuffers();
+		
 		CreateCommandBuffer();
 		CreateSyncObjects();
 	}
@@ -799,6 +930,8 @@ public:
 
 	void DestroyRenderInstance()
 	{
+		if (gptManager) delete gptManager;
+
 		shaderCache.DestroyShaderCache(logicalDevice);
 
 		DestroySwapChain();
@@ -899,9 +1032,14 @@ public:
 		return transferPool;
 	}
 
-	VkQueue GetTransferQueue() const
+	auto GetTransferQueue()
 	{
-		return transferQueue;
+		return gptManager->GetQueue();
+	}
+
+	void ReturnTranferQueue(int32_t i)
+	{
+		gptManager->ReturnQueue(i);
 	}
 
 	VkRenderPass GetRenderPass() const
@@ -929,9 +1067,9 @@ public:
 		return msaaSamples;
 	}
 
-	Semaphore& GetGraphicsSemaphore()
+	Semaphore& GetTransferSemaphore()
 	{
-		return graphicsSemaphore;
+		return transferSemaphore;
 	}
 
 
@@ -943,9 +1081,9 @@ private:
 	VkDevice logicalDevice = VK_NULL_HANDLE;
 	VkPhysicalDevice gpu = VK_NULL_HANDLE;
 
-	VkQueue graphicsQueue = VK_NULL_HANDLE, presentQueue = VK_NULL_HANDLE, transferQueue = VK_NULL_HANDLE;
-	int graphicsIdx = -1, presentIdx = -1, transferIdx = -1;
-
+	VkQueue graphicsQueue = VK_NULL_HANDLE, presentQueue = VK_NULL_HANDLE;
+	int graphicsIdx = -1, presentIdx = -1;
+	uint32_t graphicsMaxQueueCount = 0U;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
@@ -964,7 +1102,9 @@ private:
 	VkCommandPool commandPool = VK_NULL_HANDLE;
 	VkCommandPool transferPool = VK_NULL_HANDLE;
 
-	Semaphore graphicsSemaphore;
+	Semaphore transferSemaphore;
+
+	QueueManager *gptManager;
 
 	std::vector<VkCommandBuffer> commandBuffers{};
 
@@ -989,6 +1129,11 @@ private:
 	VkImage colorImage = VK_NULL_HANDLE;
 	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
 	VkImageView colorImageView = VK_NULL_HANDLE;
+
+	VkImage depthImage = VK_NULL_HANDLE;
+	VkDeviceMemory depthMemory = VK_NULL_HANDLE;
+	VkImageView depthImageView = VK_NULL_HANDLE;
+	VkFormat depthFormat;
 
 	VKShaderCache shaderCache;
 

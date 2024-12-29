@@ -18,7 +18,7 @@ public:
 
 	~VKPipelineObject()
 	{
-		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 
 		if (graphicsPipeline)
 		{
@@ -37,11 +37,11 @@ public:
 	}
 
 	void CreatePipelineObject() {
-		VkDevice device = ::VK::Renderer::gRenderInstance->GetVulkanDevice();
+		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 		CreateDescriptorSetLayout(device);
 		CreateDescriptorSets(device);
 		CreatePipelineLayout(device);
-		CreatePipeline(device, ::VK::Renderer::gRenderInstance->GetRenderPass());
+		CreatePipeline(device, VKRenderer::gRenderInstance->GetRenderPass());
 	}
 
 	VkPipeline GetPipeline() const
@@ -59,7 +59,7 @@ public:
 
 		descSetBindings.push_back(layoutBinding);
 
-		uint32_t frames = ::VK::Renderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
+		uint32_t frames = VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
 
 		VkDescriptorImageInfo imageInfo{};
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -96,7 +96,7 @@ public:
 
 	void AddShader(const std::string &name, VkShaderStageFlagBits flags)
 	{
-		VkShaderModule mod = ::VK::Renderer::gRenderInstance->GetShaderFromCache(name, flags);
+		VkShaderModule mod = VKRenderer::gRenderInstance->GetShaderFromCache(name, flags);
 		VkPipelineShaderStageCreateInfo shaderStageInfo{};
 		shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		shaderStageInfo.stage = flags;
@@ -141,11 +141,11 @@ private:
 	{
 		if (!descriptorWrites.size())
 			return;
-		uint32_t frames = ::VK::Renderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
+		uint32_t frames = VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
 		std::vector<VkDescriptorSetLayout> layouts(frames, descriptorSetLayout);
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool = ::VK::Renderer::gRenderInstance->GetDescriptorPool();
+		allocInfo.descriptorPool = VKRenderer::gRenderInstance->GetDescriptorPool();
 		allocInfo.descriptorSetCount = frames;
 		allocInfo.pSetLayouts = layouts.data();
 
@@ -250,7 +250,7 @@ private:
 		VkPipelineMultisampleStateCreateInfo multisampling{};
 		multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 		multisampling.sampleShadingEnable = VK_FALSE;
-		multisampling.rasterizationSamples = ::VK::Renderer::gRenderInstance->GetMSAASamples();
+		multisampling.rasterizationSamples = VKRenderer::gRenderInstance->GetMSAASamples();
 		multisampling.minSampleShading = 1.0f;
 		multisampling.pSampleMask = nullptr;
 		multisampling.alphaToCoverageEnable = VK_FALSE;
@@ -282,12 +282,27 @@ private:
 		pipelineInfo.stageCount = static_cast<uint32_t>(shaderInfos.size());
 		pipelineInfo.pStages = shaderInfos.data();
 
+		VkPipelineDepthStencilStateCreateInfo depthStencil{};
+		depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+		depthStencil.depthTestEnable = VK_TRUE;
+		depthStencil.depthWriteEnable = VK_TRUE;
+
+		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+
+		depthStencil.depthBoundsTestEnable = VK_FALSE;
+		depthStencil.minDepthBounds = 0.0f; // Optional
+		depthStencil.maxDepthBounds = 1.0f; // Optional
+
+		depthStencil.stencilTestEnable = VK_FALSE;
+		depthStencil.front = {}; // Optional
+		depthStencil.back = {}; // Optional
+
 		pipelineInfo.pVertexInputState = &vertexInputInfo;
 		pipelineInfo.pInputAssemblyState = &inputAssembly;
 		pipelineInfo.pViewportState = &viewportState;
 		pipelineInfo.pRasterizationState = &rasterizer;
 		pipelineInfo.pMultisampleState = &multisampling;
-		pipelineInfo.pDepthStencilState = nullptr;
+		pipelineInfo.pDepthStencilState = &depthStencil;
 		pipelineInfo.pColorBlendState = &colorBlending;
 		pipelineInfo.pDynamicState = &dynamicState;
 		pipelineInfo.layout = pipelineLayout;

@@ -13,10 +13,6 @@
 
 namespace GLSLANG
 {
-	inline bool notProcessInitialized = true;
-
-	inline TBuiltInResource gpuResource{};
-
 	void resource();
 
     VkShaderModule CompileShader(VkDevice& device, std::vector<char>& data, VkShaderStageFlags stage);

@@ -90,7 +90,9 @@ private:
 				this, std::placeholders::_1));
 
 
-		rend = ::VK::Renderer::gRenderInstance = new RenderInstance();
+		VKRenderer::gRenderInstance = new RenderInstance();
+
+		rend = VKRenderer::gRenderInstance;
 
 		mainWindow = new WindowManager();
 
@@ -103,8 +105,6 @@ private:
 
 	void CleanupRuntime()
 	{
-
-
 		rend->WaitOnQueues();
 
 		for (auto renderable : renderables)
@@ -116,7 +116,7 @@ private:
 
 		rend->DestroyVulkanRenderer();
 
-		delete ::VK::Renderer::gRenderInstance;
+		delete VKRenderer::gRenderInstance;
 
 		ThreadManager::DestroyThreadManager();
 
@@ -168,8 +168,6 @@ private:
 
 	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file)
 	{
-		std::this_thread::sleep_for(std::chrono::seconds(2));
-
 		this->LoadObject(file);
 
 		flag->store(true);

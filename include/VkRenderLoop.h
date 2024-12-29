@@ -9,20 +9,9 @@ class VKRenderLoop
 public:
 
 	VKRenderLoop() = delete;
-	VKRenderLoop(RenderInstance& _inst) : inst(_inst) {}
+	VKRenderLoop(RenderInstance& _inst);
 
-	void RenderLoop(std::vector<GenericObject*> &objs)
-	{
-		auto index = inst.BeginFrame();
-		if (index == 0xFFFFFFFF) return;
-		VkCommandBuffer cb = inst.GetCurrentCommandBuffer();
-		auto frameNum = inst.GetCurrentFrame();
-		for (auto& obj : objs)
-		{
-			obj->Draw(cb, frameNum);
-		}
-		inst.SubmitFrame(index);
-	}
+	void RenderLoop(std::vector<GenericObject*>& objs);
 
 /*
 	void AddPipeline(VKPipelineObject *pipeline)
