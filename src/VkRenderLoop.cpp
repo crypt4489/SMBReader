@@ -1,5 +1,5 @@
 #include "VKRenderLoop.h"
-
+#include "TextManager.h"
 VKRenderLoop::VKRenderLoop(RenderInstance& _inst) : inst(_inst) 
 {
 
@@ -15,5 +15,7 @@ void VKRenderLoop::RenderLoop(std::vector<GenericObject*>& objs)
 	{
 		obj->Draw(cb, frameNum);
 	}
+	TextManager::DrawTextTM(cb, frameNum);
+
 	inst.SubmitFrame(index);
 }

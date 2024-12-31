@@ -36,12 +36,12 @@ public:
 		}
 	}
 
-	void CreatePipelineObject() {
+	void CreatePipelineObject(std::optional<VkVertexInputBindingDescription> bindDescription, std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes) {
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 		CreateDescriptorSetLayout(device);
 		CreateDescriptorSets(device);
 		CreatePipelineLayout(device);
-		CreatePipeline(device, VKRenderer::gRenderInstance->GetRenderPass());
+		CreatePipeline(device, VKRenderer::gRenderInstance->GetRenderPass(), bindDescription, vertAttributes);
 	}
 
 	VkPipeline GetPipeline() const
@@ -84,12 +84,21 @@ public:
 		}
 	}
 
-	void Draw(VkCommandBuffer cb, uint32_t vertexCount, uint32_t frame)
+	void Draw(VkCommandBuffer cb, VkBuffer buffer, uint32_t vertexCount, uint32_t frame)
 	{
 		if (descriptorSetLayout)
 			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[frame], 0, nullptr);
 
+
+
 		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+		if (buffer)
+		{
+			VkBuffer vertexBuffers[] = { buffer };
+			VkDeviceSize offsets[] = { 0 };
+			vkCmdBindVertexBuffers(cb, 0, 1, vertexBuffers, offsets);
+		}
 
 		vkCmdDraw(cb, vertexCount, 1, 0, 0);
 	}
@@ -194,10 +203,11 @@ private:
 		}
 	}
 
-	void CreatePipeline(VkDevice device, VkRenderPass renderPass)
+	void CreatePipeline(VkDevice device, VkRenderPass renderPass,
+		
+		std::optional<VkVertexInputBindingDescription>& bindDescription, 
+		std::optional<std::vector<VkVertexInputAttributeDescription>>& vertAttributes)
 	{
-		// remember to fix the directory these are stored in for all build
-
 	
 		if (!shaderInfos.size())
 		{
@@ -217,10 +227,24 @@ private:
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 		vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-		vertexInputInfo.vertexBindingDescriptionCount = 0;
-		vertexInputInfo.pVertexBindingDescriptions = nullptr;
-		vertexInputInfo.vertexAttributeDescriptionCount = 0;
-		vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+		if (bindDescription.has_value())
+		{
+			vertexInputInfo.vertexBindingDescriptionCount = 1;
+			vertexInputInfo.pVertexBindingDescriptions = &bindDescription.value();
+		}
+		
+		//vertexInputInfo.vertexBindingDescriptionCount = 0;
+		//vertexInputInfo.pVertexBindingDescriptions = nullptr;
+		if (vertAttributes.has_value())
+		{
+
+			auto& attr = vertAttributes.value();
+			vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attr.size());
+			vertexInputInfo.pVertexAttributeDescriptions = attr.data();
+		}
+
+		//vertexInputInfo.vertexAttributeDescriptionCount = 0;
+		//vertexInputInfo.pVertexAttributeDescriptions = nullptr;
 
 		VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 		inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;

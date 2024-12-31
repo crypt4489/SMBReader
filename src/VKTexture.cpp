@@ -5,10 +5,22 @@ VKTexture::VKTexture(SMBTexture& tex) :
 	imageView(VK_NULL_HANDLE),
 	sampler(VK_NULL_HANDLE)
 {
-	CreateImageResources(tex);
-	CreateImageViews(tex);
-	CreateImageSampler(tex);
+	CreateImageResources(tex.data, tex.imageSizes, tex.width, tex.height, tex.miplevels, tex.type);
+	CreateImageViews(tex.miplevels);
+	CreateImageSampler(tex.miplevels);
 };
+
+VKTexture::VKTexture(AppTextureImpl& tex) :
+	image(VK_NULL_HANDLE),
+	imageView(VK_NULL_HANDLE),
+	sampler(VK_NULL_HANDLE)
+{
+	std::vector<std::vector<char>>imageVec(1, tex.data);
+	std::vector<uint32_t> imageSize(1, tex.dataSize);
+	CreateImageResources(imageVec ,imageSize, tex.width, tex.height, tex.miplevels, tex.type);
+	CreateImageViews(tex.miplevels);
+	CreateImageSampler(tex.miplevels);
+}
 
 VKTexture::VKTexture(VKTexture&& other) noexcept
 {
@@ -61,7 +73,8 @@ VKTexture::~VKTexture()
 	}
 }
 
-void VKTexture::CreateImageResources(SMBTexture& tex)
+void VKTexture::CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes,
+	uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type)
 {
 	VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 	VkPhysicalDevice gpu = VKRenderer::gRenderInstance->GetVulkanPhysicalDevice();
@@ -73,7 +86,7 @@ void VKTexture::CreateImageResources(SMBTexture& tex)
 
 	std::tie(queue, pool, queueNum) = transferQueueData.value();
 
-	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(std::accumulate(tex.imageSizes.begin(), tex.imageSizes.end(), 0));
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(std::accumulate(imageSizes.begin(), imageSizes.end(), 0));
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -82,10 +95,10 @@ void VKTexture::CreateImageResources(SMBTexture& tex)
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	char* data;
-	auto& sizes = tex.imageSizes;
-	auto& pixels = tex.data;
+	auto& sizes = imageSizes;
+	auto& pixels = imageData;
 	vkMapMemory(device, stagingMemory, 0, imagesSize, 0, reinterpret_cast<void**>(&data));
-	for (auto i = 0U; i < tex.miplevels; i++) {
+	for (auto i = 0U; i < mipLevels; i++) {
 		std::memcpy(data, pixels[i].data(), sizes[i]);
 		data += sizes[i];
 	}
@@ -94,13 +107,13 @@ void VKTexture::CreateImageResources(SMBTexture& tex)
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.extent.width = tex.width;
-	imageInfo.extent.height = tex.height;
+	imageInfo.extent.width = width;
+	imageInfo.extent.height = height;
 	imageInfo.extent.depth = 1;
-	imageInfo.mipLevels = tex.miplevels;
+	imageInfo.mipLevels = mipLevels;
 	imageInfo.arrayLayers = 1;
 
-	format = imageInfo.format = ConvertSMBToVkFormat(tex.type);
+	format = imageInfo.format = ConvertSMBToVkFormat(type);
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage =
@@ -119,18 +132,18 @@ void VKTexture::CreateImageResources(SMBTexture& tex)
 
 	VkCommandBuffer cb = ::VK::Utils::BeginOneTimeCommands(device, pool);
 
-	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, tex.miplevels, 1);
+	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
 
 	VkDeviceSize offset = 0U;
 
-	for (auto i = 0U; i < tex.miplevels; i++) {
+	for (auto i = 0U; i < mipLevels; i++) {
 
-		::VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, tex.width >> i, tex.height >> i, i, offset, { 0, 0, 0 });
+		::VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
 
 		offset += static_cast<VkDeviceSize>(sizes[i]);
 	}
 
-	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, tex.miplevels, 1);
+	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
 
 	::VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
@@ -140,7 +153,7 @@ void VKTexture::CreateImageResources(SMBTexture& tex)
 	vkDestroyBuffer(device, stagingBuffer, nullptr);
 }
 
-void VKTexture::CreateImageSampler(SMBTexture& tex)
+void VKTexture::CreateImageSampler(uint32_t mipLevels)
 {
 	VkDevice device =  VKRenderer::gRenderInstance->GetVulkanDevice();
 	VkPhysicalDevice gpu = VKRenderer::gRenderInstance->GetVulkanPhysicalDevice();
@@ -170,14 +183,14 @@ void VKTexture::CreateImageSampler(SMBTexture& tex)
 	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	samplerInfo.mipLodBias = 0.0f;
 	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = static_cast<float>(tex.miplevels);
+	samplerInfo.maxLod = static_cast<float>(mipLevels);
 
 	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create texture sampler!");
 	}
 }
 
-void VKTexture::CreateImageViews(SMBTexture& tex)
+void VKTexture::CreateImageViews(uint32_t miplevels)
 {
 	VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 
@@ -188,25 +201,25 @@ void VKTexture::CreateImageViews(SMBTexture& tex)
 	viewInfo.format = format;
 	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	viewInfo.subresourceRange.baseMipLevel = 0;
-	viewInfo.subresourceRange.levelCount = tex.miplevels;
+	viewInfo.subresourceRange.levelCount = miplevels;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 	viewInfo.subresourceRange.layerCount = 1;
 
 	imageView = ::VK::Utils::CreateImageView(device, viewInfo);
 }
 
-VkFormat VKTexture::ConvertSMBToVkFormat(SMBImageFormat format)
+VkFormat VKTexture::ConvertSMBToVkFormat(ImageFormat format)
 {
 	VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
 	switch (format)
 	{
-	case SMBImageFormat::DXT1:
+	case ImageFormat::DXT1:
 		vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
 		break;
-	case SMBImageFormat::DXT3:
+	case ImageFormat::DXT3:
 		vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
 		break;
-	case SMBImageFormat::R8G8B8A8:
+	case ImageFormat::R8G8B8A8:
 		vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
 		break;
 	}

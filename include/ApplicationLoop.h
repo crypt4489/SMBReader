@@ -15,6 +15,7 @@
 #include "ProgramArgs.h"
 #include "RenderInstance.h"
 #include "SMBFile.h"
+#include "TextManager.h"
 #include "ThreadManager.h"
 #include "VKRenderLoop.h"
 
@@ -62,7 +63,7 @@ private:
 
 			InitializeRuntime();
 
-			commandMap["load"]({ args.inputFile.string() });
+			//commandMap["load"]({ args.inputFile.string() });
 
 			while (running)
 			{
@@ -100,6 +101,14 @@ private:
 
 		rend->CreateVulkanRenderer(mainWindow);
 
+		TextManager::CreateFontTextManager("text.bmp", "text.dat");
+
+		std::string name = "NEEDS TO BE BETTER";
+
+		Text text(name, *TextManager::fonts, 0.25f, 0.25f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+
+		TextManager::UpdateVertexBuffer(text);
+
 		vkLoop = new VKRenderLoop(std::ref(*rend));
 	}
 
@@ -114,11 +123,13 @@ private:
 
 		renderables.clear();
 
+		TextManager::DestroyTextManager();
+
+		ThreadManager::DestroyThreadManager();
+
 		rend->DestroyVulkanRenderer();
 
 		delete VKRenderer::gRenderInstance;
-
-		ThreadManager::DestroyThreadManager();
 
 		cleaned = true;
 	}

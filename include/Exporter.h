@@ -6,6 +6,7 @@
 #include <iostream>
 #include <regex>
 
+#include "AppTextureImpl.h"
 #include "FileManager.h"
 #include "DXTCompression.h"
 #include "SMBFile.h"
@@ -95,9 +96,19 @@ public:
 
 			std::vector<char> bgra = tex.data[i];
 
-			TexUtils::BGRATexture(bgra.data(), tex.width >> i, tex.width >> i);
+			TexUtils::BGRATexture(bgra.data(), tex.width >> i, tex.width >> i, 4);
 
-			outputFile.write(bgra.data(), writeWidth * writeHeight * 4);
+			uint32_t bpr = writeWidth * 4;
+
+			uint32_t offset = (writeHeight - 1) * bpr;
+
+			for (uint32_t i = 0; i < writeHeight; i++)
+			{
+				outputFile.write(bgra.data() + offset, bpr);
+				offset -= bpr;
+			}
+
+			
 
 			FileManager::RemoveOpenFile(outputfilehandle.value());
 		}

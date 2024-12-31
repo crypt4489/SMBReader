@@ -3,12 +3,8 @@
 #include <iostream> 
 #include <cctype>
 #include <locale>
-#include "AppTexture.h"
-#include "Exporter.h"
-#include "RenderInstance.h"
-#include "VertexTypes.h"
-#include "VKRenderLoop.h"
-#include "VKPipelineObject.h"
+
+
 class ProgramArgs
 {
 public:

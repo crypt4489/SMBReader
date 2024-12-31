@@ -75,6 +75,12 @@
     <ClCompile Include="src\VKUtilities.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\TextManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\AppTextureImpl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -137,6 +143,15 @@
     <ClInclude Include="include\GlslangCompiler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\TextManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\AppTextureImpl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\TextureData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="SMBUnarchiverNotes.txt" />
@@ -153,6 +168,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\typicaltextured.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\text.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\text.vert">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

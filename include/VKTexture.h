@@ -1,12 +1,15 @@
 #pragma once
 #include <numeric>
 
+#include "AppTextureImpl.h"
 #include "RenderInstance.h"
 #include "SMBTexture.h"
 class VKTexture
 {
 public:
 	VKTexture(SMBTexture& tex);
+
+	VKTexture(AppTextureImpl& tex);
 
 	VKTexture(VKTexture&& other) noexcept;
 
@@ -20,11 +23,12 @@ public:
 	VkSampler sampler;
 	VkFormat format;
 
-	void CreateImageResources(SMBTexture& tex);
+	void CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes, 
+		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);
 
-	void CreateImageViews(SMBTexture& tex);
+	void CreateImageViews(uint32_t miplevels);
 
-	void CreateImageSampler(SMBTexture& tex);
+	void CreateImageSampler(uint32_t mipLevels);
 
 #if 0
 	void TransitionMips(VkDevice& device, VkPhysicalDevice &gpu, VkCommandPool &pool, VkQueue &queue, uint32_t width, uint32_t height, uint32_t mips)
@@ -117,6 +121,6 @@ public:
 	}
 #endif
 private:
-	VkFormat ConvertSMBToVkFormat(SMBImageFormat format);
+	VkFormat ConvertSMBToVkFormat(ImageFormat format);
 };
 
