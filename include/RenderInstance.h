@@ -239,7 +239,8 @@ public:
 				if (!deviceFeatures.geometryShader || 
 					!deviceFeatures.tessellationShader || 
 					!deviceFeatures.textureCompressionBC ||
-					!deviceFeatures.samplerAnisotropy)
+					!deviceFeatures.samplerAnisotropy ||
+					!deviceFeatures.multiDrawIndirect)
 				{
 					score = std::numeric_limits<int>::min();
 				}
@@ -330,7 +331,7 @@ public:
 		features.textureCompressionBC = VK_TRUE;
 		features.tessellationShader = VK_TRUE;
 		features.samplerAnisotropy = VK_TRUE;
-		//features.multiDrawIndirect = VK_TRUE;
+		features.multiDrawIndirect = VK_TRUE;
 
 		VkDeviceCreateInfo logDeviceInfo{};
 		logDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;

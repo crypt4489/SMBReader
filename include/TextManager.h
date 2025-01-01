@@ -151,6 +151,10 @@ public:
 			gpu, BUFFERSIZE, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			VK_SHARING_MODE_EXCLUSIVE,
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+		std::tie(indirectDrawBuffer, indirectDrawBufferMemory) = ::VK::Utils::createBuffer(device,
+			gpu, MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 	}
 
 	static void UpdateVertexBuffer(const Text& text)
@@ -158,22 +162,39 @@ public:
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 		char* data;
 
-		size_t vertsDataSize = sizeof(TextVertex) * text.textVertices.size();
+		uint32_t textVertexCount = static_cast<uint32_t>(text.textVertices.size());
 
-		count += text.textVertices.size();
+		size_t vertsDataSize = sizeof(TextVertex) * textVertexCount;
 
-		vkMapMemory(device, textBufferMemory, 0, BUFFERSIZE, 0, reinterpret_cast<void**>(&data));
+		vkMapMemory(device, textBufferMemory, bufferOffset, vertsDataSize, 0, reinterpret_cast<void**>(&data));
 
-		std::memcpy(data + bufferOffset, text.textVertices.data(), vertsDataSize);
+		std::memcpy(data, text.textVertices.data(), vertsDataSize);
 
 		vkUnmapMemory(device, textBufferMemory);
 
+		VkDrawIndirectCommand command;
+
+		command.firstVertex = vertexCount;
+		command.firstInstance = 0;
+		command.instanceCount = 1;
+		command.vertexCount = textVertexCount;
+
+		vkMapMemory(device, indirectDrawBufferMemory, commandCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, reinterpret_cast<void**>(&data));
+
+		std::memcpy(data, &command, sizeof(VkDrawIndirectCommand));
+
+		vkUnmapMemory(device, indirectDrawBufferMemory);
+
 		bufferOffset += vertsDataSize;
+
+		vertexCount += textVertexCount;
+		
+		commandCount++;
 	}
 
 	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame)
 	{
-		obj->Draw(cb, textBuffer, count, frame);
+		obj->DrawIndirectOneBuffer(cb, textBuffer, indirectDrawBuffer, commandCount, frame);	
 	}
 
 	static void DestroyTextManager()
@@ -181,6 +202,13 @@ public:
 		if (fonts) delete fonts;
 		if (obj) delete obj;
 		auto device = VKRenderer::gRenderInstance->GetVulkanDevice();
+
+		if (indirectDrawBufferMemory)
+			vkFreeMemory(device, indirectDrawBufferMemory, nullptr);
+
+		if (indirectDrawBuffer)
+			vkDestroyBuffer(device, indirectDrawBuffer, nullptr);
+
 		
 		if (textBufferMemory)
 			vkFreeMemory(device, textBufferMemory, nullptr);
@@ -190,13 +218,14 @@ public:
 
 	}
 
-	static std::vector<std::pair<uint64_t, uint32_t>> offsetsAndCount;
+	static constexpr uint32_t MAXTEXTRENDERABLES = 50;
 	static constexpr uint32_t BUFFERSIZE = 2'000'000;
-	static VkBuffer textBuffer;
-	static VkDeviceMemory textBufferMemory;
-	static uint64_t bufferOffset;
-	static uint32_t count;
+	static VkBuffer textBuffer, indirectDrawBuffer;
+	static VkDeviceMemory textBufferMemory, indirectDrawBufferMemory;
+	static VkDeviceSize bufferOffset;
+	static uint32_t vertexCount, commandCount;
 	static Font* fonts;
 	static VKPipelineObject* obj;
+	static std::vector<VkDrawIndirectCommand> commands;
 };
 

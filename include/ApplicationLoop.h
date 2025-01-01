@@ -107,7 +107,11 @@ private:
 
 		Text text(name, *TextManager::fonts, 0.25f, 0.25f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
 
+		Text text2(name, *TextManager::fonts, 0.5f, 0.75f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+
 		TextManager::UpdateVertexBuffer(text);
+
+		TextManager::UpdateVertexBuffer(text2);
 
 		vkLoop = new VKRenderLoop(std::ref(*rend));
 	}

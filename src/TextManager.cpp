@@ -1,9 +1,14 @@
 #include "TextManager.h"
-std::vector<std::pair<uint64_t, uint32_t>> TextManager::offsetsAndCount;
+
 
 VkBuffer TextManager::textBuffer;
 VkDeviceMemory TextManager::textBufferMemory;
-uint64_t TextManager::bufferOffset;
+VkBuffer TextManager::indirectDrawBuffer;
+VkDeviceMemory TextManager::indirectDrawBufferMemory;
+VkDeviceSize TextManager::bufferOffset = 0;
 Font* TextManager::fonts;
-uint32_t TextManager::count;
+uint32_t TextManager::vertexCount = 0;
+uint32_t TextManager::commandCount = 0;
 VKPipelineObject* TextManager::obj;
+
+std::vector<VkDrawIndirectCommand> TextManager::commands;
