@@ -1,11 +1,17 @@
 #pragma once
 
 #include <any>
+#include <chrono>
+#include <format>
 #include <functional>
 #include <optional>
 #include <queue>
+#include <string>
 #include <syncstream>
 #include <unordered_map>
+
+
+
 #if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
@@ -63,10 +69,41 @@ private:
 
 			InitializeRuntime();
 
-			//commandMap["load"]({ args.inputFile.string() });
+			commandMap["load"]({ args.inputFile.string() });
+
+			int i = 0, j = 1;
+
+			std::chrono::steady_clock::time_point first_tp = std::chrono::steady_clock::now();
+
+			uint64_t frameCounter = 0;
+
+			auto lambdy = [&first_tp]()
+				{
+					if (first_tp == std::chrono::steady_clock::time_point{})
+						return std::chrono::duration<double>{0};
+
+					return std::chrono::duration<double>{std::chrono::steady_clock::now() - first_tp};
+				};
+
+			auto fps = [&frameCounter, &lambdy]()
+				{
+					const double time = lambdy().count();
+
+					if (time == 0.0) return 0.0;
+
+					return frameCounter / time;
+				};
 
 			while (running)
 			{
+				std::string base = std::string("FPS : ");
+				std::string newstring = base + std::to_string(fps());
+			    size_t stringLoc = base.size()-1;
+				text1->UpdateText(newstring);
+				TextManager::UpdateVertexBuffer(text1, stringLoc);
+
+				//std::cout << newstring  << "\n";
+
 				if (mainWindow->ShouldCloseWindow()) break;
 
 				objsSema.Wait();
@@ -78,6 +115,10 @@ private:
 				ProcessCommands();
 
 				ThreadManager::ASyncThreadsDone();
+
+				
+
+				frameCounter++;
 			}
 
 			CleanupRuntime();
@@ -103,15 +144,15 @@ private:
 
 		TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
-		std::string name = "NEEDS TO BE BETTER";
+		std::string name = "FPS : ";
 
-		Text text(name, *TextManager::fonts, 0.25f, 0.25f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+		text1 = new Text(name, *TextManager::fonts, 0.0f, 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 25);
 
-		Text text2(name, *TextManager::fonts, 0.5f, 0.75f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f));
+		//text2 = new Text(name, *TextManager::fonts, 0.5f, 0.75f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 15);
 
-		TextManager::UpdateVertexBuffer(text);
+		TextManager::UploadToVertexBuffer(text1);
 
-		TextManager::UpdateVertexBuffer(text2);
+		//TextManager::UploadToVertexBuffer(text2);
 
 		vkLoop = new VKRenderLoop(std::ref(*rend));
 	}
@@ -126,6 +167,10 @@ private:
 		}
 
 		renderables.clear();
+		
+		delete text1;
+
+		delete text2;
 
 		TextManager::DestroyTextManager();
 
@@ -285,5 +330,6 @@ private:
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	RenderInstance* rend;
+	Text *text1, *text2;
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <tuple>
 
 #include "AppTexture.h"
 #include "FileManager.h"
@@ -45,7 +46,7 @@ struct Font
 
 	uint32_t pictureHeight, pictureWidth;
 	uint32_t cellWidth, cellHeight;
-	uint8_t startingChar;
+	char startingChar;
 	AppTexture *texture;
 	char *fontWidths;
 	uint32_t widthSize;
@@ -55,24 +56,37 @@ class Text
 {
 public:
 	Text() = delete;
-	Text(std::string& text, Font& _f, float x, float y, glm::vec4 color) : font(_f)
+	Text(std::string& text, Font& _f, float x, float y, glm::vec4 color, size_t _buffersize) 
+		: font(_f), mainText(text), bufferReserved(_buffersize), textColor(color)
+		, startX(x), startY(y)
 	{
-		CreateVertices(text, x, y, color);
+		CreateVertices(text, x, y, 0U);
 	}
 
-	void CreateVertices(std::string& text, float x, float y, glm::vec4& color)
+	void CreateVertices(std::string& text, float x, float y, size_t startingString)
 	{
-		textVertices.clear();
+		//textVertices.clear();
 		//textVertices.resize(text.length() * 4); // 4 verts per letter;
-
+		size_t startingVertex = startingString * 4;
 		float actualX, actualY;
-		NormalizeXANDY(x, y, actualX, actualY);
 
+		if (!textVertices.size())
+		{
+			NormalizeXANDY(x, y, actualX, actualY);
+		}
+		else
+		{
+			actualX = textVertices[startingVertex - 1].POSITION.x;
+			actualY = textVertices[startingVertex - 4].POSITION.y;
+			textVertices.erase(textVertices.begin() + startingVertex, textVertices.end());
+		}
+		
 		float lastx = actualX;
-		//float lasty = actualY;
+		float lasty = actualY;
 
 		uint32_t LETTERSPERROW = font.pictureWidth / font.cellWidth;
-		for (auto& c : text)
+
+		for (auto& c : text.substr(startingString, text.size()))
 		{
 			char cLetter = (std::toupper(c) - font.startingChar);
 			if (cLetter == '\n')
@@ -104,13 +118,30 @@ public:
 			float top = actualY;
 			float bottom = actualY + (static_cast<float>(font.cellHeight) / static_cast<float>(font.pictureHeight));;
 			
-			textVertices.emplace_back(glm::vec2(left, top), glm::vec2(s1, t1), color);
-			textVertices.emplace_back(glm::vec2(right, top), glm::vec2(s2, t1), color);
-			textVertices.emplace_back(glm::vec2(left, bottom), glm::vec2(s1, t2), color);
-			textVertices.emplace_back(glm::vec2(right, bottom), glm::vec2(s2, t2), color);
+			textVertices.emplace_back(glm::vec2(left, top), glm::vec2(s1, t1), textColor);
+			textVertices.emplace_back(glm::vec2(right, top), glm::vec2(s2, t1), textColor);
+			textVertices.emplace_back(glm::vec2(left, bottom), glm::vec2(s1, t2), textColor);
+			textVertices.emplace_back(glm::vec2(right, bottom), glm::vec2(s2, t2), textColor);
 
 			lastx = right;
 		}
+	}
+
+	void UpdateText(std::string& newText)
+	{
+		size_t newsize = newText.size();
+		size_t oldsize = mainText.size();
+		size_t i = 0U;
+
+		for (; i < oldsize && i < newsize; i++)
+		{
+			if (newText[i] != mainText[i])
+				break;
+		}
+
+		mainText = mainText.substr(0, i) + newText.substr(i, newText.size());
+
+		CreateVertices(mainText, 0.f, 0.f, i);
 	}
 
 	void NormalizeXANDY(float x, float y, float& xA, float& xY)
@@ -122,6 +153,10 @@ public:
 
 	std::vector<TextVertex> textVertices;
 	Font& font;
+	std::string mainText;
+	size_t bufferReserved;
+	glm::vec4 textColor;
+	float startX, startY;
 };
 
 class TextManager
@@ -140,7 +175,7 @@ public:
 		obj->AddShader("text.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		obj->AddShader("text.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 		obj->AddPixelShaderImageDescription(fonts->texture->vkImpl->imageView, fonts->texture->vkImpl->sampler, 0);
-		obj->CreatePipelineObject(TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions());
+		obj->CreatePipelineObject(TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), DepthTest::ALLPASS);
 	}
 
 	static void CreateTextBuffer()
@@ -157,44 +192,88 @@ public:
 			VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
 	}
 
-	static void UpdateVertexBuffer(const Text& text)
+	static void UploadToVertexBuffer(Text* text)
 	{
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
-		char* data;
+		void* data;
 
-		uint32_t textVertexCount = static_cast<uint32_t>(text.textVertices.size());
+		size_t textVertexCount = text->textVertices.size();
 
 		size_t vertsDataSize = sizeof(TextVertex) * textVertexCount;
 
-		vkMapMemory(device, textBufferMemory, bufferOffset, vertsDataSize, 0, reinterpret_cast<void**>(&data));
+		size_t allocatedVerts = 4 * text->bufferReserved;
 
-		std::memcpy(data, text.textVertices.data(), vertsDataSize);
+		size_t allocatedDataSize = sizeof(TextVertex) * allocatedVerts;
+
+		vkMapMemory(device, textBufferMemory, bufferOffset, vertsDataSize, 0, &data);
+
+		std::memcpy(data, text->textVertices.data(), vertsDataSize);
 
 		vkUnmapMemory(device, textBufferMemory);
 
 		VkDrawIndirectCommand command;
 
-		command.firstVertex = vertexCount;
+		command.firstVertex = static_cast<uint32_t>(vertexCount);
 		command.firstInstance = 0;
 		command.instanceCount = 1;
-		command.vertexCount = textVertexCount;
+		command.vertexCount = static_cast<uint32_t>(textVertexCount);
 
-		vkMapMemory(device, indirectDrawBufferMemory, commandCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, reinterpret_cast<void**>(&data));
+		vkMapMemory(device, indirectDrawBufferMemory, commandCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, &data);
 
 		std::memcpy(data, &command, sizeof(VkDrawIndirectCommand));
 
 		vkUnmapMemory(device, indirectDrawBufferMemory);
 
-		bufferOffset += vertsDataSize;
+		textsCommand.push_back({ text, commandCount++, bufferOffset });
 
-		vertexCount += textVertexCount;
-		
-		commandCount++;
+		bufferOffset += allocatedDataSize;
+
+		vertexCount += allocatedVerts;
+
+
+	}
+
+	static void UpdateVertexBuffer(Text* text, size_t indexInString)
+	{
+		size_t i = 0;
+		for (auto& ref : textsCommand)
+		{
+			if (std::get<Text *>(ref) == text) break;
+			i++;
+		}
+
+		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
+		void* data;
+
+		VkDeviceSize cCount, bOffset;
+
+		std::tie(std::ignore, cCount, bOffset) = textsCommand[i];
+
+		size_t textVertexCount = text->textVertices.size();
+
+		size_t startingOffset = i * 4;
+
+		size_t newCount = textVertexCount - startingOffset;
+
+		vkMapMemory(device, textBufferMemory, bOffset + startingOffset, newCount, 0, &data);
+
+		std::memcpy(data, text->textVertices.data() + startingOffset, newCount * sizeof(TextVertex));
+
+		vkUnmapMemory(device, textBufferMemory);
+
+		vkMapMemory(device, indirectDrawBufferMemory, cCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, &data);
+
+		VkDrawIndirectCommand* command = reinterpret_cast<VkDrawIndirectCommand*>(data);
+
+		command->vertexCount = static_cast<uint32_t>(textVertexCount);
+
+		vkUnmapMemory(device, indirectDrawBufferMemory);
+
 	}
 
 	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame)
 	{
-		obj->DrawIndirectOneBuffer(cb, textBuffer, indirectDrawBuffer, commandCount, frame);	
+		obj->DrawIndirectOneBuffer(cb, textBuffer, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame);
 	}
 
 	static void DestroyTextManager()
@@ -223,9 +302,9 @@ public:
 	static VkBuffer textBuffer, indirectDrawBuffer;
 	static VkDeviceMemory textBufferMemory, indirectDrawBufferMemory;
 	static VkDeviceSize bufferOffset;
-	static uint32_t vertexCount, commandCount;
+	static VkDeviceSize vertexCount, commandCount;
 	static Font* fonts;
 	static VKPipelineObject* obj;
-	static std::vector<VkDrawIndirectCommand> commands;
+	static std::vector<std::tuple<Text*, VkDeviceSize, VkDeviceSize>> textsCommand;
 };
 

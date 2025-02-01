@@ -5,6 +5,7 @@
 
 #include "vulkan/vulkan.h"
 
+#include "AppTypes.h"
 #include "RenderInstance.h"
 
 class VKPipelineObject
@@ -36,12 +37,12 @@ public:
 		}
 	}
 
-	void CreatePipelineObject(std::optional<VkVertexInputBindingDescription> bindDescription, std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes) {
+	void CreatePipelineObject(std::optional<VkVertexInputBindingDescription> bindDescription, std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes, DepthTest test) {
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
 		CreateDescriptorSetLayout(device);
 		CreateDescriptorSets(device);
 		CreatePipelineLayout(device);
-		CreatePipeline(device, VKRenderer::gRenderInstance->GetRenderPass(), bindDescription, vertAttributes);
+		CreatePipeline(device, VKRenderer::gRenderInstance->GetRenderPass(), bindDescription, vertAttributes, ConvertDepthTestAppToVulkan(test));
 	}
 
 	VkPipeline GetPipeline() const
@@ -226,10 +227,25 @@ private:
 		}
 	}
 
+	VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp)
+	{
+		VkCompareOp ret = VK_COMPARE_OP_LESS;
+		switch (testApp)
+		{
+		case DepthTest::ALLPASS:
+			ret = VK_COMPARE_OP_ALWAYS;
+			break;
+		default:
+			break;
+		}
+
+		return ret;
+	}
+
 	void CreatePipeline(VkDevice device, VkRenderPass renderPass,
 		
 		std::optional<VkVertexInputBindingDescription>& bindDescription, 
-		std::optional<std::vector<VkVertexInputAttributeDescription>>& vertAttributes)
+		std::optional<std::vector<VkVertexInputAttributeDescription>>& vertAttributes, VkCompareOp depthOp)
 	{
 	
 		if (!shaderInfos.size())
@@ -334,7 +350,7 @@ private:
 		depthStencil.depthTestEnable = VK_TRUE;
 		depthStencil.depthWriteEnable = VK_TRUE;
 
-		depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
+		depthStencil.depthCompareOp = depthOp;
 
 		depthStencil.depthBoundsTestEnable = VK_FALSE;
 		depthStencil.minDepthBounds = 0.0f; // Optional
