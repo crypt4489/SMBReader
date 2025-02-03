@@ -102,7 +102,7 @@ private:
 				text1->UpdateText(newstring);
 				TextManager::UpdateVertexBuffer(text1, stringLoc);
 
-				//std::cout << newstring  << "\n";
+				std::cout << newstring  << "\n";
 
 				if (mainWindow->ShouldCloseWindow()) break;
 

@@ -8,11 +8,10 @@ layout(location = 0) out vec4 outColor;
 layout(binding = 0) uniform sampler2D baseSampler;
 
 void main() {
-    float alpha = 1.0f;
     vec4 texColor = texture(baseSampler, texCoords);
     if (texColor.r == 0.0f)
     {
-        alpha = 0.0f;
+        discard;
     }
-    outColor = vec4(color.rgb * texColor.rgb, alpha); 
+    outColor = color * texColor; 
 }
