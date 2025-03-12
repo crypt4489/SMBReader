@@ -12,7 +12,7 @@
 
 
 
-#if defined(WIN32) || defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
 
@@ -73,36 +73,39 @@ private:
 
 			int i = 0, j = 1;
 
-			std::chrono::steady_clock::time_point first_tp = std::chrono::steady_clock::now();
+			LARGE_INTEGER startTime;
+			LARGE_INTEGER currentTime;
+			LARGE_INTEGER frequency;
 
 			uint64_t frameCounter = 0;
+			double FPS = 0.0f;
 
-			auto lambdy = [&first_tp]()
+			auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS]()
 				{
-					if (first_tp == std::chrono::steady_clock::time_point{})
-						return std::chrono::duration<double>{0};
+					double elapsed;
+					QueryPerformanceCounter(&currentTime);
 
-					return std::chrono::duration<double>{std::chrono::steady_clock::now() - first_tp};
+					elapsed = static_cast<double>((currentTime.QuadPart - startTime.QuadPart)) / frequency.QuadPart;
+
+					if (elapsed >= 1.0) {
+						FPS = static_cast<double>(frameCounter) / elapsed;
+						frameCounter = 0;
+						QueryPerformanceCounter(&startTime);
+					}
 				};
 
-			auto fps = [&frameCounter, &lambdy]()
-				{
-					const double time = lambdy().count();
-
-					if (time == 0.0) return 0.0;
-
-					return frameCounter / time;
-				};
+			QueryPerformanceFrequency(&frequency);
+			QueryPerformanceCounter(&startTime);
 
 			while (running)
 			{
 				std::string base = std::string("FPS : ");
-				std::string newstring = base + std::to_string(fps());
+				std::string newstring = base + std::to_string(FPS);
 			    size_t stringLoc = base.size()-1;
 				text1->UpdateText(newstring);
 				TextManager::UpdateVertexBuffer(text1, stringLoc);
 
-				std::cout << newstring  << "\n";
+				//std::cout << newstring  << "\n";
 
 				if (mainWindow->ShouldCloseWindow()) break;
 
@@ -116,7 +119,7 @@ private:
 
 				ThreadManager::ASyncThreadsDone();
 
-				
+				fps();
 
 				frameCounter++;
 			}

@@ -126,7 +126,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);_CRT_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(SolutionDir)include;C:\VulkanSDK\1.3.290.0\Include;$(SolutionDir)3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)vulkan\include;$(SolutionDir)include;C:\VulkanSDK\1.3.290.0\Include;$(SolutionDir)3rdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -178,20 +178,20 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\Exporter.cpp" />
     <ClCompile Include="src\FileManager.cpp" />
     <ClCompile Include="src\GenericObject.cpp" />
-    <ClCompile Include="src\GlslangCompiler.cpp" />
     <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\DXTCompression.cpp" />
-    <ClCompile Include="src\RenderInstance.cpp" />
     <ClCompile Include="src\SMBFile.cpp" />
     <ClCompile Include="src\SMBTexture.cpp" />
     <ClCompile Include="src\TextManager.cpp" />
     <ClCompile Include="src\ThreadManager.cpp" />
-    <ClCompile Include="src\VKShaderCache.cpp" />
-    <ClCompile Include="src\VKTexture.cpp" />
-    <ClCompile Include="src\VKPipelineObject.cpp" />
-    <ClCompile Include="src\VKRenderLoop.cpp" />
-    <ClCompile Include="src\VKUtilities.cpp" />
     <ClCompile Include="src\WindowManager.cpp" />
+    <ClCompile Include="vulkan\src\GlslangCompiler.cpp" />
+    <ClCompile Include="vulkan\src\RenderInstance.cpp" />
+    <ClCompile Include="vulkan\src\VKPipelineObject.cpp" />
+    <ClCompile Include="vulkan\src\VKRenderLoop.cpp" />
+    <ClCompile Include="vulkan\src\VKShaderCache.cpp" />
+    <ClCompile Include="vulkan\src\VKTexture.cpp" />
+    <ClCompile Include="vulkan\src\VKUtilities.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\ApplicationLoop.h" />
@@ -201,22 +201,22 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
     <ClInclude Include="include\GenericObject.h" />
-    <ClInclude Include="include\GlslangCompiler.h" />
     <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\DXTCompression.h" />
-    <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMBFile.h" />
     <ClInclude Include="include\SMBTexture.h" />
     <ClInclude Include="include\TextManager.h" />
     <ClInclude Include="include\TextureData.h" />
     <ClInclude Include="include\ThreadManager.h" />
-    <ClInclude Include="include\VKShaderCache.h" />
-    <ClInclude Include="include\VKTexture.h" />
     <ClInclude Include="include\VertexTypes.h" />
-    <ClInclude Include="include\VKPipelineObject.h" />
-    <ClInclude Include="include\VKRenderLoop.h" />
     <ClInclude Include="include\VKUtilities.h" />
     <ClInclude Include="include\WindowManager.h" />
+    <ClInclude Include="vulkan\include\GlslangCompiler.h" />
+    <ClInclude Include="vulkan\include\RenderInstance.h" />
+    <ClInclude Include="vulkan\include\VKPipelineObject.h" />
+    <ClInclude Include="vulkan\include\VKRenderLoop.h" />
+    <ClInclude Include="vulkan\include\VKShaderCache.h" />
+    <ClInclude Include="vulkan\include\VKTexture.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />
