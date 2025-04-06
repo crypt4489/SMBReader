@@ -16,7 +16,16 @@ public:
 		}
 		else 
 		{
-
+			if (strcmp(argv[1], "-d") == 0)
+			{
+				std::string in = std::string(argv[2]);
+				size_t off = 0;
+				size_t size = in.size();
+				if (in[0] == '\"') off++;
+				if (in[size - 1] == '\"') size--;
+				inputFile = in.substr(off, size - off);
+				return;
+			}
 		}
 	}
 

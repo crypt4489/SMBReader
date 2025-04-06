@@ -1,21 +1,22 @@
 #include "VKShaderCache.h"
 
-VkShaderModule VKShaderCache::GetShader(VkDevice& device, const std::string& name, VkShaderStageFlags flags)
+std::pair<VkShaderModule, VkShaderStageFlagBits> VKShaderCache::GetShader(VkDevice& device, const std::string& name)
 {
 	auto found = shaders.find(name);
 	if (found == std::end(shaders))
 	{
-		auto ret = shaders[name] = CreateShader(device, name, flags);
-		return ret;
+		VkShaderStageFlagBits flags = VKShaderCache::ConvertShaderFlags(name);
+		auto ret = shaders[name] = { CreateShader(device, name, flags), flags };
+		return std::make_pair(ret.mod, ret.flags);
 	}
-	return found->second;
+	return std::make_pair(found->second.mod, found->second.flags);
 }
 
 void VKShaderCache::DestroyShaderCache(VkDevice& device)
 {
 	for (auto& iter : shaders)
 	{
-		vkDestroyShaderModule(device, iter.second, nullptr);
+		vkDestroyShaderModule(device, iter.second.mod, nullptr);
 	}
 }
 

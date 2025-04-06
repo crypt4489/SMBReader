@@ -8,12 +8,14 @@
 #include <vector>
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <unordered_map>
 
 #include "FileManager.h"
 #include "ThreadManager.h"
 #include "VKShaderCache.h"
+#include "VKPipelineCache.h"
 #include "WindowManager.h"
 
 
@@ -546,9 +548,9 @@ public:
 		CreateFrameBuffers();
 	}
 
-	VkShaderModule GetShaderFromCache(const std::string& name, VkShaderStageFlags flags)
-	{
-		return shaderCache.GetShader(logicalDevice, name, flags);
+	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name)
+	{	  
+		return shaderCache.GetShader(logicalDevice, name);
 	}
 
 
@@ -624,6 +626,8 @@ public:
 		if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create render pass!");
 		}
+
+		mainRenderPassCache.renderPass = renderPass;
 	}
 
 	void CreateGraphicsCommandPool()
@@ -883,6 +887,38 @@ public:
 		renderInst->SetResizeBool(true);
 	}
 
+	void CreatePipelines()
+	{
+		// Create Shaders
+
+		auto shader1 = shaderCache.GetShader(logicalDevice, "newtextured.vert.spv");
+		auto shader2 = shaderCache.GetShader(logicalDevice, "typicaltextured.frag.spv");
+
+		auto shader3 = shaderCache.GetShader(logicalDevice, "text.vert.spv");
+		auto shader4 = shaderCache.GetShader(logicalDevice, "text.frag.spv");
+
+
+		DescriptorSetLayoutBuilder lb{};
+
+		lb.AddPixelImageSamplerLayout(0);
+
+		auto desclay = lb.CreateDescriptorSetLayout(logicalDevice);
+
+		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
+
+		mainRenderPassCache.CreatePipeline(logicalDevice, desclay, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
+
+		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
+
+		mainRenderPassCache.CreatePipeline(logicalDevice, desclay, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+
+	}
+
+	PipelineCacheObject GetPipeline(std::string ptype)
+	{
+		return mainRenderPassCache.GetPipelineFromCache(ptype);
+	}
+
 	void CreateVulkanRenderer(WindowManager *window)
 	{
 		this->windowMan = window;
@@ -921,11 +957,14 @@ public:
 		
 		CreateCommandBuffer();
 		CreateSyncObjects();
+
+		CreatePipelines();
 	}
 
 	
 	void DestroyVulkanRenderer()
 	{
+
 		DestroyRenderInstance();
 	}
 
@@ -934,6 +973,8 @@ public:
 		if (gptManager) delete gptManager;
 
 		shaderCache.DestroyShaderCache(logicalDevice);
+
+		mainRenderPassCache.DestroyPipelineCache(logicalDevice);
 
 		DestroySwapChain();
 
@@ -1073,6 +1114,10 @@ public:
 		return transferSemaphore;
 	}
 
+	VKPipelineCache* GetMainRenderPassCache()
+	{
+		return &mainRenderPassCache;
+	}
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -1137,6 +1182,7 @@ private:
 	VkFormat depthFormat;
 
 	VKShaderCache shaderCache;
+	VKPipelineCache mainRenderPassCache;
 
 	VkSampleCountFlagBits GetMaxMSAALevels()
 	{

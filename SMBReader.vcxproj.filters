@@ -69,7 +69,7 @@
     <ClCompile Include="vulkan\src\VKPipelineObject.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\src\VKRenderLoop.cpp">
+    <ClCompile Include="vulkan\src\VKRenderGraph.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vulkan\src\VKShaderCache.cpp">
@@ -79,6 +79,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vulkan\src\VKUtilities.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vulkan\src\VKPipelineCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -143,13 +146,16 @@
     <ClInclude Include="vulkan\include\VKPipelineObject.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan\include\VKRenderLoop.h">
+    <ClInclude Include="vulkan\include\VKRenderGraph.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKShaderCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKTexture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKPipelineCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

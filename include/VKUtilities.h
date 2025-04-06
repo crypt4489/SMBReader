@@ -1,7 +1,7 @@
 #pragma once
 
 #include "vulkan/vulkan.h"
-
+#include "AppTypes.h"
 #include <iostream>
 #include <vector>
 
@@ -516,6 +516,24 @@ namespace {
 						1, &barrier
 					);
 				}
+			}	
+
+		}
+		namespace API {
+
+			VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp)
+			{
+				VkCompareOp ret = VK_COMPARE_OP_LESS;
+				switch (testApp)
+				{
+				case DepthTest::ALLPASS:
+					ret = VK_COMPARE_OP_ALWAYS;
+					break;
+				default:
+					break;
+				}
+
+				return ret;
 			}
 
 		}

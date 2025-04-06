@@ -15,6 +15,7 @@ class GenericObject
 public:
 	GenericObject(const SMBFile &file, RenderingBackend be) : vkPipelineObject(nullptr)
 	{
+		vertexCount = 4;
 		for (const auto& chunk : file.chunks)
 		{
 			switch (chunk.chunkType)
@@ -36,11 +37,14 @@ public:
 
 		if (be == RenderingBackend::VULKAN)
 		{
-			vkPipelineObject = new VKPipelineObject();
-			vkPipelineObject->AddShader("newtextured.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-			vkPipelineObject->AddShader("typicaltextured.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			vkPipelineObject = new VKPipelineObject(
+				"2dimage", 
+				&vertexCount, 
+				VK_NULL_HANDLE,
+				VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT
+			);
 			vkPipelineObject->AddPixelShaderImageDescription(textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 0);
-			vkPipelineObject->CreatePipelineObject(std::nullopt, std::nullopt, DepthTest::DEPTHLESS);
+			vkPipelineObject->CreatePipelineObject(VKRenderer::gRenderInstance->GetVulkanDevice());
 		}
 	}
 
@@ -50,14 +54,14 @@ public:
 		textures.clear();
 	}
 
-	void Draw(VkCommandBuffer cb, uint32_t currentFrame)
+	VKPipelineObject* GetPipelineObject() const
 	{
-		vkPipelineObject->Draw(cb, VK_NULL_HANDLE, 4, currentFrame);
+		return vkPipelineObject;
 	}
 
 protected:
 	VKPipelineObject* vkPipelineObject;
-
+	size_t vertexCount;
 	std::vector<AppTexture> textures;
 };
 

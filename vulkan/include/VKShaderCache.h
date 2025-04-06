@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <unordered_map>
 #include <vector>
+#include "AppTypes.h"
 #include "FileManager.h"
 #include "GlslangCompiler.h"
 #include "VKUtilities.h"
@@ -27,20 +28,49 @@ private:
 	uint32_t ID;
 };
 
+
+
 class VKShaderCache
 {
 public:
 	VKShaderCache() = default;
 
-	VkShaderModule GetShader(VkDevice& device, const std::string& name, VkShaderStageFlags flags);
+	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShader(VkDevice& device, const std::string& name);
 
 	void DestroyShaderCache(VkDevice& device);
-	
-private:
 
+	VkShaderStageFlagBits ConvertShaderFlags(ShaderType type)
+	{
+		switch (type)
+		{
+		case ShaderType::PIX_SHADER:
+			return VK_SHADER_STAGE_FRAGMENT_BIT;
+		case ShaderType::VERT_SHADER:
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		}
+	}
+
+	VkShaderStageFlagBits ConvertShaderFlags(const std::string& filename)
+	{
+		if (filename.find(".frag") != std::string::npos)
+		{
+			return VK_SHADER_STAGE_FRAGMENT_BIT;
+		}
+		else if (filename.find(".vert") != std::string::npos)
+		{
+			return VK_SHADER_STAGE_VERTEX_BIT;
+		}
+	}
+	
 	VkShaderModule CreateShader(VkDevice& logicalDevice, const std::string& name, VkShaderStageFlags flags);
 
-	std::unordered_map<std::string, VkShaderModule> shaders;
+private:
+	struct ShaderCacheObject
+	{
+		VkShaderModule mod;
+		VkShaderStageFlagBits flags;
+	};
+	std::unordered_map<std::string, ShaderCacheObject> shaders;
 
 };
 

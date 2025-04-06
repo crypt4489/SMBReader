@@ -19,16 +19,16 @@
 #include "AppTypes.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
+#include "GenericObject.h"
 #include "RenderInstance.h"
 #include "SMBFile.h"
 #include "TextManager.h"
 #include "ThreadManager.h"
-#include "VKRenderLoop.h"
-
+#include "VKRenderGraph.h"
 class ApplicationLoop
 {
 public:
-	ApplicationLoop(ProgramArgs& _args) : vkLoop(nullptr), 
+	ApplicationLoop(ProgramArgs& _args) : 
 		args(_args), 
 		queueSema(Semaphore()), 
 		objsSema(Semaphore()), 
@@ -37,7 +37,7 @@ public:
 	{ 
 		Execute(); 
 	}
-	~ApplicationLoop() { if (!cleaned) CleanupRuntime();  delete vkLoop; delete mainWindow; }
+	~ApplicationLoop() { if (!cleaned) CleanupRuntime(); delete graph; delete mainWindow; }
 private:
 
 	void InitializeCommandMap()
@@ -111,7 +111,14 @@ private:
 
 				objsSema.Wait();
 
-				vkLoop->RenderLoop(std::ref(renderables));
+				auto index = rend->BeginFrame();
+				if (index == 0xFFFFFFFF) break;
+				VkCommandBuffer cb = rend->GetCurrentCommandBuffer();
+				auto frameNum = rend->GetCurrentFrame();
+				
+				graph->DrawScene(cb, frameNum, vkpipes);
+
+				rend->SubmitFrame(index);
 
 				objsSema.Notify();
 
@@ -145,6 +152,8 @@ private:
 
 		rend->CreateVulkanRenderer(mainWindow);
 
+		graph = new VKRenderGraph(rend->GetRenderPass(), rend->GetMainRenderPassCache());
+
 		TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
 		std::string name = "FPS : ";
@@ -156,8 +165,6 @@ private:
 		TextManager::UploadToVertexBuffer(text1);
 
 		//TextManager::UploadToVertexBuffer(text2);
-
-		vkLoop = new VKRenderLoop(std::ref(*rend));
 	}
 
 	void CleanupRuntime()
@@ -222,6 +229,8 @@ private:
 		SemaphoreGuard lock(objsSema);
 
 		renderables.push_back(obj);
+
+		vkpipes.push_back(obj->GetPipelineObject());
 	}
 
 	void LoadThreadedWrapper(const std::string file)
@@ -325,14 +334,15 @@ private:
 	}
 
 	ProgramArgs& args;
-	VKRenderLoop* vkLoop;
 	Semaphore queueSema, objsSema;
 	std::queue<std::vector<std::any>> commands;
 	std::unordered_map<std::string, std::function<void(std::vector<std::any>)>> commandMap;
 	std::vector<GenericObject*> renderables;
+	std::vector<VKPipelineObject*> vkpipes;
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	RenderInstance* rend;
 	Text *text1, *text2;
+	VKRenderGraph* graph;
 };
 

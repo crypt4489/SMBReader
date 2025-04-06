@@ -171,11 +171,14 @@ public:
 
 	static void CreatePipelineObject()
 	{
-		obj = new VKPipelineObject();
-		obj->AddShader("text.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-		obj->AddShader("text.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+		obj = new VKPipelineObject(
+			"text", 
+			&vertexCount, 
+			textBuffer, 
+			static_cast<size_t>(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT)
+		);
 		obj->AddPixelShaderImageDescription(fonts->texture->vkImpl->imageView, fonts->texture->vkImpl->sampler, 0);
-		obj->CreatePipelineObject(TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), DepthTest::ALLPASS);
+		obj->CreatePipelineObject(VKRenderer::gRenderInstance->GetVulkanDevice());
 	}
 
 	static void CreateTextBuffer()
@@ -273,7 +276,7 @@ public:
 
 	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame)
 	{
-		obj->DrawIndirectOneBuffer(cb, textBuffer, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame);
+		obj->DrawIndirectOneBuffer(cb, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame);
 	}
 
 	static void DestroyTextManager()
