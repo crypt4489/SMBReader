@@ -14,6 +14,7 @@
 
 #include "FileManager.h"
 #include "ThreadManager.h"
+#include "VKDescriptorLayoutCache.h"
 #include "VKShaderCache.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
@@ -550,7 +551,7 @@ public:
 
 	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name)
 	{	  
-		return shaderCache.GetShader(logicalDevice, name);
+		return shaderCache.GetShader(name);
 	}
 
 
@@ -626,8 +627,6 @@ public:
 		if (vkCreateRenderPass(logicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create render pass!");
 		}
-
-		mainRenderPassCache.renderPass = renderPass;
 	}
 
 	void CreateGraphicsCommandPool()
@@ -891,12 +890,11 @@ public:
 	{
 		// Create Shaders
 
-		auto shader1 = shaderCache.GetShader(logicalDevice, "newtextured.vert.spv");
-		auto shader2 = shaderCache.GetShader(logicalDevice, "typicaltextured.frag.spv");
+		auto shader1 = shaderCache.GetShader("newtextured.vert.spv");
+		auto shader2 = shaderCache.GetShader("typicaltextured.frag.spv");
 
-		auto shader3 = shaderCache.GetShader(logicalDevice, "text.vert.spv");
-		auto shader4 = shaderCache.GetShader(logicalDevice, "text.frag.spv");
-
+		auto shader3 = shaderCache.GetShader("text.vert.spv");
+		auto shader4 = shaderCache.GetShader("text.frag.spv");
 
 		DescriptorSetLayoutBuilder lb{};
 
@@ -904,13 +902,15 @@ public:
 
 		auto desclay = lb.CreateDescriptorSetLayout(logicalDevice);
 
+		descriptorLayoutCache.AddLayout("oneimage", desclay);
+
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
 
-		mainRenderPassCache.CreatePipeline(logicalDevice, desclay, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
+		mainRenderPassCache.CreatePipeline(desclay, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
 
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
 
-		mainRenderPassCache.CreatePipeline(logicalDevice, desclay, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+		mainRenderPassCache.CreatePipeline(desclay, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
 
 	}
 
@@ -958,13 +958,17 @@ public:
 		CreateCommandBuffer();
 		CreateSyncObjects();
 
+		descriptorLayoutCache.device = logicalDevice;
+		mainRenderPassCache.renderPass = renderPass;
+		mainRenderPassCache.device = logicalDevice;
+		shaderCache.SetLogicalDevice(logicalDevice);
+
 		CreatePipelines();
 	}
 
 	
 	void DestroyVulkanRenderer()
 	{
-
 		DestroyRenderInstance();
 	}
 
@@ -972,9 +976,11 @@ public:
 	{
 		if (gptManager) delete gptManager;
 
-		shaderCache.DestroyShaderCache(logicalDevice);
+		shaderCache.DestroyShaderCache();
 
-		mainRenderPassCache.DestroyPipelineCache(logicalDevice);
+		mainRenderPassCache.DestroyPipelineCache();
+
+		descriptorLayoutCache.DestroyLayoutCache();
 
 		DestroySwapChain();
 
@@ -1183,6 +1189,7 @@ private:
 
 	VKShaderCache shaderCache;
 	VKPipelineCache mainRenderPassCache;
+	VKDescriptorLayoutCache descriptorLayoutCache;
 
 	VkSampleCountFlagBits GetMaxMSAALevels()
 	{

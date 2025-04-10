@@ -84,6 +84,9 @@
     <ClCompile Include="vulkan\src\VKPipelineCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vulkan\src\VKDescriptorLayoutCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -156,6 +159,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKPipelineCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKDescriptorLayoutCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

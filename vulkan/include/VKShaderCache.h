@@ -35,9 +35,9 @@ class VKShaderCache
 public:
 	VKShaderCache() = default;
 
-	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShader(VkDevice& device, const std::string& name);
+	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShader(const std::string& name);
 
-	void DestroyShaderCache(VkDevice& device);
+	void DestroyShaderCache();
 
 	VkShaderStageFlagBits ConvertShaderFlags(ShaderType type)
 	{
@@ -48,6 +48,8 @@ public:
 		case ShaderType::VERT_SHADER:
 			return VK_SHADER_STAGE_VERTEX_BIT;
 		}
+
+		return VK_SHADER_STAGE_ALL;
 	}
 
 	VkShaderStageFlagBits ConvertShaderFlags(const std::string& filename)
@@ -60,9 +62,16 @@ public:
 		{
 			return VK_SHADER_STAGE_VERTEX_BIT;
 		}
+
+		return VK_SHADER_STAGE_ALL;
 	}
 	
-	VkShaderModule CreateShader(VkDevice& logicalDevice, const std::string& name, VkShaderStageFlags flags);
+	VkShaderModule CreateShader(const std::string& name, VkShaderStageFlags flags);
+
+	void SetLogicalDevice(VkDevice& _d)
+	{
+		device = _d;
+	}
 
 private:
 	struct ShaderCacheObject
@@ -71,6 +80,6 @@ private:
 		VkShaderStageFlagBits flags;
 	};
 	std::unordered_map<std::string, ShaderCacheObject> shaders;
-
+	VkDevice device = VK_NULL_HANDLE;
 };
 

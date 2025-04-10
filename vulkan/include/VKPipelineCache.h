@@ -5,40 +5,7 @@
 #include <unordered_map>
 #include <vector>
 
-struct DescriptorSetLayoutBuilder
-{
-	VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice &device)
-	{
-		VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
-		if (!descSetBindings.size())
-			return descriptorSetLayout;
-
-		VkDescriptorSetLayoutCreateInfo layoutInfo{};
-		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = static_cast<uint32_t>(descSetBindings.size());
-		layoutInfo.pBindings = descSetBindings.data();
-
-		if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create descriptor set layout!");
-		}
-
-		return descriptorSetLayout;
-	}
-
-	void AddPixelImageSamplerLayout(uint32_t binding)
-	{
-		VkDescriptorSetLayoutBinding layoutBinding{};
-		layoutBinding.binding = binding;
-		layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		layoutBinding.descriptorCount = 1;
-		layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		descSetBindings.push_back(layoutBinding);
-	}
-
-	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
-};
 
 struct PipelineCacheObject
 {
@@ -51,31 +18,31 @@ class VKPipelineCache
 {
 public:
 	VKPipelineCache() = default;
-	VKPipelineCache(VkRenderPass& rp) : renderPass(rp) {};
+	//VKPipelineCache(VkRenderPass& rp) : renderPass(rp) {};
 	PipelineCacheObject GetPipelineFromCache(const std::string& name)
 	{
 		auto found = pipelines.find(name);
 		if (found == std::end(pipelines))
 		{
-
+			throw std::runtime_error("Cannot find pipeline from cache");
 		}
 		return found->second;
 
 	}
 
-	PipelineCacheObject CreatePipeline(VkDevice& device, VkDescriptorSetLayout descriptorSetLayout,
+	PipelineCacheObject CreatePipeline(VkDescriptorSetLayout descriptorSetLayout,
 		std::optional<VkVertexInputBindingDescription> bindDescription,
 		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
 		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 		std::string name)
 	{
-		auto co = CreateGraphicsPipeline(device, descriptorSetLayout, bindDescription, vertAttributes, shaders, depthOp, sampleCount);
+		auto co = CreateGraphicsPipeline(descriptorSetLayout, bindDescription, vertAttributes, shaders, depthOp, sampleCount);
 		pipelines[name] = co;
 		return co;
 	}
 
-	VkPipelineLayout CreatePipelineLayout(VkDevice &device, VkDescriptorSetLayout descriptorSetLayout)
+	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout descriptorSetLayout)
 	{
 		VkPipelineLayout pipelineLayout;
 
@@ -97,7 +64,7 @@ public:
 		return pipelineLayout;
 	}
 
-	PipelineCacheObject CreateGraphicsPipeline(VkDevice& device,  VkDescriptorSetLayout& descriptorSetLayout,
+	PipelineCacheObject CreateGraphicsPipeline(VkDescriptorSetLayout& descriptorSetLayout,
 		std::optional<VkVertexInputBindingDescription> bindDescription,
 		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
@@ -105,7 +72,7 @@ public:
 	{
 		VkPipeline graphicsPipeline;
 
-		VkPipelineLayout pipelineLayout = CreatePipelineLayout(device, descriptorSetLayout);
+		VkPipelineLayout pipelineLayout = CreatePipelineLayout(descriptorSetLayout);
 
 		std::array<VkDynamicState, 2> dynamicStates = {
 			VK_DYNAMIC_STATE_VIEWPORT,
@@ -249,19 +216,18 @@ public:
 		return shaderStageInfo;
 	}
 
-	void DestroyPipelineCache(VkDevice device)
+	void DestroyPipelineCache()
 	{
 		for (auto& i : pipelines)
 		{
 			vkDestroyPipeline(device, i.second.pipeline, nullptr);
 			
 			vkDestroyPipelineLayout(device, i.second.pipelineLayout, nullptr);
-
-			vkDestroyDescriptorSetLayout(device, i.second.descLayout, nullptr);
 		}
 	}
 
 	std::unordered_map<std::string, PipelineCacheObject> pipelines;
 	VkRenderPass renderPass;
+	VkDevice device;
 };
 

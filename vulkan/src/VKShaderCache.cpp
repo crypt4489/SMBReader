@@ -1,18 +1,18 @@
 #include "VKShaderCache.h"
 
-std::pair<VkShaderModule, VkShaderStageFlagBits> VKShaderCache::GetShader(VkDevice& device, const std::string& name)
+std::pair<VkShaderModule, VkShaderStageFlagBits> VKShaderCache::GetShader(const std::string& name)
 {
 	auto found = shaders.find(name);
 	if (found == std::end(shaders))
 	{
 		VkShaderStageFlagBits flags = VKShaderCache::ConvertShaderFlags(name);
-		auto ret = shaders[name] = { CreateShader(device, name, flags), flags };
+		auto ret = shaders[name] = { CreateShader(name, flags), flags };
 		return std::make_pair(ret.mod, ret.flags);
 	}
 	return std::make_pair(found->second.mod, found->second.flags);
 }
 
-void VKShaderCache::DestroyShaderCache(VkDevice& device)
+void VKShaderCache::DestroyShaderCache()
 {
 	for (auto& iter : shaders)
 	{
@@ -20,7 +20,7 @@ void VKShaderCache::DestroyShaderCache(VkDevice& device)
 	}
 }
 
-VkShaderModule VKShaderCache::CreateShader(VkDevice& logicalDevice, const std::string& name, VkShaderStageFlags flags)
+VkShaderModule VKShaderCache::CreateShader(const std::string& name, VkShaderStageFlags flags)
 {
 	std::vector<char> buffer;
 
@@ -31,7 +31,7 @@ VkShaderModule VKShaderCache::CreateShader(VkDevice& logicalDevice, const std::s
 
 		if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
 
-		mod = ::VK::Utils::createShaderModule(logicalDevice, buffer);
+		mod = ::VK::Utils::createShaderModule(device, buffer);
 	}
 	else
 	{
@@ -43,7 +43,7 @@ VkShaderModule VKShaderCache::CreateShader(VkDevice& logicalDevice, const std::s
 
 		if (buffer.back() != '\0') buffer.push_back('\0');
 
-		mod = GLSLANG::CompileShader(logicalDevice, buffer, flags);
+		mod = GLSLANG::CompileShader(device, buffer, flags);
 	}
 
 	return mod;
