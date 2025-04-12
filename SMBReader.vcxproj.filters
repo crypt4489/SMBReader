@@ -87,6 +87,9 @@
     <ClCompile Include="vulkan\src\VKDescriptorLayoutCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vulkan\src\VKDescriptorSetCache.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -164,6 +167,12 @@
     <ClInclude Include="vulkan\include\VKDescriptorLayoutCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\MathTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKDescriptorSetCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Text Include="SMBUnarchiverNotes.txt" />
@@ -186,6 +195,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="shaders\text.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\3dtextured.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="shaders\3dtextured.frag">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

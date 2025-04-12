@@ -119,8 +119,8 @@ public:
 			float bottom = actualY + (static_cast<float>(font.cellHeight) / static_cast<float>(font.pictureHeight));;
 			
 			textVertices.emplace_back(glm::vec2(left, top), glm::vec2(s1, t1), textColor);
-			textVertices.emplace_back(glm::vec2(right, top), glm::vec2(s2, t1), textColor);
 			textVertices.emplace_back(glm::vec2(left, bottom), glm::vec2(s1, t2), textColor);
+			textVertices.emplace_back(glm::vec2(right, top), glm::vec2(s2, t1), textColor);
 			textVertices.emplace_back(glm::vec2(right, bottom), glm::vec2(s2, t2), textColor);
 
 			lastx = right;
@@ -171,14 +171,22 @@ public:
 
 	static void CreatePipelineObject()
 	{
+		std::string text = "text";
 		obj = new VKPipelineObject(
-			"text", 
+			text, 
 			&vertexCount, 
-			textBuffer, 
-			static_cast<size_t>(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT)
+			textBuffer
 		);
-		obj->AddPixelShaderImageDescription(fonts->texture->vkImpl->imageView, fonts->texture->vkImpl->sampler, 0);
-		obj->CreatePipelineObject(VKRenderer::gRenderInstance->GetVulkanDevice());
+
+		auto rendInst = VKRenderer::gRenderInstance;
+		uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+		auto dlc = rendInst->GetDescriptorLayoutCache();
+		auto dsc = rendInst->GetDescriptorSetCache();
+		auto dl = dlc->GetLayout("oneimage");
+		DescriptorSetBuilder dsb{};
+		dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
+		dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), fonts->texture->vkImpl->imageView, fonts->texture->vkImpl->sampler, 0, frames);
+		dsc->AddDesciptorSet(text, dsb.descriptorSets);
 	}
 
 	static void CreateTextBuffer()
@@ -276,7 +284,7 @@ public:
 
 	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame)
 	{
-		obj->DrawIndirectOneBuffer(cb, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame);
+		obj->DrawIndirectOneBuffer(cb, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame, 0);
 	}
 
 	static void DestroyTextManager()

@@ -188,6 +188,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="vulkan\src\GlslangCompiler.cpp" />
     <ClCompile Include="vulkan\src\RenderInstance.cpp" />
     <ClCompile Include="vulkan\src\VKDescriptorLayoutCache.cpp" />
+    <ClCompile Include="vulkan\src\VKDescriptorSetCache.cpp" />
     <ClCompile Include="vulkan\src\VKPipelineCache.cpp" />
     <ClCompile Include="vulkan\src\VKPipelineObject.cpp" />
     <ClCompile Include="vulkan\src\VKRenderGraph.cpp" />
@@ -203,6 +204,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\Exporter.h" />
     <ClInclude Include="include\FileManager.h" />
     <ClInclude Include="include\GenericObject.h" />
+    <ClInclude Include="include\MathTypes.h" />
     <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\DXTCompression.h" />
     <ClInclude Include="include\SMBFile.h" />
@@ -216,6 +218,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="vulkan\include\GlslangCompiler.h" />
     <ClInclude Include="vulkan\include\RenderInstance.h" />
     <ClInclude Include="vulkan\include\VKDescriptorLayoutCache.h" />
+    <ClInclude Include="vulkan\include\VKDescriptorSetCache.h" />
     <ClInclude Include="vulkan\include\VKPipelineCache.h" />
     <ClInclude Include="vulkan\include\VKPipelineObject.h" />
     <ClInclude Include="vulkan\include\VKRenderGraph.h" />
@@ -229,6 +232,8 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
   </ItemGroup>
   <ItemGroup>
     <None Include="shadercompile.bat" />
+    <None Include="shaders\3dtextured.frag" />
+    <None Include="shaders\3dtextured.vert" />
     <None Include="shaders\text.frag" />
     <None Include="shaders\text.vert" />
     <None Include="shaders\typicaltextured.frag" />

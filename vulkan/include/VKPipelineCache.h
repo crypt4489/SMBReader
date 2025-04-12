@@ -30,7 +30,7 @@ public:
 
 	}
 
-	PipelineCacheObject CreatePipeline(VkDescriptorSetLayout descriptorSetLayout,
+	PipelineCacheObject CreatePipeline(std::vector<VkDescriptorSetLayout> &descriptorSetLayout,
 		std::optional<VkVertexInputBindingDescription> bindDescription,
 		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
@@ -42,17 +42,18 @@ public:
 		return co;
 	}
 
-	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout descriptorSetLayout)
+	VkPipelineLayout CreatePipelineLayout(std::vector<VkDescriptorSetLayout> &descriptorSetLayout)
 	{
 		VkPipelineLayout pipelineLayout;
 
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-		if (descriptorSetLayout)
+		size_t num = 0;
+		if (num = descriptorSetLayout.size())
 		{
-			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+			pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(num);
+			pipelineLayoutInfo.pSetLayouts = descriptorSetLayout.data();
 		}
 		pipelineLayoutInfo.pushConstantRangeCount = 0;
 		pipelineLayoutInfo.pPushConstantRanges = nullptr;
@@ -64,7 +65,7 @@ public:
 		return pipelineLayout;
 	}
 
-	PipelineCacheObject CreateGraphicsPipeline(VkDescriptorSetLayout& descriptorSetLayout,
+	PipelineCacheObject CreateGraphicsPipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
 		std::optional<VkVertexInputBindingDescription> bindDescription,
 		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
@@ -124,7 +125,7 @@ public:
 		rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 		rasterizer.lineWidth = 1.0f;
 		rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+		rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 		rasterizer.depthBiasEnable = VK_FALSE;
 		rasterizer.depthBiasConstantFactor = 0.0f;
 		rasterizer.depthBiasClamp = 0.0f;
@@ -198,7 +199,7 @@ public:
 		}
 
 		PipelineCacheObject co = {
-			.descLayout = descriptorSetLayout,
+			.descLayout = (descriptorSetLayout.size() > 0) ? descriptorSetLayout[0] : VK_NULL_HANDLE,
 			.pipelineLayout = pipelineLayout,
 			.pipeline = graphicsPipeline
 		};

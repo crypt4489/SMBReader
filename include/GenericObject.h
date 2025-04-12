@@ -5,11 +5,14 @@
 
 #include "AppTexture.h"
 #include "AppTypes.h"
+#include "VKDescriptorSetCache.h"
 #include "GenericObject.h"
 #include "RenderInstance.h"
 #include "SMBFile.h"
 #include "VertexTypes.h"
 #include "VKPipelineObject.h"
+
+
 class GenericObject
 {
 public:
@@ -37,14 +40,23 @@ public:
 
 		if (be == RenderingBackend::VULKAN)
 		{
+			std::string genericpipeline = "genericpipeline";
+			
 			vkPipelineObject = new VKPipelineObject(
-				"2dimage", 
+				genericpipeline, 
 				&vertexCount, 
-				VK_NULL_HANDLE,
-				VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT
+				VK_NULL_HANDLE
 			);
-			vkPipelineObject->AddPixelShaderImageDescription(textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 0);
-			vkPipelineObject->CreatePipelineObject(VKRenderer::gRenderInstance->GetVulkanDevice());
+			
+			auto rendInst = VKRenderer::gRenderInstance;
+			uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+			auto dlc = rendInst->GetDescriptorLayoutCache();
+			auto dsc = rendInst->GetDescriptorSetCache();
+			auto dl = dlc->GetLayout("oneimage");
+			DescriptorSetBuilder dsb{};
+			dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
+			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 0, frames);
+			dsc->AddDesciptorSet(genericpipeline, dsb.descriptorSets);
 		}
 	}
 

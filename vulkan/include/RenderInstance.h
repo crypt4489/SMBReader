@@ -14,6 +14,7 @@
 
 #include "FileManager.h"
 #include "ThreadManager.h"
+#include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
 #include "VKShaderCache.h"
 #include "VKPipelineCache.h"
@@ -890,28 +891,41 @@ public:
 	{
 		// Create Shaders
 
-		auto shader1 = shaderCache.GetShader("newtextured.vert.spv");
-		auto shader2 = shaderCache.GetShader("typicaltextured.frag.spv");
+		auto shader1 = shaderCache.GetShader("3dtextured.vert.spv");
+		auto shader2 = shaderCache.GetShader("3dtextured.frag.spv");
+
+		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
 
 		auto shader3 = shaderCache.GetShader("text.vert.spv");
 		auto shader4 = shaderCache.GetShader("text.frag.spv");
 
-		DescriptorSetLayoutBuilder lb{};
-
-		lb.AddPixelImageSamplerLayout(0);
-
-		auto desclay = lb.CreateDescriptorSetLayout(logicalDevice);
-
-		descriptorLayoutCache.AddLayout("oneimage", desclay);
-
-		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
-
-		mainRenderPassCache.CreatePipeline(desclay, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
-
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
 
-		mainRenderPassCache.CreatePipeline(desclay, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+		DescriptorSetLayoutBuilder textDescriptor{}, globalBufferBuilder{}, genericObjectBuilder;
+		std::vector<VkDescriptorSetLayout> textDescriptorContainers(1);
+		std::vector<VkDescriptorSetLayout> regularMeshConatiners(2);
 
+		textDescriptor.AddPixelImageSamplerLayout(0);
+
+		textDescriptorContainers[0] = textDescriptor.CreateDescriptorSetLayout(logicalDevice);
+
+		descriptorLayoutCache.AddLayout("oneimage", textDescriptorContainers[0]);
+
+		globalBufferBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+
+		regularMeshConatiners[0] = globalBufferBuilder.CreateDescriptorSetLayout(logicalDevice);
+		
+		descriptorLayoutCache.AddLayout("mainrenderpass", regularMeshConatiners[0]);
+
+		regularMeshConatiners[1] = textDescriptorContainers[0];
+
+		//mainRenderPassCache.CreatePipeline(textDescriptorContainers, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
+
+		mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
+
+		mainRenderPassCache.CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+
+		
 	}
 
 	PipelineCacheObject GetPipeline(std::string ptype)
@@ -1125,6 +1139,27 @@ public:
 		return &mainRenderPassCache;
 	}
 
+	VKDescriptorLayoutCache* GetDescriptorLayoutCache()
+	{
+		return &descriptorLayoutCache;
+	}
+
+	 
+	VKDescriptorSetCache* GetDescriptorSetCache()
+	{
+		return &descriptorSetCache;;
+	}
+
+	uint32_t GetSwapChainHeight() const
+	{
+		return swapChainExtent.height;
+	}
+
+	uint32_t GetSwapChainWidth() const
+	{
+		return swapChainExtent.width;
+	}
+
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 private:
@@ -1190,6 +1225,7 @@ private:
 	VKShaderCache shaderCache;
 	VKPipelineCache mainRenderPassCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;
+	VKDescriptorSetCache descriptorSetCache;
 
 	VkSampleCountFlagBits GetMaxMSAALevels()
 	{

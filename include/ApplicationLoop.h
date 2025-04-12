@@ -25,6 +25,12 @@
 #include "TextManager.h"
 #include "ThreadManager.h"
 #include "VKRenderGraph.h"
+
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+
 class ApplicationLoop
 {
 public:
@@ -37,7 +43,7 @@ public:
 	{ 
 		Execute(); 
 	}
-	~ApplicationLoop() { if (!cleaned) CleanupRuntime(); delete graph; delete mainWindow; }
+	~ApplicationLoop() { if (!cleaned) {   CleanupRuntime(); } delete graph; delete mainWindow; }
 private:
 
 	void InitializeCommandMap()
@@ -97,6 +103,9 @@ private:
 			QueryPerformanceFrequency(&frequency);
 			QueryPerformanceCounter(&startTime);
 
+
+			
+
 			while (running)
 			{
 				std::string base = std::string("FPS : ");
@@ -109,6 +118,10 @@ private:
 
 				if (mainWindow->ShouldCloseWindow()) break;
 
+				glm::mat4 proj = glm::perspective(glm::radians(45.0f), rend->GetSwapChainWidth() / (float)rend->GetSwapChainHeight(), 0.1f, 10000.0f);
+
+				glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
 				objsSema.Wait();
 
 				auto index = rend->BeginFrame();
@@ -116,7 +129,7 @@ private:
 				VkCommandBuffer cb = rend->GetCurrentCommandBuffer();
 				auto frameNum = rend->GetCurrentFrame();
 				
-				graph->DrawScene(cb, frameNum, vkpipes);
+				graph->DrawScene(cb, frameNum, vkpipes,view, proj);
 
 				rend->SubmitFrame(index);
 
@@ -130,8 +143,6 @@ private:
 
 				frameCounter++;
 			}
-
-			CleanupRuntime();
 		}
 	}
 
@@ -152,7 +163,7 @@ private:
 
 		rend->CreateVulkanRenderer(mainWindow);
 
-		graph = new VKRenderGraph(rend->GetRenderPass(), rend->GetMainRenderPassCache());
+		graph = new VKRenderGraph(rend->GetRenderPass(), rend->GetMainRenderPassCache(), rend->GetDescriptorSetCache());
 
 		TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
@@ -163,6 +174,14 @@ private:
 		//text2 = new Text(name, *TextManager::fonts, 0.5f, 0.75f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 15);
 
 		TextManager::UploadToVertexBuffer(text1);
+
+		graph->CreateUniformBuffers(rend->GetVulkanDevice(), rend->GetVulkanPhysicalDevice(), rend->MAX_FRAMES_IN_FLIGHT);
+
+		graph->CreateRenderPassDescriptorSet(
+			rend->GetVulkanDevice(),
+			rend->GetDescriptorPool(),
+			rend->GetDescriptorLayoutCache(),
+			rend->MAX_FRAMES_IN_FLIGHT);
 
 		//TextManager::UploadToVertexBuffer(text2);
 	}
@@ -181,6 +200,8 @@ private:
 		delete text1;
 
 		delete text2;
+
+		graph->DestroyRenderGraph(rend->GetVulkanDevice());
 
 		TextManager::DestroyTextManager();
 
