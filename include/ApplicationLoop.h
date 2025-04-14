@@ -43,7 +43,7 @@ public:
 	{ 
 		Execute(); 
 	}
-	~ApplicationLoop() { if (!cleaned) {   CleanupRuntime(); } delete graph; delete mainWindow; }
+	~ApplicationLoop() { if (!cleaned) {   CleanupRuntime(); } delete mainWindow; }
 private:
 
 	void InitializeCommandMap()
@@ -175,7 +175,7 @@ private:
 
 		TextManager::UploadToVertexBuffer(text1);
 
-		graph->CreateUniformBuffers(rend->GetVulkanDevice(), rend->GetVulkanPhysicalDevice(), rend->MAX_FRAMES_IN_FLIGHT);
+		graph->CreateUniformBuffers(rend, rend->MAX_FRAMES_IN_FLIGHT);
 
 		graph->CreateRenderPassDescriptorSet(
 			rend->GetVulkanDevice(),
@@ -195,13 +195,15 @@ private:
 			delete renderable;
 		}
 
+		delete graph;
+
 		renderables.clear();
 		
 		delete text1;
 
 		delete text2;
 
-		graph->DestroyRenderGraph(rend->GetVulkanDevice());
+		//graph->DestroyRenderGraph(rend->GetVulkanDevice());
 
 		TextManager::DestroyTextManager();
 

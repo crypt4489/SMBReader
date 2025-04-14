@@ -45,7 +45,8 @@ public:
 			vkPipelineObject = new VKPipelineObject(
 				genericpipeline, 
 				&vertexCount, 
-				VK_NULL_HANDLE
+				VK_NULL_HANDLE,
+				0u
 			);
 			
 			auto rendInst = VKRenderer::gRenderInstance;

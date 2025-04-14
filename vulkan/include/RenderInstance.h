@@ -933,6 +933,36 @@ public:
 		return mainRenderPassCache.GetPipelineFromCache(ptype);
 	}
 
+	void CreateGlobalBuffer()
+	{
+		std::tie(globalBuffer, globalBufferMemory) = ::VK::Utils::createBuffer(logicalDevice,
+			gpu, 128'000'000, 
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
+			VK_SHARING_MODE_EXCLUSIVE, 
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		);
+
+		vkMapMemory(logicalDevice, globalBufferMemory, 0, 128'000'000, 0, &globalmemorymapped);
+
+		//vkMapMemory(device, uniformBufferMemory, 0, sizeof(glm::mat4) * 2 * frames, 0, &memoryMapped);
+	}
+
+
+	std::pair<VkBuffer, void*> GetPageFromUniformBuffer(size_t size, size_t &offset)
+	{
+		offset = dumbAllocator;
+		void* ret = ((char*)globalmemorymapped) + offset;
+		dumbAllocator += size;
+		return { globalBuffer, ret };
+	}
+
 	void CreateVulkanRenderer(WindowManager *window)
 	{
 		this->windowMan = window;
@@ -977,6 +1007,8 @@ public:
 		mainRenderPassCache.device = logicalDevice;
 		shaderCache.SetLogicalDevice(logicalDevice);
 
+		CreateGlobalBuffer();
+
 		CreatePipelines();
 	}
 
@@ -989,6 +1021,10 @@ public:
 	void DestroyRenderInstance()
 	{
 		if (gptManager) delete gptManager;
+
+		vkDestroyBuffer(logicalDevice, globalBuffer, nullptr);
+		
+		vkFreeMemory(logicalDevice, globalBufferMemory, nullptr);
 
 		shaderCache.DestroyShaderCache();
 
@@ -1162,6 +1198,8 @@ public:
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
+	
+
 private:
 	VkInstance instance = VK_NULL_HANDLE;
 
@@ -1226,6 +1264,11 @@ private:
 	VKPipelineCache mainRenderPassCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
+
+	VkBuffer globalBuffer;
+	VkDeviceMemory globalBufferMemory;
+	VkDeviceSize dumbAllocator;
+	void* globalmemorymapped;
 
 	VkSampleCountFlagBits GetMaxMSAALevels()
 	{

@@ -175,7 +175,8 @@ public:
 		obj = new VKPipelineObject(
 			text, 
 			&vertexCount, 
-			textBuffer
+			textBuffer,
+			textVertexGlobalOffset
 		);
 
 		auto rendInst = VKRenderer::gRenderInstance;
@@ -191,22 +192,14 @@ public:
 
 	static void CreateTextBuffer()
 	{
-		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
-		VkPhysicalDevice gpu = VKRenderer::gRenderInstance->GetVulkanPhysicalDevice();
-		std::tie(textBuffer, textBufferMemory) = ::VK::Utils::createBuffer(device,
-			gpu, BUFFERSIZE, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			VK_SHARING_MODE_EXCLUSIVE,
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+		std::tie(textBuffer, textGlobalMemory) = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(BUFFERSIZE, textVertexGlobalOffset);
 
-		std::tie(indirectDrawBuffer, indirectDrawBufferMemory) = ::VK::Utils::createBuffer(device,
-			gpu, MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-			VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT);
+		std::tie(indirectDrawBuffer, indirectGlobalMemory) = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), indirectGlobalOffset);
 	}
 
 	static void UploadToVertexBuffer(Text* text)
 	{
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
-		void* data;
 
 		size_t textVertexCount = text->textVertices.size();
 
@@ -216,11 +209,9 @@ public:
 
 		size_t allocatedDataSize = sizeof(TextVertex) * allocatedVerts;
 
-		vkMapMemory(device, textBufferMemory, bufferOffset, vertsDataSize, 0, &data);
+		char* data = ((char*)textGlobalMemory) + bufferOffset;
 
 		std::memcpy(data, text->textVertices.data(), vertsDataSize);
-
-		vkUnmapMemory(device, textBufferMemory);
 
 		VkDrawIndirectCommand command;
 
@@ -229,18 +220,15 @@ public:
 		command.instanceCount = 1;
 		command.vertexCount = static_cast<uint32_t>(textVertexCount);
 
-		vkMapMemory(device, indirectDrawBufferMemory, commandCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, &data);
+		data = ((char*)indirectGlobalMemory) + commandCount * sizeof(VkDrawIndirectCommand);
 
 		std::memcpy(data, &command, sizeof(VkDrawIndirectCommand));
-
-		vkUnmapMemory(device, indirectDrawBufferMemory);
 
 		textsCommand.push_back({ text, commandCount++, bufferOffset });
 
 		bufferOffset += allocatedDataSize;
 
 		vertexCount += allocatedVerts;
-
 
 	}
 
@@ -254,7 +242,6 @@ public:
 		}
 
 		VkDevice device = VKRenderer::gRenderInstance->GetVulkanDevice();
-		void* data;
 
 		VkDeviceSize cCount, bOffset;
 
@@ -266,52 +253,34 @@ public:
 
 		size_t newCount = textVertexCount - startingOffset;
 
-		vkMapMemory(device, textBufferMemory, bOffset + startingOffset, newCount, 0, &data);
+		char* data = ((char*)textGlobalMemory) + bOffset + startingOffset;
 
 		std::memcpy(data, text->textVertices.data() + startingOffset, newCount * sizeof(TextVertex));
 
-		vkUnmapMemory(device, textBufferMemory);
-
-		vkMapMemory(device, indirectDrawBufferMemory, cCount * sizeof(VkDrawIndirectCommand), sizeof(VkDrawIndirectCommand), 0, &data);
+		data = ((char*)indirectGlobalMemory) + cCount * sizeof(VkDrawIndirectCommand);
 
 		VkDrawIndirectCommand* command = reinterpret_cast<VkDrawIndirectCommand*>(data);
 
 		command->vertexCount = static_cast<uint32_t>(textVertexCount);
 
-		vkUnmapMemory(device, indirectDrawBufferMemory);
-
 	}
 
 	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame)
 	{
-		obj->DrawIndirectOneBuffer(cb, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame, 0);
+		obj->DrawIndirectOneBuffer(cb, indirectDrawBuffer, static_cast<uint32_t>(textsCommand.size()), frame, 0, indirectGlobalOffset);
 	}
 
 	static void DestroyTextManager()
 	{
 		if (fonts) delete fonts;
 		if (obj) delete obj;
-		auto device = VKRenderer::gRenderInstance->GetVulkanDevice();
-
-		if (indirectDrawBufferMemory)
-			vkFreeMemory(device, indirectDrawBufferMemory, nullptr);
-
-		if (indirectDrawBuffer)
-			vkDestroyBuffer(device, indirectDrawBuffer, nullptr);
-
-		
-		if (textBufferMemory)
-			vkFreeMemory(device, textBufferMemory, nullptr);
-
-		if (textBuffer)
-			vkDestroyBuffer(device, textBuffer, nullptr);
-
 	}
 
-	static constexpr uint32_t MAXTEXTRENDERABLES = 50;
-	static constexpr uint32_t BUFFERSIZE = 2'000'000;
+	static constexpr uint32_t MAXTEXTRENDERABLES = 64;
+	static constexpr uint32_t BUFFERSIZE = 1048576;
 	static VkBuffer textBuffer, indirectDrawBuffer;
-	static VkDeviceMemory textBufferMemory, indirectDrawBufferMemory;
+	static VkDeviceSize textVertexGlobalOffset, indirectGlobalOffset;
+	static void* textGlobalMemory, *indirectGlobalMemory;
 	static VkDeviceSize bufferOffset;
 	static VkDeviceSize vertexCount, commandCount;
 	static Font* fonts;

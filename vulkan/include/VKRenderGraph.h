@@ -52,17 +52,14 @@ public:
 		
 		DescriptorSetBuilder dsb{};
 		dsb.AllocDescriptorSets(device, pool, ref, frames);
-		dsb.AddUniformBuffer(device, uniformBuffer, sizeof(glm::mat4) * 2, 0, frames, 0);
+		dsb.AddUniformBuffer(device, uniformBuffer, sizeof(glm::mat4) * 2, 0, frames, uniformOffset);
 		dscache->AddDesciptorSet(mainrenderpass, dsb.descriptorSets);
 		
 	}
 
-	void CreateUniformBuffers(VkDevice device, VkPhysicalDevice physicalDevice, uint32_t frames)
+	void CreateUniformBuffers(RenderInstance *inst, uint32_t frames)
 	{
-		std::tie(uniformBuffer, uniformBufferMemory) = ::VK::Utils::createBuffer(device,
-			physicalDevice, sizeof(glm::mat4) * 2 * frames, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-		
-		vkMapMemory(device, uniformBufferMemory, 0, sizeof(glm::mat4) * 2 * frames, 0, &memoryMapped);
+		std::tie(uniformBuffer, memoryMapped) = inst->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * frames, uniformOffset);
 	}
 
 	void UpdateUniformBuffer(glm::mat4& proj, glm::mat4& view, uint32_t frameNum)
@@ -73,12 +70,6 @@ public:
 		memcpy(data + sizeof(glm::mat4), &proj, sizeof(glm::mat4));
 	}
 
-	void DestroyRenderGraph(VkDevice device)
-	{
-		vkDestroyBuffer(device, uniformBuffer, nullptr);
-		vkFreeMemory(device, uniformBufferMemory, nullptr);	
-	}
-
 private:
 	
 	VkRenderPass& inst;
@@ -86,7 +77,7 @@ private:
 	VKDescriptorSetCache* dscache;
 	std::string currentPipeline = "";
 	VkBuffer uniformBuffer;
-	VkDeviceMemory uniformBufferMemory;
+	VkDeviceSize uniformOffset;
 	void* memoryMapped;
 };
 

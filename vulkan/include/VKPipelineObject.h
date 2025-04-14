@@ -17,9 +17,10 @@ public:
 	VKPipelineObject(
 		std::string name, 
 		size_t *vCount, 
-		VkBuffer buffer
+		VkBuffer buffer,
+		size_t _offset
 		) 
-		: pipelineType(name), vertexCount(vCount), buffer(buffer) {
+		: pipelineType(name), vertexCount(vCount), buffer(buffer), offset(_offset) {
 	}
 
 	~VKPipelineObject() = default;
@@ -38,7 +39,7 @@ public:
 		if (buffer)
 		{
 			VkBuffer vertexBuffers[] = { buffer };
-			VkDeviceSize offsets[] = { 0 };
+			VkDeviceSize offsets[] = { offset };
 			vkCmdBindVertexBuffers(cb, 0, 1, vertexBuffers, offsets);
 		}
 
@@ -48,7 +49,10 @@ public:
 	void DrawIndirectOneBuffer(
 		VkCommandBuffer& cb,
 		VkBuffer& drawBuffer,
-		uint32_t drawCount, uint32_t frame, uint32_t setCount)
+		uint32_t drawCount, 
+		uint32_t frame, 
+		uint32_t setCount,
+		size_t indirectDrawBufferOffset)
 	{
 		auto po = VKRenderer::gRenderInstance->GetPipeline(pipelineType);
 		auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
@@ -60,11 +64,11 @@ public:
 		if (buffer)
 		{
 			VkBuffer vertexBuffers[] = { buffer };
-			VkDeviceSize offsets[] = { 0 };
+			VkDeviceSize offsets[] = { offset };
 			vkCmdBindVertexBuffers(cb, 0, 1, vertexBuffers, offsets);
 		}
 
-		vkCmdDrawIndirect(cb, drawBuffer, 0, drawCount, sizeof(VkDrawIndirectCommand));
+		vkCmdDrawIndirect(cb, drawBuffer, indirectDrawBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
 	}
 
 	std::string GetPipelineType() const
@@ -75,7 +79,7 @@ public:
 private:
 	std::string pipelineType;
 	VkBuffer buffer = VK_NULL_HANDLE;
-	VkDeviceMemory bufferMemory = VK_NULL_HANDLE;
+	VkDeviceSize offset = 0U;
 	size_t *vertexCount = nullptr;
 };
 
