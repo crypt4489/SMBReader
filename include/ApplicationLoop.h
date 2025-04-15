@@ -247,8 +247,14 @@ private:
 	{
 		SMBFile SMB(file);
 
-		GenericObject* obj = new GenericObject(SMB, RenderingBackend::VULKAN);
+		GenericObject* obj = new GenericObject(SMB, RenderingBackend::VULKAN, 0);
 
+		glm::mat4 identity = glm::identity<glm::mat4>();
+
+		//glm::mat4 identity = glm::zero<glm::mat4>();;
+
+		obj->SetMatrix(identity);
+		
 		SemaphoreGuard lock(objsSema);
 
 		renderables.push_back(obj);

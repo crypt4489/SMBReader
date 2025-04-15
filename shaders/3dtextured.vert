@@ -21,9 +21,12 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 proj;
 } gs;
 
+layout(set = 1, binding = 0) uniform PerModel {
+    mat4 m;
+} model;
+
 void main() {
-    vec4 posie = vec4(positions[gl_VertexIndex], 1.0);
-    mat4 viewProj = gs.proj * gs.view;
-    gl_Position = viewProj * posie;
+    mat4 MVP = gs.proj * gs.view * model.m;
+    gl_Position = MVP * vec4(positions[gl_VertexIndex], 1.0);
     texCoords = texcoords[gl_VertexIndex];
 }

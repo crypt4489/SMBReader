@@ -25,10 +25,13 @@ public:
 		UpdateUniformBuffer(proj, view, frameNum);
 		std::string mrp = "mainrenderpass";
 		VkDescriptorSet set = dscache->GetDescriptorSetPerFrame(mrp, frameNum);
-		
+		RenderInstance* rend = ::VKRenderer::gRenderInstance;
 		for (auto& obj : objs)
 		{
 			std::string name = obj->GetPipelineType();
+			
+			rend->UpdateDynamicGlobalBuffer(obj->perObjectShaderData, obj->perObjectShaderDataSize, obj->dynamicOffset, frameNum);
+
 			if (name != currentPipeline)
 			{
 				currentPipeline = name;

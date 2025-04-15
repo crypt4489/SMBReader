@@ -2,6 +2,7 @@
 
 #include <array>
 #include <vector>
+#include <functional>
 
 #include "vulkan/vulkan.h"
 
@@ -33,8 +34,15 @@ public:
 		auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
 		VkDescriptorSet set = dsc->GetDescriptorSetPerFrame(pipelineType, frame);
 
+		std::array<uint32_t, 1> dynamicOffsets = { dynamicOffset };
+
+		uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
+
+		if (!perObjectShaderData)
+			dynCount = 0;
+
 		if (po.descLayout)
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, 0, nullptr);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
 
 		if (buffer)
 		{
@@ -58,8 +66,16 @@ public:
 		auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
 		VkDescriptorSet set = dsc->GetDescriptorSetPerFrame(pipelineType, frame);
 
+		std::array<uint32_t, 1> dynamicOffsets = { dynamicOffset };
+
+		uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
+
+		if (!perObjectShaderData)
+			dynCount = 0;
+
+
 		if (po.descLayout)
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, 0, nullptr);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
 	
 		if (buffer)
 		{
@@ -76,10 +92,24 @@ public:
 		return pipelineType;
 	}
 
+	void SetPerObjectData(void* data, size_t dataSize, uint32_t _dynamicOffset)
+	{
+		perObjectShaderData = data;
+		perObjectShaderDataSize = dataSize;
+		dynamicOffset = _dynamicOffset;
+	}
+
+
+	void* perObjectShaderData;
+	VkDeviceSize perObjectShaderDataSize;
+	uint32_t dynamicOffset;
+
 private:
 	std::string pipelineType;
 	VkBuffer buffer = VK_NULL_HANDLE;
 	VkDeviceSize offset = 0U;
 	size_t *vertexCount = nullptr;
+	
+	
 };
 

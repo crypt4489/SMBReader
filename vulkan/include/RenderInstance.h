@@ -901,7 +901,7 @@ public:
 
 		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
 
-		DescriptorSetLayoutBuilder textDescriptor{}, globalBufferBuilder{}, genericObjectBuilder;
+		DescriptorSetLayoutBuilder textDescriptor{}, globalBufferBuilder{}, genericObjectBuilder{};
 		std::vector<VkDescriptorSetLayout> textDescriptorContainers(1);
 		std::vector<VkDescriptorSetLayout> regularMeshConatiners(2);
 
@@ -917,7 +917,13 @@ public:
 		
 		descriptorLayoutCache.AddLayout("mainrenderpass", regularMeshConatiners[0]);
 
-		regularMeshConatiners[1] = textDescriptorContainers[0];
+		genericObjectBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+
+		genericObjectBuilder.AddPixelImageSamplerLayout(1);
+
+		regularMeshConatiners[1] = genericObjectBuilder.CreateDescriptorSetLayout(logicalDevice);
+
+		descriptorLayoutCache.AddLayout("genericobject", regularMeshConatiners[1]);
 
 		//mainRenderPassCache.CreatePipeline(textDescriptorContainers, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "2dimage");
 
@@ -950,8 +956,22 @@ public:
 		);
 
 		vkMapMemory(logicalDevice, globalBufferMemory, 0, 128'000'000, 0, &globalmemorymapped);
+	}
 
-		//vkMapMemory(device, uniformBufferMemory, 0, sizeof(glm::mat4) * 2 * frames, 0, &memoryMapped);
+	void CreateDyanmicGlobalMeshBuffers()
+	{
+		std::tie(std::ignore, dynamicMemoryMapped) = GetPageFromUniformBuffer(sizeof(glm::mat4) * 256 * MAX_FRAMES_IN_FLIGHT, dynamicGlobalOffset);
+	}
+
+	std::tuple<VkBuffer, void*, size_t, size_t> GetDynamicBuffer()
+	{
+		return { globalBuffer, dynamicMemoryMapped, dynamicGlobalOffset, sizeof(glm::mat4) * 256 };
+	}
+
+	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame)
+	{
+		void* to = ((char*)dynamicMemoryMapped) + (sizeof(glm::mat4) * 256 * frame) + offset;
+		std::memcpy(to, data, dataSize);
 	}
 
 
@@ -1008,6 +1028,8 @@ public:
 		shaderCache.SetLogicalDevice(logicalDevice);
 
 		CreateGlobalBuffer();
+
+		CreateDyanmicGlobalMeshBuffers();
 
 		CreatePipelines();
 	}
@@ -1269,6 +1291,9 @@ private:
 	VkDeviceMemory globalBufferMemory;
 	VkDeviceSize dumbAllocator;
 	void* globalmemorymapped;
+
+	void* dynamicMemoryMapped;
+	VkDeviceSize dynamicGlobalOffset;
 
 	VkSampleCountFlagBits GetMaxMSAALevels()
 	{

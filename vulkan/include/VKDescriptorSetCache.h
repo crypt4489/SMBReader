@@ -59,6 +59,35 @@ struct DescriptorSetBuilder
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 	}
 
+	void AddDynamicUniformBuffer(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
+	{
+		std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
+		std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
+
+		for (uint32_t i = 0; i < frames; i++)
+		{
+
+			auto& ref = bufferInfos[i];
+			ref.buffer = buffer;
+			ref.offset = offset;
+			ref.range = size;
+
+			VkWriteDescriptorSet descriptorWrite{};
+			descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			descriptorWrite.dstSet = descriptorSets[i];
+			descriptorWrite.dstBinding = binding;
+			descriptorWrite.dstArrayElement = 0;
+			descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+			descriptorWrite.descriptorCount = 1;
+
+			descriptorWrite.pBufferInfo = &ref;
+			descriptorWrites[i] = descriptorWrite;
+			offset += size;
+		}
+
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+	}
+
 	void AllocDescriptorSets(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames)
 	{
 		descriptorSets.resize(frames);

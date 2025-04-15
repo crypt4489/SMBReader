@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-
+#include <functional>
 
 #include "AppTexture.h"
 #include "AppTypes.h"
@@ -16,7 +16,7 @@
 class GenericObject
 {
 public:
-	GenericObject(const SMBFile &file, RenderingBackend be) : vkPipelineObject(nullptr)
+	GenericObject(const SMBFile &file, RenderingBackend be, size_t _oi) : vkPipelineObject(nullptr), objectIndex(_oi)
 	{
 		vertexCount = 4;
 		for (const auto& chunk : file.chunks)
@@ -53,11 +53,16 @@ public:
 			uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 			auto dlc = rendInst->GetDescriptorLayoutCache();
 			auto dsc = rendInst->GetDescriptorSetCache();
-			auto dl = dlc->GetLayout("oneimage");
+			auto dl = dlc->GetLayout("genericobject");
 			DescriptorSetBuilder dsb{};
+			VkBuffer gdb;
+			size_t gdbBufferSize, gdbOffset;
+			std::tie(gdb, std::ignore, gdbOffset, gdbBufferSize) = rendInst->GetDynamicBuffer();
 			dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
-			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 0, frames);
+			dsb.AddDynamicUniformBuffer(rendInst->GetVulkanDevice(), gdb, gdbBufferSize, 0, frames, gdbOffset);
+			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 1, frames);
 			dsc->AddDesciptorSet(genericpipeline, dsb.descriptorSets);
+			vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), static_cast<uint32_t>(objectIndex * sizeof(glm::mat4)));
 		}
 	}
 
@@ -72,9 +77,22 @@ public:
 		return vkPipelineObject;
 	}
 
+	void SetMatrix(glm::mat4& f)
+	{
+		mat = f;
+	}
+
+	void SetFunctionPointer(std::function<void(void*)>& f)
+	{
+		updateObject = std::bind(f, reinterpret_cast<void*>(this));
+	}
+
 protected:
 	VKPipelineObject* vkPipelineObject;
 	size_t vertexCount;
 	std::vector<AppTexture> textures;
+	size_t objectIndex;
+	glm::mat4 mat;
+	std::function<void(void *, void*)> updateObject;
 };
 

@@ -46,6 +46,17 @@ struct DescriptorSetLayoutBuilder
 		descSetBindings.push_back(layoutBinding);
 	}
 
+	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+	{
+		VkDescriptorSetLayoutBinding layoutBinding{};
+		layoutBinding.binding = binding;
+		layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+		layoutBinding.descriptorCount = 1;
+		layoutBinding.stageFlags = flags;
+
+		descSetBindings.push_back(layoutBinding);
+	}
+
 	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
 };
 
