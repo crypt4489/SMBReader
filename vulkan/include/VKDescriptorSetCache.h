@@ -34,7 +34,7 @@ struct DescriptorSetBuilder
 	{
 		std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
 		std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
-		
+
 		for (uint32_t i = 0; i < frames; i++)
 		{
 
@@ -138,4 +138,3 @@ private:
 	std::unordered_map<std::string, std::vector<VkDescriptorSet>> descriptorSetCache;
 
 };
-

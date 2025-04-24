@@ -90,6 +90,12 @@
     <ClCompile Include="vulkan\src\VKDescriptorSetCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vulkan\src\VKInstance.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vulkan\src\VKDevice.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -120,9 +126,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ThreadManager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="include\VKUtilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\GenericObject.h">
@@ -170,7 +173,16 @@
     <ClInclude Include="include\MathTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="vulkan\include\VKInstance.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKDevice.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="vulkan\include\VKDescriptorSetCache.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKUtilities.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

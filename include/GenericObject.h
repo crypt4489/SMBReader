@@ -82,9 +82,16 @@ public:
 		mat = f;
 	}
 
-	void SetFunctionPointer(std::function<void(void*)>& f)
+	void SetFunctionPointer(std::function<void(GenericObject*)> f)
 	{
-		updateObject = std::bind(f, reinterpret_cast<void*>(this));
+		updateObject = [f, this]() {
+			f(this);
+		};
+	}
+
+	void CallUpdate()
+	{
+		updateObject();
 	}
 
 protected:
@@ -93,6 +100,6 @@ protected:
 	std::vector<AppTexture> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
-	std::function<void(void *, void*)> updateObject;
+	std::function<void()> updateObject;
 };
 

@@ -189,6 +189,8 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="vulkan\src\RenderInstance.cpp" />
     <ClCompile Include="vulkan\src\VKDescriptorLayoutCache.cpp" />
     <ClCompile Include="vulkan\src\VKDescriptorSetCache.cpp" />
+    <ClCompile Include="vulkan\src\VKDevice.cpp" />
+    <ClCompile Include="vulkan\src\VKInstance.cpp" />
     <ClCompile Include="vulkan\src\VKPipelineCache.cpp" />
     <ClCompile Include="vulkan\src\VKPipelineObject.cpp" />
     <ClCompile Include="vulkan\src\VKRenderGraph.cpp" />
@@ -213,17 +215,19 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\TextureData.h" />
     <ClInclude Include="include\ThreadManager.h" />
     <ClInclude Include="include\VertexTypes.h" />
-    <ClInclude Include="include\VKUtilities.h" />
     <ClInclude Include="include\WindowManager.h" />
     <ClInclude Include="vulkan\include\GlslangCompiler.h" />
     <ClInclude Include="vulkan\include\RenderInstance.h" />
     <ClInclude Include="vulkan\include\VKDescriptorLayoutCache.h" />
     <ClInclude Include="vulkan\include\VKDescriptorSetCache.h" />
+    <ClInclude Include="vulkan\include\VKDevice.h" />
+    <ClInclude Include="vulkan\include\VKInstance.h" />
     <ClInclude Include="vulkan\include\VKPipelineCache.h" />
     <ClInclude Include="vulkan\include\VKPipelineObject.h" />
     <ClInclude Include="vulkan\include\VKRenderGraph.h" />
     <ClInclude Include="vulkan\include\VKShaderCache.h" />
     <ClInclude Include="vulkan\include\VKTexture.h" />
+    <ClInclude Include="vulkan\include\VKUtilities.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />

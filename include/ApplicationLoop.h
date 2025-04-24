@@ -31,6 +31,18 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 
+static void Rotate(GenericObject* obj)
+{
+	static auto startTime = std::chrono::high_resolution_clock::now();
+
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+	glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+	obj->SetMatrix(model);
+}
+
+
 class ApplicationLoop
 {
 public:
@@ -123,6 +135,11 @@ private:
 				glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 				objsSema.Wait();
+
+				for (auto& ref : renderables)
+				{
+					ref->CallUpdate();
+				}
 
 				auto index = rend->BeginFrame();
 				if (index == 0xFFFFFFFF) break;
@@ -254,6 +271,8 @@ private:
 		//glm::mat4 identity = glm::zero<glm::mat4>();;
 
 		obj->SetMatrix(identity);
+
+		obj->SetFunctionPointer(Rotate);
 		
 		SemaphoreGuard lock(objsSema);
 
