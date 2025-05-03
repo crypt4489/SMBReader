@@ -195,6 +195,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="vulkan\src\VKPipelineObject.cpp" />
     <ClCompile Include="vulkan\src\VKRenderGraph.cpp" />
     <ClCompile Include="vulkan\src\VKShaderCache.cpp" />
+    <ClCompile Include="vulkan\src\VKSwapChain.cpp" />
     <ClCompile Include="vulkan\src\VKTexture.cpp" />
     <ClCompile Include="vulkan\src\VKUtilities.cpp" />
   </ItemGroup>
@@ -226,7 +227,9 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="vulkan\include\VKPipelineObject.h" />
     <ClInclude Include="vulkan\include\VKRenderGraph.h" />
     <ClInclude Include="vulkan\include\VKShaderCache.h" />
+    <ClInclude Include="vulkan\include\VKSwapChain.h" />
     <ClInclude Include="vulkan\include\VKTexture.h" />
+    <ClInclude Include="vulkan\include\VKTypes.h" />
     <ClInclude Include="vulkan\include\VKUtilities.h" />
   </ItemGroup>
   <ItemGroup>

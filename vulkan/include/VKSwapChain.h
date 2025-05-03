@@ -1,0 +1,93 @@
+#pragma once
+#include "VKTypes.h"
+#include "VKUtilities.h"
+#include <vulkan/vulkan.h>
+#include <algorithm>
+#include <array>
+#include <string>
+#include <vector>
+class VKSwapChain
+{
+public:
+	VKSwapChain() = default;
+
+	VKSwapChain(VKDevice *_d, VkSurfaceKHR _surface) : device(_d), surface(_surface) {}
+
+	void SetDeviceAndSurface(VKDevice *_device, VkSurfaceKHR _surface)
+	{
+		this->device = _device;
+		this->surface = _surface;
+	}
+
+	void CreateSwapChain(::VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t width, uint32_t height, uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies);
+
+	void CreateSwapChainImageViews();
+
+	void CreateFrameBuffers(VkRenderPass& renderPass, std::vector<VkImageView>& attachmentViews);
+
+	void DestroySwapChain();
+
+	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore waitSemaphore, VkFence fence);
+
+
+	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+		for (const auto& availableFormat : availableFormats) {
+			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+				return availableFormat;
+			}
+		}
+
+		return availableFormats[0];
+	}
+
+
+	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+		for (const auto& availablePresentMode : availablePresentModes) {
+			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+				return availablePresentMode;
+			}
+		}
+
+		return VK_PRESENT_MODE_FIFO_KHR;
+	}
+
+	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) {
+		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+			return capabilities.currentExtent;
+		}
+		else {
+	
+			VkExtent2D actualExtent = {
+				width,
+				height
+			};
+
+			actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+			actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+			return actualExtent;
+		}
+	}
+
+	uint32_t GetSwapChainHeight() const
+	{
+		return swapChainExtent.height;
+	}
+
+	uint32_t GetSwapChainWidth() const
+	{
+		return swapChainExtent.width;
+	}
+
+
+	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+	std::vector<VkImage> swapChainImages;
+	std::vector<VkImageView> swapChainImageViews;
+	std::vector<VkFramebuffer> swapChainFramebuffers;
+	VkFormat swapChainImageFormat;
+	VkExtent2D swapChainExtent;
+ 
+	VkSurfaceKHR surface; //need one to draw to
+	VKDevice* device; //owner of this swapchain
+};
+

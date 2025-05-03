@@ -91,7 +91,7 @@ void VKTexture::CreateImageResources(std::vector<std::vector<char>>& imageData, 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
 
-	std::tie(stagingBuffer, stagingMemory) = ::VK::Utils::createBuffer(device, gpu, imagesSize,
+	std::tie(stagingBuffer, stagingMemory) = VK::Utils::createBuffer(device, gpu, imagesSize,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	char* data;
@@ -124,28 +124,28 @@ void VKTexture::CreateImageResources(std::vector<std::vector<char>>& imageData, 
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.flags = 0;
 
-	std::tie(image, imageMemory) = ::VK::Utils::CreateImage(device, gpu, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	std::tie(image, imageMemory) = VK::Utils::CreateImage(device, gpu, imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	auto& sema = VKRenderer::gRenderInstance->GetTransferSemaphore();
 
 	SemaphoreGuard lock(sema);
 
-	VkCommandBuffer cb = ::VK::Utils::BeginOneTimeCommands(device, pool);
+	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
 
-	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
 
 	VkDeviceSize offset = 0U;
 
 	for (auto i = 0U; i < mipLevels; i++) {
 
-		::VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
 
 		offset += static_cast<VkDeviceSize>(sizes[i]);
 	}
 
-	::VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
 
-	::VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
+	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
 	VKRenderer::gRenderInstance->ReturnTranferQueue(queueNum);
 

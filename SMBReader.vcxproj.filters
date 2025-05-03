@@ -96,6 +96,9 @@
     <ClCompile Include="vulkan\src\VKDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="vulkan\src\VKSwapChain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -183,6 +186,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKUtilities.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKSwapChain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan\include\VKTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

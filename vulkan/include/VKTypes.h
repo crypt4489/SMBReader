@@ -1,0 +1,10 @@
+#pragma once
+class VKInstance;
+class VKDevice;
+class VKSwapChain;
+class VKPipelineCache;
+class VKShaderCache;
+class VKTexture;
+class VKPipelineObject;
+class VKDescriptorLayoutCache;
+class VKDescriptorSetCache;
