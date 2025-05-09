@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "AppTypes.h"
 #include "TextureData.h"
 
 

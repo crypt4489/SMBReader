@@ -19,7 +19,11 @@ public:
 		this->surface = _surface;
 	}
 
-	void CreateSwapChain(::VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t width, uint32_t height, uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies);
+	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport);
+
+	void CreateSwapChain(uint32_t width, uint32_t height, uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies);
+
+	void RecreateSwapChain(uint32_t width, uint32_t height);
 
 	void CreateSwapChainImageViews();
 
@@ -69,6 +73,27 @@ public:
 		}
 	}
 
+	VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
+		
+
+		VkExtent2D actualExtent = {
+			width,
+			height
+		};
+
+		//actualExtent.width = std::clamp(actualExtent.width, minMaxImageDimensions[0].width, minMaxImageDimensions[1].width);
+		//actualExtent.height = std::clamp(actualExtent.height, minMaxImageDimensions[0].height, minMaxImageDimensions[1].height);
+
+		return actualExtent;
+		
+	}
+
+	VkFormat GetSwapChainFormat() const
+	{
+		return swapChainImageFormat.format;
+	}
+
+
 	uint32_t GetSwapChainHeight() const
 	{
 		return swapChainExtent.height;
@@ -82,10 +107,16 @@ public:
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 	std::vector<VkImage> swapChainImages;
-	std::vector<VkImageView> swapChainImageViews;
+	std::vector<uint32_t> swapChainImageViews;
 	std::vector<VkFramebuffer> swapChainFramebuffers;
-	VkFormat swapChainImageFormat;
+	VkSurfaceFormatKHR swapChainImageFormat;
 	VkExtent2D swapChainExtent;
+
+	VkPresentModeKHR presentMode;
+	uint32_t imageCount;
+	VkSharingMode queueSharing;
+	VkSurfaceTransformFlagBitsKHR preTransform;
+	std::vector<uint32_t> queueFamiliesCache;
  
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain

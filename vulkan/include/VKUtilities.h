@@ -82,13 +82,19 @@ namespace VK {
 					VkImage& image, VkFormat format, VkImageLayout oldLayout,
 					VkImageLayout newLayout, uint32_t mips, uint32_t layers);
 		}
+
+		inline bool operator==(const VkExtent2D &extent1, const VkExtent2D &extent2)
+		{
+			return (extent1.width == extent2.width) && (extent1.height == extent2.height);
+		}
 						
 
 	}
 	namespace API {
 
 		VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp);
-			
 
+		VkFormat ConvertSMBToVkFormat(ImageFormat format);
+		
 	}
 }

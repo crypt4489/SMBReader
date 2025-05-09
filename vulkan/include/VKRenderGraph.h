@@ -25,7 +25,7 @@ public:
 		UpdateUniformBuffer(proj, view, frameNum);
 		std::string mrp = "mainrenderpass";
 		VkDescriptorSet set = dscache->GetDescriptorSetPerFrame(mrp, frameNum);
-		RenderInstance* rend = ::VKRenderer::gRenderInstance;
+		RenderInstance* rend = VKRenderer::gRenderInstance;
 		for (auto& obj : objs)
 		{
 			std::string name = obj->GetPipelineType();

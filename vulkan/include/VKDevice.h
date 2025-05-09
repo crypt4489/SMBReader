@@ -2,12 +2,16 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cmath>
+#include <forward_list>
+#include <map>
+#include <numeric>
+
 #include <unordered_map>
 #include <set>
 
 #include "vulkan/vulkan.h"
 #include "ThreadManager.h"
-//
 #include "VKTypes.h"
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
@@ -81,6 +85,138 @@ private:
 	Semaphore sema;
 };
 
+
+class VKAllocator
+{
+public:
+	VkDeviceSize capacity;
+	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> freeList; // [staringAddr, endingAddr)
+	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> occupiedList; //[staringAddr, endingAddr)
+
+	VKAllocator(const VkDeviceSize _c) : capacity(_c)
+	{
+		auto firstRange = std::make_pair(0U, capacity);
+		freeList.emplace_front(firstRange);
+	}
+
+	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list, 
+		VkDeviceSize first, 
+		VkDeviceSize last)
+	{
+		auto prev = list.before_begin();
+		auto traverse = list.begin();
+		while (traverse != std::end(list) && first > traverse->first)
+		{
+			prev = traverse++;
+		}
+		list.emplace_after(prev, first, last);
+	}
+
+	void InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
+		VkDeviceSize first,
+		VkDeviceSize last)
+	{
+		auto prev = list.before_begin();
+		
+		auto traverse = list.begin();
+		
+		while (traverse != std::end(list) && (first) > traverse->second)
+		{
+			prev = traverse++;
+		}
+
+		while (traverse != std::end(list) && traverse->first <= last)
+		{
+			first = std::min(first, traverse->first);
+			last = std::max(last, traverse->second);
+
+			traverse = list.erase_after(prev);
+		}
+
+		list.emplace_after(prev, first, last);
+	}
+
+	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size)
+	{
+		VkDeviceSize maxDiff = UINT64_MAX;
+		auto prev = freeList.before_begin();
+		auto iter = freeList.begin();
+		auto candidate = freeList.end();
+		auto candidatePrev = freeList.end();
+		while (iter != std::end(freeList))
+		{
+			VkDeviceSize holesize = (iter->second - iter->first);
+			if (holesize >= size)
+			{
+				VkDeviceSize diff = holesize - size;
+
+				if (diff < maxDiff)
+				{
+					maxDiff = diff;
+					candidate = iter;
+					candidatePrev = prev;
+					if (!maxDiff) break; //perfect match
+				}
+			}
+
+			prev = iter++;
+		}
+
+		if (candidate == std::end(freeList))
+		{
+			return std::make_pair(UINT64_MAX, UINT64_MAX);
+		}
+
+		auto ret = *candidate;
+		freeList.erase_after(candidatePrev);
+		return ret;
+	}
+
+	VkDeviceSize GetMemory(VkDeviceSize size)
+	{
+		auto iter = GetBestFit(size);
+		
+		if (iter.first == UINT64_MAX && iter.second == UINT64_MAX) // too large, no lower bound
+		{
+			throw std::runtime_error("too large of allocation!");
+		}
+
+		VkDeviceSize originaladdr = iter.first;
+		VkDeviceSize endaddr = originaladdr + size;
+		VkDeviceSize originalSize = iter.second - originaladdr;
+
+		InsertSorted(occupiedList, originaladdr, endaddr); //add new pair to occupied
+	
+		if (originalSize != size) // if it is not a perfect size, have new hole
+		{
+			InsertSorted(freeList, endaddr, iter.second);
+		}
+		
+		return originaladdr;
+	}
+
+	void FreeMemory(VkDeviceSize addr)
+	{
+		auto prev = occupiedList.before_begin();
+		
+		auto iter = occupiedList.begin();
+
+		while (iter != std::end(occupiedList) && iter->first != addr)
+		{
+			prev = iter++;
+		}
+
+		if (iter == std::end(occupiedList))
+		{
+			throw std::runtime_error("Free memory never allocated");
+		}
+
+		VkDeviceSize beg = iter->first, end = iter->second;
+		occupiedList.erase_after(prev);
+		InsertSortedMerged(freeList, beg, end);
+	}
+};
+
 class VKDevice
 {
 public:
@@ -94,6 +230,21 @@ public:
 		if (device)
 		{
 			vkDeviceWaitIdle(device);
+
+			for (auto& iv : imageViews)
+			{
+				vkDestroyImageView(device, iv, nullptr);
+			}
+
+			for (auto& i : images)
+			{
+				vkDestroyImage(device, std::get<VkImage>(i), nullptr);
+			}
+
+			for (auto& m : deviceMemories)
+			{
+				vkFreeMemory(device, m, nullptr);
+			}
 
 			for (auto& d : descriptorPools)
 			{
@@ -116,7 +267,7 @@ public:
 
 	VKDevice& operator=(const VKDevice& _dev) = default;
 
-	VKDevice& operator=(VKDevice&& _dev) {
+	VKDevice& operator=(VKDevice&& _dev) noexcept {
 		this->device = _dev.device;
 		_dev.device = VK_NULL_HANDLE;
 		this->gpu = _dev.gpu;
@@ -127,7 +278,7 @@ public:
 
 	VKDevice(const VKDevice& _dev) = default;
 
-	VKDevice(VKDevice&& _dev)
+	VKDevice(VKDevice&& _dev) noexcept
 	{
 		this->device = _dev.device;
 		_dev.device = VK_NULL_HANDLE;
@@ -280,32 +431,61 @@ public:
 		return descriptorPool;
 	}
 
-	uint32_t CreateMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeBits, VkMemoryPropertyFlags properties)
+	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
+		uint32_t height, uint32_t mipLevels,
+		VkFormat type, uint32_t layers,
+		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkMemoryPropertyFlags memProps)
 	{
-		uint32_t memorytype = ::VK::Utils::findMemoryType(gpu, memoryTypeBits, properties);
-		
-		auto iter = deviceMemories.find(memorytype);
-		if (iter != std::end(deviceMemories))
-		{
-			return static_cast<uint32_t>(std::distance(deviceMemories.begin(), iter));
+		VkImage image;
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = width;
+		imageInfo.extent.height = height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = mipLevels;
+		imageInfo.arrayLayers = layers;
+
+		imageInfo.format = type;//VK::API::ConvertSMBToVkFormat(type);
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = flags;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
+		imageInfo.flags = 0;
+
+		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create image!");
 		}
 
-		uint32_t ret = static_cast<uint32_t>(deviceMemories.size());
-		
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(device, image, &memRequirements);
+		uint32_t memoryTypeIndex = VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, memProps);
+
+		vkDestroyImage(device, image, nullptr);
+
+		return std::make_pair(memoryTypeIndex, memRequirements.alignment);
+
+	}
+
+	uint32_t CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex)
+	{
 		VkDeviceMemory deviceMemory;
 
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = poolSize;
-		allocInfo.memoryTypeIndex = memorytype;
+		allocInfo.memoryTypeIndex = memoryTypeIndex;
 
 		if (vkAllocateMemory(device, &allocInfo, nullptr, &deviceMemory) != VK_SUCCESS) {
 			throw std::runtime_error("failed to allocate image memory!");
 		}
 
-		deviceMemories[memorytype] = deviceMemory;
-
-		return ret;
+		deviceMemories.push_back(deviceMemory);
+		//deviceMemoriesAllocators[deviceMemories.size()-1] = 0;
+		allocators.emplace_back(poolSize);
+		return static_cast<uint32_t>(deviceMemories.size()-1);
 	}
 
 	uint32_t CreateSwapChain(VkSurfaceKHR surface)
@@ -313,6 +493,192 @@ public:
 		uint32_t index = static_cast<uint32_t>(swapChains.size());
 		auto swapchain = swapChains.emplace_back(this, surface);
 		return index;
+	}
+
+
+	uint32_t CreateImage(uint32_t width, 
+		uint32_t height, uint32_t mipLevels, 
+		VkFormat type, uint32_t layers,
+		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkMemoryPropertyFlags memProps, uint32_t memIndex)
+	{
+		VkImage image;
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType = VK_IMAGE_TYPE_2D;
+		imageInfo.extent.width = width;
+		imageInfo.extent.height = height;
+		imageInfo.extent.depth = 1;
+		imageInfo.mipLevels = mipLevels;
+		imageInfo.arrayLayers = layers;
+
+		imageInfo.format = type;
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.usage = flags;
+		imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
+		imageInfo.flags = 0;
+
+		if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create image!");
+		}
+
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+		auto iter = deviceMemories[memIndex];
+
+		auto &alloc = allocators[memIndex];
+
+		VkDeviceSize addr = alloc.GetMemory(memRequirements.size);
+
+		vkBindImageMemory(device, image, iter, addr);
+
+		images.push_back(std::tuple(image, addr, memIndex));
+		
+		return static_cast<uint32_t>(images.size() - 1);
+	}
+
+	uint32_t CreateImageView(
+		uint32_t imageIndex, uint32_t mipLevels, 
+		VkFormat type, VkImageAspectFlags aspectMask)
+	{
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = std::get<VkImage>(images[imageIndex]);
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = type;
+		viewInfo.subresourceRange.aspectMask = aspectMask;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = mipLevels;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+		VkImageView imageView = VK_NULL_HANDLE;
+		if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image view!");
+		}
+
+		imageViews.push_back(imageView);
+
+		return static_cast<uint32_t>(imageViews.size() - 1);
+	}
+
+	uint32_t CreateImageView(
+		VkImage image, uint32_t mipLevels,
+		VkFormat type, VkImageAspectFlags aspectMask)
+	{
+		VkImageViewCreateInfo viewInfo{};
+		viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewInfo.image = image;
+		viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewInfo.format = type;
+		viewInfo.subresourceRange.aspectMask = aspectMask;
+		viewInfo.subresourceRange.baseMipLevel = 0;
+		viewInfo.subresourceRange.levelCount = mipLevels;
+		viewInfo.subresourceRange.baseArrayLayer = 0;
+		viewInfo.subresourceRange.layerCount = 1;
+		VkImageView imageView = VK_NULL_HANDLE;
+		if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture image view!");
+		}
+
+		imageViews.push_back(imageView);
+
+		return static_cast<uint32_t>(imageViews.size() - 1);
+	}
+
+	uint32_t CreateImage(
+		std::vector<std::vector<char>>& imageData, 
+		std::vector<uint32_t>& imageSizes,
+		uint32_t width, uint32_t height, 
+		uint32_t mipLevels, VkFormat type,
+		uint32_t queueIndex, uint32_t queueFamilyIndex,
+		uint32_t poolIndex, uint32_t memIndex)
+	{
+		VkQueue queue;
+		vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
+
+		VkDeviceSize imagesSize = static_cast<VkDeviceSize>(std::accumulate(imageSizes.begin(), imageSizes.end(), 0));
+
+		VkBuffer stagingBuffer;
+		VkDeviceMemory stagingMemory;
+
+		std::tie(stagingBuffer, stagingMemory) = VK::Utils::createBuffer(device, gpu, imagesSize,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+		char* data;
+		auto& sizes = imageSizes;
+		auto& pixels = imageData;
+		vkMapMemory(device, stagingMemory, 0, imagesSize, 0, reinterpret_cast<void**>(&data));
+		for (auto i = 0U; i < mipLevels; i++) {
+			std::memcpy(data, pixels[i].data(), sizes[i]);
+			data += sizes[i];
+		}
+		vkUnmapMemory(device, stagingMemory);
+
+		VkFormat format = type;
+
+		uint32_t imageIndex = CreateImage(
+			width, height, mipLevels, type, 1, 
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+			VK_IMAGE_USAGE_SAMPLED_BIT, 
+			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memIndex);
+
+		VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, commandPools[poolIndex]);
+
+		VK::Utils::MultiCommands::TransitionImageLayout(cb, std::get<VkImage>(images[imageIndex]), format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+
+		VkDeviceSize offset = 0U;
+
+		for (auto i = 0U; i < mipLevels; i++) {
+
+			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, std::get<VkImage>(images[imageIndex]), width >> i, height >> i, i, offset, { 0, 0, 0 });
+
+			offset += static_cast<VkDeviceSize>(sizes[i]);
+		}
+
+		VK::Utils::MultiCommands::TransitionImageLayout(cb, std::get<VkImage>(images[imageIndex]), format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+
+		VK::Utils::EndOneTimeCommands(device, queue, commandPools[poolIndex], cb);
+
+		vkFreeMemory(device, stagingMemory, nullptr);
+		vkDestroyBuffer(device, stagingBuffer, nullptr);
+	}
+
+	void TransitionImageLayout(uint32_t poolIndex, uint32_t queueIdx, uint32_t imageIndex,
+		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
+		uint32_t mips, uint32_t layers)
+	{
+		VkQueue queue;
+		vkGetDeviceQueue(device, queueIdx, 0, &queue);
+		VK::Utils::TransitionImageLayout(
+			device, 
+			commandPools[poolIndex], queue,
+			std::get<VkImage>(images[imageIndex]), format,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 
+			1, 1
+		);
+	}
+
+	void DestroyImageView(uint32_t imageViewIndex)
+	{
+		vkDestroyImageView(device, imageViews[imageViewIndex], nullptr);
+		imageViews[imageViewIndex] = VK_NULL_HANDLE;
+	}
+
+	void DestroyImage(uint32_t imageIndex)
+	{
+		vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
+		auto& alloc = allocators[std::get<uint32_t>(images[imageIndex])];
+		alloc.FreeMemory(std::get<VkDeviceSize>(images[imageIndex]));
+		images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
+	}
+
+	VkImageView GetImageView(uint32_t index)
+	{
+		return imageViews[index];
 	}
 
 	VkCommandPool GetCommandPool(uint32_t poolIndex)
@@ -336,7 +702,11 @@ public:
 	std::vector<VkCommandPool> commandPools;
 	std::vector<VkDescriptorPool> descriptorPools;
 	std::vector<VKSwapChain> swapChains;
-	std::unordered_map<uint32_t, VkDeviceMemory> deviceMemories; //memoryIndex, deviceMemory pool
+	std::vector<VkDeviceMemory> deviceMemories; //memoryIndex, deviceMemory pool
+	//std::unordered_map<uint32_t, VkDeviceSize> deviceMemoriesAllocators; //memoryIndex, current stack allocator
+	std::vector<VKAllocator> allocators;
 	std::vector<VkBuffer> deviceBuffers;
+	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
+	std::vector<VkImageView> imageViews;
 };
 

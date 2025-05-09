@@ -277,7 +277,7 @@ namespace VK {
 				VkMemoryAllocateInfo allocInfo{};
 				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 				allocInfo.allocationSize = memRequirements.size;
-				allocInfo.memoryTypeIndex = ::VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, properties);
+				allocInfo.memoryTypeIndex = VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, properties);
 
 				if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
 					throw std::runtime_error("failed to allocate image memory!");
@@ -518,6 +518,24 @@ namespace VK {
 				}
 
 				return ret;
+		}
+
+		VkFormat ConvertSMBToVkFormat(ImageFormat format)
+		{
+			VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
+			switch (format)
+			{
+			case ImageFormat::DXT1:
+				vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+				break;
+			case ImageFormat::DXT3:
+				vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
+				break;
+			case ImageFormat::R8G8B8A8:
+				vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+				break;
+			}
+			return vkFormat;
 		}
 
 	}

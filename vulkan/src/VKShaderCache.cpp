@@ -31,7 +31,7 @@ VkShaderModule VKShaderCache::CreateShader(const std::string& name, VkShaderStag
 
 		if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
 
-		mod = ::VK::Utils::createShaderModule(device, buffer);
+		mod = VK::Utils::createShaderModule(device, buffer);
 	}
 	else
 	{

@@ -55,17 +55,3 @@ namespace TexUtils
 }
 
 //either DX8 or DX9 format, mix of both in the SMB archives
-enum class ImageFormat : uint32_t
-{
-	X8L8U8V8 = 7,
-	DXT1 = 12,
-	DXT3 = 14,
-	R8G8B8A8 = 18,
-	R8G8B8 = 0x7ffffffe,
-	IMAGE_UNKNOWN = 0x7fffffff
-};
-
-enum class TextureIOType
-{
-	BMP = 0,
-};

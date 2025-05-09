@@ -205,7 +205,7 @@ void VKTexture::CreateImageViews(uint32_t miplevels)
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 	viewInfo.subresourceRange.layerCount = 1;
 
-	imageView = ::VK::Utils::CreateImageView(device, viewInfo);
+	imageView = VK::Utils::CreateImageView(device, viewInfo);
 }
 
 VkFormat VKTexture::ConvertSMBToVkFormat(ImageFormat format)

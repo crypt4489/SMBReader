@@ -30,7 +30,7 @@ public:
 			vkDestroySurfaceKHR(instance, renderSurface, nullptr);
 		}
 
-		::VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
+		VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
 
 		if (instance)
 		{
@@ -38,9 +38,9 @@ public:
 		}
 	}
 
-	::VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex)
+	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex)
 	{
-		::VK::Utils::SwapChainSupportDetails ret = ::VK::Utils::querySwapChainSupport(gpus[gpuIndex], renderSurface);
+		VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpus[gpuIndex], renderSurface);
 		return ret;
 	}
 
@@ -142,7 +142,7 @@ public:
 		instanceDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		instanceDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		instanceDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		instanceDebugInfo.pfnUserCallback = ::VK::Utils::debugCallback;
+		instanceDebugInfo.pfnUserCallback = VK::Utils::debugCallback;
 		instanceDebugInfo.pUserData = nullptr;
 
 
@@ -158,10 +158,10 @@ public:
 		debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 		debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 		debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-		debugInfo.pfnUserCallback = ::VK::Utils::debugCallback;
+		debugInfo.pfnUserCallback = VK::Utils::debugCallback;
 		debugInfo.pUserData = nullptr;
 
-		result = ::VK::Utils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
+		result = VK::Utils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
 
 		if (result != VK_SUCCESS)
 		{
@@ -285,9 +285,9 @@ public:
 
 		if (renderSurface)
 		{
-			::VK::Utils::SwapChainSupportDetails supportDetails;
+			VK::Utils::SwapChainSupportDetails supportDetails;
 
-			supportDetails = ::VK::Utils::querySwapChainSupport(device, renderSurface);
+			supportDetails = VK::Utils::querySwapChainSupport(device, renderSurface);
 
 			if (supportDetails.formats.empty() || supportDetails.presentModes.empty())
 			{

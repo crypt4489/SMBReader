@@ -199,7 +199,7 @@ namespace GLSLANG
 
         std::vector<char> compiledShader(ptr, ptr + (glslang_program_SPIRV_get_size(program) * sizeof(unsigned int)));
 
-        VkShaderModule ret = ::VK::Utils::createShaderModule(device, compiledShader);
+        VkShaderModule ret = VK::Utils::createShaderModule(device, compiledShader);
 
         glslang_program_delete(program);
 
