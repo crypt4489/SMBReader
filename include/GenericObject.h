@@ -60,7 +60,7 @@ public:
 			std::tie(gdb, std::ignore, gdbOffset, gdbBufferSize) = rendInst->GetDynamicBuffer();
 			dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
 			dsb.AddDynamicUniformBuffer(rendInst->GetVulkanDevice(), gdb, gdbBufferSize, 0, frames, gdbOffset);
-			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), textures[0].vkImpl->imageView, textures[0].vkImpl->sampler, 1, frames);
+			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(textures[0].vkImpl->viewIndex), textures[0].vkImpl->sampler, 1, frames);
 			dsc->AddDesciptorSet(genericpipeline, dsb.descriptorSets);
 			vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), static_cast<uint32_t>(objectIndex * sizeof(glm::mat4)));
 		}

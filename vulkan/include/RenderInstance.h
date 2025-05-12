@@ -598,6 +598,41 @@ public:
 		return { globalBuffer, ret };
 	}
 
+	uint32_t CreateVulkanImage(
+		std::vector<std::vector<char>>& imageData,
+		std::vector<uint32_t>& imageSizes,
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, ImageFormat type)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		return majorDevice.CreateSampledImage(
+			imageData, imageSizes, 
+			width, height, 
+			mipLevels, VK::API::ConvertSMBToVkFormat(type), 
+			1, 
+			graphicsIndex, transferIndex, 
+			attachmentsIndex, stagingBufferIndex);
+	}
+
+	uint32_t CreateVulkanImageView(uint32_t imageIndex, uint32_t mipLevels,
+		ImageFormat type, VkImageAspectFlags aspectMask)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
+	}
+
+	void DeleteVulkanImageView(uint32_t index)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		majorDevice.DestroyImage(index);
+	}
+
+	void DeleteVulkanImage(uint32_t index)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		majorDevice.DestroyImage(index);
+	}
+
 	void CreateVulkanRenderer(WindowManager *window)
 	{
 		this->windowMan = window;
@@ -622,6 +657,7 @@ public:
 		
 		std::set queueFamilies = { graphicsIndex, presentIndex };
 		std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
+		
 		VkPhysicalDeviceFeatures features{};
 		features.geometryShader = VK_TRUE;
 		features.textureCompressionBC = VK_TRUE;
@@ -643,6 +679,8 @@ public:
 			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+
+		stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 		swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface);
 
@@ -684,8 +722,6 @@ public:
 	
 		std::vector<VkImageView> attachmentViews = { majorDevice.GetImageView(colorView), majorDevice.GetImageView(depthView) };
 		swapChain.CreateFrameBuffers(renderPass, attachmentViews);
-
-		
 		
 		
 		CreateCommandBuffer();
@@ -703,6 +739,12 @@ public:
 		CreatePipelines();
 	}
 
+	VkImageView GetImageView(uint32_t viewIndex)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		return majorDevice.imageViews[viewIndex];
+	}
+
 	
 	void DestroyVulkanRenderer()
 	{
@@ -713,7 +755,6 @@ public:
 	{
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 		VkDevice logicalDevice = dev.device;
-		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
 
 		vkDestroyBuffer(logicalDevice, globalBuffer, nullptr);
 		
@@ -724,8 +765,6 @@ public:
 		mainRenderPassCache.DestroyPipelineCache();
 
 		descriptorLayoutCache.DestroyLayoutCache();
-
-		swapChain.DestroySwapChain();
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		{
@@ -750,13 +789,6 @@ public:
 		{
 			vkDestroyRenderPass(logicalDevice, renderPass, nullptr);
 		}
-	}
-
-	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures)
-	{
-		vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
-		vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 	}
 
 	void SetResizeBool(bool set)
@@ -877,13 +909,14 @@ private:
 	uint32_t attachmentsIndex;
 	uint32_t depthView, depthImage;
 	uint32_t colorView, colorImage;
+	uint32_t stagingBufferIndex;
 
 
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 
-	Semaphore transferSemaphore; // semaphore for transfer command pool
+	QueueManager* gptManager;
 
-	QueueManager *gptManager;
+	Semaphore transferSemaphore; // semaphore for transfer command pool
 
 	std::vector<VkCommandBuffer> commandBuffers{};
 
@@ -898,15 +931,7 @@ private:
 	bool resizeWindow = false;
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-/*
-	VkImage colorImage = VK_NULL_HANDLE;
-	VkDeviceMemory colorImageMemory = VK_NULL_HANDLE;
-	VkImageView colorImageView = VK_NULL_HANDLE;
 
-	VkImage depthImage = VK_NULL_HANDLE;
-	VkDeviceMemory depthMemory = VK_NULL_HANDLE;
-	VkImageView depthImageView = VK_NULL_HANDLE;
-*/
 	VkFormat depthFormat;
 
 	VKShaderCache shaderCache;
@@ -921,48 +946,6 @@ private:
 
 	void* dynamicMemoryMapped;
 	VkDeviceSize dynamicGlobalOffset;
-
-
-
-	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-		for (const auto& availableFormat : availableFormats) {
-			if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-				return availableFormat;
-			}
-		}
-
-		return availableFormats[0];
-	}
-
-	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-		for (const auto& availablePresentMode : availablePresentModes) {
-			if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-				return availablePresentMode;
-			}
-		}
-
-		return VK_PRESENT_MODE_FIFO_KHR;
-	}
-
-	VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {
-		if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
-			return capabilities.currentExtent;
-		}
-		else {
-			int width, height;
-			glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
-
-			VkExtent2D actualExtent = {
-				static_cast<uint32_t>(width),
-				static_cast<uint32_t>(height)
-			};
-
-			actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-			actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
-			return actualExtent;
-		}
-	}
 
 };
 

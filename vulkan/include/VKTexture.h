@@ -17,18 +17,18 @@ public:
 
 	~VKTexture();
 
-	VkImage image;
-	VkDeviceMemory imageMemory;
-	VkImageView imageView;
+	uint32_t imageIndex;
+	uint32_t viewIndex;
 	VkSampler sampler;
-	VkFormat format;
 
 	void CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes, 
 		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);
 
-	void CreateImageViews(uint32_t miplevels);
+	void CreateImageViews(uint32_t miplevels, ImageFormat type);
 
 	void CreateImageSampler(uint32_t mipLevels);
+	
+	void DeleteResources();
 
 #if 0
 	void TransitionMips(VkDevice& device, VkPhysicalDevice &gpu, VkCommandPool &pool, VkQueue &queue, uint32_t width, uint32_t height, uint32_t mips)
@@ -120,7 +120,5 @@ public:
 		::VK::Utils::EndOneTimeCommands(device, queue, pool, commandBuffer);
 	}
 #endif
-private:
-	VkFormat ConvertSMBToVkFormat(ImageFormat format);
 };
 

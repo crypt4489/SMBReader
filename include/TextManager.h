@@ -186,7 +186,7 @@ public:
 		auto dl = dlc->GetLayout("oneimage");
 		DescriptorSetBuilder dsb{};
 		dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
-		dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), fonts->texture->vkImpl->imageView, fonts->texture->vkImpl->sampler, 0, frames);
+		dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(fonts->texture->vkImpl->viewIndex), fonts->texture->vkImpl->sampler, 0, frames);
 		dsc->AddDesciptorSet(text, dsb.descriptorSets);
 	}
 

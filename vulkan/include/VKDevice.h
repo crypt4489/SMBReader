@@ -99,6 +99,14 @@ public:
 		freeList.emplace_front(firstRange);
 	}
 
+	VKAllocator(const VKAllocator&) = delete;
+
+	VKAllocator& operator=(const VKAllocator&) = delete;
+
+	VKAllocator(VKAllocator&&) = default;
+
+	VKAllocator& operator=(VKAllocator&&) = default;
+
 	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list, 
 		VkDeviceSize first, 
 		VkDeviceSize last)
@@ -136,16 +144,28 @@ public:
 		list.emplace_after(prev, first, last);
 	}
 
-	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size)
+	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size, VkDeviceSize alignment)
 	{
 		VkDeviceSize maxDiff = UINT64_MAX;
 		auto prev = freeList.before_begin();
 		auto iter = freeList.begin();
 		auto candidate = freeList.end();
 		auto candidatePrev = freeList.end();
+		VkDeviceSize addressAlignmentMakeUp = 0U;
 		while (iter != std::end(freeList))
 		{
-			VkDeviceSize holesize = (iter->second - iter->first);
+
+			VkDeviceSize endingAddress = iter->second;
+			VkDeviceSize startingAddress = iter->first;
+			VkDeviceSize makeup = (startingAddress & (alignment - 1));
+
+			if (makeup)
+			{
+				startingAddress += makeup; //make up for any alignment considerations
+			}
+
+			VkDeviceSize holesize = endingAddress - startingAddress;
+			
 			if (holesize >= size)
 			{
 				VkDeviceSize diff = holesize - size;
@@ -155,6 +175,7 @@ public:
 					maxDiff = diff;
 					candidate = iter;
 					candidatePrev = prev;
+					addressAlignmentMakeUp = makeup;
 					if (!maxDiff) break; //perfect match
 				}
 			}
@@ -169,12 +190,17 @@ public:
 
 		auto ret = *candidate;
 		freeList.erase_after(candidatePrev);
+		if (addressAlignmentMakeUp)
+		{
+			InsertSorted(freeList, ret.first, ret.first + addressAlignmentMakeUp);
+			ret.first += addressAlignmentMakeUp;
+		}
 		return ret;
 	}
 
-	VkDeviceSize GetMemory(VkDeviceSize size)
+	VkDeviceSize GetMemory(VkDeviceSize size, VkDeviceSize alignment)
 	{
-		auto iter = GetBestFit(size);
+		auto iter = GetBestFit(size, alignment);
 		
 		if (iter.first == UINT64_MAX && iter.second == UINT64_MAX) // too large, no lower bound
 		{
@@ -231,6 +257,17 @@ public:
 		{
 			vkDeviceWaitIdle(device);
 
+			for (auto& hb : hostBuffers)
+			{
+				vkDestroyBuffer(device, hb.first, nullptr);
+				vkFreeMemory(device, hb.second, nullptr);
+			}
+
+			for (auto& sc : swapChains)
+			{
+				sc.DestroySwapChain();
+			}
+
 			for (auto& iv : imageViews)
 			{
 				vkDestroyImageView(device, iv, nullptr);
@@ -273,6 +310,13 @@ public:
 		this->gpu = _dev.gpu;
 		this->commandPools = std::move(_dev.commandPools);
 		this->queueManagers = std::move(_dev.queueManagers);
+		this->descriptorPools = std::move(_dev.descriptorPools);
+		this->swapChains = std::move(_dev.swapChains);
+		this->deviceMemories = std::move(_dev.deviceMemories);
+		this->allocators = std::move(_dev.allocators);
+		this->deviceBuffers = std::move(_dev.deviceBuffers);
+		this->images = std::move(_dev.images);
+		this->imageViews = std::move(_dev.imageViews);
 		return *this;
 	};
 
@@ -285,6 +329,13 @@ public:
 		this->gpu = _dev.gpu;
 		this->commandPools = std::move(_dev.commandPools);
 		this->queueManagers = std::move(_dev.queueManagers);
+		this->descriptorPools = std::move(_dev.descriptorPools);
+		this->swapChains = std::move(_dev.swapChains);
+		this->deviceMemories = std::move(_dev.deviceMemories);
+		this->allocators = std::move(_dev.allocators);
+		this->deviceBuffers = std::move(_dev.deviceBuffers);
+		this->images = std::move(_dev.images);
+		this->imageViews = std::move(_dev.imageViews);
 	};
 
 	VkPhysicalDevice GetGPU() const
@@ -483,7 +534,6 @@ public:
 		}
 
 		deviceMemories.push_back(deviceMemory);
-		//deviceMemoriesAllocators[deviceMemories.size()-1] = 0;
 		allocators.emplace_back(poolSize);
 		return static_cast<uint32_t>(deviceMemories.size()-1);
 	}
@@ -531,7 +581,7 @@ public:
 
 		auto &alloc = allocators[memIndex];
 
-		VkDeviceSize addr = alloc.GetMemory(memRequirements.size);
+		VkDeviceSize addr = alloc.GetMemory(memRequirements.size, memRequirements.alignment);
 
 		vkBindImageMemory(device, image, iter, addr);
 
@@ -588,13 +638,23 @@ public:
 		return static_cast<uint32_t>(imageViews.size() - 1);
 	}
 
-	uint32_t CreateImage(
+	uint32_t CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlagBits usage)
+	{
+		hostBuffers.emplace_back(VK_NULL_HANDLE, VK_NULL_HANDLE);
+		auto& ref = hostBuffers.back();
+		std::tie(ref.first, ref.second) = VK::Utils::createBuffer(device, gpu, allocSize,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | (coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0), VK_SHARING_MODE_EXCLUSIVE, usage);
+		return static_cast<uint32_t>(hostBuffers.size() - 1);
+	}
+
+	uint32_t CreateSampledImage(
 		std::vector<std::vector<char>>& imageData, 
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height, 
 		uint32_t mipLevels, VkFormat type,
 		uint32_t queueIndex, uint32_t queueFamilyIndex,
-		uint32_t poolIndex, uint32_t memIndex)
+		uint32_t poolIndex, uint32_t memIndex,
+		uint32_t hostIndex)
 	{
 		VkQueue queue;
 		vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
@@ -604,8 +664,7 @@ public:
 		VkBuffer stagingBuffer;
 		VkDeviceMemory stagingMemory;
 
-		std::tie(stagingBuffer, stagingMemory) = VK::Utils::createBuffer(device, gpu, imagesSize,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VK_SHARING_MODE_EXCLUSIVE, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		std::tie(stagingBuffer, stagingMemory) = hostBuffers[hostIndex];
 
 		char* data;
 		auto& sizes = imageSizes;
@@ -643,8 +702,7 @@ public:
 
 		VK::Utils::EndOneTimeCommands(device, queue, commandPools[poolIndex], cb);
 
-		vkFreeMemory(device, stagingMemory, nullptr);
-		vkDestroyBuffer(device, stagingBuffer, nullptr);
+		return imageIndex;
 	}
 
 	void TransitionImageLayout(uint32_t poolIndex, uint32_t queueIdx, uint32_t imageIndex,
@@ -672,7 +730,7 @@ public:
 	{
 		vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
 		auto& alloc = allocators[std::get<uint32_t>(images[imageIndex])];
-		alloc.FreeMemory(std::get<VkDeviceSize>(images[imageIndex]));
+		alloc.FreeMemory(std::get<VkDeviceSize>(images[imageIndex])); //image, address, and memory type index
 		images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
 	}
 
@@ -706,6 +764,7 @@ public:
 	//std::unordered_map<uint32_t, VkDeviceSize> deviceMemoriesAllocators; //memoryIndex, current stack allocator
 	std::vector<VKAllocator> allocators;
 	std::vector<VkBuffer> deviceBuffers;
+	std::vector<std::pair<VkBuffer, VkDeviceMemory>> hostBuffers;
 	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
 	std::vector<VkImageView> imageViews;
 };
