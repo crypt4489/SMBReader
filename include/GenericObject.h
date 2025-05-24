@@ -42,12 +42,7 @@ public:
 		{
 			std::string genericpipeline = "genericpipeline";
 			
-			vkPipelineObject = new VKPipelineObject(
-				genericpipeline, 
-				&vertexCount, 
-				VK_NULL_HANDLE,
-				0u
-			);
+			
 			
 			auto rendInst = VKRenderer::gRenderInstance;
 			uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
@@ -55,14 +50,20 @@ public:
 			auto dsc = rendInst->GetDescriptorSetCache();
 			auto dl = dlc->GetLayout("genericobject");
 			DescriptorSetBuilder dsb{};
-			VkBuffer gdb;
-			size_t gdbBufferSize, gdbOffset;
-			std::tie(gdb, std::ignore, gdbOffset, gdbBufferSize) = rendInst->GetDynamicBuffer();
+			uint32_t offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
 			dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
-			dsb.AddDynamicUniformBuffer(rendInst->GetVulkanDevice(), gdb, gdbBufferSize, 0, frames, gdbOffset);
-			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(textures[0].vkImpl->viewIndex), textures[0].vkImpl->sampler, 1, frames);
+			dsb.AddDynamicUniformBuffer(rendInst->GetVulkanDevice(), rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, offset);
+			dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(textures[0].vkImpl->viewIndex), rendInst->GetSampler(textures[0].vkImpl->samplerIndex), 1, frames);
 			dsc->AddDesciptorSet(genericpipeline, dsb.descriptorSets);
-			vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), static_cast<uint32_t>(objectIndex * sizeof(glm::mat4)));
+			
+			vkPipelineObject = new VKPipelineObject(
+				genericpipeline,
+				~0U,
+				~0U,
+				&vertexCount
+			);
+			
+			vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), offset);
 		}
 	}
 

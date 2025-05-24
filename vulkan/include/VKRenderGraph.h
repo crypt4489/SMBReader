@@ -55,22 +55,24 @@ public:
 		
 		DescriptorSetBuilder dsb{};
 		dsb.AllocDescriptorSets(device, pool, ref, frames);
-		dsb.AddUniformBuffer(device, uniformBuffer, sizeof(glm::mat4) * 2, 0, frames, uniformOffset);
+		dsb.AddUniformBuffer(device, VKRenderer::gRenderInstance->GetDynamicUniformBuffer(), sizeof(glm::mat4)*2, 0, frames, uniformOffset);
 		dscache->AddDesciptorSet(mainrenderpass, dsb.descriptorSets);
 		
 	}
 
 	void CreateUniformBuffers(RenderInstance *inst, uint32_t frames)
 	{
-		std::tie(uniformBuffer, memoryMapped) = inst->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * frames, uniformOffset);
+		uniformOffset = inst->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * frames, 16);
 	}
 
 	void UpdateUniformBuffer(glm::mat4& proj, glm::mat4& view, uint32_t frameNum)
 	{
 		proj[1][1] *= -1;
-		char* data = ((char*)memoryMapped) + (frameNum * 2 * sizeof(glm::mat4));
-		memcpy(data, &view, sizeof(glm::mat4));
-		memcpy(data + sizeof(glm::mat4), &proj, sizeof(glm::mat4));
+		struct {
+			glm::mat4 view;
+			glm::mat4 proj;
+		} what = {  view,  proj };
+		VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(&what, sizeof(glm::mat4)*2, uniformOffset, frameNum);
 	}
 
 private:
@@ -79,8 +81,6 @@ private:
 	VKPipelineCache* cache;
 	VKDescriptorSetCache* dscache;
 	std::string currentPipeline = "";
-	VkBuffer uniformBuffer;
-	VkDeviceSize uniformOffset;
-	void* memoryMapped;
+	uint32_t uniformOffset;
 };
 

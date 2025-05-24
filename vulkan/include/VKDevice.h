@@ -268,6 +268,11 @@ public:
 				sc.DestroySwapChain();
 			}
 
+			for (auto& smp : samplers)
+			{
+				vkDestroySampler(device, smp, nullptr);
+			}
+
 			for (auto& iv : imageViews)
 			{
 				vkDestroyImageView(device, iv, nullptr);
@@ -638,13 +643,21 @@ public:
 		return static_cast<uint32_t>(imageViews.size() - 1);
 	}
 
-	uint32_t CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlagBits usage)
+	uint32_t CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage)
 	{
 		hostBuffers.emplace_back(VK_NULL_HANDLE, VK_NULL_HANDLE);
 		auto& ref = hostBuffers.back();
 		std::tie(ref.first, ref.second) = VK::Utils::createBuffer(device, gpu, allocSize,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | (coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0), VK_SHARING_MODE_EXCLUSIVE, usage);
-		return static_cast<uint32_t>(hostBuffers.size() - 1);
+
+		uint32_t ret = static_cast<uint32_t>(hostBuffers.size() - 1);
+
+		if (createAllocator)
+		{
+			hostAllocators.emplace_back(ret, allocSize);
+		}
+
+		return ret;
 	}
 
 	uint32_t CreateSampledImage(
@@ -720,6 +733,52 @@ public:
 		);
 	}
 
+	uint32_t CreateSampler(uint32_t mipLevels)
+	{
+		VkPhysicalDeviceProperties properties{};
+		vkGetPhysicalDeviceProperties(gpu, &properties);
+
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		samplerInfo.magFilter = VK_FILTER_LINEAR;
+		samplerInfo.minFilter = VK_FILTER_LINEAR;
+
+		samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+		samplerInfo.anisotropyEnable = VK_TRUE;
+		samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+		samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+
+		samplerInfo.unnormalizedCoordinates = VK_FALSE;
+
+		samplerInfo.compareEnable = VK_FALSE;
+		samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.mipLodBias = 0.0f;
+		samplerInfo.minLod = 0.0f;
+		samplerInfo.maxLod = static_cast<float>(mipLevels);
+
+		uint32_t ret = static_cast<uint32_t>(samplers.size());
+
+		samplers.emplace_back(VK_NULL_HANDLE);
+
+		if (vkCreateSampler(device, &samplerInfo, nullptr, &samplers.back()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create texture sampler!");
+		}
+
+		return ret;
+	}
+
+	void DestorySampler(uint32_t samplerIndex)
+	{
+		vkDestroySampler(device, samplers[samplerIndex], nullptr);
+		samplers[samplerIndex] = VK_NULL_HANDLE;
+	}
+
 	void DestroyImageView(uint32_t imageViewIndex)
 	{
 		vkDestroyImageView(device, imageViews[imageViewIndex], nullptr);
@@ -733,6 +792,27 @@ public:
 		alloc.FreeMemory(std::get<VkDeviceSize>(images[imageIndex])); //image, address, and memory type index
 		images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
 	}
+
+	void WriteToHostBuffer(uint32_t hostIndex, void* data, uint32_t size, uint32_t offset)
+	{
+		auto deviceMem = hostBuffers[hostIndex].second;
+		void* datalocal;
+		vkMapMemory(device, deviceMem, offset, size, 0, reinterpret_cast<void**>(&datalocal));
+		std::memcpy(datalocal , data, size);
+		vkUnmapMemory(device, deviceMem);
+	}
+
+	uint32_t GetOffsetIntoHostBuffer(uint32_t hostIndex, uint32_t size, uint32_t alignment)
+	{
+		auto alloc = std::find_if(hostAllocators.begin(), hostAllocators.end(), [&hostIndex](auto& pair)
+			{
+				return hostIndex == pair.first;
+			}
+		);
+
+		return static_cast<uint32_t>(alloc->second.GetMemory(size, alignment));
+	}
+
 
 	VkImageView GetImageView(uint32_t index)
 	{
@@ -763,9 +843,12 @@ public:
 	std::vector<VkDeviceMemory> deviceMemories; //memoryIndex, deviceMemory pool
 	//std::unordered_map<uint32_t, VkDeviceSize> deviceMemoriesAllocators; //memoryIndex, current stack allocator
 	std::vector<VKAllocator> allocators;
-	std::vector<VkBuffer> deviceBuffers;
+	std::vector<std::pair<VkBuffer, VkDeviceMemory>> deviceBuffers;
 	std::vector<std::pair<VkBuffer, VkDeviceMemory>> hostBuffers;
+	std::vector<char*> hostBufferMappings;
 	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
 	std::vector<VkImageView> imageViews;
+	std::vector<VkSampler> samplers; 
+	std::vector<std::pair<uint32_t, VKAllocator>> hostAllocators;
 };
 

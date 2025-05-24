@@ -555,13 +555,10 @@ public:
 	void CreateGlobalBuffer()
 	{
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VkDevice logicalDevice = dev.device;
-		std::tie(globalBuffer, globalBufferMemory) = VK::Utils::createBuffer(logicalDevice,
-			dev.gpu, 128'000'000, 
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 
-			VK_SHARING_MODE_EXCLUSIVE, 
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | 
+		globalIndex = dev.CreateHostBuffer
+		(
+			128'000'000, true, true, 
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
 			VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
@@ -570,32 +567,32 @@ public:
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 		);
 
-		vkMapMemory(logicalDevice, globalBufferMemory, 0, 128'000'000, 0, &globalmemorymapped);
-	}
+	//	dynamicOffset = dev.GetOffsetIntoHostBuffer(globalIndex, sizeof(glm::mat4) * 256 * MAX_FRAMES_IN_FLIGHT, 16);
 
-	void CreateDyanmicGlobalMeshBuffers()
-	{
-		std::tie(std::ignore, dynamicMemoryMapped) = GetPageFromUniformBuffer(sizeof(glm::mat4) * 256 * MAX_FRAMES_IN_FLIGHT, dynamicGlobalOffset);
-	}
-
-	std::tuple<VkBuffer, void*, size_t, size_t> GetDynamicBuffer()
-	{
-		return { globalBuffer, dynamicMemoryMapped, dynamicGlobalOffset, sizeof(glm::mat4) * 256 };
+		
 	}
 
 	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame)
 	{
-		void* to = ((char*)dynamicMemoryMapped) + (sizeof(glm::mat4) * 256 * frame) + offset;
-		std::memcpy(to, data, dataSize);
+		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * frame));
 	}
 
 
-	std::pair<VkBuffer, void*> GetPageFromUniformBuffer(size_t size, size_t &offset)
+	uint32_t GetPageFromUniformBuffer(size_t size, size_t alignment)
 	{
-		offset = dumbAllocator;
-		void* ret = ((char*)globalmemorymapped) + offset;
-		dumbAllocator += size;
-		return { globalBuffer, ret };
+		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		return dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment);
+	}
+
+	uint32_t GetMainBufferIndex() const
+	{
+		return globalIndex;
+	}
+
+	VkBuffer GetDynamicUniformBuffer() 
+	{
+		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).hostBuffers[globalIndex].first;
 	}
 
 	uint32_t CreateVulkanImage(
@@ -621,6 +618,12 @@ public:
 		return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
 	}
 
+	uint32_t CreateVulkanSampler(uint32_t mipLevels)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		return majorDevice.CreateSampler(mipLevels);
+	}
+
 	void DeleteVulkanImageView(uint32_t index)
 	{
 		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
@@ -631,6 +634,12 @@ public:
 	{
 		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 		majorDevice.DestroyImage(index);
+	}
+
+	void DeleteVulkanSampler(uint32_t index)
+	{
+		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+		majorDevice.DestorySampler(index);
 	}
 
 	void CreateVulkanRenderer(WindowManager *window)
@@ -680,7 +689,7 @@ public:
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-		stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 		swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface);
 
@@ -734,8 +743,6 @@ public:
 
 		CreateGlobalBuffer();
 
-		CreateDyanmicGlobalMeshBuffers();
-
 		CreatePipelines();
 	}
 
@@ -743,6 +750,11 @@ public:
 	{
 		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 		return majorDevice.imageViews[viewIndex];
+	}
+
+	VkSampler GetSampler(uint32_t index)
+	{
+		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).samplers[index];
 	}
 
 	
@@ -755,10 +767,6 @@ public:
 	{
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 		VkDevice logicalDevice = dev.device;
-
-		vkDestroyBuffer(logicalDevice, globalBuffer, nullptr);
-		
-		vkFreeMemory(logicalDevice, globalBufferMemory, nullptr);
 
 		shaderCache.DestroyShaderCache();
 
@@ -910,6 +918,8 @@ private:
 	uint32_t depthView, depthImage;
 	uint32_t colorView, colorImage;
 	uint32_t stagingBufferIndex;
+	uint32_t globalIndex;
+	uint32_t dynamicIndex, dynamicOffset;
 
 
 	VkRenderPass renderPass = VK_NULL_HANDLE;
@@ -938,14 +948,6 @@ private:
 	VKPipelineCache mainRenderPassCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
-
-	VkBuffer globalBuffer;
-	VkDeviceMemory globalBufferMemory;
-	VkDeviceSize dumbAllocator;
-	void* globalmemorymapped;
-
-	void* dynamicMemoryMapped;
-	VkDeviceSize dynamicGlobalOffset;
 
 };
 

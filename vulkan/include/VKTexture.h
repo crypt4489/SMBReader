@@ -19,7 +19,7 @@ public:
 
 	uint32_t imageIndex;
 	uint32_t viewIndex;
-	VkSampler sampler;
+	uint32_t samplerIndex;
 
 	void CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes, 
 		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);

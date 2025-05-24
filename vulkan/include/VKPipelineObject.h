@@ -16,12 +16,17 @@ public:
 
 	VKPipelineObject() = delete;
 	VKPipelineObject(
-		std::string name, 
-		size_t *vCount, 
-		VkBuffer buffer,
-		size_t _offset
-		) 
-		: pipelineType(name), vertexCount(vCount), buffer(buffer), offset(_offset) {
+		std::string name,
+		size_t vertexBufferIndex_,
+		size_t vertexBufferOffset_,
+		size_t *vCount) 
+		: 
+		pipelineType(name), 
+		vertexCount(vCount),  
+		vertexBufferOffset(vertexBufferOffset_) ,
+		vertexBufferIndex(vertexBufferIndex_)
+	{
+	
 	}
 
 	~VKPipelineObject() = default;
@@ -34,7 +39,7 @@ public:
 		auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
 		VkDescriptorSet set = dsc->GetDescriptorSetPerFrame(pipelineType, frame);
 
-		std::array<uint32_t, 1> dynamicOffsets = { dynamicOffset };
+		std::array<uint32_t, 1> dynamicOffsets = { 0 };
 
 		uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
 
@@ -44,10 +49,10 @@ public:
 		if (po.descLayout)
 			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
 
-		if (buffer)
+		if (vertexBufferIndex != ~0U)
 		{
-			VkBuffer vertexBuffers[] = { buffer };
-			VkDeviceSize offsets[] = { offset };
+			VkBuffer vertexBuffers[] = { VKRenderer::gRenderInstance->GetDynamicUniformBuffer() };
+			VkDeviceSize offsets[] = { vertexBufferOffset };
 			vkCmdBindVertexBuffers(cb, 0, 1, vertexBuffers, offsets);
 		}
 
@@ -77,10 +82,10 @@ public:
 		if (po.descLayout)
 			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
 	
-		if (buffer)
+		if (vertexBufferIndex != ~0U)
 		{
-			VkBuffer vertexBuffers[] = { buffer };
-			VkDeviceSize offsets[] = { offset };
+			VkBuffer vertexBuffers[] = { VKRenderer::gRenderInstance->GetDynamicUniformBuffer() };
+			VkDeviceSize offsets[] = { vertexBufferOffset };
 			vkCmdBindVertexBuffers(cb, 0, 1, vertexBuffers, offsets);
 		}
 
@@ -104,10 +109,8 @@ public:
 	VkDeviceSize perObjectShaderDataSize;
 	uint32_t dynamicOffset;
 
-private:
 	std::string pipelineType;
-	VkBuffer buffer = VK_NULL_HANDLE;
-	VkDeviceSize offset = 0U;
+	VkDeviceSize vertexBufferIndex, vertexBufferOffset;
 	size_t *vertexCount = nullptr;
 	
 	
