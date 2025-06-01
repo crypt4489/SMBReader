@@ -4,8 +4,29 @@
 #include <vulkan/vulkan.h>
 #include <algorithm>
 #include <array>
+#include <format>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+class VKSwapChainDependencies
+{
+public:
+
+	VKSwapChainDependencies() = default;
+
+	void AddIndicesForImage(uint32_t iIndex, std::vector<std::vector<uint32_t>>& depenencies)
+	{
+		if (chains.count(iIndex))
+		{
+			throw std::runtime_error(std::format("Trying to recreate the swap chain dependencies for image %d", iIndex));
+		}
+		chains[iIndex] = depenencies;
+	}
+
+	std::unordered_map<uint32_t, std::vector<std::vector<uint32_t>>> chains;
+};
+
 class VKSwapChain
 {
 public:
@@ -27,12 +48,13 @@ public:
 
 	void CreateSwapChainImageViews();
 
-	void CreateFrameBuffers(VkRenderPass& renderPass, std::vector<VkImageView>& attachmentViews);
+	void CreateFrameBuffers(VkRenderPass renderPass, std::vector<VkImageView>& attachmentViews);
 
 	void DestroySwapChain();
 
-	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore waitSemaphore, VkFence fence);
+	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
+	void CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present);
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
 		for (const auto& availableFormat : availableFormats) {
@@ -117,6 +139,7 @@ public:
 	VkSharingMode queueSharing;
 	VkSurfaceTransformFlagBitsKHR preTransform;
 	std::vector<uint32_t> queueFamiliesCache;
+	VKSwapChainDependencies dependencies;
  
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain

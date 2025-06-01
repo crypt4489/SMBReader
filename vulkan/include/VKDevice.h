@@ -12,6 +12,7 @@
 
 #include "vulkan/vulkan.h"
 #include "ThreadManager.h"
+#include "VKRenderPassBuilder.h"
 #include "VKTypes.h"
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
@@ -243,6 +244,17 @@ public:
 	}
 };
 
+class VKCommandBuffer
+{
+public:
+	VKCommandBuffer() :
+		buffer(VK_NULL_HANDLE), fenceIdx(~0U) {};
+	VKCommandBuffer(VkCommandBuffer _b, uint32_t i)
+		: buffer(_b), fenceIdx(i) {};
+	VkCommandBuffer buffer;
+	uint32_t fenceIdx = ~0U;
+};
+
 class VKDevice
 {
 public:
@@ -256,6 +268,21 @@ public:
 		if (device)
 		{
 			vkDeviceWaitIdle(device);
+
+			for (auto& f : fences)
+			{
+				vkDestroyFence(device, f, nullptr);
+			}
+
+			for (auto& sema : semaphores)
+			{
+				vkDestroySemaphore(device, sema, nullptr);
+			}
+
+			for (auto& rp : renderPasses)
+			{
+				vkDestroyRenderPass(device, rp, nullptr);
+			}
 
 			for (auto& hb : hostBuffers)
 			{
@@ -313,6 +340,7 @@ public:
 		this->device = _dev.device;
 		_dev.device = VK_NULL_HANDLE;
 		this->gpu = _dev.gpu;
+		_dev.gpu = VK_NULL_HANDLE;
 		this->commandPools = std::move(_dev.commandPools);
 		this->queueManagers = std::move(_dev.queueManagers);
 		this->descriptorPools = std::move(_dev.descriptorPools);
@@ -322,6 +350,7 @@ public:
 		this->deviceBuffers = std::move(_dev.deviceBuffers);
 		this->images = std::move(_dev.images);
 		this->imageViews = std::move(_dev.imageViews);
+		this->renderPasses = std::move(_dev.renderPasses);
 		return *this;
 	};
 
@@ -332,6 +361,7 @@ public:
 		this->device = _dev.device;
 		_dev.device = VK_NULL_HANDLE;
 		this->gpu = _dev.gpu;
+		_dev.gpu = VK_NULL_HANDLE;
 		this->commandPools = std::move(_dev.commandPools);
 		this->queueManagers = std::move(_dev.queueManagers);
 		this->descriptorPools = std::move(_dev.descriptorPools);
@@ -341,6 +371,7 @@ public:
 		this->deviceBuffers = std::move(_dev.deviceBuffers);
 		this->images = std::move(_dev.images);
 		this->imageViews = std::move(_dev.imageViews);
+		this->renderPasses = std::move(_dev.renderPasses);
 	};
 
 	VkPhysicalDevice GetGPU() const
@@ -813,6 +844,251 @@ public:
 		return static_cast<uint32_t>(alloc->second.GetMemory(size, alignment));
 	}
 
+	uint32_t CreateRenderPasses(VKRenderPassBuilder& builder)
+	{
+		auto ref = &renderPasses.emplace_back(VK_NULL_HANDLE);
+		uint32_t ret = static_cast<uint32_t>(renderPasses.size());
+		if (vkCreateRenderPass(device, &builder.createInfo, nullptr, ref) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create render pass!");
+		}
+
+		return ret;
+	}
+
+	std::vector<uint32_t> CreateSemaphores(uint32_t count)
+	{
+		
+		uint32_t startingIndex = static_cast<uint32_t>(semaphores.size());
+		std::vector<uint32_t> ret{ startingIndex };
+		semaphores.emplace_back(VK_NULL_HANDLE);
+		for (uint32_t i = 1; i < count; i++) {
+			ret.push_back(startingIndex + i);
+			semaphores.emplace_back(VK_NULL_HANDLE);
+		}
+
+		VkSemaphoreCreateInfo semaphoreInfo{};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		for (uint32_t i = 0; i < count; i++) {
+			if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &semaphores[startingIndex + i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create semaphores!");
+			}
+		}
+
+		return ret;
+	}
+
+	std::vector<uint32_t> CreateFences(uint32_t count, VkFenceCreateFlags flags)
+	{
+
+		uint32_t startingIndex = static_cast<uint32_t>(fences.size());
+		std::vector<uint32_t> ret{ startingIndex };
+		fences.emplace_back(VK_NULL_HANDLE);
+		for (uint32_t i = 1; i < count; i++) {
+			ret.push_back(startingIndex + i);
+			fences.emplace_back(VK_NULL_HANDLE);
+		}
+
+		VkFenceCreateInfo fenceInfo{};
+		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceInfo.flags = flags;
+
+		for (uint32_t i = 0; i < count; i++) {
+			if (vkCreateFence(device, &fenceInfo, nullptr, &fences[startingIndex + i]) != VK_SUCCESS) {
+				throw std::runtime_error("failed to create fences!");
+			}
+		}
+
+		return ret;
+	}
+
+	void CreateSwapChainsDependencies(uint32_t swapChainIndex, std::vector<uint32_t>& indices, uint32_t imageCounts, uint32_t semaphorePerImage)
+	{
+		assert(indices.size() == imageCounts * semaphorePerImage);
+		VKSwapChain& swc = swapChains[swapChainIndex];
+		for (uint32_t i = 0U; i < imageCounts; i++)
+		{
+			swc.CreateSwapChainDependency(i, indices[i], indices[i + imageCounts]);
+		}
+	}
+
+	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage)
+	{
+		VKSwapChain& swapChain = swapChains[swapChainIndex];
+
+		uint32_t imageIndex = swapChain.AcquireNextSwapChainImage(UINT64_MAX, requestedImage);
+
+		return imageIndex;
+	}
+
+	uint32_t SubmitCommandBuffer(uint32_t queueFamilyIdx, uint32_t queueIdx, 
+		std::vector<uint32_t>& wait, 
+		std::vector<VkPipelineStageFlags>& waitStages, 
+		std::vector<uint32_t> &signal, 
+		uint32_t cbIndex)
+	{
+		VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
+
+		uint32_t woCount = static_cast<uint32_t>(wait.size());
+		uint32_t signalCount = static_cast<uint32_t>(signal.size());
+
+		VkSubmitInfo submitInfo{};
+		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+		std::vector<VkSemaphore> waitSemaphores(woCount, VK_NULL_HANDLE);
+		std::vector<VkSemaphore> signalSemaphores(signalCount, VK_NULL_HANDLE);
+		
+		uint32_t i;
+		for (i = 0; i < woCount; i++)
+		{
+			waitSemaphores[i] = semaphores[wait[i]];
+		}
+
+		for (i = 0; i < signalCount; i++)
+		{
+			signalSemaphores[i] = semaphores[signal[i]];
+		}
+
+		submitInfo.waitSemaphoreCount = woCount;
+		submitInfo.pWaitSemaphores = waitSemaphores.data();
+		submitInfo.pWaitDstStageMask = waitStages.data();
+
+		submitInfo.signalSemaphoreCount = signalCount;
+		submitInfo.pSignalSemaphores = signalSemaphores.data();
+
+		submitInfo.commandBufferCount = 1;
+		submitInfo.pCommandBuffers = &commandBuffers[cbIndex].buffer;
+
+
+		if (vkQueueSubmit(queue, 1, &submitInfo, fences[commandBuffers[cbIndex].fenceIdx]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to submit draw command buffer!");
+		}
+
+		return 1;
+	}
+
+	uint32_t SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex, 
+		uint32_t queueFamilyIdx, uint32_t queueIdx, 
+		uint32_t cbIndex)
+	{
+		VKSwapChain& swc = swapChains[swapChainIdx];
+		auto &depends = swc.dependencies.chains[frameIndex];
+		std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+		return SubmitCommandBuffer(queueFamilyIdx, queueIdx, depends[0], waitStages, depends[1], cbIndex);
+	}
+
+	uint32_t PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, uint32_t queueFamilyIdx, uint32_t queueIdx)
+	{
+		VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
+		
+		VKSwapChain& swc = swapChains[swapChainIdx];
+		auto& depends = swc.dependencies.chains[frameIdx];
+		auto& waitIndices = depends[1];
+		
+		uint32_t waitCount = static_cast<uint32_t>(waitIndices.size());
+		std::vector<VkSemaphore> waitSemaphores(waitCount, VK_NULL_HANDLE);
+		for (uint32_t i = 0; i < waitCount; i++)
+		{
+			waitSemaphores[i] = semaphores[depends[1][i]];
+		}
+
+
+		VkPresentInfoKHR presentInfo{};
+		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+		presentInfo.waitSemaphoreCount = waitCount;
+		presentInfo.pWaitSemaphores = waitSemaphores.data();
+
+		VkSwapchainKHR swapChains[] = { swc.swapChain };
+		presentInfo.swapchainCount = 1;
+		presentInfo.pSwapchains = swapChains;
+		presentInfo.pImageIndices = &imageIdx;
+		presentInfo.pResults = nullptr;
+
+		VkResult result = vkQueuePresentKHR(queue, &presentInfo);
+
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+			return 0;
+		}
+		else if (result != VK_SUCCESS) {
+			throw std::runtime_error("failed to present swap chain image!");
+		}
+
+		return 1;
+	}
+
+	std::vector<uint32_t> CreateCommandBuffers(uint32_t commandPoolIndex, uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences)
+	{
+		
+
+		uint32_t size = static_cast<uint32_t>(commandBuffers.size());
+		
+		commandBuffers.resize(size + numberOfCommandBuffers);
+		
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+
+		allocInfo.commandPool = commandPools[commandPoolIndex];
+		allocInfo.level = level;
+		allocInfo.commandBufferCount = numberOfCommandBuffers;
+
+		std::vector<VkCommandBuffer> l(numberOfCommandBuffers);
+
+		if (vkAllocateCommandBuffers(device, &allocInfo, l.data()) != VK_SUCCESS) {
+			throw std::runtime_error("failed to allocate command buffers!");
+		}
+
+		std::vector<uint32_t> ret(numberOfCommandBuffers);
+
+		auto base = std::prev(commandBuffers.end(), numberOfCommandBuffers);
+
+		auto iter = base;
+
+		for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
+			iter->buffer = l[i];
+			ret[i] = size + i;
+			iter = std::next(iter, 1);
+		}
+
+		if (createFences)
+		{
+			iter = base;
+			auto fencesidx = CreateFences(numberOfCommandBuffers, VK_FENCE_CREATE_SIGNALED_BIT);
+			for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
+				iter->fenceIdx = fencesidx[i];
+				iter = std::next(iter, 1);
+			}
+		}
+
+		return ret;
+	}
+
+	uint32_t GetCommandBufferIndex(uint64_t timeout)
+	{
+		uint32_t index = 0;
+		for (auto& vkcb : commandBuffers)
+		{
+			if (vkcb.fenceIdx != ~0U)
+			{
+				VkResult res = vkWaitForFences(device, 1, &fences[vkcb.fenceIdx], VK_TRUE, timeout);
+				if (res == VK_SUCCESS)
+				{
+					vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
+					vkResetCommandBuffer(vkcb.buffer, 0);
+					return index;
+				}
+			}
+			else {
+				return index;
+			}
+			index++;
+		}
+		return ~0u;
+	}
+
+	VkCommandBuffer GetCommandBufferHandle(uint32_t index)
+	{
+		return commandBuffers[index].buffer;
+	}
 
 	VkImageView GetImageView(uint32_t index)
 	{
@@ -834,6 +1110,21 @@ public:
 		return swapChains[index];
 	}
 
+	VkRenderPass GetRenderPass(uint32_t index)
+	{
+		return renderPasses[index];
+	}
+
+	VkFence GetFence(uint32_t index)
+	{
+		return fences[index];
+	}
+
+	VkSemaphore GetSemaphore(uint32_t index)
+	{
+		return semaphores[index];
+	}
+
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	std::vector<QueueManager*> queueManagers;
@@ -841,14 +1132,16 @@ public:
 	std::vector<VkDescriptorPool> descriptorPools;
 	std::vector<VKSwapChain> swapChains;
 	std::vector<VkDeviceMemory> deviceMemories; //memoryIndex, deviceMemory pool
-	//std::unordered_map<uint32_t, VkDeviceSize> deviceMemoriesAllocators; //memoryIndex, current stack allocator
 	std::vector<VKAllocator> allocators;
 	std::vector<std::pair<VkBuffer, VkDeviceMemory>> deviceBuffers;
 	std::vector<std::pair<VkBuffer, VkDeviceMemory>> hostBuffers;
-	std::vector<char*> hostBufferMappings;
 	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
 	std::vector<VkImageView> imageViews;
 	std::vector<VkSampler> samplers; 
 	std::vector<std::pair<uint32_t, VKAllocator>> hostAllocators;
+	std::vector<VkRenderPass> renderPasses;
+	std::vector<VkSemaphore> semaphores;
+	std::vector<VkFence> fences;
+	std::vector<VKCommandBuffer> commandBuffers;
 };
 

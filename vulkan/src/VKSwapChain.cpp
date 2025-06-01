@@ -1,3 +1,5 @@
+
+
 #include "VKSwapChain.h"
 #include "VKDevice.h"
 #include "VKUtilities.h"
@@ -56,9 +58,14 @@ void VKSwapChain::CreateSwapChain(
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, nullptr);
 	swapChainImages.resize(imageCount);
+	
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swapChainImages.data());
+}
 
-
+void VKSwapChain::CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present)
+{
+	std::vector<std::vector<uint32_t>> copy{ {beforeDrawing}, {present} };
+	dependencies.AddIndicesForImage(imageIndex, copy);
 }
 
 void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
@@ -87,15 +94,11 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-
 	if (vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create swap chain!");
 	}
 
-	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, nullptr);
-	swapChainImages.resize(imageCount);
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swapChainImages.data());
-
 }
 
 void VKSwapChain::CreateSwapChainImageViews()
@@ -106,7 +109,7 @@ void VKSwapChain::CreateSwapChainImageViews()
 	}
 }
 
-void VKSwapChain::CreateFrameBuffers(VkRenderPass& renderPass, std::vector<VkImageView>& attachmentViews)
+void VKSwapChain::CreateFrameBuffers(VkRenderPass renderPass, std::vector<VkImageView>& attachmentViews)
 {
 	swapChainFramebuffers.resize(swapChainImageViews.size());
 	for (size_t i = 0; i < swapChainImageViews.size(); i++) {
@@ -144,10 +147,13 @@ void VKSwapChain::DestroySwapChain()
 
 }
 
-uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore waitSemaphore, VkFence fence)
+uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t frame)
 {
 	uint32_t imageIndex;
-	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, waitSemaphore, fence, &imageIndex);
+	
+	auto& depends = dependencies.chains[frame];
+
+	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(depends[0][0]), VK_NULL_HANDLE, &imageIndex);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		return 0xFFFFFFFF;
@@ -155,5 +161,6 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore w
 	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
+
 	return imageIndex;
 }
