@@ -269,6 +269,11 @@ public:
 		{
 			vkDeviceWaitIdle(device);
 
+			for (auto& fb : frameBuffers)
+			{
+				vkDestroyFramebuffer(device, fb, nullptr);
+			}
+
 			for (auto& f : fences)
 			{
 				vkDestroyFence(device, f, nullptr);
@@ -578,6 +583,13 @@ public:
 	{
 		uint32_t index = static_cast<uint32_t>(swapChains.size());
 		auto swapchain = swapChains.emplace_back(this, surface);
+		return index;
+	}
+
+	uint32_t CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount)
+	{
+		uint32_t index = static_cast<uint32_t>(swapChains.size());
+		auto swapchain = swapChains.emplace_back(this, surface, attachmentCount);
 		return index;
 	}
 
@@ -1085,6 +1097,50 @@ public:
 		return ~0u;
 	}
 
+	uint32_t RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex)
+	{
+		auto& vkcb = commandBuffers[bufferIndex];
+
+		if (vkcb.fenceIdx == ~0U)
+			return bufferIndex;
+
+		VkResult res = vkWaitForFences(device, 1, &fences[vkcb.fenceIdx], VK_TRUE, timeout);
+		
+		if (res == VK_TIMEOUT)
+			return ~0U;
+
+		vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
+		vkResetCommandBuffer(vkcb.buffer, 0);
+
+		return bufferIndex;
+	}
+
+	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent)
+	{
+		uint32_t ret = static_cast<uint32_t>(frameBuffers.size());
+		uint32_t attachmentsCount = static_cast<uint32_t>(attachmentIndices.size());
+		std::vector<VkImageView> attachments(attachmentsCount);
+
+		for (uint32_t i = 0; i<attachmentsCount; i++) attachments[i] = imageViews[attachmentIndices[i]];
+		
+		VkFramebufferCreateInfo framebufferInfo{};
+		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		framebufferInfo.renderPass = renderPasses[renderPassIndex];
+		framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		framebufferInfo.pAttachments = attachments.data();
+		framebufferInfo.width = extent.width;
+		framebufferInfo.height = extent.height;
+		framebufferInfo.layers = 1;
+
+		frameBuffers.push_back(VK_NULL_HANDLE);
+
+		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &frameBuffers[ret]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create framebuffer!");
+		}
+
+		return ret;
+	}
+
 	VkCommandBuffer GetCommandBufferHandle(uint32_t index)
 	{
 		return commandBuffers[index].buffer;
@@ -1124,6 +1180,11 @@ public:
 	{
 		return semaphores[index];
 	}
+	
+	VkFramebuffer GetFrameBuffer(uint32_t index)
+	{
+		return frameBuffers[index];
+	}
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
@@ -1143,5 +1204,6 @@ public:
 	std::vector<VkSemaphore> semaphores;
 	std::vector<VkFence> fences;
 	std::vector<VKCommandBuffer> commandBuffers;
+	std::vector<VkFramebuffer> frameBuffers;
 };
 

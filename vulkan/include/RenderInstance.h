@@ -83,11 +83,6 @@ public:
 		CreateDepthImage(width, height);
 
 		swapChain.RecreateSwapChain(width, height);
-		
-		swapChain.CreateSwapChainImageViews();
-		std::vector<VkImageView> attachmentViews = { dev.GetImageView(colorView), dev.GetImageView(depthView)};
-		swapChain.CreateFrameBuffers(dev.GetRenderPass(renderPassIndex), attachmentViews);
-	
 	}
 
 	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name)
@@ -98,7 +93,6 @@ public:
 
 	void CreateRenderPass()
 	{
-		
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
 
@@ -147,8 +141,8 @@ public:
 
 		VkRenderPassBeginInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = dev.GetRenderPass(renderPassIndex);
-		renderPassInfo.framebuffer = swapChain.swapChainFramebuffers[imageIndex];
+		renderPassInfo.renderPass = dev.GetRenderPass(swapChain.renderPassIndex);
+		renderPassInfo.framebuffer = dev.GetFrameBuffer(swapChain.swapChainFramebuffers[imageIndex]);
 		renderPassInfo.renderArea.offset = { 0, 0 };
 		renderPassInfo.renderArea.extent = swapChain.swapChainExtent;
 
@@ -205,7 +199,7 @@ public:
 
 		dev.CreateSwapChainsDependencies(swapChainIndex, indices, MAX_FRAMES_IN_FLIGHT, 2);
 
-		dev.CreateCommandBuffers(graphicsPresentIndex, MAX_FRAMES_IN_FLIGHT, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+		dev.CreateCommandBuffers(graphicsPresentIndex, MAX_FRAMES_IN_FLIGHT*3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
 		
 	}
 
@@ -213,7 +207,7 @@ public:
 	{
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-		currentCBIndex = dev.GetCommandBufferIndex(UINT64_MAX);
+		currentCBIndex = dev.RequestCommandBuffer(UINT64_MAX, currentFrame);
 
 		uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
@@ -463,7 +457,7 @@ public:
 
 		stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-		swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface);
+		swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface, 3);
 
 		VKSwapChain& swapChain = majorDevice.GetSwapChain(swapChainIndex);
 
@@ -489,27 +483,23 @@ public:
 
 		CreateDepthImage(800, 600);
 
+		CreateRenderPass();
+
+		std::vector<uint32_t*> attachmentViews = { &colorView, &depthView };
+
 		uint32_t queuefamilies[] = { graphicsIndex };
 		
-		swapChain.CreateSwapChain(800, 600, queuefamilies, 1);
-		swapChain.CreateSwapChainImageViews();
+		swapChain.CreateSwapChain(800, 600, queuefamilies, 1, 0, attachmentViews);
 
 		DescriptorPoolBuilder builder{};
 		builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 		builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 		majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 		
-		CreateRenderPass();
-	
-		std::vector<VkImageView> attachmentViews = { majorDevice.GetImageView(colorView), majorDevice.GetImageView(depthView) };
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		swapChain.CreateFrameBuffers(majorDevice.GetRenderPass(renderPassIndex), attachmentViews);
-		
-	
 		CreateSyncObjects();
 
 		descriptorLayoutCache.device = majorDevice.device;
-		mainRenderPassCache.renderPass = majorDevice.GetRenderPass(renderPassIndex);
+		mainRenderPassCache.renderPass = majorDevice.GetRenderPass(0);
 		mainRenderPassCache.device = majorDevice.device;
 		shaderCache.SetLogicalDevice(majorDevice.device);
 
@@ -592,7 +582,7 @@ public:
 	VkRenderPass GetRenderPass() 
 	{
 		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetRenderPass(renderPassIndex);
+		return dev.GetRenderPass(0);
 	}
 
 	VkDescriptorPool GetDescriptorPool() 
@@ -666,7 +656,6 @@ private:
 	uint32_t stagingBufferIndex;
 	uint32_t globalIndex;
 	uint32_t dynamicIndex;
-	uint32_t renderPassIndex;
 	uint32_t currentCBIndex;
 
 	QueueManager* gptManager;

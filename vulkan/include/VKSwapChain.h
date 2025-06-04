@@ -9,6 +9,17 @@
 #include <unordered_map>
 #include <vector>
 
+class VKFrameBufferAttachments
+{
+public:
+	VKFrameBufferAttachments() = default;
+	VKFrameBufferAttachments(uint32_t size) {
+		attachments.resize(size);
+	}
+
+	std::vector<uint32_t*> attachments;
+};
+
 class VKSwapChainDependencies
 {
 public:
@@ -34,6 +45,9 @@ public:
 
 	VKSwapChain(VKDevice *_d, VkSurfaceKHR _surface) : device(_d), surface(_surface) {}
 
+	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, uint32_t _attachmentCount)
+		: device(_d), surface(_surface), attachmentCount(_attachmentCount) {}
+
 	void SetDeviceAndSurface(VKDevice *_device, VkSurfaceKHR _surface)
 	{
 		this->device = _device;
@@ -42,19 +56,31 @@ public:
 
 	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport);
 
-	void CreateSwapChain(uint32_t width, uint32_t height, uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies);
-
 	void RecreateSwapChain(uint32_t width, uint32_t height);
 
-	void CreateSwapChainImageViews();
+	void CreateSwapChainElements();
 
-	void CreateFrameBuffers(VkRenderPass renderPass, std::vector<VkImageView>& attachmentViews);
+	void CreateSwapChain(
+		uint32_t width, uint32_t height,
+		uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies,
+		uint32_t _renderPassIndex, std::vector<uint32_t*>& attachmentIndices);
 
 	void DestroySwapChain();
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
 	void CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present);
+
+	void AddFramebufferAttachments(std::vector<uint32_t*>& attachmentIndices)
+	{
+		uint32_t i = 0;
+		uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
+		while (i < imageCount)
+		{
+			auto& fbref = attachments[i++];
+			for (uint32_t j = 0; j < attachIndicesSize; j++) fbref.attachments[j] = attachmentIndices[j];
+		}
+	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
 		for (const auto& availableFormat : availableFormats) {
@@ -103,8 +129,7 @@ public:
 			height
 		};
 
-		//actualExtent.width = std::clamp(actualExtent.width, minMaxImageDimensions[0].width, minMaxImageDimensions[1].width);
-		//actualExtent.height = std::clamp(actualExtent.height, minMaxImageDimensions[0].height, minMaxImageDimensions[1].height);
+
 
 		return actualExtent;
 		
@@ -128,19 +153,25 @@ public:
 
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+
 	std::vector<VkImage> swapChainImages;
 	std::vector<uint32_t> swapChainImageViews;
-	std::vector<VkFramebuffer> swapChainFramebuffers;
+	std::vector<uint32_t> swapChainFramebuffers;
+	std::vector<VKFrameBufferAttachments> attachments;
+	uint32_t renderPassIndex;
+
 	VkSurfaceFormatKHR swapChainImageFormat;
+	VkPresentModeKHR presentMode;
 	VkExtent2D swapChainExtent;
 
-	VkPresentModeKHR presentMode;
+	uint32_t attachmentCount;
 	uint32_t imageCount;
+
 	VkSharingMode queueSharing;
 	VkSurfaceTransformFlagBitsKHR preTransform;
 	std::vector<uint32_t> queueFamiliesCache;
+	
 	VKSwapChainDependencies dependencies;
- 
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain
 };
