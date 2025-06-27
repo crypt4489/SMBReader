@@ -14,33 +14,11 @@ class Semaphore
 public:
     explicit Semaphore(int c = 1) : count(c) {};
 
-    void Wait()
-    {
-        std::unique_lock guard(lock);
-        cv.wait(guard, [this]() { return count > 0; });
-        count--;
-    }
+    void Wait();
 
-    bool Wait(std::chrono::milliseconds timeout)
-    {
-        std::unique_lock guard(lock);
-        if (!cv.wait_for(guard, timeout, [this]() { return count > 0; }))
-        {
-            return false;
-        }
-        count--;
-        return true;
-    }
-
-    void Notify()
-    {
-        {
-            std::unique_lock guard(lock);
-            count++;
-        }
-        cv.notify_one();
-    }
-
+    bool Wait(std::chrono::milliseconds timeout);
+    
+    void Notify();
 
 private:
     int count;
@@ -65,22 +43,9 @@ public:
 
     static std::vector<std::jthread> backgroundTasks;
 
-    static void ASyncThreadsDone()
-    {
-        if (threadsFlags.size()) {
-            threadsFlags.erase(std::remove_if(threadsFlags.begin(),
-                threadsFlags.end(),
-                [](auto& x) { return x.second->load(); }),
-                threadsFlags.end());
-        }
-    }
+    static void ASyncThreadsDone();
 
-    static void DestroyThreadManager()
-    {
-        threadsFlags.clear();
-
-        backgroundTasks.clear();
-    }
+    static void DestroyThreadManager();
 
     template<class F, class... Args>
     static void LaunchASyncThread(F&& f, Args&&... args)

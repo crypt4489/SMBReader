@@ -53,178 +53,39 @@ class FileManager
 {
 public:
 
-	static std::optional<FileID> OpenFile(const std::string& name, std::ios::openmode flags, FileHandle* &outHandle)
-	{
-		return HandleOpening(name, flags, outHandle);
-	}
+	static std::optional<FileID> OpenFile(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle);
 
-	static std::optional<FileID> OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle* &outHandle)
-	{
-		return HandleOpening(name.string(), flags, outHandle);
-	}
+	static std::optional<FileID> OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle*& outHandle);
 
-	static int ReadFileInFull(const std::string& name, std::vector<char> &buffer)
-	{
-		std::fstream stream;
+	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer);
 
-		stream.open(name, std::ios::binary | std::ios::in | std::ios::ate);
+	static FileHandle* GetFile(const FileID& id);
 
-		if (!stream.is_open())
-		{
-			return 1;
-		}
+	static void RemoveOpenFile(const FileID& id);
 
-		std::streampos fileEnd = stream.tellg();
+	static std::filesystem::path SetupDirectory(std::string& nameOfDir);
 
-		buffer.resize(fileEnd);
+	static void SetFileCurrentDirectory(std::string name);
 
-		stream.seekg(0);
+	static void SetFileCurrentDirectory(std::string& name);
 
-		stream.read(buffer.data(), fileEnd);
+	static void SetFileCurrentDirectory(std::filesystem::path& path);
 
-		stream.close();
+	static std::string ExtractFileNameFromPath(const std::string& path);
 
-		return 0;
-	}
+	static std::string ExtractFileNameFromPath(std::filesystem::path& path);
 
-	static FileHandle* GetFile(const FileID &id)
-	{
-		if (id() >= MAXFILES) throw std::invalid_argument("You did what?");
-		return filesopen[id()];
-	}
+	static std::filesystem::path GetCurrentDirectoryFM();
 
-	static void RemoveOpenFile(const FileID &id)
-	{
-		FileHandle *ret = GetFile(id);
-
-		if (!ret)
-			return;
-
-		if (ret->streamHandle.is_open())
-		{
-			ret->streamHandle.close();
-		}
-		delete ret;
-		filesopen[id()] = nullptr;
-	}
-
-	static std::filesystem::path SetupDirectory(std::string &nameOfDir)
-	{
-		std::filesystem::path pathToDir = currDir / nameOfDir;
-		if (!std::filesystem::exists(pathToDir))
-		{
-			std::filesystem::create_directory(pathToDir);
-		}
-		return pathToDir;
-	}
-
-	static void SetFileCurrentDirectory(std::string name)
-	{
-		currDir = SetupDirectory(name);
-	}
-
-	static void SetFileCurrentDirectory(std::string &name)
-	{
-		currDir = SetupDirectory(name);
-	}
-
-	static void SetFileCurrentDirectory(std::filesystem::path &path)
-	{
-		currDir = path;
-	}
-
-	static std::string ExtractFileNameFromPath(const std::string &path)
-	{
-		std::smatch match;
-
-		std::string name;
-
-		if (std::regex_search(path, match, filenamePattern))
-		{
-			name = match[1];
-		}
-		else
-		{
-			std::cerr << "Couldn't find the filename in " << path << "\n";
-		}
-
-		return name;
-	}
-
-	static std::string ExtractFileNameFromPath(std::filesystem::path &path)
-	{
-
-		std::smatch match;
-
-		std::string name, search = path.string();
-
-		if (std::regex_search(search, match, filenamePattern))
-		{
-			name = match[1];
-		}
-		else
-		{
-			std::cerr << "Couldn't find the filename in " << path << "\n";
-		}
-
-		return name;
-	}
-
-	static std::filesystem::path GetCurrentDirectoryFM()
-	{
-		return currDir;
-	}
-
-	static bool FileExists(const std::string& name)
-	{
-		return std::filesystem::exists(name);
-	}
+	static bool FileExists(const std::string& name);
 
 	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
 	static constexpr uint32_t MAXFILES = 10;
 private:
 
-	static uint32_t FindAvailableHandle()
-	{
-		uint32_t i = 0;
-		for (; i < MAXFILES; i++) {
-			if (filesopen[i] == nullptr)
-				break;
-		}
-		return i;
-	}
+	static uint32_t FindAvailableHandle();
 
-	static std::optional<FileID> HandleOpening(const std::string& name, std::ios::openmode flags, FileHandle* &outHandle)
-	{
-		uint32_t index = FindAvailableHandle();
-
-		if (index == NOHANDLE)
-		{
-			return std::nullopt;
-		}
-
-		std::fstream stream;
-
-		std::ios::openmode openingFlags = flags;
-
-		if (flags & std::ios::in)
-		{
-			openingFlags |= std::ios::ate;
-		}
-
-		stream.open(name, openingFlags);
-
-		if (!stream.is_open())
-		{
-			return std::nullopt;
-		}
-
-		FileHandle* handle = new FileHandle(stream, flags);
-
-		filesopen[index] = outHandle = handle;
-
-		return FileID(index);
-	}
+	static std::optional<FileID> HandleOpening(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle);
 
 	static std::array<FileHandle*, MAXFILES> filesopen;
 	static std::filesystem::path currDir;

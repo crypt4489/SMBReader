@@ -30,616 +30,112 @@ class RenderInstance
 {
 public:
 
-	RenderInstance() : transferSemaphore(Semaphore(1))
-	{
-
-	};
-
-	void CreateDepthImage(uint32_t width, uint32_t height)
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-
-		depthImage = dev.CreateImage(width, height,
-			1, depthFormat, 1,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			msaaSamples,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
-
-		depthView = dev.CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
-
-		dev.TransitionImageLayout(graphicsPresentIndex, graphicsIndex, 
-			depthImage, depthFormat, 
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 
-			1, 1
-		);
-	}
-
-	void DestroySwapChainAttachments()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		dev.DestroyImage(depthImage);
-		dev.DestroyImageView(depthView);
-		dev.DestroyImage(colorImage);
-		dev.DestroyImageView(colorView);
-	}
-
-	void RecreateSwapChain() {
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VkDevice logicalDevice = dev.device;
-		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-		int width = 0, height = 0;
-		glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
-		while (width == 0 || height == 0) {
-			glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
-			glfwWaitEvents();
-		}
-
-		vkDeviceWaitIdle(logicalDevice);
-
-		DestroySwapChainAttachments();
-		swapChain.DestroySwapChain();
-
-		CreateMSAAColorResources(width, height);
-		CreateDepthImage(width, height);
-
-		swapChain.RecreateSwapChain(width, height);
-	}
-
-	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name)
-	{	  
-		return shaderCache.GetShader(name);
-	}
-
-
-	void CreateRenderPass()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-
-		VKRenderPassBuilder rpb{};
-		VkFormat format = swapChain.GetSwapChainFormat();
-
-		rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, msaaSamples,
-			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0);
-	
-
-		rpb.CreateAttachment(VKRenderPassBuilder::COLORRESOLVEATTACH, format, VK_SAMPLE_COUNT_1_BIT,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE
-			, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 2);
-
-		rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, depthFormat, msaaSamples,
-			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
-
-		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 0, 0);
-
-		rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
-
-		rpb.CreateInfo();
+	RenderInstance();
 
-		dev.CreateRenderPasses(rpb);
-	}
-
-	void BeginCommandBufferRecording(VkCommandBuffer cb, uint32_t imageIndex)
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-		VkCommandBufferBeginInfo beginInfo{};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = 0; 
-		beginInfo.pInheritanceInfo = nullptr; 
+	void CreateDepthImage(uint32_t width, uint32_t height);
 
-		if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
-			throw std::runtime_error("failed to begin recording command buffer!");
-		}
+	void DestroySwapChainAttachments();
 
-		VkRenderPassBeginInfo renderPassInfo{};
-		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = dev.GetRenderPass(swapChain.renderPassIndex);
-		renderPassInfo.framebuffer = dev.GetFrameBuffer(swapChain.swapChainFramebuffers[imageIndex]);
-		renderPassInfo.renderArea.offset = { 0, 0 };
-		renderPassInfo.renderArea.extent = swapChain.swapChainExtent;
+	void RecreateSwapChain();
 
-		std::array<VkClearValue, 2> clearValues{};
-		clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
-		clearValues[1].depthStencil = { 1.0f, 0 };
+	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name);
 
-		renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-		renderPassInfo.pClearValues = clearValues.data();
+	void CreateRenderPass();
 
-		vkCmdBeginRenderPass(cb, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	void BeginCommandBufferRecording(VkCommandBuffer cb, uint32_t imageIndex);
 
-		VkViewport viewport{};
-		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = static_cast<float>(swapChain.GetSwapChainWidth());
-		viewport.height = static_cast<float>(swapChain.GetSwapChainHeight());
-		viewport.minDepth = 0.0f;
-		viewport.maxDepth = 1.0f;
-		vkCmdSetViewport(cb, 0, 1, &viewport);
+	void EndCommandBufferRecording(VkCommandBuffer cb);
 
-		VkRect2D scissor{};
-		scissor.offset = { 0, 0 };
-		scissor.extent = swapChain.swapChainExtent;
-		vkCmdSetScissor(cb, 0, 1, &scissor);
+	void CreateSyncObjects();
 
-	}
+	uint32_t BeginFrame();
 
-	void EndCommandBufferRecording(VkCommandBuffer cb)
-	{
-		vkCmdEndRenderPass(cb);
+	void SubmitFrame(uint32_t imageIndex);
 
-		if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
-			throw std::runtime_error("failed to record command buffer!");
-		}
-	}
+	void CreateMSAAColorResources(uint32_t width, uint32_t height);
 
-	void CreateSyncObjects()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	
-		std::vector<uint32_t> imageAvailablesIndices = dev.CreateSemaphores(MAX_FRAMES_IN_FLIGHT);
-		std::vector<uint32_t> renderFinishedIndices = dev.CreateSemaphores(MAX_FRAMES_IN_FLIGHT);
+	void WaitOnQueues();
 
-		uint32_t size = static_cast<uint32_t>(imageAvailablesIndices.size());
+	void CreatePipelines();
 
-		std::vector<uint32_t> indices(size * 2);
+	PipelineCacheObject GetPipeline(std::string ptype);
 
-		auto iter = indices.begin();
+	void CreateGlobalBuffer();
 
-		iter = std::copy(imageAvailablesIndices.begin(), imageAvailablesIndices.end(), iter);
+	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame);
 
-		iter = std::copy(renderFinishedIndices.begin(), renderFinishedIndices.end(), iter);
+	uint32_t GetPageFromUniformBuffer(size_t size, size_t alignment);
 
-		dev.CreateSwapChainsDependencies(swapChainIndex, indices, MAX_FRAMES_IN_FLIGHT, 2);
+	uint32_t GetMainBufferIndex() const;
 
-		dev.CreateCommandBuffers(graphicsPresentIndex, MAX_FRAMES_IN_FLIGHT*3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
-		
-	}
-
-	uint32_t BeginFrame()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-
-		currentCBIndex = dev.RequestCommandBuffer(UINT64_MAX, currentFrame);
-
-		uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
-
-		if (imageIndex == UINT32_MAX)
-		{
-			RecreateSwapChain();
-			return imageIndex;
-		}
-
-		BeginCommandBufferRecording(dev.GetCommandBufferHandle(currentCBIndex), imageIndex);
-
-		return imageIndex;
-	}
-
-	void SubmitFrame(uint32_t imageIndex)
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-
-		EndCommandBufferRecording(dev.GetCommandBufferHandle(currentCBIndex));
-
-		uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, graphicsIndex, 0, currentCBIndex);
-
-		res = dev.PresetSwapChain(swapChainIndex, currentFrame, imageIndex, presentIndex, 0);
-
-		if (!res || resizeWindow) {
-			resizeWindow = false;
-			RecreateSwapChain();
-		}
-
-		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-	}
-
-	
-
-	void CreateMSAAColorResources(uint32_t width, uint32_t height) {
-
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VkDevice logicalDevice = dev.device;
-		VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-
-		colorImage = dev.CreateImage(width, height,
-			1, swapChain.GetSwapChainFormat(), 1,
-			VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-			msaaSamples,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
-
-		colorView = dev.CreateImageView(colorImage, 1, swapChain.GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
-	}
-
-	void WaitOnQueues()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		vkQueueWaitIdle(dev.GetQueueHandle(graphicsIndex, 0));
-		vkQueueWaitIdle(dev.GetQueueHandle(presentIndex, 0));
-	}
-
-	static void frameResizeCB(GLFWwindow* window, int width, int height)
-	{
-		auto renderInst = reinterpret_cast<RenderInstance*>(glfwGetWindowUserPointer(window));
-		renderInst->SetResizeBool(true);
-	}
-
-	void CreatePipelines()
-	{
-		// Create Shaders
-
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		VkDevice logicalDevice = dev.device;
-
-		auto shader1 = shaderCache.GetShader("3dtextured.vert.spv");
-		auto shader2 = shaderCache.GetShader("3dtextured.frag.spv");
-
-		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
-
-		auto shader3 = shaderCache.GetShader("text.vert.spv");
-		auto shader4 = shaderCache.GetShader("text.frag.spv");
-
-		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
-
-		DescriptorSetLayoutBuilder textDescriptor{}, globalBufferBuilder{}, genericObjectBuilder{};
-		std::vector<VkDescriptorSetLayout> textDescriptorContainers(1);
-		std::vector<VkDescriptorSetLayout> regularMeshConatiners(2);
-
-		textDescriptor.AddPixelImageSamplerLayout(0);
-
-		textDescriptorContainers[0] = textDescriptor.CreateDescriptorSetLayout(logicalDevice);
-
-		descriptorLayoutCache.AddLayout("oneimage", textDescriptorContainers[0]);
-
-		globalBufferBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
-
-		regularMeshConatiners[0] = globalBufferBuilder.CreateDescriptorSetLayout(logicalDevice);
-		
-		descriptorLayoutCache.AddLayout("mainrenderpass", regularMeshConatiners[0]);
-
-		genericObjectBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
-
-		genericObjectBuilder.AddPixelImageSamplerLayout(1);
-
-		regularMeshConatiners[1] = genericObjectBuilder.CreateDescriptorSetLayout(logicalDevice);
-
-		descriptorLayoutCache.AddLayout("genericobject", regularMeshConatiners[1]);
-
-		mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
-
-		mainRenderPassCache.CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
-	}
-
-	PipelineCacheObject GetPipeline(std::string ptype)
-	{
-		return mainRenderPassCache.GetPipelineFromCache(ptype);
-	}
-
-	void CreateGlobalBuffer()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		globalIndex = dev.CreateHostBuffer
-		(
-			128'000'000, true, true, 
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-			VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-		);
-	}
-
-	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame)
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * frame));
-	}
-
-
-	uint32_t GetPageFromUniformBuffer(size_t size, size_t alignment)
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment);
-	}
-
-	uint32_t GetMainBufferIndex() const
-	{
-		return globalIndex;
-	}
-
-	VkBuffer GetDynamicUniformBuffer() 
-	{
-		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).hostBuffers[globalIndex].first;
-	}
+	VkBuffer GetDynamicUniformBuffer();
 
 	uint32_t CreateVulkanImage(
 		std::vector<std::vector<char>>& imageData,
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return majorDevice.CreateSampledImage(
-			imageData, imageSizes, 
-			width, height, 
-			mipLevels, VK::API::ConvertSMBToVkFormat(type), 
-			1, 
-			graphicsIndex, transferIndex, 
-			attachmentsIndex, stagingBufferIndex);
-	}
+		uint32_t mipLevels, ImageFormat type);
 
 	uint32_t CreateVulkanImageView(uint32_t imageIndex, uint32_t mipLevels,
-		ImageFormat type, VkImageAspectFlags aspectMask)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
-	}
+		ImageFormat type, VkImageAspectFlags aspectMask);
 
-	uint32_t CreateVulkanSampler(uint32_t mipLevels)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return majorDevice.CreateSampler(mipLevels);
-	}
+	uint32_t CreateVulkanSampler(uint32_t mipLevels);
 
-	void DeleteVulkanImageView(uint32_t index)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		majorDevice.DestroyImage(index);
-	}
+	void DeleteVulkanImageView(uint32_t index);
 
-	void DeleteVulkanImage(uint32_t index)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		majorDevice.DestroyImage(index);
-	}
+	void DeleteVulkanImage(uint32_t index);
 
-	void DeleteVulkanSampler(uint32_t index)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		majorDevice.DestorySampler(index);
-	}
+	void DeleteVulkanSampler(uint32_t index);
 
-	void CreateVulkanRenderer(WindowManager *window)
-	{
-		this->windowMan = window;
-		windowMan->SetWindowResizeCallback(frameResizeCB);
-		glfwSetWindowUserPointer(windowMan->GetWindow(), this);
-		
+	void CreateVulkanRenderer(WindowManager* window);
 
-		vkInstance.CreateRenderInstance();
-		vkInstance.CreateDrawingSurface(window->GetWindow());
-		
-		physicalIndex = vkInstance.CreatePhysicalDevice();
-		VKDevice &majorDevice = vkInstance.CreateLogicalDevice(physicalIndex, deviceIndex);
+	VkImageView GetImageView(uint32_t viewIndex);
 
-		msaaSamples = vkInstance.GetMaxMSAALevels(physicalIndex);
-		
-		std::vector<VkQueueFamilyProperties> famProps;
-		majorDevice.QueueFamilyDetails(famProps);
-		
-		uint32_t graphicsIndex, presentIndex, presentMax, graphicsMax;
-		majorDevice.GetPresentQueue(presentIndex, presentMax, famProps, vkInstance.renderSurface);
-		majorDevice.GetQueueByMask(graphicsIndex, graphicsMax, famProps, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
-		
-		std::set queueFamilies = { graphicsIndex, presentIndex };
-		std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
-		
-		VkPhysicalDeviceFeatures features{};
-		features.geometryShader = VK_TRUE;
-		features.textureCompressionBC = VK_TRUE;
-		features.tessellationShader = VK_TRUE;
-		features.samplerAnisotropy = VK_TRUE;
-		features.multiDrawIndirect = VK_TRUE;
-
-		graphicsPresentIndex = 0;
-		transferIndex = 1;
-
-		majorDevice.CreateLogicalDevice(vkInstance.instanceLayers, vkInstance.deviceExtensions, queueFamilies, queueCounts, features);
-		
-		majorDevice.CreateCommandPool(graphicsIndex, graphicsPresentIndex);
-		majorDevice.CreateCommandPool(graphicsIndex, transferIndex);
-		
-		gptManager = majorDevice.CreateQueueManager(graphicsIndex, transferIndex, graphicsMax);
-
-		depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
-			{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
-
-		stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
-		swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface, 3);
-
-		VKSwapChain& swapChain = majorDevice.GetSwapChain(swapChainIndex);
-
-		auto scd = vkInstance.GetSwapChainSupport(physicalIndex);
-
-		swapChain.SetSwapChainProperties(scd);
-
-		VkFormat swcFormat = swapChain.GetSwapChainFormat();
-
-		auto swcPool = majorDevice.FindImageMemoryIndexForPool(1920, 1200,
-			1, swcFormat, 1,
-			VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-		auto depthPool = majorDevice.FindImageMemoryIndexForPool(1920, 1200,
-			1, depthFormat, 1,
-			VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		
-		attachmentsIndex = majorDevice.CreateImageMemoryPool(512'000'000, depthPool.first);
-		
-		CreateMSAAColorResources(800, 600);
-
-		CreateDepthImage(800, 600);
-
-		CreateRenderPass();
-
-		std::vector<uint32_t*> attachmentViews = { &colorView, &depthView };
-
-		uint32_t queuefamilies[] = { graphicsIndex };
-		
-		swapChain.CreateSwapChain(800, 600, queuefamilies, 1, 0, attachmentViews);
-
-		DescriptorPoolBuilder builder{};
-		builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
-		builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
-		majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
-		
-		CreateSyncObjects();
-
-		descriptorLayoutCache.device = majorDevice.device;
-		mainRenderPassCache.renderPass = majorDevice.GetRenderPass(0);
-		mainRenderPassCache.device = majorDevice.device;
-		shaderCache.SetLogicalDevice(majorDevice.device);
-
-		CreateGlobalBuffer();
-
-		CreatePipelines();
-	}
-
-	VkImageView GetImageView(uint32_t viewIndex)
-	{
-		VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return majorDevice.imageViews[viewIndex];
-	}
-
-	VkSampler GetSampler(uint32_t index)
-	{
-		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).samplers[index];
-	}
-
+	VkSampler GetSampler(uint32_t index);
 	
-	void DestroyVulkanRenderer()
-	{
-		DestroyRenderInstance();
-	}
+	void DestroyVulkanRenderer();
 
-	void DestroyRenderInstance()
-	{
-		shaderCache.DestroyShaderCache();
+	void DestroyRenderInstance();
 
-		mainRenderPassCache.DestroyPipelineCache();
+	void SetResizeBool(bool set);
 
-		descriptorLayoutCache.DestroyLayoutCache();
-	}
+	VkDevice GetVulkanDevice();
 
-	void SetResizeBool(bool set)
-	{
-		resizeWindow = set;
-	}
+	VkPhysicalDevice GetVulkanPhysicalDevice();
 
-	VkDevice GetVulkanDevice()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.device;
-	}
+	VkCommandPool GetVulkanGraphincsCommandPool();
 
-	VkPhysicalDevice GetVulkanPhysicalDevice()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.gpu;
-	}
+	VkQueue GetGraphicsQueue();
 
-	VkCommandPool GetVulkanGraphincsCommandPool()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetCommandPool(graphicsPresentIndex);
-	}
+	VkCommandPool GetVulkanTransferCommandPool();
 
-	VkQueue GetGraphicsQueue() 
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetQueueHandle(graphicsIndex, 0);
-	}
+	auto GetTransferQueue();
 
-	VkCommandPool GetVulkanTransferCommandPool()
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetCommandPool(transferIndex);
-	}
+	void ReturnTranferQueue(int32_t i);
 
-	auto GetTransferQueue()
-	{
-		return gptManager->GetQueue();
-	}
+	VkRenderPass GetRenderPass();
 
-	void ReturnTranferQueue(int32_t i)
-	{
-		gptManager->ReturnQueue(i);
-	}
+	VkDescriptorPool GetDescriptorPool();
 
-	VkRenderPass GetRenderPass() 
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetRenderPass(0);
-	}
+	VkCommandBuffer GetCurrentCommandBuffer();
+	
+	uint32_t GetCurrentFrame() const;
 
-	VkDescriptorPool GetDescriptorPool() 
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetDescriptorPool(descriptorPoolIndex);
-	}
+	VkSampleCountFlagBits GetMSAASamples() const;
 
-	VkCommandBuffer GetCurrentCommandBuffer() 
-	{
-		VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-		return dev.GetCommandBufferHandle(currentCBIndex);
-	}
+	Semaphore& GetTransferSemaphore();
 
-	uint32_t GetCurrentFrame() const
-	{
-		return currentFrame;
-	}
+	VKPipelineCache* GetMainRenderPassCache();
 
-	VkSampleCountFlagBits GetMSAASamples() const
-	{
-		return msaaSamples;
-	}
-
-	Semaphore& GetTransferSemaphore()
-	{
-		return transferSemaphore;
-	}
-
-	VKPipelineCache* GetMainRenderPassCache()
-	{
-		return &mainRenderPassCache;
-	}
-
-	VKDescriptorLayoutCache* GetDescriptorLayoutCache()
-	{
-		return &descriptorLayoutCache;
-	}
+	VKDescriptorLayoutCache* GetDescriptorLayoutCache();
 	 
-	VKDescriptorSetCache* GetDescriptorSetCache()
-	{
-		return &descriptorSetCache;
-	}
+	VKDescriptorSetCache* GetDescriptorSetCache();
 
-	uint32_t GetSwapChainHeight()
-	{
-		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainHeight();
-	}
+	uint32_t GetSwapChainHeight();
 
-	uint32_t GetSwapChainWidth() 
-	{
-		return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainWidth();
-	}
+	uint32_t GetSwapChainWidth();
 
-	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
-
-	
+	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 private:
 
