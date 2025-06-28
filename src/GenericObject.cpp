@@ -38,7 +38,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		auto dsc = rendInst->GetDescriptorSetCache();
 		auto dl = dlc->GetLayout("genericobject");
 		DescriptorSetBuilder dsb{};
-		uint32_t offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
+		OffsetIndex offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
 		dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
 		dsb.AddDynamicUniformBuffer(rendInst->GetVulkanDevice(), rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, offset);
 		dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(textures[0].vkImpl->viewIndex), rendInst->GetSampler(textures[0].vkImpl->samplerIndex), 1, frames);

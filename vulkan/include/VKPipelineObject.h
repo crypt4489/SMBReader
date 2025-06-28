@@ -1,5 +1,6 @@
 #pragma once
 
+#include "IndexTypes.h"
 #include "vulkan/vulkan.h"
 #include <string>
 
@@ -28,11 +29,11 @@ public:
 
 	std::string GetPipelineType() const;
 
-	void SetPerObjectData(void* data, size_t dataSize, uint32_t _dynamicOffset);
+	void SetPerObjectData(void* data, size_t dataSize, OffsetIndex& _dynamicOffset);
 
 	void* perObjectShaderData;
 	VkDeviceSize perObjectShaderDataSize;
-	uint32_t dynamicOffset;
+	OffsetIndex dynamicOffset;
 
 	std::string pipelineType;
 	VkDeviceSize vertexBufferIndex, vertexBufferOffset;

@@ -88,9 +88,9 @@ std::string VKPipelineObject::GetPipelineType() const
 	return pipelineType;
 }
 
-void VKPipelineObject::SetPerObjectData(void* data, size_t dataSize, uint32_t _dynamicOffset)
+void VKPipelineObject::SetPerObjectData(void* data, size_t dataSize, OffsetIndex& _dynamicOffset)
 {
 	perObjectShaderData = data;
 	perObjectShaderDataSize = dataSize;
-	dynamicOffset = _dynamicOffset;
+	dynamicOffset = std::move(_dynamicOffset);
 }

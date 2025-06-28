@@ -349,9 +349,9 @@ public:
 
 	void DestroyImage(ImageIndex& imageIndex);
 
-	void WriteToHostBuffer(BufferIndex& hostIndex, void* data, uint32_t size, uint32_t offset);
+	void WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size, size_t offset);
 
-	uint32_t GetOffsetIntoHostBuffer(uint32_t hostIndex, uint32_t size, uint32_t alignment);
+	OffsetIndex GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t size, uint32_t alignment);
 
 	uint32_t CreateRenderPasses(VKRenderPassBuilder& builder);
 

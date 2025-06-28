@@ -575,7 +575,7 @@ void VKDevice::DestroyImage(ImageIndex& imageIndex)
 	images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
 }
 
-void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, uint32_t size, uint32_t offset)
+void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size, size_t offset)
 {
 	auto deviceMem = hostBuffers[hostIndex].second;
 	void* datalocal;
@@ -584,7 +584,7 @@ void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, uint32_t si
 	vkUnmapMemory(device, deviceMem);
 }
 
-uint32_t VKDevice::GetOffsetIntoHostBuffer(uint32_t hostIndex, uint32_t size, uint32_t alignment)
+OffsetIndex VKDevice::GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t size, uint32_t alignment)
 {
 	auto alloc = std::find_if(hostAllocators.begin(), hostAllocators.end(), [&hostIndex](auto& pair)
 		{
@@ -592,7 +592,7 @@ uint32_t VKDevice::GetOffsetIntoHostBuffer(uint32_t hostIndex, uint32_t size, ui
 		}
 	);
 
-	return static_cast<uint32_t>(alloc->second.GetMemory(size, alignment));
+	return OffsetIndex(alloc->second.GetMemory(size, alignment));
 }
 
 uint32_t VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)

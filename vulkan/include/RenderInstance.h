@@ -50,7 +50,7 @@ public:
 
 	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame);
 
-	uint32_t GetPageFromUniformBuffer(size_t size, size_t alignment);
+	OffsetIndex GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
 	uint32_t GetMainBufferIndex() const;
 

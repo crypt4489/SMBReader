@@ -71,6 +71,10 @@ public:
 	constexpr bool operator==(const BufferIndex& other) const {
 		return this->ID == other.ID;
 	}
+
+	constexpr bool operator==(const uint32_t other) const {
+		return this->ID == other;
+	}
 private:
 	uint16_t ID = ~0;
 };
@@ -108,4 +112,86 @@ public:
 	}
 private:
 	uint8_t ID = ~0;
+};
+
+class QueueIndex
+{
+public:
+	QueueIndex() = default;
+	explicit QueueIndex(uint8_t _id) : ID(_id) {};
+	explicit QueueIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
+	explicit QueueIndex(size_t _id) : ID(static_cast<uint8_t>(_id)) {};
+	//delete copies / integer assignment
+	constexpr QueueIndex& operator=(const uint32_t) = delete;
+	constexpr QueueIndex& operator=(const QueueIndex&) = delete;
+	QueueIndex(const QueueIndex& other) = delete;
+
+	//keep moves
+	QueueIndex(QueueIndex&&) = default;
+	constexpr QueueIndex& operator=(QueueIndex&&) = default;
+
+	constexpr auto operator()() const {
+		return ID;
+	}
+
+	constexpr operator size_t() const {
+		return ID;
+	}
+
+	constexpr operator uint32_t() const {
+		return ID;
+	}
+
+	constexpr bool operator==(const QueueIndex& other) const {
+		return this->ID == other.ID;
+	}
+
+	
+
+private:
+	uint8_t ID = ~0;
+};
+
+
+class OffsetIndex
+{
+public:
+	OffsetIndex() = default;
+	explicit OffsetIndex(uint64_t _id) : ID(_id) {};
+	//delete copies / integer assignment
+	constexpr OffsetIndex& operator=(const uint32_t) = delete;
+	constexpr OffsetIndex& operator=(const OffsetIndex&) = delete;
+	OffsetIndex(const OffsetIndex& other) = delete;
+
+	//keep moves
+	OffsetIndex(OffsetIndex&&) = default;
+	constexpr OffsetIndex& operator=(OffsetIndex&&) = default;
+
+	constexpr auto operator()() const {
+		return ID;
+	}
+
+	constexpr operator size_t() const {
+		return ID;
+	}
+
+	constexpr operator uint32_t() const {
+		return static_cast<uint32_t>(ID);
+	}
+
+	OffsetIndex operator+(const OffsetIndex& other)
+	{
+		return OffsetIndex(other.ID + ID);
+	}
+
+	OffsetIndex operator+(const size_t other)
+	{
+		return OffsetIndex(other + ID);
+	}
+
+	constexpr bool operator==(const OffsetIndex& other) const {
+		return this->ID == other.ID;
+	}
+private:
+	size_t ID = ~0UL;
 };

@@ -61,11 +61,11 @@ public:
 
 	static constexpr uint32_t MAXTEXTRENDERABLES = 64;
 	static constexpr uint32_t BUFFERSIZE = 1048576;
-	static VkDeviceSize bufferOffset;
-	static VkDeviceSize vertexCount, commandCount;
-	static uint32_t vertexBufferOffset, indirectCommandsOffset;
+	static OffsetIndex bufferOffset;
+	static size_t vertexCount, commandCount;
+	static OffsetIndex vertexBufferOffset, indirectCommandsOffset;
 	static Font* fonts;
 	static VKPipelineObject* obj;
-	static std::vector<std::tuple<Text*, VkDeviceSize, VkDeviceSize>> textsCommand;
+	static std::vector<std::tuple<Text*, size_t, size_t>> textsCommand;
 };
 

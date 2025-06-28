@@ -342,10 +342,10 @@ void RenderInstance::UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size
 }
 
 
-uint32_t RenderInstance::GetPageFromUniformBuffer(size_t size, size_t alignment)
+OffsetIndex RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment);
+	return std::move(dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment));
 }
 
 uint32_t RenderInstance::GetMainBufferIndex() const

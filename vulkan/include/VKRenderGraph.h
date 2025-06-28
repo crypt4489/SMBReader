@@ -36,6 +36,6 @@ private:
 	VKPipelineCache* cache;
 	VKDescriptorSetCache* dscache;
 	std::string currentPipeline = "";
-	uint32_t uniformOffset;
+	OffsetIndex uniformOffset;
 };
 

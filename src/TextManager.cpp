@@ -3,13 +3,13 @@
 #include "RenderInstance.h"
 #include "VertexTypes.h"
 #include "VKPipelineObject.h"
-VkDeviceSize TextManager::bufferOffset = 0;
+OffsetIndex TextManager::bufferOffset = std::move(OffsetIndex(0UL));
 Font* TextManager::fonts;
-VkDeviceSize TextManager::vertexCount = 0;
-VkDeviceSize TextManager::commandCount = 0;
+size_t TextManager::vertexCount = 0;
+size_t TextManager::commandCount = 0;
 VKPipelineObject* TextManager::obj;
-std::vector<std::tuple<Text *, VkDeviceSize, VkDeviceSize>> TextManager::textsCommand;
-uint32_t TextManager::vertexBufferOffset, TextManager::indirectCommandsOffset;
+std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
+OffsetIndex TextManager::vertexBufferOffset = std::move(OffsetIndex(0UL)), TextManager::indirectCommandsOffset = std::move(OffsetIndex(0UL));
 
 
 void TextManager::CreateFontTextManager(const std::string& imageName, const std::string& dataName)
@@ -74,11 +74,11 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
 		&command, vertsDataSize,
-		commandOffset + indirectCommandsOffset, 0);
+		indirectCommandsOffset + commandOffset, 0);
 
 	textsCommand.push_back({ text, commandCount++, bufferOffset });
 
-	bufferOffset += allocatedDataSize;
+	bufferOffset = bufferOffset + allocatedDataSize;
 
 	vertexCount += allocatedVerts;
 
@@ -98,21 +98,21 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 	std::tie(std::ignore, cCount, bOffset) = textsCommand[i];
 
-	uint32_t textVertexCount = static_cast<uint32_t>(text->textVertices.size());
+	size_t textVertexCount = text->textVertices.size();
 
-	uint32_t startingOffset = i * 4;
+	size_t startingOffset = i * 4;
 
-	uint32_t newCount = textVertexCount - startingOffset;
+	size_t newCount = textVertexCount - startingOffset;
 
 	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
 		text->textVertices.data(), newCount * sizeof(TextVertex),
-		bOffset + startingOffset + vertexBufferOffset, 0);
+		vertexBufferOffset + bOffset + startingOffset , 0);
 
 	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
 		&textVertexCount, sizeof(uint32_t),
-		offsetof(VkDrawIndirectCommand, vertexCount) +
-		(cCount * sizeof(VkDrawIndirectCommand)) +
-		indirectCommandsOffset, 0);
+		indirectCommandsOffset + offsetof(VkDrawIndirectCommand, vertexCount) +
+		 (cCount * sizeof(VkDrawIndirectCommand))
+		, 0);
 
 }
 
@@ -237,9 +237,19 @@ Font::Font(const std::string& imageName, const std::string& dataName)
 	}
 
 	std::vector<char> imageData;
-	FileManager::ReadFileInFull(imageName, imageData);
+	int ret = FileManager::ReadFileInFull(imageName, imageData);
+	if (ret)
+	{
+		throw std::runtime_error("Cannot open Font image data");
+	}
+
 	std::vector<char> fontData;
-	FileManager::ReadFileInFull(dataName, fontData);
+	ret = FileManager::ReadFileInFull(dataName, fontData);
+
+	if (ret)
+	{
+		throw std::runtime_error("Cannot open Font Widths data");
+	}
 
 	texture = new AppTexture(imageData, type);
 	CreateFontWidths(fontData);
