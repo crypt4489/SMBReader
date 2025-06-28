@@ -26,17 +26,17 @@ public:
 
 	void CreateRenderInstance();
 
-	uint32_t CreatePhysicalDevice();
+	DeviceIndex CreatePhysicalDevice();
 
-	VkSampleCountFlagBits GetMaxMSAALevels(uint32_t gpuIndex);
+	VkSampleCountFlagBits GetMaxMSAALevels(DeviceIndex& gpuIndex);
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures);
 
 	bool isDeviceSuitable(VkPhysicalDevice device);
 
-	VKDevice& CreateLogicalDevice(uint32_t gpuIndex, uint32_t& deviceIndex);
+	VKDevice& CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
-	VKDevice& GetLogicalDevice(uint32_t gpuIndex, uint32_t deviceIndex);
+	VKDevice& GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;

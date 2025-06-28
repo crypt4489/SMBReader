@@ -1,4 +1,28 @@
 #include "RenderInstance.h"
+
+
+
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <iostream>
+#include <vector>
+#include <limits>
+#include <map>
+#include <optional>
+#include <set>
+#include <unordered_map>
+
+#include "FileManager.h"
+#include "ThreadManager.h"
+#include "VKInstance.h"
+#include "VKDescriptorSetCache.h"
+#include "VKDescriptorLayoutCache.h"
+#include "VKSwapChain.h"
+#include "VKShaderCache.h"
+#include "VKPipelineCache.h"
+#include "WindowManager.h"
+
 namespace VKRenderer {
 	RenderInstance* gRenderInstance = nullptr;
 }
@@ -334,7 +358,7 @@ VkBuffer RenderInstance::GetDynamicUniformBuffer()
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).hostBuffers[globalIndex].first;
 }
 
-uint32_t RenderInstance::CreateVulkanImage(
+ImageIndex RenderInstance::CreateVulkanImage(
 	std::vector<std::vector<char>>& imageData,
 	std::vector<uint32_t>& imageSizes,
 	uint32_t width, uint32_t height,
@@ -350,32 +374,32 @@ uint32_t RenderInstance::CreateVulkanImage(
 		attachmentsIndex, stagingBufferIndex);
 }
 
-uint32_t RenderInstance::CreateVulkanImageView(uint32_t imageIndex, uint32_t mipLevels,
+ImageIndex RenderInstance::CreateVulkanImageView(ImageIndex& imageIndex, uint32_t mipLevels,
 	ImageFormat type, VkImageAspectFlags aspectMask)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
 }
 
-uint32_t RenderInstance::CreateVulkanSampler(uint32_t mipLevels)
+ImageIndex RenderInstance::CreateVulkanSampler(uint32_t mipLevels)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice.CreateSampler(mipLevels);
 }
 
-void RenderInstance::DeleteVulkanImageView(uint32_t index)
+void RenderInstance::DeleteVulkanImageView(ImageIndex& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestroyImage(index);
 }
 
-void RenderInstance::DeleteVulkanImage(uint32_t index)
+void RenderInstance::DeleteVulkanImage(ImageIndex& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestroyImage(index);
 }
 
-void RenderInstance::DeleteVulkanSampler(uint32_t index)
+void RenderInstance::DeleteVulkanSampler(ImageIndex& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestorySampler(index);

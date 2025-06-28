@@ -1,14 +1,7 @@
 #pragma once
 
-#include <array>
-#include <vector>
-#include <functional>
-
 #include "vulkan/vulkan.h"
-
-#include "AppTypes.h"
-#include "RenderInstance.h"
-#include "VKPipelineCache.h"
+#include <string>
 
 class VKPipelineObject
 {

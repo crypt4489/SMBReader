@@ -1,5 +1,8 @@
 #include "TextManager.h"
-
+#include "FileManager.h"
+#include "RenderInstance.h"
+#include "VertexTypes.h"
+#include "VKPipelineObject.h"
 VkDeviceSize TextManager::bufferOffset = 0;
 Font* TextManager::fonts;
 VkDeviceSize TextManager::vertexCount = 0;

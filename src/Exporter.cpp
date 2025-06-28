@@ -1,4 +1,15 @@
 #include "Exporter.h"
+
+#include <cstdint>
+#include <format>
+#include <fstream>
+
+#include "AppTextureImpl.h"
+#include "FileManager.h"
+#include "DXTCompression.h"
+#include "SMBTexture.h"
+
+
 void Exporter::ExportChunksFromFile(SMBFile& smb)
 {
 

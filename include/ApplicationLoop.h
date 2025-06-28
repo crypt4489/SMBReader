@@ -11,11 +11,6 @@
 #include <unordered_map>
 
 
-
-#if defined(_WIN32) || defined(_WIN64)
-#include <Windows.h>
-#endif
-
 #include "AppTypes.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
@@ -25,11 +20,6 @@
 #include "TextManager.h"
 #include "ThreadManager.h"
 #include "VKRenderGraph.h"
-
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 
 class ApplicationLoop
 {

@@ -1,4 +1,9 @@
 #include "ProgramArgs.h"
+
+#include <iostream> 
+#include <cctype>
+#include <locale>
+
 ProgramArgs::ProgramArgs(int argc, char** argv) : justexport(false)
 {
 	if (argc <= 1)

@@ -1,5 +1,6 @@
 #include "VKRenderGraph.h"
 
+#include "TextManager.h"
 VKRenderGraph::VKRenderGraph(VkRenderPass rp, VKPipelineCache* c, VKDescriptorSetCache* dsc) : inst(rp), cache(c), dscache(dsc) {};
 
 void VKRenderGraph::DrawScene(

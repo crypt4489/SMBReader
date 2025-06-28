@@ -1,5 +1,13 @@
 #include "ApplicationLoop.h"
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <Windows.h>
+#endif
+
+
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 static void Rotate(GenericObject* obj)
 {
 	static auto startTime = std::chrono::high_resolution_clock::now();

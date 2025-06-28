@@ -4,15 +4,8 @@
 #include <functional>
 
 #include "AppTexture.h"
-#include "AppTypes.h"
-#include "VKDescriptorSetCache.h"
-#include "GenericObject.h"
-#include "RenderInstance.h"
 #include "SMBFile.h"
-#include "VertexTypes.h"
 #include "VKPipelineObject.h"
-
-
 class GenericObject
 {
 public:

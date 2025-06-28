@@ -22,7 +22,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 void VKSwapChain::CreateSwapChain( 
 	uint32_t width, uint32_t height, 
 	uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies, 
-	uint32_t _renderPassIndex, std::vector<uint32_t*>& attachmentIndices)
+	uint32_t _renderPassIndex, std::vector<ImageIndex*> &attachmentIndices)
 {
 	renderPassIndex = _renderPassIndex;
 	swapChainExtent = chooseSwapExtent(width, height);
@@ -131,9 +131,10 @@ void VKSwapChain::CreateSwapChainElements()
 
 	for (size_t i = 0; i < imageCount; i++) {
 		auto& ref = indices[i];
+		auto& ref2 = attachments[i];
 
 		for (size_t j = 0; j < attachmentCount; j++) {
-			ref[j] = *attachments[i].attachments[j];
+			ref[j] = *ref2.attachments[j];
 		}
 
 		swapChainFramebuffers[i] = device->CreateFrameBuffer(ref, renderPassIndex, swapChainExtent);

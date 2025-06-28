@@ -2,6 +2,7 @@
 #include <numeric>
 
 #include "AppTextureImpl.h"
+#include "IndexTypes.h"
 #include "RenderInstance.h"
 #include "SMBTexture.h"
 class VKTexture
@@ -13,13 +14,13 @@ public:
 
 	VKTexture(VKTexture&& other) noexcept;
 
-	VKTexture(VKTexture& other) noexcept;
+	VKTexture(VKTexture& other) = delete;
 
 	~VKTexture();
 
-	uint32_t imageIndex;
-	uint32_t viewIndex;
-	uint32_t samplerIndex;
+	ImageIndex imageIndex;
+	ImageIndex viewIndex;
+	ImageIndex samplerIndex;
 
 	void CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes, 
 		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);

@@ -11,6 +11,7 @@
 #include <set>
 
 #include "vulkan/vulkan.h"
+#include "IndexTypes.h"
 #include "ThreadManager.h"
 #include "VKRenderPassBuilder.h"
 #include "VKTypes.h"
@@ -311,23 +312,23 @@ public:
 	uint32_t CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount);
 
 
-	uint32_t CreateImage(uint32_t width,
+	ImageIndex CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps, uint32_t memIndex);
 
-	uint32_t CreateImageView(
-		uint32_t imageIndex, uint32_t mipLevels,
+	ImageIndex CreateImageView(
+		ImageIndex& imageIndex, uint32_t mipLevels,
 		VkFormat type, VkImageAspectFlags aspectMask);
 
-	uint32_t CreateImageView(
+	ImageIndex CreateImageView(
 		VkImage image, uint32_t mipLevels,
 		VkFormat type, VkImageAspectFlags aspectMask);
 
-	uint32_t CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
+	BufferIndex CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
 
-	uint32_t CreateSampledImage(
+	ImageIndex CreateSampledImage(
 		std::vector<std::vector<char>>& imageData,
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height,
@@ -340,15 +341,15 @@ public:
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	uint32_t CreateSampler(uint32_t mipLevels);
+	ImageIndex CreateSampler(uint32_t mipLevels);
 
-	void DestorySampler(uint32_t samplerIndex);
+	void DestorySampler(ImageIndex& samplerIndex);
 
-	void DestroyImageView(uint32_t imageViewIndex);
+	void DestroyImageView(ImageIndex& imageViewIndex);
 
-	void DestroyImage(uint32_t imageIndex);
+	void DestroyImage(ImageIndex& imageIndex);
 
-	void WriteToHostBuffer(uint32_t hostIndex, void* data, uint32_t size, uint32_t offset);
+	void WriteToHostBuffer(BufferIndex& hostIndex, void* data, uint32_t size, uint32_t offset);
 
 	uint32_t GetOffsetIntoHostBuffer(uint32_t hostIndex, uint32_t size, uint32_t alignment);
 

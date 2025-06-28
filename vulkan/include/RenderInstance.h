@@ -1,30 +1,16 @@
 #pragma once
 
 
-#include <algorithm>
-#include <array>
-#include <cassert>
-#include <iostream>
-#include <vector>
-#include <limits>
-#include <map>
-#include <optional>
-#include <set>
-#include <unordered_map>
+#include <vulkan/vulkan.h>
 
-#include "FileManager.h"
-#include "ThreadManager.h"
+#include "AppTypes.h"
+#include "IndexTypes.h"
 #include "VKInstance.h"
+#include "VKPipelineCache.h"
 #include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
-#include "VKSwapChain.h"
 #include "VKShaderCache.h"
-#include "VKPipelineCache.h"
 #include "WindowManager.h"
-
-
-
-
 
 class RenderInstance
 {
@@ -70,22 +56,22 @@ public:
 
 	VkBuffer GetDynamicUniformBuffer();
 
-	uint32_t CreateVulkanImage(
+	ImageIndex CreateVulkanImage(
 		std::vector<std::vector<char>>& imageData,
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type);
 
-	uint32_t CreateVulkanImageView(uint32_t imageIndex, uint32_t mipLevels,
+	ImageIndex CreateVulkanImageView(ImageIndex& imageIndex, uint32_t mipLevels,
 		ImageFormat type, VkImageAspectFlags aspectMask);
 
-	uint32_t CreateVulkanSampler(uint32_t mipLevels);
+	ImageIndex CreateVulkanSampler(uint32_t mipLevels);
 
-	void DeleteVulkanImageView(uint32_t index);
+	void DeleteVulkanImageView(ImageIndex& index);
 
-	void DeleteVulkanImage(uint32_t index);
+	void DeleteVulkanImage(ImageIndex& index);
 
-	void DeleteVulkanSampler(uint32_t index);
+	void DeleteVulkanSampler(ImageIndex& index);
 
 	void CreateVulkanRenderer(WindowManager* window);
 
@@ -141,17 +127,16 @@ private:
 
 	VKInstance vkInstance;
 	uint32_t graphicsIndex, presentIndex, presentMax, graphicsMax;
-	uint32_t deviceIndex;
-	uint32_t physicalIndex;
+	DeviceIndex deviceIndex;
+	DeviceIndex physicalIndex;
 	uint32_t transferIndex, graphicsPresentIndex;
 	uint32_t descriptorPoolIndex;
 	uint32_t swapChainIndex;
 	uint32_t attachmentsIndex;
-	uint32_t depthView, depthImage;
-	uint32_t colorView, colorImage;
-	uint32_t stagingBufferIndex;
-	uint32_t globalIndex;
-	uint32_t dynamicIndex;
+	ImageIndex depthView, depthImage;
+	ImageIndex colorView, colorImage;
+	BufferIndex stagingBufferIndex;
+	BufferIndex globalIndex;
 	uint32_t currentCBIndex;
 
 	QueueManager* gptManager;

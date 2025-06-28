@@ -1,4 +1,5 @@
 #pragma once
+#include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
 #include <vulkan/vulkan.h>
@@ -17,7 +18,7 @@ public:
 		attachments.resize(size);
 	}
 
-	std::vector<uint32_t*> attachments;
+	std::vector<ImageIndex*> attachments;
 };
 
 class VKSwapChainDependencies
@@ -63,7 +64,7 @@ public:
 	void CreateSwapChain(
 		uint32_t width, uint32_t height,
 		uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies,
-		uint32_t _renderPassIndex, std::vector<uint32_t*>& attachmentIndices);
+		uint32_t _renderPassIndex, std::vector<ImageIndex*>& attachmentIndices);
 
 	void DestroySwapChain();
 
@@ -71,7 +72,7 @@ public:
 
 	void CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present);
 
-	void AddFramebufferAttachments(std::vector<uint32_t*>& attachmentIndices)
+	void AddFramebufferAttachments(std::vector<ImageIndex*>& attachmentIndices)
 	{
 		uint32_t i = 0;
 		uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
@@ -155,7 +156,7 @@ public:
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 
 	std::vector<VkImage> swapChainImages;
-	std::vector<uint32_t> swapChainImageViews;
+	std::vector<ImageIndex> swapChainImageViews{};
 	std::vector<uint32_t> swapChainFramebuffers;
 	std::vector<VKFrameBufferAttachments> attachments;
 	uint32_t renderPassIndex;

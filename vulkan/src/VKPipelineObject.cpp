@@ -1,5 +1,13 @@
 #include "VKPipelineObject.h"
 
+#include <array>
+#include <vector>
+#include <functional>
+
+#include "AppTypes.h"
+#include "RenderInstance.h"
+#include "VKPipelineCache.h"
+
 VKPipelineObject::VKPipelineObject(
 	std::string name,
 	size_t vertexBufferIndex_,

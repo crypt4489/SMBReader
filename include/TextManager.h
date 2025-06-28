@@ -3,10 +3,7 @@
 #include <tuple>
 
 #include "AppTexture.h"
-#include "FileManager.h"
-#include "RenderInstance.h"
-#include "VertexTypes.h"
-#include "VKPipelineObject.h"
+
 
 struct Font
 {

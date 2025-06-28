@@ -321,19 +321,19 @@ uint32_t VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryT
 uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface)
 {
 	uint32_t index = static_cast<uint32_t>(swapChains.size());
-	auto swapchain = swapChains.emplace_back(this, surface);
+	swapChains.emplace_back(this, surface);
 	return index;
 }
 
 uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount)
 {
 	uint32_t index = static_cast<uint32_t>(swapChains.size());
-	auto swapchain = swapChains.emplace_back(this, surface, attachmentCount);
+	swapChains.emplace_back(this, surface, attachmentCount);
 	return index;
 }
 
 
-uint32_t VKDevice::CreateImage(uint32_t width,
+ImageIndex VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount,
@@ -374,11 +374,11 @@ uint32_t VKDevice::CreateImage(uint32_t width,
 
 	images.push_back(std::tuple(image, addr, memIndex));
 
-	return static_cast<uint32_t>(images.size() - 1);
+	return std::move(ImageIndex(images.size() - 1));
 }
 
-uint32_t VKDevice::CreateImageView(
-	uint32_t imageIndex, uint32_t mipLevels,
+ImageIndex VKDevice::CreateImageView(
+	ImageIndex& imageIndex, uint32_t mipLevels,
 	VkFormat type, VkImageAspectFlags aspectMask)
 {
 	VkImageViewCreateInfo viewInfo{};
@@ -398,10 +398,10 @@ uint32_t VKDevice::CreateImageView(
 
 	imageViews.push_back(imageView);
 
-	return static_cast<uint32_t>(imageViews.size() - 1);
+	return std::move(ImageIndex(imageViews.size() - 1));
 }
 
-uint32_t VKDevice::CreateImageView(
+ImageIndex VKDevice::CreateImageView(
 	VkImage image, uint32_t mipLevels,
 	VkFormat type, VkImageAspectFlags aspectMask)
 {
@@ -422,10 +422,10 @@ uint32_t VKDevice::CreateImageView(
 
 	imageViews.push_back(imageView);
 
-	return static_cast<uint32_t>(imageViews.size() - 1);
+	return std::move(ImageIndex(imageViews.size() - 1));
 }
 
-uint32_t VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage)
+BufferIndex VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage)
 {
 	hostBuffers.emplace_back(VK_NULL_HANDLE, VK_NULL_HANDLE);
 	auto& ref = hostBuffers.back();
@@ -439,10 +439,10 @@ uint32_t VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool 
 		hostAllocators.emplace_back(ret, allocSize);
 	}
 
-	return ret;
+	return BufferIndex(ret);
 }
 
-uint32_t VKDevice::CreateSampledImage(
+ImageIndex VKDevice::CreateSampledImage(
 	std::vector<std::vector<char>>& imageData,
 	std::vector<uint32_t>& imageSizes,
 	uint32_t width, uint32_t height,
@@ -454,7 +454,7 @@ uint32_t VKDevice::CreateSampledImage(
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
-	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(std::accumulate(imageSizes.begin(), imageSizes.end(), 0));
+	VkDeviceSize imagesSize = std::accumulate(imageSizes.begin(), imageSizes.end(), 0UL);
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -473,7 +473,7 @@ uint32_t VKDevice::CreateSampledImage(
 
 	VkFormat format = type;
 
-	uint32_t imageIndex = CreateImage(
+	ImageIndex imageIndex = CreateImage(
 		width, height, mipLevels, type, 1,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -515,7 +515,7 @@ void VKDevice::TransitionImageLayout(uint32_t poolIndex, uint32_t queueIdx, uint
 	);
 }
 
-uint32_t VKDevice::CreateSampler(uint32_t mipLevels)
+ImageIndex VKDevice::CreateSampler(uint32_t mipLevels)
 {
 	VkPhysicalDeviceProperties properties{};
 	vkGetPhysicalDeviceProperties(gpu, &properties);
@@ -544,7 +544,7 @@ uint32_t VKDevice::CreateSampler(uint32_t mipLevels)
 	samplerInfo.minLod = 0.0f;
 	samplerInfo.maxLod = static_cast<float>(mipLevels);
 
-	uint32_t ret = static_cast<uint32_t>(samplers.size());
+	auto ret = ImageIndex(samplers.size());
 
 	samplers.emplace_back(VK_NULL_HANDLE);
 
@@ -555,19 +555,19 @@ uint32_t VKDevice::CreateSampler(uint32_t mipLevels)
 	return ret;
 }
 
-void VKDevice::DestorySampler(uint32_t samplerIndex)
+void VKDevice::DestorySampler(ImageIndex& samplerIndex)
 {
 	vkDestroySampler(device, samplers[samplerIndex], nullptr);
 	samplers[samplerIndex] = VK_NULL_HANDLE;
 }
 
-void VKDevice::DestroyImageView(uint32_t imageViewIndex)
+void VKDevice::DestroyImageView(ImageIndex& imageViewIndex)
 {
 	vkDestroyImageView(device, imageViews[imageViewIndex], nullptr);
 	imageViews[imageViewIndex] = VK_NULL_HANDLE;
 }
 
-void VKDevice::DestroyImage(uint32_t imageIndex)
+void VKDevice::DestroyImage(ImageIndex& imageIndex)
 {
 	vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
 	auto& alloc = allocators[std::get<uint32_t>(images[imageIndex])];
@@ -575,7 +575,7 @@ void VKDevice::DestroyImage(uint32_t imageIndex)
 	images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
 }
 
-void VKDevice::WriteToHostBuffer(uint32_t hostIndex, void* data, uint32_t size, uint32_t offset)
+void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, uint32_t size, uint32_t offset)
 {
 	auto deviceMem = hostBuffers[hostIndex].second;
 	void* datalocal;

@@ -151,7 +151,7 @@ void VKInstance::CreateRenderInstance()
 	}
 }
 
-uint32_t VKInstance::CreatePhysicalDevice()
+DeviceIndex VKInstance::CreatePhysicalDevice()
 {
 	uint32_t physicalDeviceCount = 0;
 	VkResult result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
@@ -215,12 +215,12 @@ uint32_t VKInstance::CreatePhysicalDevice()
 
 	gpus.push_back(gpu);
 
-	return static_cast<uint32_t>(gpus.size() - 1);
+	return DeviceIndex(gpus.size() - 1);
 }
 
 
 
-VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(uint32_t gpuIndex)
+VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(DeviceIndex& gpuIndex)
 {
 	VkPhysicalDevice gpu = gpus[gpuIndex];
 	VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -279,7 +279,7 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 	return true;
 }
 
-VKDevice& VKInstance::CreateLogicalDevice(uint32_t gpuIndex, uint32_t& deviceIndex)
+VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
 	auto& gpu = gpus[gpuIndex];
 	auto iter = logicalDevices.begin();
@@ -291,7 +291,7 @@ VKDevice& VKInstance::CreateLogicalDevice(uint32_t gpuIndex, uint32_t& deviceInd
 
 	if (iter == std::end(logicalDevices))
 	{
-		deviceIndex = 0;
+		deviceIndex = std::move(DeviceIndex(0U));
 		std::vector<VKDevice> devices;
 		logicalDevices.emplace_back(gpu, std::vector<VKDevice>{});
 		auto& ref = logicalDevices.back().second;
@@ -303,7 +303,7 @@ VKDevice& VKInstance::CreateLogicalDevice(uint32_t gpuIndex, uint32_t& deviceInd
 	return ref.back();
 }
 
-VKDevice& VKInstance::GetLogicalDevice(uint32_t gpuIndex, uint32_t deviceIndex)
+VKDevice& VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
 	return logicalDevices[gpuIndex].second[deviceIndex];
 }

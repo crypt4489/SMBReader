@@ -1,9 +1,9 @@
 #include "VKTexture.h"
 
 VKTexture::VKTexture(SMBTexture& tex) :
-	imageIndex(~0U),
-	viewIndex(~0U),
-	samplerIndex(~0U)
+	imageIndex(),
+	viewIndex(),
+	samplerIndex()
 {
 	CreateImageResources(tex.data, tex.imageSizes, tex.width, tex.height, tex.miplevels, tex.type);
 	CreateImageViews(tex.miplevels, tex.type);
@@ -11,9 +11,9 @@ VKTexture::VKTexture(SMBTexture& tex) :
 };
 
 VKTexture::VKTexture(AppTextureImpl& tex) :
-	imageIndex(~0U),
-	viewIndex(~0U),
-	samplerIndex(~0U)
+	imageIndex(),
+	viewIndex(),
+	samplerIndex()
 {
 	std::vector<std::vector<char>>imageVec(1, tex.data);
 	std::vector<uint32_t> imageSize(1, tex.dataSize);
@@ -24,23 +24,23 @@ VKTexture::VKTexture(AppTextureImpl& tex) :
 
 VKTexture::VKTexture(VKTexture&& other) noexcept
 {
-	this->imageIndex = other.imageIndex;
-	this->viewIndex = other.viewIndex;
-	this->samplerIndex = other.samplerIndex;
-	other.imageIndex = ~0U;
-	other.viewIndex = ~0U;
-	other.samplerIndex = ~0U;
+	this->imageIndex = std::move(other.imageIndex);
+	this->viewIndex = std::move(other.viewIndex);
+	this->samplerIndex = std::move(other.samplerIndex);
+	//other.imageIndex = ~0U;
+	//other.viewIndex = ~0U;
+	//other.samplerIndex = ~0U;
 }
 
-VKTexture::VKTexture(VKTexture& other) noexcept
-{
-	this->imageIndex = other.imageIndex;
-	this->viewIndex = other.viewIndex;
-	this->samplerIndex = other.samplerIndex;
-	other.imageIndex = ~0U;
-	other.viewIndex = ~0U;
-	other.samplerIndex = ~0U;
-}
+//VKTexture::VKTexture(VKTexture& other) noexcept
+//{
+	//this->imageIndex = std::move(other.imageIndex);
+	//this->viewIndex = other.viewIndex;
+//	this->samplerIndex = other.samplerIndex;
+	//other.imageIndex = ~0U;
+	//other.viewIndex = ~0U;
+	//other.samplerIndex = ~0U;
+//}
 
 VKTexture::~VKTexture()
 {

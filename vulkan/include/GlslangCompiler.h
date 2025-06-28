@@ -1,15 +1,8 @@
 #pragma once
 
 #include <vector>
-#include <stdexcept>
 
-
-
-#include <glslang/Include/glslang_c_interface.h>
-#include <glslang/Include/ResourceLimits.h>
-#include "glslang/Public/resource_limits_c.h"
-
-#include "VKUtilities.h"
+#include <vulkan/vulkan.h>
 
 namespace GLSLANG
 {

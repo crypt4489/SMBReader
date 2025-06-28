@@ -1,4 +1,9 @@
 #include "GenericObject.h"
+
+#include "AppTypes.h"
+#include "RenderInstance.h"
+#include "VertexTypes.h"
+
 GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : vkPipelineObject(nullptr), objectIndex(_oi)
 {
 	vertexCount = 4;

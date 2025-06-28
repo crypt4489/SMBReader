@@ -1,18 +1,10 @@
 #pragma once
 
-#include <cstdint>
-#include <format>
-#include <fstream>
+
+
 #include <iostream>
-#include <regex>
-
-#include "AppTextureImpl.h"
-#include "FileManager.h"
-#include "DXTCompression.h"
 #include "SMBFile.h"
-#include "SMBTexture.h"
 #include "VertexTypes.h"
-
 
 namespace ExportHelper
 {
