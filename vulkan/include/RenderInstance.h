@@ -126,7 +126,7 @@ public:
 private:
 
 	VKInstance vkInstance;
-	uint32_t graphicsIndex, presentIndex, presentMax, graphicsMax;
+	QueueIndex graphicsIndex, presentIndex, presentMax, graphicsMax;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	uint32_t transferIndex, graphicsPresentIndex;

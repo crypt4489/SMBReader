@@ -274,13 +274,13 @@ public:
 
 	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
 
-	int32_t GetPresentQueue(uint32_t& queueIdx,
-		uint32_t& maxQueueCount,
+	int32_t GetPresentQueue(QueueIndex& queueIdx,
+		QueueIndex& maxQueueCount,
 		std::vector<VkQueueFamilyProperties>& famProps,
 		VkSurfaceKHR& renderSurface);
 
-	int32_t GetQueueByMask(uint32_t& queueIdx,
-		uint32_t& maxQueueCount,
+	int32_t GetQueueByMask(QueueIndex& queueIdx,
+		QueueIndex& maxQueueCount,
 		std::vector<VkQueueFamilyProperties>& famProps,
 		uint32_t queueMask);
 
@@ -291,11 +291,11 @@ public:
 		std::vector<uint32_t>& maxQueueCount,
 		VkPhysicalDeviceFeatures& features);
 
-	VkQueue GetQueueHandle(uint32_t queueFamily, uint32_t queueIdx);
+	VkQueue GetQueueHandle(QueueIndex& queueFamily, uint32_t queueIdx);
 
-	QueueManager* CreateQueueManager(uint32_t queueIndex, uint32_t poolIndex, uint32_t maxCount);
+	QueueManager* CreateQueueManager(QueueIndex& queueIndex, uint32_t poolIndex, uint32_t maxCount);
 
-	VkCommandPool CreateCommandPool(uint32_t queueIndex, uint32_t& poolIndex);
+	VkCommandPool CreateCommandPool(QueueIndex& queueIndex, uint32_t& poolIndex);
 
 	VkDescriptorPool CreateDesciptorPool(uint32_t& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets);
 
@@ -333,11 +333,11 @@ public:
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkFormat type,
-		uint32_t queueIndex, uint32_t queueFamilyIndex,
+		uint32_t queueIndex, QueueIndex& queueFamilyIndex,
 		uint32_t poolIndex, uint32_t memIndex,
 		uint32_t hostIndex);
 
-	void TransitionImageLayout(uint32_t poolIndex, uint32_t queueIdx, uint32_t imageIndex,
+	void TransitionImageLayout(uint32_t poolIndex, QueueIndex& queueIdx, ImageIndex& imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
@@ -363,17 +363,17 @@ public:
 
 	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage);
 
-	uint32_t SubmitCommandBuffer(uint32_t queueFamilyIdx, uint32_t queueIdx,
+	uint32_t SubmitCommandBuffer(QueueIndex& queueFamilyIdx, uint32_t queueIdx,
 		std::vector<uint32_t>& wait,
 		std::vector<VkPipelineStageFlags>& waitStages,
 		std::vector<uint32_t>& signal,
 		uint32_t cbIndex);
 
 	uint32_t SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
-		uint32_t queueFamilyIdx, uint32_t queueIdx,
+		QueueIndex& queueFamilyIdx, uint32_t queueIdx,
 		uint32_t cbIndex);
 
-	uint32_t PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, uint32_t queueFamilyIdx, uint32_t queueIdx);
+	uint32_t PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx);
 
 	std::vector<uint32_t> CreateCommandBuffers(uint32_t commandPoolIndex, uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences);
 	

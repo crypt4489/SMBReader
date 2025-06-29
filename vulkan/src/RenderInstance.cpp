@@ -423,12 +423,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	std::vector<VkQueueFamilyProperties> famProps;
 	majorDevice.QueueFamilyDetails(famProps);
 
-	uint32_t graphicsIndex, presentIndex, presentMax, graphicsMax;
 	majorDevice.GetPresentQueue(presentIndex, presentMax, famProps, vkInstance.renderSurface);
 	majorDevice.GetQueueByMask(graphicsIndex, graphicsMax, famProps, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
 
-	std::set queueFamilies = { graphicsIndex, presentIndex };
-	std::vector queueCounts = { graphicsMax, presentMax };
+	std::set<uint32_t> queueFamilies = { graphicsIndex, presentIndex };
+	std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
 
 	VkPhysicalDeviceFeatures features{};
 	features.geometryShader = VK_TRUE;

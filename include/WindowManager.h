@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stdexcept>
-
 #define VK_USE_PLATFORM_WIN32_KHR
 #define GLFW_INCLUDE_VULKAN
 #include "GLFW/include/GLFW/glfw3.h"
@@ -13,40 +11,15 @@
 class WindowManager
 {
 public:
-	void CreateWindowInstance()
-	{
-		bool good = glfwInit();
-		if (!good) throw std::runtime_error("Cannot create window");
+	void CreateWindowInstance();
 
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	void SetWindowResizeCallback(GLFWframebuffersizefun callback);
 
-		window = glfwCreateWindow(800, 600, "SMB File Viewer", nullptr, nullptr);
-		
-	}
+	GLFWwindow* GetWindow() const;
 
-	void SetWindowResizeCallback(GLFWframebuffersizefun callback)
-	{
-		glfwSetFramebufferSizeCallback(window, callback);
-	}
+	void DestroyGLFWWindow();
 
-	GLFWwindow* GetWindow() const
-	{
-		return window;
-	}
-
-	void DestroyGLFWWindow()
-	{
-		glfwDestroyWindow(window);
-		glfwTerminate();
-	}
-
-	bool ShouldCloseWindow()
-	{
-		if (glfwWindowShouldClose(window))
-			return true;
-		glfwPollEvents();
-		return false;
-	}
+	bool ShouldCloseWindow();
 
 private:
 	GLFWwindow* window = nullptr;

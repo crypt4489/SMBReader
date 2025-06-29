@@ -133,8 +133,8 @@ void VKDevice::QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps
 	vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamilyCount, famProps.data());
 }
 
-int32_t VKDevice::GetPresentQueue(uint32_t& queueIdx,
-	uint32_t& maxQueueCount,
+int32_t VKDevice::GetPresentQueue(QueueIndex& queueIdx,
+	QueueIndex& maxQueueCount,
 	std::vector<VkQueueFamilyProperties>& famProps,
 	VkSurfaceKHR& renderSurface)
 {
@@ -146,8 +146,8 @@ int32_t VKDevice::GetPresentQueue(uint32_t& queueIdx,
 
 		if (presentSupport)
 		{
-			maxQueueCount = props.queueCount;
-			queueIdx = i;
+			maxQueueCount = QueueIndex(props.queueCount);
+			queueIdx = QueueIndex(i);
 			return 0;
 		}
 		i++;
@@ -155,8 +155,8 @@ int32_t VKDevice::GetPresentQueue(uint32_t& queueIdx,
 	return -1;
 }
 
-int32_t VKDevice::GetQueueByMask(uint32_t& queueIdx,
-	uint32_t& maxQueueCount,
+int32_t VKDevice::GetQueueByMask(QueueIndex& queueIdx,
+	QueueIndex& maxQueueCount,
 	std::vector<VkQueueFamilyProperties>& famProps,
 	uint32_t queueMask)
 {
@@ -165,8 +165,8 @@ int32_t VKDevice::GetQueueByMask(uint32_t& queueIdx,
 	{
 
 		if ((props.queueFlags & queueMask) == queueMask) {
-			queueIdx = i;
-			maxQueueCount = props.queueCount;
+			queueIdx = QueueIndex(i);
+			maxQueueCount = QueueIndex(props.queueCount);
 			return 0;
 		}
 		i++;
@@ -215,20 +215,20 @@ void VKDevice::CreateLogicalDevice(
 	}
 }
 
-VkQueue VKDevice::GetQueueHandle(uint32_t queueFamily, uint32_t queueIdx)
+VkQueue VKDevice::GetQueueHandle(QueueIndex& queueFamily, uint32_t queueIdx)
 {
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamily, queueIdx, &queue);
 	return queue;
 }
 
-QueueManager* VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t poolIndex, uint32_t maxCount)
+QueueManager* VKDevice::CreateQueueManager(QueueIndex& queueIndex, uint32_t poolIndex, uint32_t maxCount)
 {
 	queueManagers.push_back(new QueueManager(std::vector<uint32_t>{0}, maxCount, queueIndex, commandPools[poolIndex], device));
 	return queueManagers.back();
 }
 
-VkCommandPool VKDevice::CreateCommandPool(uint32_t queueIndex, uint32_t& poolIndex)
+VkCommandPool VKDevice::CreateCommandPool(QueueIndex& queueIndex, uint32_t& poolIndex)
 {
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -447,7 +447,7 @@ ImageIndex VKDevice::CreateSampledImage(
 	std::vector<uint32_t>& imageSizes,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
-	uint32_t queueIndex, uint32_t queueFamilyIndex,
+	uint32_t queueIndex, QueueIndex& queueFamilyIndex,
 	uint32_t poolIndex, uint32_t memIndex,
 	uint32_t hostIndex)
 {
@@ -500,7 +500,7 @@ ImageIndex VKDevice::CreateSampledImage(
 	return imageIndex;
 }
 
-void VKDevice::TransitionImageLayout(uint32_t poolIndex, uint32_t queueIdx, uint32_t imageIndex,
+void VKDevice::TransitionImageLayout(uint32_t poolIndex, QueueIndex& queueIdx, ImageIndex& imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 	uint32_t mips, uint32_t layers)
 {
@@ -671,7 +671,7 @@ uint32_t VKDevice::BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requ
 	return imageIndex;
 }
 
-uint32_t VKDevice::SubmitCommandBuffer(uint32_t queueFamilyIdx, uint32_t queueIdx,
+uint32_t VKDevice::SubmitCommandBuffer(QueueIndex& queueFamilyIdx, uint32_t queueIdx,
 	std::vector<uint32_t>& wait,
 	std::vector<VkPipelineStageFlags>& waitStages,
 	std::vector<uint32_t>& signal,
@@ -718,7 +718,7 @@ uint32_t VKDevice::SubmitCommandBuffer(uint32_t queueFamilyIdx, uint32_t queueId
 }
 
 uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
-	uint32_t queueFamilyIdx, uint32_t queueIdx,
+	QueueIndex& queueFamilyIdx, uint32_t queueIdx,
 	uint32_t cbIndex)
 {
 	VKSwapChain& swc = swapChains[swapChainIdx];
@@ -727,7 +727,7 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t fr
 	return SubmitCommandBuffer(queueFamilyIdx, queueIdx, depends[0], waitStages, depends[1], cbIndex);
 }
 
-uint32_t VKDevice::PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, uint32_t queueFamilyIdx, uint32_t queueIdx)
+uint32_t VKDevice::PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx)
 {
 	VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
 
