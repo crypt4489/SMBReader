@@ -6,10 +6,8 @@
 #include "AppTypes.h"
 #include "IndexTypes.h"
 #include "VKInstance.h"
-#include "VKPipelineCache.h"
 #include "VKDescriptorSetCache.h"
-#include "VKDescriptorLayoutCache.h"
-#include "VKShaderCache.h"
+#include "VKPipelineCache.h"
 #include "WindowManager.h"
 
 class RenderInstance
@@ -24,13 +22,11 @@ public:
 
 	void RecreateSwapChain();
 
-	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShaderFromCache(const std::string& name);
-
 	void CreateRenderPass();
 
-	void BeginCommandBufferRecording(VkCommandBuffer cb, uint32_t imageIndex);
+	void BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex);
 
-	void EndCommandBufferRecording(VkCommandBuffer cb);
+	void EndCommandBufferRecording(uint32_t cb);
 
 	void CreateSyncObjects();
 
@@ -43,8 +39,6 @@ public:
 	void WaitOnQueues();
 
 	void CreatePipelines();
-
-	PipelineCacheObject GetPipeline(std::string ptype);
 
 	void CreateGlobalBuffer();
 
@@ -78,10 +72,6 @@ public:
 	VkImageView GetImageView(uint32_t viewIndex);
 
 	VkSampler GetSampler(uint32_t index);
-	
-	void DestroyVulkanRenderer();
-
-	void DestroyRenderInstance();
 
 	void SetResizeBool(bool set);
 
@@ -104,6 +94,12 @@ public:
 	VkDescriptorPool GetDescriptorPool();
 
 	VkCommandBuffer GetCurrentCommandBuffer();
+
+	PipelineCacheObject* GetVulkanPipeline(uint32_t renderTarget, std::string pipelinename);
+
+	DescriptorSetBuilder CreateDescriptorSet(std::string layoutname, uint32_t frames);
+
+	VkDescriptorSet GetDescriptorSet(std::string descriptorname, uint32_t frameNum);
 	
 	uint32_t GetCurrentFrame() const;
 
@@ -111,19 +107,12 @@ public:
 
 	Semaphore& GetTransferSemaphore();
 
-	VKPipelineCache* GetMainRenderPassCache();
-
-	VKDescriptorLayoutCache* GetDescriptorLayoutCache();
-	 
-	VKDescriptorSetCache* GetDescriptorSetCache();
-
 	uint32_t GetSwapChainHeight();
 
 	uint32_t GetSwapChainWidth();
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
-private:
 
 	VKInstance vkInstance;
 	QueueIndex graphicsIndex, presentIndex, presentMax, graphicsMax;
@@ -137,6 +126,7 @@ private:
 	ImageIndex colorView, colorImage;
 	BufferIndex stagingBufferIndex;
 	BufferIndex globalIndex;
+	uint32_t mainRenderTarget;
 	uint32_t currentCBIndex;
 
 	QueueManager* gptManager;
@@ -152,11 +142,6 @@ private:
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	VkFormat depthFormat;
-
-	VKShaderCache shaderCache;
-	VKPipelineCache mainRenderPassCache;
-	VKDescriptorLayoutCache descriptorLayoutCache;
-	VKDescriptorSetCache descriptorSetCache;
 };
 
 namespace VKRenderer {

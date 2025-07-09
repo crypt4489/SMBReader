@@ -20,7 +20,9 @@ public:
 	VKPipelineCache() = default;
 	VKPipelineCache(VkDevice _d, VkRenderPass _rp);
 
-	PipelineCacheObject GetPipelineFromCache(const std::string& name);
+	PipelineCacheObject* operator[](std::string name);
+
+	PipelineCacheObject* GetPipelineFromCache(const std::string& name);
 
 	PipelineCacheObject CreatePipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
 		std::optional<VkVertexInputBindingDescription> bindDescription,

@@ -4,15 +4,20 @@ VKPipelineCache::VKPipelineCache(VkDevice _d, VkRenderPass _rp) : device(_d), re
 
 }
 
-PipelineCacheObject VKPipelineCache::GetPipelineFromCache(const std::string& name)
+PipelineCacheObject* VKPipelineCache::GetPipelineFromCache(const std::string& name)
 {
 	auto found = pipelines.find(name);
 	if (found == std::end(pipelines))
 	{
 		throw std::runtime_error("Cannot find pipeline from cache");
 	}
-	return found->second;
+	return &(found->second);
 
+}
+
+PipelineCacheObject* VKPipelineCache::operator[](std::string name)
+{
+	return GetPipelineFromCache(name);
 }
 
 PipelineCacheObject VKPipelineCache::CreatePipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,

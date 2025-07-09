@@ -12,12 +12,14 @@ VKPipelineObject::VKPipelineObject(
 	std::string name,
 	size_t vertexBufferIndex_,
 	size_t vertexBufferOffset_,
-	size_t* vCount)
+	size_t* vCount,
+	uint32_t renderTarget)
 	:
 	pipelineType(name),
 	vertexCount(vCount),
 	vertexBufferOffset(vertexBufferOffset_),
-	vertexBufferIndex(vertexBufferIndex_)
+	vertexBufferIndex(vertexBufferIndex_),
+	mainRenderTarget(renderTarget)
 {
 
 }
@@ -26,21 +28,21 @@ void VKPipelineObject::Draw(VkCommandBuffer& cb, uint32_t frame, uint32_t setCou
 {
 	uint32_t drawSize = static_cast<uint32_t>(*vertexCount);
 
-	auto po = VKRenderer::gRenderInstance->GetPipeline(pipelineType);
-	auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
-	VkDescriptorSet set = dsc->GetDescriptorSetPerFrame(pipelineType, frame);
+	auto po = VKRenderer::gRenderInstance->GetVulkanPipeline(mainRenderTarget, pipelineType);
 
-	std::array<uint32_t, 1> dynamicOffsets = { 0 };
+	if (po->descLayout) {
+		std::array<uint32_t, 1> dynamicOffsets = { 0 };
 
-	uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
+		uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
 
-	if (!perObjectShaderData)
-		dynCount = 0;
+		if (!perObjectShaderData)
+			dynCount = 0;
 
-	if (po.descLayout)
-		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
+		VkDescriptorSet set = VKRenderer::gRenderInstance->GetDescriptorSet(pipelineType, frame);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po->pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
+	}
 
-	if (vertexBufferIndex != ~0U)
+	if (vertexBufferIndex != ~0ui32)
 	{
 		VkBuffer vertexBuffers[] = { VKRenderer::gRenderInstance->GetDynamicUniformBuffer() };
 		VkDeviceSize offsets[] = { vertexBufferOffset };
@@ -58,22 +60,23 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 	uint32_t setCount,
 	size_t indirectDrawBufferOffset)
 {
-	auto po = VKRenderer::gRenderInstance->GetPipeline(pipelineType);
-	auto dsc = VKRenderer::gRenderInstance->GetDescriptorSetCache();
-	VkDescriptorSet set = dsc->GetDescriptorSetPerFrame(pipelineType, frame);
+	
+	auto po = VKRenderer::gRenderInstance->GetVulkanPipeline(mainRenderTarget, pipelineType);
 
-	std::array<uint32_t, 1> dynamicOffsets = { dynamicOffset };
+	if (po->descLayout) {
+		std::array<uint32_t, 1> dynamicOffsets = { dynamicOffset };
 
-	uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
+		uint32_t dynCount = static_cast<uint32_t>(dynamicOffsets.size());
 
-	if (!perObjectShaderData)
-		dynCount = 0;
+		if (!perObjectShaderData)
+			dynCount = 0;
 
+		VkDescriptorSet set = VKRenderer::gRenderInstance->GetDescriptorSet(pipelineType, frame);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po->pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
+	}
+		
 
-	if (po.descLayout)
-		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, po.pipelineLayout, setCount, 1, &set, dynCount, dynamicOffsets.data());
-
-	if (vertexBufferIndex != ~0U)
+	if (vertexBufferIndex != ~0ui32)
 	{
 		VkBuffer vertexBuffers[] = { VKRenderer::gRenderInstance->GetDynamicUniformBuffer() };
 		VkDeviceSize offsets[] = { vertexBufferOffset };

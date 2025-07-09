@@ -13,7 +13,8 @@ public:
 		std::string name,
 		size_t vertexBufferIndex_,
 		size_t vertexBufferOffset_,
-		size_t* vCount);
+		size_t* vCount,
+		uint32_t renderTarget);
 
 	~VKPipelineObject() = default;
 
@@ -38,6 +39,7 @@ public:
 	std::string pipelineType;
 	VkDeviceSize vertexBufferIndex, vertexBufferOffset;
 	size_t *vertexCount = nullptr;
+	uint32_t mainRenderTarget;
 	
 	
 };

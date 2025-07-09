@@ -13,6 +13,10 @@
 #include "vulkan/vulkan.h"
 #include "IndexTypes.h"
 #include "ThreadManager.h"
+#include "VKPipelineCache.h"
+#include "VKDescriptorSetCache.h"
+#include "VKDescriptorLayoutCache.h"
+#include "VKShaderCache.h"
 #include "VKRenderPassBuilder.h"
 #include "VKTypes.h"
 #include "VKSwapChain.h"
@@ -383,6 +387,30 @@ public:
 
 	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
 
+	void BeginCommandBufferRecording(uint32_t bufferIndex);
+
+	void SetViewportCommand(uint32_t bufferIndex, float xs, float ys, float width, float height, float minDepth, float maxDepth);
+
+	void SetScissorCommand(uint32_t bufferIndex, int xo, int yo, uint32_t extentx, uint32_t extenty);
+
+	void EndRecordingCommand(uint32_t bufferIndex);
+	
+	void EndRenderPassCommand(uint32_t bufferIndex);
+
+	void BeginRenderPassCommand(uint32_t bufferIndex,
+		uint32_t renderPassIndex, uint32_t frameBufferIndex,
+		VkRect2D rect,
+		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
+		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
+
+	void BeginRenderPassFromSwapChainCommand(uint32_t bufferIndex,
+		uint32_t swapChainIndex,
+		uint32_t imageIndex,
+		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
+		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
+
+	void BindDescriptorSetCommand(uint32_t cbIndex);
+
 	VkCommandBuffer GetCommandBufferHandle(uint32_t index);
 
 	VkImageView GetImageView(uint32_t index);
@@ -400,6 +428,18 @@ public:
 	VkSemaphore GetSemaphore(uint32_t index);
 	
 	VkFramebuffer GetFrameBuffer(uint32_t index);
+
+	VKShaderCache& GetShaders();
+
+	VKDescriptorSetCache& GetDescriptorSets();
+
+	VKDescriptorLayoutCache& GetDescriptorLayouts();
+
+	void CreatePipelineCache(uint32_t renderPassIndex);
+
+	VKPipelineCache& GetPipelineCache(uint32_t renderPassIndex);
+
+	DescriptorSetBuilder CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
@@ -420,5 +460,9 @@ public:
 	std::vector<VkFence> fences;
 	std::vector<VKCommandBuffer> commandBuffers;
 	std::vector<VkFramebuffer> frameBuffers;
+	VKShaderCache shaders;
+	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
+	VKDescriptorLayoutCache descriptorLayoutCache;
+	VKDescriptorSetCache descriptorSetCache;
 };
 

@@ -1,7 +1,7 @@
 #include "VKRenderGraph.h"
 
 #include "TextManager.h"
-VKRenderGraph::VKRenderGraph(VkRenderPass rp, VKPipelineCache* c, VKDescriptorSetCache* dsc) : inst(rp), cache(c), dscache(dsc) {};
+VKRenderGraph::VKRenderGraph(uint32_t _renderTargetIndex) : renderTargetIndex(_renderTargetIndex) {};
 
 void VKRenderGraph::DrawScene(
 	VkCommandBuffer& cb,
@@ -11,10 +11,10 @@ void VKRenderGraph::DrawScene(
 	glm::mat4& proj
 )
 {
+	RenderInstance* rend = VKRenderer::gRenderInstance;
 	UpdateUniformBuffer(proj, view, frameNum);
 	std::string mrp = "mainrenderpass";
-	VkDescriptorSet set = dscache->GetDescriptorSetPerFrame(mrp, frameNum);
-	RenderInstance* rend = VKRenderer::gRenderInstance;
+	VkDescriptorSet set = rend->GetDescriptorSet(mrp, frameNum);
 	for (auto& obj : objs)
 	{
 		std::string name = obj->GetPipelineType();
@@ -24,28 +24,28 @@ void VKRenderGraph::DrawScene(
 		if (name != currentPipeline)
 		{
 			currentPipeline = name;
-			PipelineCacheObject co = cache->GetPipelineFromCache(name);
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co.pipelineLayout, 0, 1, &set, 0, nullptr);
-			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co.pipeline);
+			auto co = rend->GetVulkanPipeline(renderTargetIndex, name);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipelineLayout, 0, 1, &set, 0, nullptr);
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipeline);
 		}
+
 		obj->Draw(cb, frameNum, 1);
 	}
 
-	PipelineCacheObject co = cache->GetPipelineFromCache("text");
-	vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co.pipeline);
+	auto co = rend->GetVulkanPipeline(renderTargetIndex, "text");
+	vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipeline);
 	TextManager::DrawTextTM(cb, frameNum);
 	currentPipeline.clear();
 }
 
-void VKRenderGraph::CreateRenderPassDescriptorSet(VkDevice device, VkDescriptorPool pool, VKDescriptorLayoutCache* dlcache, uint32_t frames)
+void VKRenderGraph::CreateRenderPassDescriptorSet(uint32_t frames)
 {
 	std::string mainrenderpass = "mainrenderpass";
-	auto ref = dlcache->GetLayout("mainrenderpass");
+	RenderInstance* rend = VKRenderer::gRenderInstance;
 
-	DescriptorSetBuilder dsb{};
-	dsb.AllocDescriptorSets(device, pool, ref, frames);
-	dsb.AddUniformBuffer(device, VKRenderer::gRenderInstance->GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, frames, uniformOffset);
-	dscache->AddDesciptorSet(mainrenderpass, dsb.descriptorSets);
+	DescriptorSetBuilder dsb = rend->CreateDescriptorSet(mainrenderpass, frames);
+	dsb.AddUniformBuffer(VKRenderer::gRenderInstance->GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, frames, uniformOffset);
+	dsb.AddDescriptorsToCache(mainrenderpass);
 
 }
 

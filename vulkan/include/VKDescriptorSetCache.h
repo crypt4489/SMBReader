@@ -2,18 +2,26 @@
 
 #include "VKUtilities.h"
 #include <unordered_map>
+
+class VKDescriptorSetCache;
+
 struct DescriptorSetBuilder
 {
+	DescriptorSetBuilder(VkDevice _d, VKDescriptorSetCache* c) : device(_d), cache(c) {};
 
-	void AddPixelShaderImageDescription(VkDevice device, VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames);
+	void AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames);
 
-	void AddUniformBuffer(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+	void AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
 
-	void AddDynamicUniformBuffer(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+	void AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
 
-	void AllocDescriptorSets(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
+	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
+
+	void AddDescriptorsToCache(std::string name);
 
 	std::vector<VkDescriptorSet> descriptorSets;
+	VkDevice device;
+	VKDescriptorSetCache* cache;
 };
 
 

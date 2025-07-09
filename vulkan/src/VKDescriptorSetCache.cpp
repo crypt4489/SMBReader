@@ -1,5 +1,5 @@
 #include "VKDescriptorSetCache.h"
-void DescriptorSetBuilder::AddPixelShaderImageDescription(VkDevice device, VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames)
+void DescriptorSetBuilder::AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames)
 {
 	VkDescriptorImageInfo imageInfo{};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -24,7 +24,7 @@ void DescriptorSetBuilder::AddPixelShaderImageDescription(VkDevice device, VkIma
 	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddUniformBuffer(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
+void DescriptorSetBuilder::AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
 	std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
 	std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
@@ -53,7 +53,7 @@ void DescriptorSetBuilder::AddUniformBuffer(VkDevice device, VkBuffer buffer, Vk
 	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddDynamicUniformBuffer(VkDevice device, VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
+void DescriptorSetBuilder::AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
 	std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
 	std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
@@ -82,7 +82,7 @@ void DescriptorSetBuilder::AddDynamicUniformBuffer(VkDevice device, VkBuffer buf
 	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
 }
 
-void DescriptorSetBuilder::AllocDescriptorSets(VkDevice device, VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames)
+void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames)
 {
 	descriptorSets.resize(frames);
 	std::vector<VkDescriptorSetLayout> layouts(frames, descriptorSetLayout);
@@ -96,6 +96,11 @@ void DescriptorSetBuilder::AllocDescriptorSets(VkDevice device, VkDescriptorPool
 	if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate descriptor sets!");
 	}
+}
+
+void DescriptorSetBuilder::AddDescriptorsToCache(std::string name)
+{
+	cache->AddDesciptorSet(name, descriptorSets);
 }
 
 VkDescriptorSet VKDescriptorSetCache::GetDescriptorSetPerFrame(std::string& id, uint32_t frame)

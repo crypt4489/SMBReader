@@ -27,18 +27,15 @@ void TextManager::CreatePipelineObject()
 		text,
 		rendInst->GetMainBufferIndex(),
 		vertexBufferOffset,
-		&vertexCount
+		&vertexCount,
+		rendInst->mainRenderTarget
 	);
 
 
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-	auto dlc = rendInst->GetDescriptorLayoutCache();
-	auto dsc = rendInst->GetDescriptorSetCache();
-	auto dl = dlc->GetLayout("oneimage");
-	DescriptorSetBuilder dsb{};
-	dsb.AllocDescriptorSets(rendInst->GetVulkanDevice(), rendInst->GetDescriptorPool(), dl, frames);
-	dsb.AddPixelShaderImageDescription(rendInst->GetVulkanDevice(), rendInst->GetImageView(fonts->texture->vkImpl->viewIndex), rendInst->GetSampler(fonts->texture->vkImpl->samplerIndex), 0, frames);
-	dsc->AddDesciptorSet(text, dsb.descriptorSets);
+	DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("oneimage", frames);
+	dsb.AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl->viewIndex), rendInst->GetSampler(fonts->texture->vkImpl->samplerIndex), 0, frames);
+	dsb.AddDescriptorsToCache(text);
 }
 
 void TextManager::CreateTextBuffer()

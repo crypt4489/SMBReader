@@ -88,12 +88,6 @@ void RenderInstance::RecreateSwapChain() {
 	swapChain.RecreateSwapChain(width, height);
 }
 
-std::pair<VkShaderModule, VkShaderStageFlagBits> RenderInstance::GetShaderFromCache(const std::string& name)
-{
-	return shaderCache.GetShader(name);
-}
-
-
 void RenderInstance::CreateRenderPass()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
@@ -126,61 +120,33 @@ void RenderInstance::CreateRenderPass()
 
 	rpb.CreateInfo();
 
-	dev.CreateRenderPasses(rpb);
+	mainRenderTarget = dev.CreateRenderPasses(rpb);
 }
 
-void RenderInstance::BeginCommandBufferRecording(VkCommandBuffer cb, uint32_t imageIndex)
+void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = 0;
-	beginInfo.pInheritanceInfo = nullptr;
+	
+	dev.BeginCommandBufferRecording(cb);
 
-	if (vkBeginCommandBuffer(cb, &beginInfo) != VK_SUCCESS) {
-		throw std::runtime_error("failed to begin recording command buffer!");
-	}
+	dev.BeginRenderPassFromSwapChainCommand(cb, swapChainIndex, imageIndex);
 
-	VkRenderPassBeginInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = dev.GetRenderPass(swapChain.renderPassIndex);
-	renderPassInfo.framebuffer = dev.GetFrameBuffer(swapChain.swapChainFramebuffers[imageIndex]);
-	renderPassInfo.renderArea.offset = { 0, 0 };
-	renderPassInfo.renderArea.extent = swapChain.swapChainExtent;
+	uint32_t x = swapChain.GetSwapChainWidth(), y = swapChain.GetSwapChainHeight();
 
-	std::array<VkClearValue, 2> clearValues{};
-	clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
-	clearValues[1].depthStencil = { 1.0f, 0 };
+	dev.SetViewportCommand(cb, 0, 0, x, y, 0.0f, 1.0f);
 
-	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	renderPassInfo.pClearValues = clearValues.data();
-
-	vkCmdBeginRenderPass(cb, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-	VkViewport viewport{};
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = static_cast<float>(swapChain.GetSwapChainWidth());
-	viewport.height = static_cast<float>(swapChain.GetSwapChainHeight());
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(cb, 0, 1, &viewport);
-
-	VkRect2D scissor{};
-	scissor.offset = { 0, 0 };
-	scissor.extent = swapChain.swapChainExtent;
-	vkCmdSetScissor(cb, 0, 1, &scissor);
+	dev.SetScissorCommand(cb, 0, 0, x, y);
 
 }
 
-void RenderInstance::EndCommandBufferRecording(VkCommandBuffer cb)
+void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 {
-	vkCmdEndRenderPass(cb);
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	if (vkEndCommandBuffer(cb) != VK_SUCCESS) {
-		throw std::runtime_error("failed to record command buffer!");
-	}
+	dev.EndRenderPassCommand(cb);
+
+	dev.EndRecordingCommand(cb);
 }
 
 void RenderInstance::CreateSyncObjects()
@@ -214,13 +180,13 @@ uint32_t RenderInstance::BeginFrame()
 
 	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
-	if (imageIndex == UINT32_MAX)
+	if (imageIndex == ~0ui32)
 	{
 		RecreateSwapChain();
 		return imageIndex;
 	}
 
-	BeginCommandBufferRecording(dev.GetCommandBufferHandle(currentCBIndex), imageIndex);
+	BeginCommandBufferRecording(currentCBIndex, imageIndex);
 
 	return imageIndex;
 }
@@ -229,7 +195,7 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EndCommandBufferRecording(dev.GetCommandBufferHandle(currentCBIndex));
+	EndCommandBufferRecording(currentCBIndex);
 
 	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, graphicsIndex, 0, currentCBIndex);
 
@@ -274,7 +240,10 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VkDevice logicalDevice = dev.device;
-
+	auto &shaderCache = dev.GetShaders();
+	auto &descriptorLayoutCache = dev.GetDescriptorLayouts();
+	auto &mainRenderPassCache = dev.GetPipelineCache(mainRenderTarget);
+	
 	auto shader1 = shaderCache.GetShader("3dtextured.vert.spv");
 	auto shader2 = shaderCache.GetShader("3dtextured.frag.spv");
 
@@ -312,11 +281,6 @@ void RenderInstance::CreatePipelines()
 	mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
 
 	mainRenderPassCache.CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
-}
-
-PipelineCacheObject RenderInstance::GetPipeline(std::string ptype)
-{
-	return mainRenderPassCache.GetPipelineFromCache(ptype);
 }
 
 void RenderInstance::CreateGlobalBuffer()
@@ -481,6 +445,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreateRenderPass();
 
+	majorDevice.CreatePipelineCache(mainRenderTarget);
+
 	std::vector attachmentViews = { &colorView, &depthView };
 
 	uint32_t queuefamilies[] = { graphicsIndex };
@@ -493,11 +459,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 
 	CreateSyncObjects();
-
-	descriptorLayoutCache.device = majorDevice.device;
-	mainRenderPassCache.renderPass = majorDevice.GetRenderPass(0);
-	mainRenderPassCache.device = majorDevice.device;
-	shaderCache.SetLogicalDevice(majorDevice.device);
 
 	CreateGlobalBuffer();
 
@@ -513,20 +474,6 @@ VkImageView RenderInstance::GetImageView(uint32_t viewIndex)
 VkSampler RenderInstance::GetSampler(uint32_t index)
 {
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).samplers[index];
-}
-
-void RenderInstance::DestroyVulkanRenderer()
-{
-	DestroyRenderInstance();
-}
-
-void RenderInstance::DestroyRenderInstance()
-{
-	shaderCache.DestroyShaderCache();
-
-	mainRenderPassCache.DestroyPipelineCache();
-
-	descriptorLayoutCache.DestroyLayoutCache();
 }
 
 void RenderInstance::SetResizeBool(bool set)
@@ -607,21 +554,6 @@ Semaphore& RenderInstance::GetTransferSemaphore()
 	return transferSemaphore;
 }
 
-VKPipelineCache* RenderInstance::GetMainRenderPassCache()
-{
-	return &mainRenderPassCache;
-}
-
-VKDescriptorLayoutCache* RenderInstance::GetDescriptorLayoutCache()
-{
-	return &descriptorLayoutCache;
-}
-
-VKDescriptorSetCache* RenderInstance::GetDescriptorSetCache()
-{
-	return &descriptorSetCache;
-}
-
 uint32_t RenderInstance::GetSwapChainHeight()
 {
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainHeight();
@@ -630,4 +562,24 @@ uint32_t RenderInstance::GetSwapChainHeight()
 uint32_t RenderInstance::GetSwapChainWidth()
 {
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainWidth();
+}
+
+PipelineCacheObject* RenderInstance::GetVulkanPipeline(uint32_t renderTarget, std::string pipelinename)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	auto &cache = dev.GetPipelineCache(mainRenderTarget);
+	return cache[pipelinename];
+}
+
+DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname, uint32_t frames)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	return dev.CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
+}
+
+VkDescriptorSet RenderInstance::GetDescriptorSet(std::string descriptorname, uint32_t frameNum)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	auto cache = dev.GetDescriptorSets();
+	return cache.GetDescriptorSetPerFrame(descriptorname, frameNum);
 }

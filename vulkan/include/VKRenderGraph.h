@@ -14,7 +14,7 @@ class VKRenderGraph
 public:
 
 	VKRenderGraph() = delete;
-	VKRenderGraph(VkRenderPass rp, VKPipelineCache* c, VKDescriptorSetCache* dsc);
+	VKRenderGraph(uint32_t _renderTargetIndex);
 
 	void DrawScene(
 		VkCommandBuffer& cb,
@@ -24,7 +24,7 @@ public:
 		glm::mat4& proj
 	);
 
-	void CreateRenderPassDescriptorSet(VkDevice device, VkDescriptorPool pool, VKDescriptorLayoutCache* dlcache, uint32_t frames);
+	void CreateRenderPassDescriptorSet(uint32_t frames);
 
 	void CreateUniformBuffers(RenderInstance* inst, uint32_t frames);
 
@@ -32,10 +32,10 @@ public:
 
 private:
 	
-	VkRenderPass& inst;
-	VKPipelineCache* cache;
-	VKDescriptorSetCache* dscache;
-	std::string currentPipeline = "";
+	uint32_t renderTargetIndex;
+	
 	OffsetIndex uniformOffset;
+
+	std::string currentPipeline = "";
 };
 

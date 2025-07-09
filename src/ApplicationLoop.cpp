@@ -120,7 +120,7 @@ void ApplicationLoop::Execute()
 			}
 
 			auto index = rend->BeginFrame();
-			if (index == 0xFFFFFFFF) break;
+			if (index == ~0ui32) break;
 			VkCommandBuffer cb = rend->GetCurrentCommandBuffer();
 			auto frameNum = rend->GetCurrentFrame();
 
@@ -159,7 +159,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	rend->CreateVulkanRenderer(mainWindow);
 
-	graph = new VKRenderGraph(rend->GetRenderPass(), rend->GetMainRenderPassCache(), rend->GetDescriptorSetCache());
+	graph = new VKRenderGraph(rend->mainRenderTarget);
 
 	TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
@@ -167,19 +167,12 @@ void ApplicationLoop::InitializeRuntime()
 
 	text1 = new Text(name, *TextManager::fonts, 0.0f, 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 25);
 
-	//text2 = new Text(name, *TextManager::fonts, 0.5f, 0.75f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 15);
-
 	TextManager::UploadToVertexBuffer(text1);
 
 	graph->CreateUniformBuffers(rend, rend->MAX_FRAMES_IN_FLIGHT);
 
 	graph->CreateRenderPassDescriptorSet(
-		rend->GetVulkanDevice(),
-		rend->GetDescriptorPool(),
-		rend->GetDescriptorLayoutCache(),
 		rend->MAX_FRAMES_IN_FLIGHT);
-
-	//TextManager::UploadToVertexBuffer(text2);
 }
 
 
@@ -205,8 +198,6 @@ void ApplicationLoop::CleanupRuntime()
 	TextManager::DestroyTextManager();
 
 	ThreadManager::DestroyThreadManager();
-
-	rend->DestroyVulkanRenderer();
 
 	delete VKRenderer::gRenderInstance;
 
