@@ -33,7 +33,7 @@ static void frameResizeCB(GLFWwindow* window, int width, int height)
 	renderInst->SetResizeBool(true);
 }
 
-RenderInstance::RenderInstance() : transferSemaphore(Semaphore(1))
+RenderInstance::RenderInstance()
 {
 
 };
@@ -270,7 +270,7 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayoutCache.AddLayout("mainrenderpass", regularMeshConatiners[0]);
 
-	genericObjectBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+	genericObjectBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
 	genericObjectBuilder.AddPixelImageSamplerLayout(1);
 
@@ -408,7 +408,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	majorDevice.CreateCommandPool(graphicsIndex, graphicsPresentIndex);
 	majorDevice.CreateCommandPool(graphicsIndex, transferIndex);
 
-	gptManager = majorDevice.CreateQueueManager(graphicsIndex, transferIndex, graphicsMax);
+	//TODO: add multi threaded device support
+	//gptManager = majorDevice.CreateQueueManager(graphicsIndex, transferIndex, graphicsMax);
 
 	depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
 		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -481,62 +482,10 @@ void RenderInstance::SetResizeBool(bool set)
 	resizeWindow = set;
 }
 
-VkDevice RenderInstance::GetVulkanDevice()
+RecordingBufferObject RenderInstance::GetCurrentCommandBuffer()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.device;
-}
-
-VkPhysicalDevice RenderInstance::GetVulkanPhysicalDevice()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.gpu;
-}
-
-VkCommandPool RenderInstance::GetVulkanGraphincsCommandPool()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetCommandPool(graphicsPresentIndex);
-}
-
-VkQueue RenderInstance::GetGraphicsQueue()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetQueueHandle(graphicsIndex, 0);
-}
-
-VkCommandPool RenderInstance::GetVulkanTransferCommandPool()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetCommandPool(transferIndex);
-}
-
-auto RenderInstance::GetTransferQueue()
-{
-	return gptManager->GetQueue();
-}
-
-void RenderInstance::ReturnTranferQueue(int32_t i)
-{
-	gptManager->ReturnQueue(i);
-}
-
-VkRenderPass RenderInstance::GetRenderPass()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetRenderPass(0);
-}
-
-VkDescriptorPool RenderInstance::GetDescriptorPool()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetDescriptorPool(descriptorPoolIndex);
-}
-
-VkCommandBuffer RenderInstance::GetCurrentCommandBuffer()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetCommandBufferHandle(currentCBIndex);
+	return dev.GetRecordingBufferObject(currentCBIndex);
 }
 
 uint32_t RenderInstance::GetCurrentFrame() const
@@ -549,11 +498,6 @@ VkSampleCountFlagBits RenderInstance::GetMSAASamples() const
 	return msaaSamples;
 }
 
-Semaphore& RenderInstance::GetTransferSemaphore()
-{
-	return transferSemaphore;
-}
-
 uint32_t RenderInstance::GetSwapChainHeight()
 {
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainHeight();
@@ -564,22 +508,8 @@ uint32_t RenderInstance::GetSwapChainWidth()
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainWidth();
 }
 
-PipelineCacheObject* RenderInstance::GetVulkanPipeline(uint32_t renderTarget, std::string pipelinename)
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto &cache = dev.GetPipelineCache(mainRenderTarget);
-	return cache[pipelinename];
-}
-
 DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname, uint32_t frames)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return dev.CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
-}
-
-VkDescriptorSet RenderInstance::GetDescriptorSet(std::string descriptorname, uint32_t frameNum)
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto cache = dev.GetDescriptorSets();
-	return cache.GetDescriptorSetPerFrame(descriptorname, frameNum);
 }

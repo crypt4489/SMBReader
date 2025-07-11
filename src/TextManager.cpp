@@ -25,6 +25,7 @@ void TextManager::CreatePipelineObject()
 	auto rendInst = VKRenderer::gRenderInstance;
 	obj = new VKPipelineObject(
 		text,
+		text,
 		rendInst->GetMainBufferIndex(),
 		vertexBufferOffset,
 		&vertexCount,
@@ -113,9 +114,9 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 }
 
-void TextManager::DrawTextTM(VkCommandBuffer cb, uint32_t frame)
+void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
 {
-	VkBuffer buff = VKRenderer::gRenderInstance->GetDynamicUniformBuffer();
+	auto buff = VKRenderer::gRenderInstance->GetMainBufferIndex();
 	obj->DrawIndirectOneBuffer(cb, buff, static_cast<uint32_t>(textsCommand.size()), frame, 0, indirectCommandsOffset);
 }
 

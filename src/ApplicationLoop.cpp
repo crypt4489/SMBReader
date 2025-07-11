@@ -104,8 +104,6 @@ void ApplicationLoop::Execute()
 			text1->UpdateText(newstring);
 			TextManager::UpdateVertexBuffer(text1, stringLoc);
 
-			//std::cout << newstring  << "\n";
-
 			if (mainWindow->ShouldCloseWindow()) break;
 
 			glm::mat4 proj = glm::perspective(glm::radians(45.0f), rend->GetSwapChainWidth() / (float)rend->GetSwapChainHeight(), 0.1f, 10000.0f);
@@ -120,11 +118,10 @@ void ApplicationLoop::Execute()
 			}
 
 			auto index = rend->BeginFrame();
+			
 			if (index == ~0ui32) break;
-			VkCommandBuffer cb = rend->GetCurrentCommandBuffer();
-			auto frameNum = rend->GetCurrentFrame();
 
-			graph->DrawScene(cb, frameNum, vkpipes, view, proj);
+			graph->DrawScene(index, vkpipes, view, proj);
 
 			rend->SubmitFrame(index);
 
@@ -192,8 +189,6 @@ void ApplicationLoop::CleanupRuntime()
 	delete text1;
 
 	delete text2;
-
-	//graph->DestroyRenderGraph(rend->GetVulkanDevice());
 
 	TextManager::DestroyTextManager();
 

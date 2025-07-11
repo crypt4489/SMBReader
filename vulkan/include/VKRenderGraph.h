@@ -1,11 +1,7 @@
 #pragma once
 
 #include "RenderInstance.h"
-#include "VKDescriptorSetCache.h"
-#include "VKDescriptorLayoutCache.h"
 #include "VKPipelineObject.h"
-#include "VKPipelineCache.h"
-
 
 #include <vector>
 #include <string>
@@ -17,7 +13,6 @@ public:
 	VKRenderGraph(uint32_t _renderTargetIndex);
 
 	void DrawScene(
-		VkCommandBuffer& cb,
 		uint32_t frameNum,
 		std::vector<VKPipelineObject*>& objs,
 		glm::mat4& view,

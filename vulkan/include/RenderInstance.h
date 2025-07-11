@@ -75,37 +75,13 @@ public:
 
 	void SetResizeBool(bool set);
 
-	VkDevice GetVulkanDevice();
-
-	VkPhysicalDevice GetVulkanPhysicalDevice();
-
-	VkCommandPool GetVulkanGraphincsCommandPool();
-
-	VkQueue GetGraphicsQueue();
-
-	VkCommandPool GetVulkanTransferCommandPool();
-
-	auto GetTransferQueue();
-
-	void ReturnTranferQueue(int32_t i);
-
-	VkRenderPass GetRenderPass();
-
-	VkDescriptorPool GetDescriptorPool();
-
-	VkCommandBuffer GetCurrentCommandBuffer();
-
-	PipelineCacheObject* GetVulkanPipeline(uint32_t renderTarget, std::string pipelinename);
+	RecordingBufferObject GetCurrentCommandBuffer();
 
 	DescriptorSetBuilder CreateDescriptorSet(std::string layoutname, uint32_t frames);
-
-	VkDescriptorSet GetDescriptorSet(std::string descriptorname, uint32_t frameNum);
 	
 	uint32_t GetCurrentFrame() const;
 
 	VkSampleCountFlagBits GetMSAASamples() const;
-
-	Semaphore& GetTransferSemaphore();
 
 	uint32_t GetSwapChainHeight();
 
@@ -128,10 +104,6 @@ public:
 	BufferIndex globalIndex;
 	uint32_t mainRenderTarget;
 	uint32_t currentCBIndex;
-
-	QueueManager* gptManager;
-
-	Semaphore transferSemaphore; // semaphore for transfer command pool
 
 	WindowManager *windowMan = nullptr;
 

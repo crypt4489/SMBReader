@@ -4,7 +4,6 @@
 VKRenderGraph::VKRenderGraph(uint32_t _renderTargetIndex) : renderTargetIndex(_renderTargetIndex) {};
 
 void VKRenderGraph::DrawScene(
-	VkCommandBuffer& cb,
 	uint32_t frameNum,
 	std::vector<VKPipelineObject*>& objs,
 	glm::mat4& view,
@@ -13,8 +12,8 @@ void VKRenderGraph::DrawScene(
 {
 	RenderInstance* rend = VKRenderer::gRenderInstance;
 	UpdateUniformBuffer(proj, view, frameNum);
+	auto rbo = rend->GetCurrentCommandBuffer();
 	std::string mrp = "mainrenderpass";
-	VkDescriptorSet set = rend->GetDescriptorSet(mrp, frameNum);
 	for (auto& obj : objs)
 	{
 		std::string name = obj->GetPipelineType();
@@ -24,17 +23,15 @@ void VKRenderGraph::DrawScene(
 		if (name != currentPipeline)
 		{
 			currentPipeline = name;
-			auto co = rend->GetVulkanPipeline(renderTargetIndex, name);
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipelineLayout, 0, 1, &set, 0, nullptr);
-			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipeline);
+			rbo.BindPipeline(renderTargetIndex, name);
+			rbo.BindDescriptorSets(mrp, frameNum, 1, 0, 0, nullptr);
 		}
 
-		obj->Draw(cb, frameNum, 1);
+		obj->Draw(rbo, frameNum, 1);
 	}
 
-	auto co = rend->GetVulkanPipeline(renderTargetIndex, "text");
-	vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, co->pipeline);
-	TextManager::DrawTextTM(cb, frameNum);
+	rbo.BindPipeline(renderTargetIndex, "text");
+	TextManager::DrawTextTM(rbo, frameNum);
 	currentPipeline.clear();
 }
 

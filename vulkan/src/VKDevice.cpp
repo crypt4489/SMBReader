@@ -1,5 +1,51 @@
 #include "VKDevice.h"
 
+
+RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer) :
+	cbBufferHandler(buffer), vkDeviceHandle(device), currLayout(VK_NULL_HANDLE), currPipeline(VK_NULL_HANDLE)
+{
+
+}
+
+void RecordingBufferObject::BindPipeline(uint32_t renderTarget, std::string pipelinename)
+{
+	auto pbo = vkDeviceHandle.GetPipelineCache(renderTarget);
+	auto pco = pbo[pipelinename];
+	currLayout = pco->pipelineLayout;
+	currPipeline = pco->pipeline;
+	vkCmdBindPipeline(cbBufferHandler.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currPipeline);
+}
+
+void RecordingBufferObject::BindDescriptorSets(std::string descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
+	uint32_t dynamicOffsetCount, uint32_t* offsets)
+{
+	auto descsets = vkDeviceHandle.GetDescriptorSets();
+	auto descset = descsets.GetDescriptorSetPerFrame(descriptorname, descriptorNumber);
+	vkCmdBindDescriptorSets(
+		cbBufferHandler.buffer, 
+		VK_PIPELINE_BIND_POINT_GRAPHICS, currLayout, 
+		firstDescriptorSet, descriptorCount, 
+		&descset, dynamicOffsetCount, 
+		offsets);
+}
+
+void RecordingBufferObject::BindVertexBuffer(uint32_t bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets)
+{
+	VkBuffer buffer = vkDeviceHandle.hostBuffers[bufferIndex].first;
+	vkCmdBindVertexBuffers(cbBufferHandler.buffer, firstBindingCount, bindingCount, &buffer, offsets);
+}
+
+void RecordingBufferObject::BindingDrawCmd(uint32_t first, uint32_t drawSize)
+{
+	vkCmdDraw(cbBufferHandler.buffer, drawSize, 1, first, 0);
+}
+
+void RecordingBufferObject::BindingIndirectDrawCmd(uint32_t indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset)
+{
+	VkBuffer buffer = vkDeviceHandle.hostBuffers[indirectBufferIndex].first;
+	vkCmdDrawIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
+}
+
 VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu)
 {
 	commandPools.resize(2);
@@ -1070,4 +1116,9 @@ DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(uint32_t poolIndex, st
 	auto ref = descriptorLayoutCache.GetLayout(layoutname);
 	dsb.AllocDescriptorSets(descriptorPools[poolIndex], ref, numberofsets);
 	return dsb;
+}
+
+RecordingBufferObject VKDevice::GetRecordingBufferObject(uint32_t commandBufferIndex)
+{
+	return { *this, commandBuffers[commandBufferIndex] };
 }

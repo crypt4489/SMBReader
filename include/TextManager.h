@@ -55,7 +55,7 @@ public:
 
 	static void UpdateVertexBuffer(Text* text, size_t indexInString);
 
-	static void DrawTextTM(VkCommandBuffer cb, uint32_t frame);
+	static void DrawTextTM(RecordingBufferObject& cb, uint32_t frame);
 
 	static void DestroyTextManager();
 

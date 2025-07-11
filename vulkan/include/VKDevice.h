@@ -22,6 +22,9 @@
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
 
+
+class VKDevice;
+
 struct DescriptorPoolBuilder
 {
 	void AddUniformPoolSize(uint32_t size)
@@ -260,6 +263,29 @@ public:
 	uint32_t fenceIdx = ~0U;
 };
 
+class RecordingBufferObject
+{
+public:
+
+	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
+
+	void BindPipeline(uint32_t renderTarget, std::string pipelinename);
+
+	void BindDescriptorSets(std::string descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+		uint32_t dynamicOffsetCount, uint32_t* offsets);
+
+	void BindVertexBuffer(uint32_t bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
+
+	void BindingDrawCmd(uint32_t first, uint32_t drawSize);
+
+	void BindingIndirectDrawCmd(uint32_t indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
+
+	VKCommandBuffer& cbBufferHandler;
+	VKDevice& vkDeviceHandle;
+	VkPipelineLayout currLayout;
+	VkPipeline currPipeline;
+};
+
 class VKDevice
 {
 public:
@@ -409,8 +435,6 @@ public:
 		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
 
-	void BindDescriptorSetCommand(uint32_t cbIndex);
-
 	VkCommandBuffer GetCommandBufferHandle(uint32_t index);
 
 	VkImageView GetImageView(uint32_t index);
@@ -440,6 +464,8 @@ public:
 	VKPipelineCache& GetPipelineCache(uint32_t renderPassIndex);
 
 	DescriptorSetBuilder CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets);
+
+	RecordingBufferObject GetRecordingBufferObject(uint32_t commandBufferIndex);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
