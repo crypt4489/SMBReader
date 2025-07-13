@@ -24,7 +24,6 @@ void VKSwapChain::CreateSwapChain(
 	uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies, 
 	uint32_t _renderPassIndex, std::vector<ImageIndex*> &attachmentIndices)
 {
-	renderPassIndex = _renderPassIndex;
 	swapChainExtent = chooseSwapExtent(width, height);
 	
 
@@ -65,7 +64,7 @@ void VKSwapChain::CreateSwapChain(
 
 	attachments.resize(imageCount, VKFrameBufferAttachments(attachmentCount));
 	swapChainImageViews.resize(imageCount);
-	swapChainFramebuffers.resize(imageCount);
+	renderTargetIndex = device->CreateRenderTarget(_renderPassIndex, imageCount);
 
 	AddFramebufferAttachments(attachmentIndices);
 
@@ -129,6 +128,8 @@ void VKSwapChain::CreateSwapChainElements()
 
 	std::vector<std::vector<uint32_t>> indices(imageCount, std::vector<uint32_t>(attachmentCount));
 
+	auto& renderTarget = device->GetRenderTarget(renderTargetIndex);
+
 	for (size_t i = 0; i < imageCount; i++) {
 		auto& ref = indices[i];
 		auto& ref2 = attachments[i];
@@ -137,7 +138,7 @@ void VKSwapChain::CreateSwapChainElements()
 			ref[j] = *ref2.attachments[j];
 		}
 
-		swapChainFramebuffers[i] = device->CreateFrameBuffer(ref, renderPassIndex, swapChainExtent);
+		renderTarget.framebufferIndices[i] = device->CreateFrameBuffer(ref, renderTarget.renderPassIndex, swapChainExtent);
 	}
 }
 

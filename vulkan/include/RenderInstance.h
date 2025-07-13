@@ -102,7 +102,7 @@ public:
 	ImageIndex colorView, colorImage;
 	BufferIndex stagingBufferIndex;
 	BufferIndex globalIndex;
-	uint32_t mainRenderTarget;
+	uint32_t mainRenderPass;
 	uint32_t currentCBIndex;
 
 	WindowManager *windowMan = nullptr;

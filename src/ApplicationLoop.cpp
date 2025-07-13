@@ -156,7 +156,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	rend->CreateVulkanRenderer(mainWindow);
 
-	graph = new VKRenderGraph(rend->mainRenderTarget);
+	graph = new VKRenderGraph(rend->mainRenderPass);
 
 	TextManager::CreateFontTextManager("text.bmp", "text.dat");
 

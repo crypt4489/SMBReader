@@ -29,7 +29,7 @@ void TextManager::CreatePipelineObject()
 		rendInst->GetMainBufferIndex(),
 		vertexBufferOffset,
 		&vertexCount,
-		rendInst->mainRenderTarget
+		rendInst->mainRenderPass
 	);
 
 

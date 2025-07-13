@@ -120,23 +120,25 @@ void RenderInstance::CreateRenderPass()
 
 	rpb.CreateInfo();
 
-	mainRenderTarget = dev.CreateRenderPasses(rpb);
+	mainRenderPass = dev.CreateRenderPasses(rpb);
 }
 
 void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
-	
-	dev.BeginCommandBufferRecording(cb);
 
-	dev.BeginRenderPassFromSwapChainCommand(cb, swapChainIndex, imageIndex);
+	auto rbo = dev.GetRecordingBufferObject(cb);
+
+	rbo.BeginRecordingCommand();
+	
+	rbo.BeginRenderPassCommand(swapChain.renderTargetIndex, imageIndex, { {0, 0}, swapChain.swapChainExtent });
 
 	uint32_t x = swapChain.GetSwapChainWidth(), y = swapChain.GetSwapChainHeight();
 
-	dev.SetViewportCommand(cb, 0, 0, x, y, 0.0f, 1.0f);
+	rbo.SetViewportCommand(0, 0, x, y, 0.0f, 1.0f);
 
-	dev.SetScissorCommand(cb, 0, 0, x, y);
+	rbo.SetScissorCommand(0, 0, x, y);
 
 }
 
@@ -144,9 +146,11 @@ void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	dev.EndRenderPassCommand(cb);
+	auto rbo = dev.GetRecordingBufferObject(cb);
 
-	dev.EndRecordingCommand(cb);
+	rbo.EndRenderPassCommand();
+
+	rbo.EndRecordingCommand();
 }
 
 void RenderInstance::CreateSyncObjects()
@@ -199,7 +203,7 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, graphicsIndex, 0, currentCBIndex);
 
-	res = dev.PresetSwapChain(swapChainIndex, currentFrame, imageIndex, presentIndex, 0);
+	res = dev.PresentSwapChain(swapChainIndex, currentFrame, imageIndex, presentIndex, 0);
 
 	if (!res || resizeWindow) {
 		resizeWindow = false;
@@ -242,7 +246,7 @@ void RenderInstance::CreatePipelines()
 	VkDevice logicalDevice = dev.device;
 	auto &shaderCache = dev.GetShaders();
 	auto &descriptorLayoutCache = dev.GetDescriptorLayouts();
-	auto &mainRenderPassCache = dev.GetPipelineCache(mainRenderTarget);
+	auto &mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
 	
 	auto shader1 = shaderCache.GetShader("3dtextured.vert.spv");
 	auto shader2 = shaderCache.GetShader("3dtextured.frag.spv");
@@ -446,13 +450,13 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreateRenderPass();
 
-	majorDevice.CreatePipelineCache(mainRenderTarget);
+	majorDevice.CreatePipelineCache(mainRenderPass);
 
 	std::vector attachmentViews = { &colorView, &depthView };
 
 	uint32_t queuefamilies[] = { graphicsIndex };
 
-	swapChain.CreateSwapChain(800, 600, queuefamilies, 1, 0, attachmentViews);
+	swapChain.CreateSwapChain(800, 600, queuefamilies, 1, mainRenderPass, attachmentViews);
 
 	DescriptorPoolBuilder builder{};
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);

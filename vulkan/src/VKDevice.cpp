@@ -46,6 +46,77 @@ void RecordingBufferObject::BindingIndirectDrawCmd(uint32_t indirectBufferIndex,
 	vkCmdDrawIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
+void RecordingBufferObject::EndRenderPassCommand()
+{
+	vkCmdEndRenderPass(cbBufferHandler.buffer);
+}
+
+void RecordingBufferObject::BeginRenderPassCommand(uint32_t renderTargetIndex, uint32_t imageIndex,
+	VkRect2D rect,
+	VkClearColorValue color,
+	VkClearDepthStencilValue depthStencil)
+{
+
+	VkRenderPassBeginInfo renderPassInfo{};
+	auto& ref = vkDeviceHandle.GetRenderTarget(renderTargetIndex);
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassInfo.renderPass = vkDeviceHandle.renderPasses[ref.renderPassIndex];
+	renderPassInfo.framebuffer = vkDeviceHandle.frameBuffers[ref.framebufferIndices[imageIndex]];
+	renderPassInfo.renderArea = rect;
+
+	std::array<VkClearValue, 2> clearValues{};
+	clearValues[0].color = color;
+	clearValues[1].depthStencil = depthStencil;
+
+	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassInfo.pClearValues = clearValues.data();
+
+	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+
+void RecordingBufferObject::SetViewportCommand(float xs, float ys, float width, float height, float minDepth, float maxDepth)
+{
+	VkViewport viewport{};
+	viewport.x = xs;
+	viewport.y = ys;
+	viewport.width = width;
+	viewport.height = height;
+	viewport.minDepth = minDepth;
+	viewport.maxDepth = maxDepth;
+	vkCmdSetViewport(cbBufferHandler.buffer, 0, 1, &viewport);
+}
+
+void RecordingBufferObject::SetScissorCommand(int xo, int yo, uint32_t extentx, uint32_t extenty)
+{
+	VkRect2D scissor{};
+	scissor.offset = { xo, yo };
+
+	scissor.extent = { extentx, extenty };
+
+	vkCmdSetScissor(cbBufferHandler.buffer, 0, 1, &scissor);
+}
+
+
+void RecordingBufferObject::BeginRecordingCommand()
+{
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = 0;
+	beginInfo.pInheritanceInfo = nullptr;
+
+	if (vkBeginCommandBuffer(cbBufferHandler.buffer, &beginInfo) != VK_SUCCESS) {
+		throw std::runtime_error("failed to begin recording command buffer!");
+	}
+}
+
+void RecordingBufferObject::EndRecordingCommand()
+{
+	if (vkEndCommandBuffer(cbBufferHandler.buffer) != VK_SUCCESS) {
+		throw std::runtime_error("failed to record command buffer!");
+	}
+}
+
 VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu)
 {
 	commandPools.resize(2);
@@ -785,7 +856,7 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t fr
 	return SubmitCommandBuffer(queueFamilyIdx, queueIdx, depends[0], waitStages, depends[1], cbIndex);
 }
 
-uint32_t VKDevice::PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx)
+uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx)
 {
 	VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
 
@@ -938,108 +1009,6 @@ uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, u
 	return ret;
 }
 
-void VKDevice::BeginCommandBufferRecording(uint32_t bufferIndex)
-{
-	auto& vkcb = commandBuffers[bufferIndex];
-
-	VkCommandBufferBeginInfo beginInfo{};
-	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = 0;
-	beginInfo.pInheritanceInfo = nullptr;
-
-	if (vkBeginCommandBuffer(vkcb.buffer, &beginInfo) != VK_SUCCESS) {
-		throw std::runtime_error("failed to begin recording command buffer!");
-	}
-}
-
-void VKDevice::SetScissorCommand(uint32_t bufferIndex, int xo, int yo, uint32_t extentx, uint32_t extenty)
-{
-	auto& vkcb = commandBuffers[bufferIndex];
-	VkRect2D scissor{};
-	scissor.offset = { xo, yo };
-	
-	scissor.extent = { extentx, extenty };
-	
-	vkCmdSetScissor(vkcb.buffer, 0, 1, &scissor);
-}
-
-void VKDevice::EndRecordingCommand(uint32_t bufferIndex)
-{
-	auto& vkcb = commandBuffers[bufferIndex];
-	if (vkEndCommandBuffer(vkcb.buffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to record command buffer!");
-	}
-}
-
-void VKDevice::EndRenderPassCommand(uint32_t bufferIndex)
-{
-	auto& vkcb = commandBuffers[bufferIndex];
-	vkCmdEndRenderPass(vkcb.buffer);
-}
-
-void VKDevice::BeginRenderPassCommand(uint32_t bufferIndex, 
-	uint32_t renderPassIndex, uint32_t frameBufferIndex, 
-	VkRect2D rect, 
-	VkClearColorValue color,
-	VkClearDepthStencilValue depthStencil)
-{
-
-	auto& vkcb = commandBuffers[bufferIndex];
-	VkRenderPassBeginInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = renderPasses[renderPassIndex];
-	renderPassInfo.framebuffer = frameBuffers[frameBufferIndex];
-	renderPassInfo.renderArea = rect;
-
-	std::array<VkClearValue, 2> clearValues{};
-	clearValues[0].color = color;
-	clearValues[1].depthStencil = depthStencil;
-
-	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	renderPassInfo.pClearValues = clearValues.data();
-
-	vkCmdBeginRenderPass(vkcb.buffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-}
-
-void VKDevice::BeginRenderPassFromSwapChainCommand(uint32_t bufferIndex,
-	uint32_t swapChainIndex,
-	uint32_t imageIndex, 
-	VkClearColorValue color,
-	VkClearDepthStencilValue depthStencil)
-{
-	VKSwapChain& swapChain = swapChains[swapChainIndex];
-	auto& vkcb = commandBuffers[bufferIndex];
-	VkRenderPassBeginInfo renderPassInfo{};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = renderPasses[swapChain.renderPassIndex];
-	renderPassInfo.framebuffer = frameBuffers[swapChain.swapChainFramebuffers[imageIndex]];
-	
-	renderPassInfo.renderArea = { {0, 0}, swapChain.swapChainExtent };
-
-	std::array<VkClearValue, 2> clearValues{};
-	clearValues[0].color = color;
-	clearValues[1].depthStencil = depthStencil;
-
-	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	renderPassInfo.pClearValues = clearValues.data();
-
-	vkCmdBeginRenderPass(vkcb.buffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-}
-
-void VKDevice::SetViewportCommand(uint32_t bufferIndex, float xs, float ys, float width, float height, float minDepth, float maxDepth)
-{
-
-	auto& vkcb = commandBuffers[bufferIndex];
-	VkViewport viewport{};
-	viewport.x = xs;
-	viewport.y = ys;
-	viewport.width = width;
-	viewport.height = height;
-	viewport.minDepth = minDepth;
-	viewport.maxDepth = maxDepth;
-	vkCmdSetViewport(vkcb.buffer, 0, 1, &viewport);
-}
-
 VkCommandBuffer VKDevice::GetCommandBufferHandle(uint32_t index)
 {
 	return commandBuffers[index].buffer;
@@ -1121,4 +1090,16 @@ DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(uint32_t poolIndex, st
 RecordingBufferObject VKDevice::GetRecordingBufferObject(uint32_t commandBufferIndex)
 {
 	return { *this, commandBuffers[commandBufferIndex] };
+}
+
+uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount)
+{
+	uint32_t ret = renderTargets.size();
+	renderTargets.emplace_back(renderPassIndex, framebufferCount);
+	return ret;
+}
+
+RenderTarget& VKDevice::GetRenderTarget(uint32_t renderTargetIndex)
+{
+	return renderTargets[renderTargetIndex];
 }

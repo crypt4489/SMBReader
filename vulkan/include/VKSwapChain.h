@@ -157,9 +157,8 @@ public:
 
 	std::vector<VkImage> swapChainImages;
 	std::vector<ImageIndex> swapChainImageViews{};
-	std::vector<uint32_t> swapChainFramebuffers;
 	std::vector<VKFrameBufferAttachments> attachments;
-	uint32_t renderPassIndex;
+	uint32_t renderTargetIndex = ~0ui32;
 
 	VkSurfaceFormatKHR swapChainImageFormat;
 	VkPresentModeKHR presentMode;

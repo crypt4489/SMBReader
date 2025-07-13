@@ -280,10 +280,39 @@ public:
 
 	void BindingIndirectDrawCmd(uint32_t indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
 
+	void BeginRenderPassCommand(uint32_t renderTargetIndex, uint32_t imageIndex,
+		VkRect2D rect,
+		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
+		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
+
+	void EndRenderPassCommand();
+
+
+	void SetViewportCommand(float xs, float ys, float width, float height, float minDepth, float maxDepth);
+
+	void SetScissorCommand(int xo, int yo, uint32_t extentx, uint32_t extenty);
+
+	void BeginRecordingCommand();
+
+	void EndRecordingCommand();
+
 	VKCommandBuffer& cbBufferHandler;
 	VKDevice& vkDeviceHandle;
 	VkPipelineLayout currLayout;
 	VkPipeline currPipeline;
+};
+
+class RenderTarget
+{
+public:
+	RenderTarget() = default;
+	RenderTarget(uint32_t renderPass, uint32_t imageCount)
+	{
+		renderPassIndex = renderPass;
+		framebufferIndices.resize(imageCount);
+	}
+	uint32_t renderPassIndex;
+	std::vector<uint32_t> framebufferIndices;
 };
 
 class VKDevice
@@ -403,7 +432,7 @@ public:
 		QueueIndex& queueFamilyIdx, uint32_t queueIdx,
 		uint32_t cbIndex);
 
-	uint32_t PresetSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx);
+	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx);
 
 	std::vector<uint32_t> CreateCommandBuffers(uint32_t commandPoolIndex, uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences);
 	
@@ -412,28 +441,6 @@ public:
 	uint32_t RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex);
 
 	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
-
-	void BeginCommandBufferRecording(uint32_t bufferIndex);
-
-	void SetViewportCommand(uint32_t bufferIndex, float xs, float ys, float width, float height, float minDepth, float maxDepth);
-
-	void SetScissorCommand(uint32_t bufferIndex, int xo, int yo, uint32_t extentx, uint32_t extenty);
-
-	void EndRecordingCommand(uint32_t bufferIndex);
-	
-	void EndRenderPassCommand(uint32_t bufferIndex);
-
-	void BeginRenderPassCommand(uint32_t bufferIndex,
-		uint32_t renderPassIndex, uint32_t frameBufferIndex,
-		VkRect2D rect,
-		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
-		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
-
-	void BeginRenderPassFromSwapChainCommand(uint32_t bufferIndex,
-		uint32_t swapChainIndex,
-		uint32_t imageIndex,
-		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
-		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
 
 	VkCommandBuffer GetCommandBufferHandle(uint32_t index);
 
@@ -467,6 +474,10 @@ public:
 
 	RecordingBufferObject GetRecordingBufferObject(uint32_t commandBufferIndex);
 
+	uint32_t CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount);
+
+	RenderTarget& GetRenderTarget(uint32_t renderTargetIndex);
+
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	std::vector<QueueManager*> queueManagers;
@@ -486,6 +497,7 @@ public:
 	std::vector<VkFence> fences;
 	std::vector<VKCommandBuffer> commandBuffers;
 	std::vector<VkFramebuffer> frameBuffers;
+	std::vector<RenderTarget> renderTargets;
 	VKShaderCache shaders;
 	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;

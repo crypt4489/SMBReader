@@ -47,7 +47,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			~0U,
 			~0U,
 			&vertexCount,
-			rendInst->mainRenderTarget
+			rendInst->mainRenderPass
 		);
 
 		vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), offset);
