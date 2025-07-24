@@ -91,10 +91,8 @@ public:
 
 
 	VKInstance vkInstance;
-	QueueIndex graphicsIndex, presentIndex, presentMax, graphicsMax;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
-	uint32_t transferIndex, graphicsPresentIndex;
 	uint32_t descriptorPoolIndex;
 	uint32_t swapChainIndex;
 	uint32_t attachmentsIndex;

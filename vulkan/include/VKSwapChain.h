@@ -63,7 +63,6 @@ public:
 
 	void CreateSwapChain(
 		uint32_t width, uint32_t height,
-		uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies,
 		uint32_t _renderPassIndex, std::vector<ImageIndex*>& attachmentIndices);
 
 	void DestroySwapChain();

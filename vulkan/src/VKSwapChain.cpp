@@ -21,7 +21,6 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 
 void VKSwapChain::CreateSwapChain( 
 	uint32_t width, uint32_t height, 
-	uint32_t* queueFamilyIndices, uint32_t numberOfQueueFamilies, 
 	uint32_t _renderPassIndex, std::vector<ImageIndex*> &attachmentIndices)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
@@ -36,10 +35,14 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.imageExtent = swapChainExtent;
 	createInfo.imageArrayLayers = 1;
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
+	
+	
+	std::vector<uint32_t> queueFamilyIndices;
+	uint32_t ret = device->GetFamiliesOfCapableQueues(queueFamilyIndices, GRAPHICS | TRANSFER | PRESENT);
+	uint32_t numberOfQueueFamilies = static_cast<uint32_t>(queueFamilyIndices.size());
 	queueSharing = createInfo.imageSharingMode = (numberOfQueueFamilies > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 	createInfo.queueFamilyIndexCount = numberOfQueueFamilies;
-	createInfo.pQueueFamilyIndices = queueFamilyIndices;
+	createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 
 	queueFamiliesCache.resize(numberOfQueueFamilies);
 

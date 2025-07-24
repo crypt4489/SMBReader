@@ -119,7 +119,6 @@ void RecordingBufferObject::EndRecordingCommand()
 
 VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu)
 {
-	commandPools.resize(2);
 	device = VK_NULL_HANDLE;
 }
 
@@ -303,22 +302,40 @@ int32_t VKDevice::GetQueueByMask(QueueIndex& queueIdx,
 void VKDevice::CreateLogicalDevice(
 	std::vector<const char*>& instanceLayers,
 	std::vector<const char*>& deviceExtensions,
-	std::set<uint32_t>& queueIndices,
-	std::vector<uint32_t>& maxQueueCount,
-	VkPhysicalDeviceFeatures& features)
+	uint32_t queueFlags,
+	VkPhysicalDeviceFeatures& features,
+	VkSurfaceKHR renderSurface
+	)
 {
+	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
+	std::vector<VkQueueFamilyProperties> famProps;
+	QueueIndex index, maxCount;
+
+	QueueFamilyDetails(famProps);
+
+	GetQueueByMask(index, maxCount, famProps, queueFlags);
+
+	queueIndices[index] = { maxCount, false };
+
+	if (renderSurface)
+	{
+		GetPresentQueue(index, maxCount, famProps, renderSurface);
+		queueIndices[index] = { maxCount, true };
+	}
 
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
 
-	std::vector<float> queuePriorties(*std::max_element(maxQueueCount.begin(), maxQueueCount.end()), 1.0f);
+	auto result = std::max_element(queueIndices.begin(), queueIndices.end(), [](auto& ref, auto& ref2) {
+		return std::get<uint32_t>(ref.second) < std::get<uint32_t>(ref2.second);
+	});
+	
+	std::vector<float> queuePriorties(std::get<uint32_t>((*result).second), 1.0f);
 
-	uint32_t i = 0;
-
-	for (uint32_t queueFamily : queueIndices) {
+	for (const auto& queueFamily : queueIndices) {
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = queueFamily;
-		queueCreateInfo.queueCount = maxQueueCount[i++];
+		queueCreateInfo.queueFamilyIndex = queueFamily.first;
+		queueCreateInfo.queueCount = std::get<uint32_t>(queueFamily.second);
 		queueCreateInfo.pQueuePriorities = queuePriorties.data();
 		queueCreateInfos.push_back(queueCreateInfo);
 	}
@@ -342,33 +359,60 @@ void VKDevice::CreateLogicalDevice(
 
 	descriptorLayoutCache.device = device;
 	shaders.SetLogicalDevice(device);
+
+	for (const auto queueFamily : queueIndices) {
+
+		uint32_t queueIndex = queueFamily.first;
+		uint32_t maxCount = std::get<uint32_t>(queueFamily.second);
+		bool present = std::get<bool>(queueFamily.second);
+		CreateQueueManager(queueIndex, maxCount, queueFlags, present);
+	}
 }
 
-VkQueue VKDevice::GetQueueHandle(QueueIndex& queueFamily, uint32_t queueIdx)
+static uint32_t FindQueueManagerByCapapbilites(std::vector<QueueManager*>& managers, uint32_t capabilities)
 {
-	VkQueue queue;
-	vkGetDeviceQueue(device, queueFamily, queueIdx, &queue);
-	return queue;
+	uint32_t i = 0;
+	for (;i<managers.size(); i++)
+	{
+		if ((managers[i]->queueCapabilities & capabilities) == capabilities) {
+			return i;
+		}
+	}
+
+	return ~0ui32;
 }
 
-QueueManager* VKDevice::CreateQueueManager(QueueIndex& queueIndex, uint32_t poolIndex, uint32_t maxCount)
+std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> VKDevice::GetQueueHandle(uint32_t capabilites)
 {
-	queueManagers.push_back(new QueueManager(std::vector<uint32_t>{0}, maxCount, queueIndex, commandPools[poolIndex], device));
-	return queueManagers.back();
+	auto ret = FindQueueManagerByCapapbilites(this->queueManagers, capabilites);
+	uint32_t queueIdx = this->queueManagers[ret]->GetQueue();
+	return { ret, queueIdx, this->queueManagers[ret]->queueFamilyIndex, this->queueManagers[ret]->poolIndices[queueIdx] };
 }
 
-VkCommandPool VKDevice::CreateCommandPool(QueueIndex& queueIndex, uint32_t& poolIndex)
+void VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
+	queueManagers.emplace_back(new QueueManager(std::vector<uint32_t>{0}, maxCount, queueIndex, queueFlags, presentsupport, *this));
+}
+
+void VKDevice::AllocateCommandPools(uint32_t size)
+{
+	commandPools.resize(size);
+}
+
+uint32_t VKDevice::CreateCommandPool(QueueIndex& queueIndex)
+{
+	uint32_t poolIndex = static_cast<uint32_t>(commandPools.size());
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 	poolInfo.queueFamilyIndex = queueIndex;
+	commandPools.push_back(VK_NULL_HANDLE);
 
 	if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPools[poolIndex]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create command pool!");
 	}
 
-	return commandPools[poolIndex];
+	return poolIndex;
 }
 
 VkDescriptorPool VKDevice::CreateDesciptorPool(uint32_t& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets)
@@ -576,11 +620,17 @@ ImageIndex VKDevice::CreateSampledImage(
 	std::vector<uint32_t>& imageSizes,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
-	uint32_t queueIndex, QueueIndex& queueFamilyIndex,
-	uint32_t poolIndex, uint32_t memIndex,
+	uint32_t memIndex,
 	uint32_t hostIndex)
 {
-	VkQueue queue;
+	auto queueDetails = GetQueueHandle(GRAPHICS | TRANSFER);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	uint32_t poolIndex = std::get<3>(queueDetails);
+
+	VkQueue queue; 
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
 	VkDeviceSize imagesSize = std::accumulate(imageSizes.begin(), imageSizes.end(), 0UL);
@@ -626,15 +676,24 @@ ImageIndex VKDevice::CreateSampledImage(
 
 	VK::Utils::EndOneTimeCommands(device, queue, commandPools[poolIndex], cb);
 
+	queueManagers[managerIndex]->ReturnQueue(queueIndex);
+
 	return imageIndex;
 }
 
-void VKDevice::TransitionImageLayout(uint32_t poolIndex, QueueIndex& queueIdx, ImageIndex& imageIndex,
+void VKDevice::TransitionImageLayout(ImageIndex& imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 	uint32_t mips, uint32_t layers)
 {
+	auto queueDetails = GetQueueHandle(TRANSFER);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	uint32_t poolIndex = std::get<3>(queueDetails);
+
 	VkQueue queue;
-	vkGetDeviceQueue(device, queueIdx, 0, &queue);
+	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 	VK::Utils::TransitionImageLayout(
 		device,
 		commandPools[poolIndex], queue,
@@ -642,6 +701,7 @@ void VKDevice::TransitionImageLayout(uint32_t poolIndex, QueueIndex& queueIdx, I
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1, 1
 	);
+	queueManagers[managerIndex]->ReturnQueue(queueIndex);
 }
 
 ImageIndex VKDevice::CreateSampler(uint32_t mipLevels)
@@ -800,13 +860,16 @@ uint32_t VKDevice::BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requ
 	return imageIndex;
 }
 
-uint32_t VKDevice::SubmitCommandBuffer(QueueIndex& queueFamilyIdx, uint32_t queueIdx,
+uint32_t VKDevice::SubmitCommandBuffer(
 	std::vector<uint32_t>& wait,
 	std::vector<VkPipelineStageFlags>& waitStages,
 	std::vector<uint32_t>& signal,
 	uint32_t cbIndex)
 {
-	VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
+
+	auto& vkcb = commandBuffers[cbIndex];
+	VkQueue queue;
+	vkGetDeviceQueue(device, vkcb.queueFamilyIndex, vkcb.queueIndex, &queue);
 
 	uint32_t woCount = static_cast<uint32_t>(wait.size());
 	uint32_t signalCount = static_cast<uint32_t>(signal.size());
@@ -836,29 +899,36 @@ uint32_t VKDevice::SubmitCommandBuffer(QueueIndex& queueFamilyIdx, uint32_t queu
 	submitInfo.pSignalSemaphores = signalSemaphores.data();
 
 	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffers[cbIndex].buffer;
+	submitInfo.pCommandBuffers = &vkcb.buffer;
 
 
-	if (vkQueueSubmit(queue, 1, &submitInfo, fences[commandBuffers[cbIndex].fenceIdx]) != VK_SUCCESS) {
+	if (vkQueueSubmit(queue, 1, &submitInfo, fences[vkcb.fenceIdx]) != VK_SUCCESS) {
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
 	return 1;
 }
 
-uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
-	QueueIndex& queueFamilyIdx, uint32_t queueIdx,
-	uint32_t cbIndex)
+uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex, uint32_t cbIndex)
 {
 	VKSwapChain& swc = swapChains[swapChainIdx];
 	auto& depends = swc.dependencies.chains[frameIndex];
 	std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	return SubmitCommandBuffer(queueFamilyIdx, queueIdx, depends[0], waitStages, depends[1], cbIndex);
+	return SubmitCommandBuffer(depends[0], waitStages, depends[1], cbIndex);
 }
 
-uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx, QueueIndex& queueFamilyIdx, uint32_t queueIdx)
+uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx)
 {
-	VkQueue queue = GetQueueHandle(queueFamilyIdx, queueIdx);
+
+	auto queueDetails = GetQueueHandle(PRESENT);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+
+	VkQueue queue;
+
+	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
 	VKSwapChain& swc = swapChains[swapChainIdx];
 	auto& depends = swc.dependencies.chains[frameIdx];
@@ -892,13 +962,20 @@ uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, ui
 	else if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to present swap chain image!");
 	}
-
+	auto& ref = queueManagers[managerIndex];
+	ref->ReturnQueue(queueIndex);
 	return 1;
 }
 
-std::vector<uint32_t> VKDevice::CreateCommandBuffers(uint32_t commandPoolIndex, uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences)
+std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers( 
+	uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
 {
+	auto queueDetails = GetQueueHandle(capabilites);
 
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	uint32_t poolIndex = std::get<3>(queueDetails);
 
 	uint32_t size = static_cast<uint32_t>(commandBuffers.size());
 
@@ -907,7 +984,7 @@ std::vector<uint32_t> VKDevice::CreateCommandBuffers(uint32_t commandPoolIndex, 
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 
-	allocInfo.commandPool = commandPools[commandPoolIndex];
+	allocInfo.commandPool = commandPools[poolIndex];
 	allocInfo.level = level;
 	allocInfo.commandBufferCount = numberOfCommandBuffers;
 
@@ -925,6 +1002,9 @@ std::vector<uint32_t> VKDevice::CreateCommandBuffers(uint32_t commandPoolIndex, 
 
 	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
 		iter->buffer = l[i];
+		iter->queueFamilyIndex = queueFamilyIndex;
+		iter->queueIndex = queueIndex;
+		iter->poolIndex = poolIndex;
 		ret[i] = size + i;
 		iter = std::next(iter, 1);
 	}
@@ -1007,6 +1087,19 @@ uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, u
 	}
 
 	return ret;
+}
+
+uint32_t VKDevice::GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamilies, uint32_t capabilities)
+{
+	auto iter = queueManagers.begin();
+	while (capabilities && iter != queueManagers.end())
+	{
+		uint32_t comp = capabilities;
+		capabilities &= ~((*iter)->queueCapabilities & capabilities);
+		if (comp != capabilities) queueFamilies.push_back((*iter)->queueFamilyIndex);
+		iter = std::next(iter);
+	}
+	return capabilities;
 }
 
 VkCommandBuffer VKDevice::GetCommandBufferHandle(uint32_t index)
@@ -1094,7 +1187,7 @@ RecordingBufferObject VKDevice::GetRecordingBufferObject(uint32_t commandBufferI
 
 uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount)
 {
-	uint32_t ret = renderTargets.size();
+	uint32_t ret = static_cast<uint32_t>(renderTargets.size());
 	renderTargets.emplace_back(renderPassIndex, framebufferCount);
 	return ret;
 }
@@ -1102,4 +1195,63 @@ uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebu
 RenderTarget& VKDevice::GetRenderTarget(uint32_t renderTargetIndex)
 {
 	return renderTargets[renderTargetIndex];
+}
+
+QueueManager::QueueManager(std::vector<uint32_t> _cqs, int32_t _mqc, uint32_t _qfi, uint32_t _queueCapabilities, bool present, VKDevice& _d) :
+	bitmap(0U),
+	maxQueueCount(_mqc),
+	queueFamilyIndex(_qfi),
+	queueCapabilities(ConvertQueueProps(_queueCapabilities, present)),
+	device(_d),
+	sema(Semaphore(_mqc))
+{
+
+	assert(maxQueueCount <= 16);
+
+	poolIndices.resize(_mqc);
+
+	QueueIndex index = QueueIndex{ _qfi };
+
+	for (auto& i : poolIndices)
+	{
+		i = _d.CreateCommandPool(index);
+	}
+
+	for (uint32_t i = 0; i < _cqs.size(); i++)
+	{
+		bitmap.set(_cqs[i]);
+	}
+}
+
+uint32_t QueueManager::GetQueue()
+{
+	sema.Wait();
+	std::scoped_lock lock(bitwiseMutex);
+	for (int32_t i = 0; i < maxQueueCount; i++)
+	{
+		if (!bitmap.test(i))
+		{
+			bitmap.set(i);
+			return i;
+		}
+	}
+	return 0;
+}
+
+void QueueManager::ReturnQueue(int32_t queueNum)
+{
+	{
+		std::scoped_lock lock(bitwiseMutex);
+		bitmap.reset(queueNum);
+	}
+	sema.Notify();
+}
+
+uint32_t QueueManager::ConvertQueueProps(uint32_t flags, bool present)
+{
+	uint32_t flag = ((flags & VK_QUEUE_GRAPHICS_BIT) != 0) * GRAPHICS;
+	flag |= ((flags & VK_QUEUE_COMPUTE_BIT) != 0) * COMPUTE;
+	flag |= ((flags & VK_QUEUE_TRANSFER_BIT) != 0) * TRANSFER;
+	flag |= (present * PRESENT);
+	return flag;
 }

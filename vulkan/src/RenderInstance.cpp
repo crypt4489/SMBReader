@@ -50,7 +50,7 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
 
 	depthView = dev.CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-	dev.TransitionImageLayout(graphicsPresentIndex, graphicsIndex,
+	dev.TransitionImageLayout(
 		depthImage, depthFormat,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1, 1
@@ -172,7 +172,7 @@ void RenderInstance::CreateSyncObjects()
 
 	dev.CreateSwapChainsDependencies(swapChainIndex, indices, MAX_FRAMES_IN_FLIGHT, 2);
 
-	dev.CreateCommandBuffers(graphicsPresentIndex, MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+	dev.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 
 }
 
@@ -201,9 +201,9 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	EndCommandBufferRecording(currentCBIndex);
 
-	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, graphicsIndex, 0, currentCBIndex);
+	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, currentCBIndex);
 
-	res = dev.PresentSwapChain(swapChainIndex, currentFrame, imageIndex, presentIndex, 0);
+	res = dev.PresentSwapChain(swapChainIndex, currentFrame, imageIndex);
 
 	if (!res || resizeWindow) {
 		resizeWindow = false;
@@ -234,8 +234,9 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
 void RenderInstance::WaitOnQueues()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	vkQueueWaitIdle(dev.GetQueueHandle(graphicsIndex, 0));
-	vkQueueWaitIdle(dev.GetQueueHandle(presentIndex, 0));
+	
+	//vkQueueWaitIdle(dev.GetQueueHandle(graphicsIndex, 0));
+	//vkQueueWaitIdle(dev.GetQueueHandle(presentIndex, 0));
 }
 
 void RenderInstance::CreatePipelines()
@@ -337,9 +338,8 @@ ImageIndex RenderInstance::CreateVulkanImage(
 		imageData, imageSizes,
 		width, height,
 		mipLevels, VK::API::ConvertSMBToVkFormat(type),
-		1,
-		graphicsIndex, transferIndex,
-		attachmentsIndex, stagingBufferIndex);
+		attachmentsIndex, 
+		stagingBufferIndex);
 }
 
 ImageIndex RenderInstance::CreateVulkanImageView(ImageIndex& imageIndex, uint32_t mipLevels,
@@ -388,14 +388,16 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	msaaSamples = vkInstance.GetMaxMSAALevels(physicalIndex);
 
-	std::vector<VkQueueFamilyProperties> famProps;
-	majorDevice.QueueFamilyDetails(famProps);
+	//std::vector<VkQueueFamilyProperties> famProps;
+	//majorDevice.QueueFamilyDetails(famProps);
 
-	majorDevice.GetPresentQueue(presentIndex, presentMax, famProps, vkInstance.renderSurface);
-	majorDevice.GetQueueByMask(graphicsIndex, graphicsMax, famProps, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
 
-	std::set<uint32_t> queueFamilies = { graphicsIndex, presentIndex };
-	std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
+	//QueueIndex presentMax, graphicsMax;
+	//majorDevice.GetPresentQueue(presentIndex, presentMax, famProps, vkInstance.renderSurface);
+	//majorDevice.GetQueueByMask(graphicsIndex, graphicsMax, famProps, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
+
+	//std::set<uint32_t> queueFamilies = { graphicsIndex, presentIndex };
+	//std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
 
 	VkPhysicalDeviceFeatures features{};
 	features.geometryShader = VK_TRUE;
@@ -404,16 +406,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	features.samplerAnisotropy = VK_TRUE;
 	features.multiDrawIndirect = VK_TRUE;
 
-	graphicsPresentIndex = 0;
-	transferIndex = 1;
-
-	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers, vkInstance.deviceExtensions, queueFamilies, queueCounts, features);
-
-	majorDevice.CreateCommandPool(graphicsIndex, graphicsPresentIndex);
-	majorDevice.CreateCommandPool(graphicsIndex, transferIndex);
-
-	//TODO: add multi threaded device support
-	//gptManager = majorDevice.CreateQueueManager(graphicsIndex, transferIndex, graphicsMax);
+	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers, 
+		vkInstance.deviceExtensions, 
+		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, features, vkInstance.renderSurface);
 
 	depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
 		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -454,9 +449,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	std::vector attachmentViews = { &colorView, &depthView };
 
-	uint32_t queuefamilies[] = { graphicsIndex };
-
-	swapChain.CreateSwapChain(800, 600, queuefamilies, 1, mainRenderPass, attachmentViews);
+	swapChain.CreateSwapChain(800, 600, mainRenderPass, attachmentViews);
 
 	DescriptorPoolBuilder builder{};
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
