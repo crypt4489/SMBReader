@@ -1,5 +1,5 @@
 #include "VKDescriptorLayoutCache.h"
-VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(VkDevice& device)
+VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(std::string name)
 {
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
@@ -14,6 +14,8 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(VkDe
 	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor set layout!");
 	}
+
+	cacheObj->AddLayout(name, descriptorSetLayout);
 
 	return descriptorSetLayout;
 }

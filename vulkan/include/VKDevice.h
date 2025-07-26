@@ -453,6 +453,8 @@ public:
 
 	DescriptorSetBuilder CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets);
 
+	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder();
+
 	RecordingBufferObject GetRecordingBufferObject(uint32_t commandBufferIndex);
 
 	uint32_t CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount);
@@ -460,6 +462,12 @@ public:
 	RenderTarget& GetRenderTarget(uint32_t renderTargetIndex);
 
 	void AllocateCommandPools(uint32_t size);
+
+	void WaitOnDevice();
+
+	void GetExclusiveLock();
+
+	void UnlockExclusiveLock();
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
@@ -485,5 +493,6 @@ public:
 	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
+	SharedExclusiveFlag deviceLock;
 };
 

@@ -1,5 +1,6 @@
 #include "VKPipelineCache.h"
-VKPipelineCache::VKPipelineCache(VkDevice _d, VkRenderPass _rp) : device(_d), renderPass(_rp)
+#include "VKDevice.h"
+VKPipelineCache::VKPipelineCache(VkDevice _d, VkRenderPass _rp, VKDevice *d) : device(_d), renderPass(_rp), majorDev(d)
 {
 
 }
@@ -20,14 +21,34 @@ PipelineCacheObject* VKPipelineCache::operator[](std::string name)
 	return GetPipelineFromCache(name);
 }
 
-PipelineCacheObject VKPipelineCache::CreatePipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
+PipelineCacheObject VKPipelineCache::CreatePipeline(
+	std::vector<std::string>& descriptorSetLayoutNames,
 	std::optional<VkVertexInputBindingDescription> bindDescription,
 	std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
+	std::vector<std::string>& shaderNames,
 	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 	std::string name)
 {
-	auto co = CreateGraphicsPipeline(descriptorSetLayout, bindDescription, vertAttributes, shaders, depthOp, sampleCount);
+	std::size_t dslcns = descriptorSetLayoutNames.size();
+	std::size_t snl = shaderNames.size();
+	std::vector<VkDescriptorSetLayout> layouts(dslcns);
+	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders(snl);
+	// get 
+
+	auto& dslc = majorDev->GetDescriptorLayouts();
+	auto& sc = majorDev->GetShaders();
+
+	for (std::size_t i = 0; i < dslcns; i++)
+	{
+		layouts[i] = dslc.GetLayout(descriptorSetLayoutNames[i]);
+	}
+
+	for (std::size_t i = 0; i < snl; i++)
+	{
+		shaders[i] = sc.GetShader(shaderNames[i]);
+	}
+
+	auto co = CreateGraphicsPipeline(layouts, bindDescription, vertAttributes, shaders, depthOp, sampleCount);
 	pipelines[name] = co;
 	return co;
 }

@@ -1,5 +1,7 @@
 #include "VKShaderCache.h"
 
+VKShaderCache::VKShaderCache(VkDevice& _d) : device(_d) {}
+
 std::pair<VkShaderModule, VkShaderStageFlagBits> VKShaderCache::GetShader(const std::string& name)
 {
 	auto found = shaders.find(name);

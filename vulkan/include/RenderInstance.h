@@ -36,7 +36,7 @@ public:
 
 	void CreateMSAAColorResources(uint32_t width, uint32_t height);
 
-	void WaitOnQueues();
+	void WaitOnRender();
 
 	void CreatePipelines();
 

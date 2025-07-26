@@ -1,5 +1,6 @@
 #include "VKDevice.h"
-
+#include <mutex>
+#include <shared_mutex>
 
 RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer) :
 	cbBufferHandler(buffer), vkDeviceHandle(device), currLayout(VK_NULL_HANDLE), currPipeline(VK_NULL_HANDLE)
@@ -117,9 +118,8 @@ void RecordingBufferObject::EndRecordingCommand()
 	}
 }
 
-VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu)
+VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu), device(VK_NULL_HANDLE)
 {
-	device = VK_NULL_HANDLE;
 }
 
 VKDevice::~VKDevice()
@@ -222,11 +222,13 @@ VKDevice& VKDevice::operator=(VKDevice&& _dev) noexcept {
 	this->images = std::move(_dev.images);
 	this->imageViews = std::move(_dev.imageViews);
 	this->renderPasses = std::move(_dev.renderPasses);
+	this->shaders = std::move(_dev.shaders);
 	return *this;
 };
 
-VKDevice::VKDevice(VKDevice&& _dev) noexcept
+VKDevice::VKDevice(VKDevice&& _dev)  noexcept
 {
+	//this->shaders;
 	this->device = _dev.device;
 	_dev.device = VK_NULL_HANDLE;
 	this->gpu = _dev.gpu;
@@ -241,6 +243,7 @@ VKDevice::VKDevice(VKDevice&& _dev) noexcept
 	this->images = std::move(_dev.images);
 	this->imageViews = std::move(_dev.imageViews);
 	this->renderPasses = std::move(_dev.renderPasses);
+	this->shaders = std::move(_dev.shaders);
 };
 
 VkPhysicalDevice VKDevice::GetGPU() const
@@ -358,7 +361,7 @@ void VKDevice::CreateLogicalDevice(
 	}
 
 	descriptorLayoutCache.device = device;
-	shaders.SetLogicalDevice(device);
+	shaders.device = device;
 
 	for (const auto queueFamily : queueIndices) {
 
@@ -367,6 +370,21 @@ void VKDevice::CreateLogicalDevice(
 		bool present = std::get<bool>(queueFamily.second);
 		CreateQueueManager(queueIndex, maxCount, queueFlags, present);
 	}
+}
+
+void VKDevice::WaitOnDevice()
+{
+	vkDeviceWaitIdle(device);
+}
+
+void VKDevice::GetExclusiveLock()
+{
+	deviceLock.lock();
+}
+
+void VKDevice::UnlockExclusiveLock()
+{
+	deviceLock.unlock();
 }
 
 static uint32_t FindQueueManagerByCapapbilites(std::vector<QueueManager*>& managers, uint32_t capabilities)
@@ -391,6 +409,7 @@ std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> VKDevice::GetQueueHandle(uint
 
 void VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
+	std::shared_lock lock(deviceLock);
 	queueManagers.emplace_back(new QueueManager(std::vector<uint32_t>{0}, maxCount, queueIndex, queueFlags, presentsupport, *this));
 }
 
@@ -401,6 +420,7 @@ void VKDevice::AllocateCommandPools(uint32_t size)
 
 uint32_t VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t poolIndex = static_cast<uint32_t>(commandPools.size());
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -417,6 +437,7 @@ uint32_t VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 
 VkDescriptorPool VKDevice::CreateDesciptorPool(uint32_t& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets)
 {
+	std::shared_lock lock(deviceLock);
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 	uint32_t poolSizeCount = static_cast<uint32_t>(builder.poolSizes.size());
 
@@ -441,6 +462,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps)
 {
+	std::shared_lock lock(deviceLock);
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -475,6 +497,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 
 uint32_t VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex)
 {
+	std::shared_lock lock(deviceLock);
 	VkDeviceMemory deviceMemory;
 
 	VkMemoryAllocateInfo allocInfo{};
@@ -493,6 +516,7 @@ uint32_t VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryT
 
 uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t index = static_cast<uint32_t>(swapChains.size());
 	swapChains.emplace_back(this, surface);
 	return index;
@@ -500,6 +524,7 @@ uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface)
 
 uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t index = static_cast<uint32_t>(swapChains.size());
 	swapChains.emplace_back(this, surface, attachmentCount);
 	return index;
@@ -512,6 +537,7 @@ ImageIndex VKDevice::CreateImage(uint32_t width,
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps, uint32_t memIndex)
 {
+	std::shared_lock lock(deviceLock);
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -554,6 +580,7 @@ ImageIndex VKDevice::CreateImageView(
 	ImageIndex& imageIndex, uint32_t mipLevels,
 	VkFormat type, VkImageAspectFlags aspectMask)
 {
+	std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = std::get<VkImage>(images[imageIndex]);
@@ -578,6 +605,7 @@ ImageIndex VKDevice::CreateImageView(
 	VkImage image, uint32_t mipLevels,
 	VkFormat type, VkImageAspectFlags aspectMask)
 {
+	std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
@@ -600,6 +628,7 @@ ImageIndex VKDevice::CreateImageView(
 
 BufferIndex VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage)
 {
+	std::shared_lock lock(deviceLock);
 	hostBuffers.emplace_back(VK_NULL_HANDLE, VK_NULL_HANDLE);
 	auto& ref = hostBuffers.back();
 	std::tie(ref.first, ref.second) = VK::Utils::createBuffer(device, gpu, allocSize,
@@ -623,6 +652,7 @@ ImageIndex VKDevice::CreateSampledImage(
 	uint32_t memIndex,
 	uint32_t hostIndex)
 {
+	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(GRAPHICS | TRANSFER);
 
 	uint32_t managerIndex = std::get<0>(queueDetails);
@@ -685,6 +715,7 @@ void VKDevice::TransitionImageLayout(ImageIndex& imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 	uint32_t mips, uint32_t layers)
 {
+	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(TRANSFER);
 
 	uint32_t managerIndex = std::get<0>(queueDetails);
@@ -706,6 +737,7 @@ void VKDevice::TransitionImageLayout(ImageIndex& imageIndex,
 
 ImageIndex VKDevice::CreateSampler(uint32_t mipLevels)
 {
+	std::shared_lock lock(deviceLock);
 	VkPhysicalDeviceProperties properties{};
 	vkGetPhysicalDeviceProperties(gpu, &properties);
 
@@ -746,18 +778,21 @@ ImageIndex VKDevice::CreateSampler(uint32_t mipLevels)
 
 void VKDevice::DestorySampler(ImageIndex& samplerIndex)
 {
+	std::shared_lock lock(deviceLock);
 	vkDestroySampler(device, samplers[samplerIndex], nullptr);
 	samplers[samplerIndex] = VK_NULL_HANDLE;
 }
 
 void VKDevice::DestroyImageView(ImageIndex& imageViewIndex)
 {
+	std::shared_lock lock(deviceLock);
 	vkDestroyImageView(device, imageViews[imageViewIndex], nullptr);
 	imageViews[imageViewIndex] = VK_NULL_HANDLE;
 }
 
 void VKDevice::DestroyImage(ImageIndex& imageIndex)
 {
+	std::shared_lock lock(deviceLock);
 	vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
 	auto& alloc = allocators[std::get<uint32_t>(images[imageIndex])];
 	alloc.FreeMemory(std::get<VkDeviceSize>(images[imageIndex])); //image, address, and memory type index
@@ -766,6 +801,7 @@ void VKDevice::DestroyImage(ImageIndex& imageIndex)
 
 void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size, size_t offset)
 {
+	std::shared_lock lock(deviceLock);
 	auto deviceMem = hostBuffers[hostIndex].second;
 	void* datalocal;
 	vkMapMemory(device, deviceMem, offset, size, 0, reinterpret_cast<void**>(&datalocal));
@@ -775,6 +811,7 @@ void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size
 
 OffsetIndex VKDevice::GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t size, uint32_t alignment)
 {
+	std::shared_lock lock(deviceLock);
 	auto alloc = std::find_if(hostAllocators.begin(), hostAllocators.end(), [&hostIndex](auto& pair)
 		{
 			return hostIndex == pair.first;
@@ -786,6 +823,7 @@ OffsetIndex VKDevice::GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t siz
 
 uint32_t VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 {
+	std::shared_lock lock(deviceLock);
 	auto ref = &renderPasses.emplace_back(VK_NULL_HANDLE);
 	uint32_t ret = static_cast<uint32_t>(renderPasses.size());
 	if (vkCreateRenderPass(device, &builder.createInfo, nullptr, ref) != VK_SUCCESS) {
@@ -797,7 +835,7 @@ uint32_t VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 
 std::vector<uint32_t> VKDevice::CreateSemaphores(uint32_t count)
 {
-
+	std::shared_lock lock(deviceLock);
 	uint32_t startingIndex = static_cast<uint32_t>(semaphores.size());
 	std::vector<uint32_t> ret{ startingIndex };
 	semaphores.emplace_back(VK_NULL_HANDLE);
@@ -819,7 +857,7 @@ std::vector<uint32_t> VKDevice::CreateSemaphores(uint32_t count)
 
 std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 {
-
+	std::shared_lock lock(deviceLock);
 	uint32_t startingIndex = static_cast<uint32_t>(fences.size());
 	std::vector<uint32_t> ret{ startingIndex };
 	fences.emplace_back(VK_NULL_HANDLE);
@@ -843,6 +881,7 @@ std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags 
 
 void VKDevice::CreateSwapChainsDependencies(uint32_t swapChainIndex, std::vector<uint32_t>& indices, uint32_t imageCounts, uint32_t semaphorePerImage)
 {
+	std::shared_lock lock(deviceLock);
 	assert(indices.size() == imageCounts * semaphorePerImage);
 	VKSwapChain& swc = swapChains[swapChainIndex];
 	for (uint32_t i = 0U; i < imageCounts; i++)
@@ -853,6 +892,7 @@ void VKDevice::CreateSwapChainsDependencies(uint32_t swapChainIndex, std::vector
 
 uint32_t VKDevice::BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage)
 {
+	std::shared_lock lock(deviceLock);
 	VKSwapChain& swapChain = swapChains[swapChainIndex];
 
 	uint32_t imageIndex = swapChain.AcquireNextSwapChainImage(UINT64_MAX, requestedImage);
@@ -866,7 +906,7 @@ uint32_t VKDevice::SubmitCommandBuffer(
 	std::vector<uint32_t>& signal,
 	uint32_t cbIndex)
 {
-
+	std::shared_lock lock(deviceLock);
 	auto& vkcb = commandBuffers[cbIndex];
 	VkQueue queue;
 	vkGetDeviceQueue(device, vkcb.queueFamilyIndex, vkcb.queueIndex, &queue);
@@ -911,6 +951,7 @@ uint32_t VKDevice::SubmitCommandBuffer(
 
 uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex, uint32_t cbIndex)
 {
+	//std::shared_lock lock(deviceLock);
 	VKSwapChain& swc = swapChains[swapChainIdx];
 	auto& depends = swc.dependencies.chains[frameIndex];
 	std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
@@ -919,7 +960,7 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t fr
 
 uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx)
 {
-
+	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(PRESENT);
 
 	uint32_t managerIndex = std::get<0>(queueDetails);
@@ -970,6 +1011,8 @@ uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, ui
 std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers( 
 	uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
 {
+
+	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(capabilites);
 
 	uint32_t managerIndex = std::get<0>(queueDetails);
@@ -1024,6 +1067,7 @@ std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers(
 
 uint32_t VKDevice::GetCommandBufferIndex(uint64_t timeout)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t index = 0;
 	for (auto& vkcb : commandBuffers)
 	{
@@ -1047,6 +1091,7 @@ uint32_t VKDevice::GetCommandBufferIndex(uint64_t timeout)
 
 uint32_t VKDevice::RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex)
 {
+	std::shared_lock lock(deviceLock);
 	auto& vkcb = commandBuffers[bufferIndex];
 
 	if (vkcb.fenceIdx == ~0U)
@@ -1065,6 +1110,7 @@ uint32_t VKDevice::RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex)
 
 uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t ret = static_cast<uint32_t>(frameBuffers.size());
 	uint32_t attachmentsCount = static_cast<uint32_t>(attachmentIndices.size());
 	std::vector<VkImageView> attachments(attachmentsCount);
@@ -1091,6 +1137,7 @@ uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, u
 
 uint32_t VKDevice::GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamilies, uint32_t capabilities)
 {
+	std::shared_lock lock(deviceLock);
 	auto iter = queueManagers.begin();
 	while (capabilities && iter != queueManagers.end())
 	{
@@ -1104,46 +1151,55 @@ uint32_t VKDevice::GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamili
 
 VkCommandBuffer VKDevice::GetCommandBufferHandle(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return commandBuffers[index].buffer;
 }
 
 VkImageView VKDevice::GetImageView(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return imageViews[index];
 }
 
 VkCommandPool VKDevice::GetCommandPool(uint32_t poolIndex)
 {
+	std::shared_lock lock(deviceLock);
 	return commandPools[poolIndex];
 }
 
 VkDescriptorPool VKDevice::GetDescriptorPool(uint32_t poolIndex)
 {
+	std::shared_lock lock(deviceLock);
 	return descriptorPools[poolIndex];
 }
 
 VKSwapChain& VKDevice::GetSwapChain(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return swapChains[index];
 }
 
 VkRenderPass VKDevice::GetRenderPass(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return renderPasses[index];
 }
 
 VkFence VKDevice::GetFence(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return fences[index];
 }
 
 VkSemaphore VKDevice::GetSemaphore(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return semaphores[index];
 }
 
 VkFramebuffer VKDevice::GetFrameBuffer(uint32_t index)
 {
+	std::shared_lock lock(deviceLock);
 	return frameBuffers[index];
 }
 
@@ -1164,29 +1220,39 @@ VKDescriptorLayoutCache& VKDevice::GetDescriptorLayouts()
 
 void VKDevice::CreatePipelineCache(uint32_t renderPassIndex)
 {
-	renderPassPipelineCache.insert({ renderPassIndex, VKPipelineCache(device, renderPasses[renderPassIndex]) });
+	std::shared_lock lock(deviceLock);
+	renderPassPipelineCache.insert({ renderPassIndex, VKPipelineCache(device, renderPasses[renderPassIndex], this) });
 }
 
 VKPipelineCache& VKDevice::GetPipelineCache(uint32_t renderPassIndex)
 {
+	std::shared_lock lock(deviceLock);
 	return renderPassPipelineCache[renderPassIndex];
 }
 
 DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets)
 {
+	std::shared_lock lock(deviceLock);
 	DescriptorSetBuilder dsb{device, &descriptorSetCache};
 	auto ref = descriptorLayoutCache.GetLayout(layoutname);
 	dsb.AllocDescriptorSets(descriptorPools[poolIndex], ref, numberofsets);
 	return dsb;
 }
 
+DescriptorSetLayoutBuilder VKDevice::CreateDescriptorSetLayoutBuilder()
+{
+	return { device, &descriptorLayoutCache };
+}
+
 RecordingBufferObject VKDevice::GetRecordingBufferObject(uint32_t commandBufferIndex)
 {
+	std::shared_lock lock(deviceLock);
 	return { *this, commandBuffers[commandBufferIndex] };
 }
 
 uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount)
 {
+	std::shared_lock lock(deviceLock);
 	uint32_t ret = static_cast<uint32_t>(renderTargets.size());
 	renderTargets.emplace_back(renderPassIndex, framebufferCount);
 	return ret;
@@ -1194,6 +1260,7 @@ uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebu
 
 RenderTarget& VKDevice::GetRenderTarget(uint32_t renderTargetIndex)
 {
+	std::shared_lock lock(deviceLock);
 	return renderTargets[renderTargetIndex];
 }
 

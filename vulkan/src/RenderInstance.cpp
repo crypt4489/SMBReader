@@ -231,12 +231,10 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
 	colorView = dev.CreateImageView(colorImage, 1, swapChain.GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
-void RenderInstance::WaitOnQueues()
+void RenderInstance::WaitOnRender()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	
-	//vkQueueWaitIdle(dev.GetQueueHandle(graphicsIndex, 0));
-	//vkQueueWaitIdle(dev.GetQueueHandle(presentIndex, 0));
+	dev.WaitOnDevice();
 }
 
 void RenderInstance::CreatePipelines()
@@ -244,46 +242,34 @@ void RenderInstance::CreatePipelines()
 	// Create Shaders
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VkDevice logicalDevice = dev.device;
-	auto &shaderCache = dev.GetShaders();
-	auto &descriptorLayoutCache = dev.GetDescriptorLayouts();
+
+	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv" };
+
+	std::vector<std::string> shaders2 = { "text.vert.spv" , "text.frag.spv" };
+
 	auto &mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
-	
-	auto shader1 = shaderCache.GetShader("3dtextured.vert.spv");
-	auto shader2 = shaderCache.GetShader("3dtextured.frag.spv");
 
-	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders = { shader1, shader2 };
-
-	auto shader3 = shaderCache.GetShader("text.vert.spv");
-	auto shader4 = shaderCache.GetShader("text.frag.spv");
-
-	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders2 = { shader3, shader4 };
-
-	DescriptorSetLayoutBuilder textDescriptor{}, globalBufferBuilder{}, genericObjectBuilder{};
-	std::vector<VkDescriptorSetLayout> textDescriptorContainers(1);
-	std::vector<VkDescriptorSetLayout> regularMeshConatiners(2);
+	DescriptorSetLayoutBuilder textDescriptor = dev.CreateDescriptorSetLayoutBuilder();
+	DescriptorSetLayoutBuilder globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(); 
+	DescriptorSetLayoutBuilder genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder();
+	std::vector<std::string> textDescriptorContainers = { "oneimage" };
+	std::vector<std::string> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
 	textDescriptor.AddPixelImageSamplerLayout(0);
 
-	textDescriptorContainers[0] = textDescriptor.CreateDescriptorSetLayout(logicalDevice);
-
-	descriptorLayoutCache.AddLayout("oneimage", textDescriptorContainers[0]);
+	textDescriptor.CreateDescriptorSetLayout(textDescriptorContainers[0]);
 
 	globalBufferBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
-	regularMeshConatiners[0] = globalBufferBuilder.CreateDescriptorSetLayout(logicalDevice);
-
-	descriptorLayoutCache.AddLayout("mainrenderpass", regularMeshConatiners[0]);
+	globalBufferBuilder.CreateDescriptorSetLayout(regularMeshConatiners[0]);
 
 	genericObjectBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
 	genericObjectBuilder.AddPixelImageSamplerLayout(1);
 
-	regularMeshConatiners[1] = genericObjectBuilder.CreateDescriptorSetLayout(logicalDevice);
+	genericObjectBuilder.CreateDescriptorSetLayout(regularMeshConatiners[1]);
 
-	descriptorLayoutCache.AddLayout("genericobject", regularMeshConatiners[1]);
-
-	mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
+	mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders1, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
 
 	mainRenderPassCache.CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
 }
@@ -387,17 +373,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	VKDevice& majorDevice = vkInstance.CreateLogicalDevice(physicalIndex, deviceIndex);
 
 	msaaSamples = vkInstance.GetMaxMSAALevels(physicalIndex);
-
-	//std::vector<VkQueueFamilyProperties> famProps;
-	//majorDevice.QueueFamilyDetails(famProps);
-
-
-	//QueueIndex presentMax, graphicsMax;
-	//majorDevice.GetPresentQueue(presentIndex, presentMax, famProps, vkInstance.renderSurface);
-	//majorDevice.GetQueueByMask(graphicsIndex, graphicsMax, famProps, VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT);
-
-	//std::set<uint32_t> queueFamilies = { graphicsIndex, presentIndex };
-	//std::vector<uint32_t> queueCounts = { graphicsMax, presentMax };
 
 	VkPhysicalDeviceFeatures features{};
 	features.geometryShader = VK_TRUE;

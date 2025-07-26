@@ -9,6 +9,81 @@
 #include <thread>
 #include <vector>
 
+class SharedExclusiveFlag
+{
+    std::atomic_flag exclusiveFlag;
+    std::atomic<int> sharedCount;
+public:
+
+    void lock() noexcept
+    {
+        while (exclusiveFlag.test_and_set(std::memory_order_acquire))
+        {
+            exclusiveFlag.wait(true, std::memory_order_relaxed);
+        }
+
+        while (true) {
+            int count = sharedCount.load(std::memory_order_acquire);
+            if (count == 0)
+                break;
+            sharedCount.wait(count, std::memory_order_relaxed); // wait until it changes
+        }
+    }
+
+    bool try_lock() noexcept
+    {
+        return !exclusiveFlag.test_and_set(std::memory_order_acquire);
+    }
+
+    void unlock() noexcept
+    {
+        exclusiveFlag.clear(std::memory_order_release);
+        exclusiveFlag.notify_all();
+    }
+
+    void lock_shared()
+    {
+        while (true) {
+            while (exclusiveFlag.test(std::memory_order_acquire)) {
+                exclusiveFlag.wait(true, std::memory_order_relaxed);
+            }
+
+            sharedCount.fetch_add(1, std::memory_order_acquire);
+
+            if (!exclusiveFlag.test(std::memory_order_acquire)) {
+                break;
+            }
+
+            sharedCount.fetch_sub(1, std::memory_order_release);
+        }
+    }
+    
+    void unlock_shared() noexcept
+    {
+        int prev = sharedCount.fetch_sub(1, std::memory_order_release);
+        if (prev == 1)
+        {
+            sharedCount.notify_all();
+        }
+    }
+
+    bool try_lock_shared()
+    {
+        if (exclusiveFlag.test(std::memory_order_acquire)) {
+            return false;
+        }
+
+        sharedCount.fetch_add(1, std::memory_order_acquire);
+
+        if (exclusiveFlag.test(std::memory_order_acquire)) {
+            sharedCount.fetch_sub(1, std::memory_order_release);
+            return false;
+        }
+
+        return true;
+    }
+};
+
 class Semaphore
 {
 public:

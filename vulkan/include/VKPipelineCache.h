@@ -1,5 +1,6 @@
 #pragma once
 #include "VKUtilities.h"
+#include "VKTypes.h"
 #include "VertexTypes.h"
 #include <optional>
 #include <unordered_map>
@@ -18,16 +19,17 @@ class VKPipelineCache
 {
 public:
 	VKPipelineCache() = default;
-	VKPipelineCache(VkDevice _d, VkRenderPass _rp);
+	VKPipelineCache(VkDevice _d, VkRenderPass _rp, VKDevice *d);
 
 	PipelineCacheObject* operator[](std::string name);
 
 	PipelineCacheObject* GetPipelineFromCache(const std::string& name);
 
-	PipelineCacheObject CreatePipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
+	PipelineCacheObject CreatePipeline(
+		std::vector<std::string>& descriptorSetLayoutNames,
 		std::optional<VkVertexInputBindingDescription> bindDescription,
 		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
+		std::vector<std::string>& shaderNames,
 		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 		std::string name);
 
@@ -46,5 +48,6 @@ public:
 	std::unordered_map<std::string, PipelineCacheObject> pipelines;
 	VkRenderPass renderPass;
 	VkDevice device;
+	VKDevice *majorDev;
 };
 

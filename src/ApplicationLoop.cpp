@@ -175,7 +175,7 @@ void ApplicationLoop::InitializeRuntime()
 
 void ApplicationLoop::CleanupRuntime()
 {
-	rend->WaitOnQueues();
+	rend->WaitOnRender();
 
 	for (auto renderable : renderables)
 	{

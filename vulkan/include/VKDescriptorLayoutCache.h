@@ -3,17 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
-struct DescriptorSetLayoutBuilder
-{
-	VkDescriptorSetLayout CreateDescriptorSetLayout(VkDevice& device);
-	void AddPixelImageSamplerLayout(uint32_t binding);
 
-	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
-
-	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
-
-	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
-};
 
 class VKDescriptorLayoutCache
 {
@@ -26,5 +16,21 @@ public:
 
 	std::unordered_map<std::string, VkDescriptorSetLayout> cache;
 	VkDevice device;
+};
+
+struct DescriptorSetLayoutBuilder
+{
+	DescriptorSetLayoutBuilder(VkDevice d, VKDescriptorLayoutCache *coa) : device(d), cacheObj(coa) {}
+	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout(std::string name);
+	void AddPixelImageSamplerLayout(uint32_t binding);
+
+	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+
+	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+
+	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
+
+	VkDevice device;
+	VKDescriptorLayoutCache* cacheObj;
 };
 
