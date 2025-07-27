@@ -78,6 +78,18 @@ void VKSwapChain::CreateSwapChain(
 	}
 
 	CreateSwapChainElements();
+	CreateSyncObject();
+}
+
+void VKSwapChain::CreateSyncObject()
+{
+	std::vector<uint32_t> imageAvailablesIndices = device->CreateSemaphores(imageCount);
+	std::vector<uint32_t> renderFinishedIndices = device->CreateSemaphores(imageCount);
+
+	for (uint32_t i = 0; i < imageCount; i++)
+	{
+		CreateSwapChainDependency(i, imageAvailablesIndices[i], renderFinishedIndices[i]);
+	}
 }
 
 void VKSwapChain::CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present)

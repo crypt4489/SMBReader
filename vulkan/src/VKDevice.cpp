@@ -387,6 +387,11 @@ void VKDevice::UnlockExclusiveLock()
 	deviceLock.unlock();
 }
 
+void VKDevice::GetSharedLock()
+{
+	deviceLock.lock_shared();
+}
+
 static uint32_t FindQueueManagerByCapapbilites(std::vector<QueueManager*>& managers, uint32_t capabilities)
 {
 	uint32_t i = 0;
@@ -877,17 +882,6 @@ std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags 
 	}
 
 	return ret;
-}
-
-void VKDevice::CreateSwapChainsDependencies(uint32_t swapChainIndex, std::vector<uint32_t>& indices, uint32_t imageCounts, uint32_t semaphorePerImage)
-{
-	std::shared_lock lock(deviceLock);
-	assert(indices.size() == imageCounts * semaphorePerImage);
-	VKSwapChain& swc = swapChains[swapChainIndex];
-	for (uint32_t i = 0U; i < imageCounts; i++)
-	{
-		swc.CreateSwapChainDependency(i, indices[i], indices[i + imageCounts]);
-	}
 }
 
 uint32_t VKDevice::BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage)

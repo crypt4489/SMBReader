@@ -28,8 +28,6 @@ public:
 
 	void EndCommandBufferRecording(uint32_t cb);
 
-	void CreateSyncObjects();
-
 	uint32_t BeginFrame();
 
 	void SubmitFrame(uint32_t imageIndex);

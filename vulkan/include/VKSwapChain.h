@@ -65,6 +65,8 @@ public:
 		uint32_t width, uint32_t height,
 		uint32_t _renderPassIndex, std::vector<ImageIndex*>& attachmentIndices);
 
+	void CreateSyncObject();
+
 	void DestroySwapChain();
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);

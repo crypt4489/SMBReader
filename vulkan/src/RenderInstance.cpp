@@ -153,29 +153,6 @@ void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 	rbo.EndRecordingCommand();
 }
 
-void RenderInstance::CreateSyncObjects()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-
-	std::vector<uint32_t> imageAvailablesIndices = dev.CreateSemaphores(MAX_FRAMES_IN_FLIGHT);
-	std::vector<uint32_t> renderFinishedIndices = dev.CreateSemaphores(MAX_FRAMES_IN_FLIGHT);
-
-	uint32_t size = static_cast<uint32_t>(imageAvailablesIndices.size());
-
-	std::vector<uint32_t> indices(size * 2);
-
-	auto iter = indices.begin();
-
-	iter = std::copy(imageAvailablesIndices.begin(), imageAvailablesIndices.end(), iter);
-
-	iter = std::copy(renderFinishedIndices.begin(), renderFinishedIndices.end(), iter);
-
-	dev.CreateSwapChainsDependencies(swapChainIndex, indices, MAX_FRAMES_IN_FLIGHT, 2);
-
-	dev.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
-
-}
-
 uint32_t RenderInstance::BeginFrame()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
@@ -431,7 +408,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 
-	CreateSyncObjects();
+	majorDevice.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 
 	CreateGlobalBuffer();
 

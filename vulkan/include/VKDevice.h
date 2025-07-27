@@ -397,8 +397,6 @@ public:
 
 	std::vector<uint32_t> CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
-	void CreateSwapChainsDependencies(uint32_t swapChainIndex, std::vector<uint32_t>& indices, uint32_t imageCounts, uint32_t semaphorePerImage);
-
 	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage);
 
 	uint32_t SubmitCommandBuffer(
@@ -468,6 +466,8 @@ public:
 	void GetExclusiveLock();
 
 	void UnlockExclusiveLock();
+
+	void GetSharedLock();
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
