@@ -21,12 +21,13 @@ public:
 
 	void CallUpdate();
 
-protected:
+
 	VKPipelineObject* vkPipelineObject;
 	size_t vertexCount;
 	std::vector<AppTexture> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
 	std::function<void()> updateObject;
+	OffsetIndex memoryOffset;
 };
 

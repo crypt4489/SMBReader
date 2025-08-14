@@ -236,11 +236,11 @@ void RenderInstance::CreatePipelines()
 
 	textDescriptor.CreateDescriptorSetLayout(textDescriptorContainers[0]);
 
-	globalBufferBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+	globalBufferBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
 	globalBufferBuilder.CreateDescriptorSetLayout(regularMeshConatiners[0]);
 
-	genericObjectBuilder.AddBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+	genericObjectBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
 	genericObjectBuilder.AddPixelImageSamplerLayout(1);
 
@@ -406,6 +406,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	DescriptorPoolBuilder builder{};
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
+
 	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 
 	majorDevice.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
@@ -413,6 +414,19 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	CreateGlobalBuffer();
 
 	CreatePipelines();
+
+}
+
+OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
+{
+	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	DescriptorSetBuilder dsb = CreateDescriptorSet("mainrenderpass", MAX_FRAMES_IN_FLIGHT);
+	dsb.AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
+	dsb.AddDescriptorsToCache("mainrenderpass");
+	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
+	std::vector<uint32_t> data(1, perRenderPassStuff);
+	majorDevice.CreateRenderGraph(mainRenderPass, data, "mainrenderpass");
+	return perRenderPassStuff;
 }
 
 VkImageView RenderInstance::GetImageView(uint32_t viewIndex)
@@ -462,3 +476,21 @@ DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname,
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return dev.CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
+
+void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	auto& graphIndex = dev.graphMapping[mainRenderPass];
+	auto& graph = dev.graphs[graphIndex];
+	graph->AddObject(pipeline);
+}
+
+void RenderInstance::DrawScene()
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	auto rcb = dev.GetRecordingBufferObject(currentCBIndex);
+	auto& graphIndex = dev.graphMapping[mainRenderPass];
+	auto& graph = dev.graphs[graphIndex];
+	graph->DrawScene(rcb, currentFrame);
+}
+

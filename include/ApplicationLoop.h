@@ -52,16 +52,22 @@ private:
 
 	void ScanSTDIN(std::stop_token stoken);
 
+	void UpdateRenderables();
+
+	void UpdateCameraMatrix();
+
+	void WriteCameraMatrix(uint32_t frame);
+
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
 	std::queue<std::vector<std::any>> commands;
 	std::unordered_map<std::string, std::function<void(std::vector<std::any>)>> commandMap;
 	std::vector<GenericObject*> renderables;
-	std::vector<VKPipelineObject*> vkpipes;
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	RenderInstance* rend;
 	Text *text1, *text2;
-	VKRenderGraph* graph;
+	glm::mat4 proj, view;
+	OffsetIndex globalBufferLocation;
 };
 

@@ -8,3 +8,4 @@ class VKTexture;
 class VKPipelineObject;
 class VKDescriptorLayoutCache;
 class VKDescriptorSetCache;
+class VKRenderGraph;

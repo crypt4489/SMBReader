@@ -1,22 +1,30 @@
 #pragma once
 
 #include "IndexTypes.h"
-#include "RenderInstance.h"
+#include "VKDevice.h"
 #include "vulkan/vulkan.h"
 #include <string>
+#include <vector>
+
+struct VKPipelineObjectCreateInfo
+{
+	uint32_t drawType;
+	uint32_t vertexBufferIndex;
+	uint32_t vertexBufferOffset;
+	uint32_t vertexCount;
+	uint32_t indirectDrawBuffer;
+	uint32_t indirectDrawOffset;
+	std::string pipelinename;
+	std::string descriptorsetname;
+};
+
 
 class VKPipelineObject
 {
 public:
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(
-		std::string name,
-		std::string descname,
-		size_t vertexBufferIndex_,
-		size_t vertexBufferOffset_,
-		size_t* vCount,
-		uint32_t renderTarget);
+	VKPipelineObject(VKPipelineObjectCreateInfo &createinfo);
 
 	~VKPipelineObject() = default;
 
@@ -24,25 +32,19 @@ public:
 
 	void DrawIndirectOneBuffer(
 		RecordingBufferObject& rbo,
-		uint32_t bufferIndex,
 		uint32_t drawCount,
 		uint32_t frame,
-		uint32_t firstSet,
-		size_t indirectDrawBufferOffset);
+		uint32_t firstSet);
 
-	std::string GetPipelineType() const;
+	void SetPerObjectData(uint32_t objectlocation);
 
-	void SetPerObjectData(void* data, size_t dataSize, OffsetIndex& _dynamicOffset);
-
-	void* perObjectShaderData;
-	VkDeviceSize perObjectShaderDataSize;
-	OffsetIndex dynamicOffset;
+	std::vector<uint32_t> objectData;
 
 	std::string pipelineType, descriptorSetName;
-	VkDeviceSize vertexBufferIndex, vertexBufferOffset;
-	size_t *vertexCount = nullptr;
-	uint32_t mainRenderTarget;
-	
-	
+
+	uint32_t vertexBufferIndex, indirectBufferIndex, drawType;
+
+	std::size_t vertexBufferOffset, indirectBufferOffset;
+	std::size_t vertexCount;
 };
 

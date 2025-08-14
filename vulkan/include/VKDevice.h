@@ -259,9 +259,11 @@ public:
 	{
 		renderPassIndex = renderPass;
 		framebufferIndices.resize(imageCount);
+		imageViews.resize(imageCount);
 	}
 	uint32_t renderPassIndex;
 	std::vector<uint32_t> framebufferIndices;
+	std::vector<ImageIndex> imageViews;
 };
 
 enum VKQueueCapabilities : uint32_t
@@ -294,17 +296,19 @@ public:
 	std::mutex bitwiseMutex;
 };
 
+
+
 class VKDevice
 {
 public:
 	VKDevice(VkPhysicalDevice _gpu);
 	~VKDevice();
 
-	VKDevice& operator=(const VKDevice& _dev) = default;
+	VKDevice& operator=(const VKDevice& _dev) = delete;
 
 	VKDevice& operator=(VKDevice&& _dev) noexcept;
 
-	VKDevice(const VKDevice& _dev) = default;
+	VKDevice(const VKDevice& _dev) = delete;
 
 	VKDevice(VKDevice&& _dev) noexcept;
 
@@ -392,6 +396,8 @@ public:
 	OffsetIndex GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t size, uint32_t alignment);
 
 	uint32_t CreateRenderPasses(VKRenderPassBuilder& builder);
+
+	void CreateRenderGraph(uint32_t renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
 
 	std::vector<uint32_t> CreateSemaphores(uint32_t count);
 
@@ -494,5 +500,8 @@ public:
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
 	SharedExclusiveFlag deviceLock;
+
+	std::unordered_map<uint32_t, uint32_t> graphMapping;
+	std::vector<VKRenderGraph*> graphs;
 };
 

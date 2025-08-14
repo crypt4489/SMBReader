@@ -157,7 +157,6 @@ public:
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
 
 	std::vector<VkImage> swapChainImages;
-	std::vector<ImageIndex> swapChainImageViews{};
 	std::vector<VKFrameBufferAttachments> attachments;
 	uint32_t renderTargetIndex = ~0ui32;
 

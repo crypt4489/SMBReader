@@ -30,27 +30,33 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	{
 		std::string genericpipeline = "genericpipeline";
 
-
-
 		auto rendInst = VKRenderer::gRenderInstance;
 		uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 
 		DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("genericobject", frames);
 		OffsetIndex offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
-		dsb.AddUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, offset);
+		dsb.AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, 0);
 		dsb.AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl->viewIndex), rendInst->GetSampler(textures[0].vkImpl->samplerIndex), 1, frames);
 		dsb.AddDescriptorsToCache(genericpipeline);
 
-		vkPipelineObject = new VKPipelineObject(
-			genericpipeline,
-			genericpipeline,
-			~0U,
-			~0U,
-			&vertexCount,
-			rendInst->mainRenderPass
-		);
+		VKPipelineObjectCreateInfo create = {
+			.drawType = 0,
+			.vertexBufferIndex = ~0U,
+			.vertexBufferOffset = ~0U,
+			.vertexCount = static_cast<uint32_t>(vertexCount),
+			.indirectDrawBuffer = ~0U,
+			.indirectDrawOffset = ~0U,
+			.pipelinename = genericpipeline,
+			.descriptorsetname = genericpipeline
+		};
 
-		vkPipelineObject->SetPerObjectData(&mat, sizeof(glm::mat4), offset);
+		vkPipelineObject = new VKPipelineObject(create);
+
+		vkPipelineObject->SetPerObjectData(offset);
+
+		rendInst->CreateVulkanPipelineObject(vkPipelineObject);
+
+		memoryOffset = std::move(offset);
 	}
 }
 
@@ -80,4 +86,6 @@ void GenericObject::SetFunctionPointer(std::function<void(GenericObject*)> f)
 void GenericObject::CallUpdate()
 {
 	updateObject();
+	auto rendInst = VKRenderer::gRenderInstance;
+	rendInst->UpdateDynamicGlobalBuffer(&mat, sizeof(glm::mat4), memoryOffset, rendInst->currentFrame);
 }

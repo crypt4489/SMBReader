@@ -9,29 +9,35 @@
 #include "VKPipelineCache.h"
 
 VKPipelineObject::VKPipelineObject(
-	std::string name,
-	std::string descname,
-	size_t vertexBufferIndex_,
-	size_t vertexBufferOffset_,
-	size_t* vCount,
-	uint32_t renderTarget)
+	VKPipelineObjectCreateInfo& createinfo)
 	:
-	pipelineType(name),
-	descriptorSetName(descname),
-	vertexCount(vCount),
-	vertexBufferOffset(vertexBufferOffset_),
-	vertexBufferIndex(vertexBufferIndex_),
-	mainRenderTarget(renderTarget)
+	pipelineType(createinfo.pipelinename),
+	descriptorSetName(createinfo.descriptorsetname),
+	vertexCount(createinfo.vertexCount),
+	vertexBufferOffset(createinfo.vertexBufferOffset),
+	vertexBufferIndex(createinfo.vertexBufferIndex),
+	indirectBufferIndex(createinfo.indirectDrawBuffer),
+	indirectBufferOffset(createinfo.indirectDrawOffset),
+	drawType(createinfo.drawType)
 {
 
 }
 
+
 void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t firstSet)
 {
-	uint32_t drawSize = static_cast<uint32_t>(*vertexCount);
+	uint32_t drawSize = vertexCount;
 
 	if (!descriptorSetName.empty()) {
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, 0, nullptr);
+
+		std::vector<uint32_t> dynamicOffsets;
+
+		for (auto& c : objectData)
+		{
+			dynamicOffsets.push_back(c);
+		}
+
+		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, 1, dynamicOffsets.data());
 	}
 
 	if (vertexBufferIndex != ~0ui32)
@@ -39,22 +45,27 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	rbo.BindingDrawCmd(0, drawSize);
+	rbo.BindingDrawCmd(0, 4);
 }
 
 void VKPipelineObject::DrawIndirectOneBuffer(
 	RecordingBufferObject &rbo,
-	uint32_t bufferIndex,
 	uint32_t drawCount,
 	uint32_t frame,
-	uint32_t firstSet,
-	size_t indirectDrawBufferOffset)
+	uint32_t firstSet)
 {
 	
 	
 
 	if (!descriptorSetName.empty()) {
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, 0, nullptr);
+		std::vector<uint32_t> dynamicOffsets;
+
+		for (auto& c : objectData)
+		{
+			dynamicOffsets.push_back(static_cast<uint32_t>(c));
+		}
+
+		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
 	}
 		
 
@@ -63,17 +74,11 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	rbo.BindingIndirectDrawCmd(bufferIndex, drawCount, indirectDrawBufferOffset);
+	rbo.BindingIndirectDrawCmd(indirectBufferIndex, drawCount, indirectBufferOffset);
 }
 
-std::string VKPipelineObject::GetPipelineType() const
-{
-	return pipelineType;
-}
 
-void VKPipelineObject::SetPerObjectData(void* data, size_t dataSize, OffsetIndex& _dynamicOffset)
+void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 {
-	perObjectShaderData = data;
-	perObjectShaderDataSize = dataSize;
-	dynamicOffset = std::move(_dynamicOffset);
+	objectData.emplace_back(_dynamicOffset);
 }

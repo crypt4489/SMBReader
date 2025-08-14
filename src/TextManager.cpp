@@ -22,26 +22,32 @@ void TextManager::CreateFontTextManager(const std::string& imageName, const std:
 void TextManager::CreatePipelineObject()
 {
 	std::string text = "text";
-	auto rendInst = VKRenderer::gRenderInstance;
-	obj = new VKPipelineObject(
-		text,
-		text,
-		rendInst->GetMainBufferIndex(),
-		vertexBufferOffset,
-		&vertexCount,
-		rendInst->mainRenderPass
-	);
 
+	auto rendInst = VKRenderer::gRenderInstance;
+
+	VKPipelineObjectCreateInfo create = {
+		.drawType = 1,
+		.vertexBufferIndex = rendInst->GetMainBufferIndex(),
+		.vertexBufferOffset = vertexBufferOffset,
+		.vertexCount = ~0U,
+		.indirectDrawBuffer = rendInst->GetMainBufferIndex(),
+		.indirectDrawOffset = indirectCommandsOffset,
+		.pipelinename = text,
+		.descriptorsetname = text
+	};
+	
+	obj = new VKPipelineObject(create);
 
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 	DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("oneimage", frames);
 	dsb.AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl->viewIndex), rendInst->GetSampler(fonts->texture->vkImpl->samplerIndex), 0, frames);
 	dsb.AddDescriptorsToCache(text);
+
+	//rendInst->CreateVulkanPipelineObject(obj);
 }
 
 void TextManager::CreateTextBuffer()
 {
-
 	vertexBufferOffset = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(BUFFERSIZE, 0);
 	indirectCommandsOffset = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U);
 }
@@ -116,8 +122,7 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
 {
-	auto buff = VKRenderer::gRenderInstance->GetMainBufferIndex();
-	obj->DrawIndirectOneBuffer(cb, buff, static_cast<uint32_t>(textsCommand.size()), frame, 0, indirectCommandsOffset);
+	obj->DrawIndirectOneBuffer(cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
 }
 
 void TextManager::DestroyTextManager()

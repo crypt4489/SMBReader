@@ -66,15 +66,16 @@ void VKSwapChain::CreateSwapChain(
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swapChainImages.data());
 
 	attachments.resize(imageCount, VKFrameBufferAttachments(attachmentCount));
-	swapChainImageViews.resize(imageCount);
 	renderTargetIndex = device->CreateRenderTarget(_renderPassIndex, imageCount);
+
+	auto &ref = device->GetRenderTarget(renderTargetIndex);
 
 	AddFramebufferAttachments(attachmentIndices);
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
 		auto& fbref = attachments[i];
-		fbref.attachments[attachmentCount-1] = &swapChainImageViews[i];
+		fbref.attachments[attachmentCount-1] = &ref.imageViews[i];
 	}
 
 	CreateSwapChainElements();
@@ -137,23 +138,20 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 void VKSwapChain::CreateSwapChainElements()
 {
-	for (size_t i = 0; i < imageCount; i++) {
-		swapChainImageViews[i] = device->CreateImageView(swapChainImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
-	}
-
-	std::vector<std::vector<uint32_t>> indices(imageCount, std::vector<uint32_t>(attachmentCount));
+	std::vector<uint32_t> indices(attachmentCount);
 
 	auto& renderTarget = device->GetRenderTarget(renderTargetIndex);
 
 	for (size_t i = 0; i < imageCount; i++) {
-		auto& ref = indices[i];
 		auto& ref2 = attachments[i];
 
+		renderTarget.imageViews[i] = device->CreateImageView(swapChainImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
+
 		for (size_t j = 0; j < attachmentCount; j++) {
-			ref[j] = *ref2.attachments[j];
+			indices[j] = *ref2.attachments[j];
 		}
 
-		renderTarget.framebufferIndices[i] = device->CreateFrameBuffer(ref, renderTarget.renderPassIndex, swapChainExtent);
+		renderTarget.framebufferIndices[i] = device->CreateFrameBuffer(indices, renderTarget.renderPassIndex, swapChainExtent);
 	}
 }
 

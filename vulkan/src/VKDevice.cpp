@@ -1,4 +1,5 @@
 #include "VKDevice.h"
+#include "VKRenderGraph.h"
 #include <mutex>
 #include <shared_mutex>
 
@@ -836,6 +837,27 @@ uint32_t VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 	}
 
 	return ret-1;
+}
+
+void VKDevice::CreateRenderGraph(uint32_t renderPass, std::vector<uint32_t> &dynamicOffsets, std::string perGraphDescriptor)
+{
+	std::shared_lock lock(deviceLock);
+
+	uint32_t index = static_cast<uint32_t>(graphs.size());
+	graphs.push_back( new VKRenderGraph(renderPass) );
+	auto& graph = graphs[index];
+
+	auto ret = graphMapping.insert({ renderPass,  index});
+	//VKRenderGraph& iter = ret.first->second;
+	if (!perGraphDescriptor.empty())
+	{
+		graph->descriptorname = perGraphDescriptor;
+	}
+
+	for (auto i : dynamicOffsets)
+	{
+		graph->dynamicOffsets.push_back(i);
+	}
 }
 
 std::vector<uint32_t> VKDevice::CreateSemaphores(uint32_t count)

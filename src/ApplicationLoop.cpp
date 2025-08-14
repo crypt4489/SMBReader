@@ -14,9 +14,7 @@ static void Rotate(GenericObject* obj)
 
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-	glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-	obj->SetMatrix(model);
+	obj->mat = glm::rotate(glm::mat4(1.0f), time * glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 }
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
@@ -101,31 +99,20 @@ void ApplicationLoop::Execute()
 			std::string base = std::string("FPS : ");
 			std::string newstring = base + std::to_string(FPS);
 			size_t stringLoc = base.size() - 1;
-			text1->UpdateText(newstring);
-			TextManager::UpdateVertexBuffer(text1, stringLoc);
+			//text1->UpdateText(newstring);
+			//TextManager::UpdateVertexBuffer(text1, stringLoc);
 
 			if (mainWindow->ShouldCloseWindow()) break;
 
-			glm::mat4 proj = glm::perspective(glm::radians(45.0f), rend->GetSwapChainWidth() / (float)rend->GetSwapChainHeight(), 0.1f, 10000.0f);
-
-			glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-
-			objsSema.Wait();
-
-			for (auto& ref : renderables)
-			{
-				ref->CallUpdate();
-			}
+			UpdateRenderables();
 
 			auto index = rend->BeginFrame();
 			
 			if (index == ~0ui32) break;
 
-			graph->DrawScene(index, vkpipes, view, proj);
+			rend->DrawScene();
 
 			rend->SubmitFrame(index);
-
-			objsSema.Notify();
 
 			ProcessCommands();
 
@@ -136,6 +123,33 @@ void ApplicationLoop::Execute()
 			frameCounter++;
 		}
 	}
+}
+
+void ApplicationLoop::UpdateRenderables()
+{
+	SemaphoreGuard guard(objsSema);
+
+	for (auto& ref : renderables)
+	{
+		ref->CallUpdate();
+	}
+}
+
+void ApplicationLoop::UpdateCameraMatrix()
+{
+	proj = glm::perspective(glm::radians(45.0f), rend->GetSwapChainWidth() / (float)rend->GetSwapChainHeight(), 0.1f, 10000.0f);
+
+	view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
+{
+	struct {
+		glm::mat4 view;
+		glm::mat4 proj;
+	} what = { view,  proj };
+	what.proj[1][1] *= -1;
+	rend->UpdateDynamicGlobalBuffer(&what, sizeof(glm::mat4) * 2, globalBufferLocation, frame);
 }
 
 
@@ -156,20 +170,25 @@ void ApplicationLoop::InitializeRuntime()
 
 	rend->CreateVulkanRenderer(mainWindow);
 
-	graph = new VKRenderGraph(rend->mainRenderPass);
+	//TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
-	TextManager::CreateFontTextManager("text.bmp", "text.dat");
+	//std::string name = "FPS : ";
 
-	std::string name = "FPS : ";
+	//text1 = new Text(name, *TextManager::fonts, 0.0f, 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 25);
 
-	text1 = new Text(name, *TextManager::fonts, 0.0f, 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 25);
+	//TextManager::UploadToVertexBuffer(text1);
 
-	TextManager::UploadToVertexBuffer(text1);
 
-	graph->CreateUniformBuffers(rend, rend->MAX_FRAMES_IN_FLIGHT);
+	globalBufferLocation = rend->CreateRenderGraph(sizeof(glm::mat4) * 2 * rend->MAX_FRAMES_IN_FLIGHT, 16);
 
-	graph->CreateRenderPassDescriptorSet(
-		rend->MAX_FRAMES_IN_FLIGHT);
+	UpdateCameraMatrix();
+
+	for (uint32_t i = 0; i < rend->MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		WriteCameraMatrix(i);
+	}
+
+
 }
 
 
@@ -181,8 +200,6 @@ void ApplicationLoop::CleanupRuntime()
 	{
 		delete renderable;
 	}
-
-	delete graph;
 
 	renderables.clear();
 
@@ -245,8 +262,6 @@ void ApplicationLoop::LoadObject(const std::string& file)
 	SemaphoreGuard lock(objsSema);
 
 	renderables.push_back(obj);
-
-	vkpipes.push_back(obj->GetPipelineObject());
 }
 
 void ApplicationLoop::LoadThreadedWrapper(const std::string file)

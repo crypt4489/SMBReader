@@ -7,6 +7,7 @@
 #include "IndexTypes.h"
 #include "VKInstance.h"
 #include "VKDescriptorSetCache.h"
+#include "VKRenderGraph.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
 
@@ -85,8 +86,13 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+	void CreateVulkanPipelineObject(VKPipelineObject* pipeline);
 
+	OffsetIndex CreateRenderGraph(size_t datasize, size_t alignment);
+
+	void DrawScene();
+
+	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	VKInstance vkInstance;
 	DeviceIndex deviceIndex;
@@ -110,6 +116,8 @@ public:
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
 	VkFormat depthFormat;
+
+	
 };
 
 namespace VKRenderer {
