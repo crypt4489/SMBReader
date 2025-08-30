@@ -1105,7 +1105,7 @@ uint32_t VKDevice::GetCommandBufferIndex(uint64_t timeout)
 	return ~0u;
 }
 
-uint32_t VKDevice::RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex)
+uint32_t VKDevice::RequestAndResetCommandBuffer(uint64_t timeout, uint32_t bufferIndex, bool reset)
 {
 	std::shared_lock lock(deviceLock);
 	auto& vkcb = commandBuffers[bufferIndex];
@@ -1119,7 +1119,9 @@ uint32_t VKDevice::RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex)
 		return ~0U;
 
 	vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
-	vkResetCommandBuffer(vkcb.buffer, 0);
+	
+	if (reset)
+		vkResetCommandBuffer(vkcb.buffer, 0);
 
 	return bufferIndex;
 }

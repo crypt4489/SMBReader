@@ -76,16 +76,18 @@ void GenericObject::SetMatrix(glm::mat4& f)
 	mat = f;
 }
 
-void GenericObject::SetFunctionPointer(std::function<void(GenericObject*)> f)
+void GenericObject::SetPerObjectCallback(std::function<void(GenericObject*)> f)
 {
-	updateObject = [f, this]() {
-		f(this);
-		};
+	updateObject = f;
+}
+
+void GenericObject::SetPerObjectMemoryCallback(std::function<void(void*, size_t, size_t)> ptr)
+{
+	memoryCallback = ptr;
 }
 
 void GenericObject::CallUpdate()
 {
-	updateObject();
-	auto rendInst = VKRenderer::gRenderInstance;
-	rendInst->UpdateDynamicGlobalBuffer(&mat, sizeof(glm::mat4), memoryOffset, rendInst->currentFrame);
+	updateObject(this);
+	memoryCallback(&mat, sizeof(glm::mat4), memoryOffset);
 }

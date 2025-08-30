@@ -421,7 +421,7 @@ public:
 	
 	uint32_t GetCommandBufferIndex(uint64_t timeout);
 
-	uint32_t RequestCommandBuffer(uint64_t timeout, uint32_t bufferIndex);
+	uint32_t RequestAndResetCommandBuffer(uint64_t timeout, uint32_t bufferIndex, bool reset);
 
 	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
 

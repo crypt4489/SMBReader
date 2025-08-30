@@ -125,6 +125,9 @@ void RenderInstance::CreateRenderPass()
 
 void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex)
 {
+	
+	if (cbsComplete[cb]) return;
+
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
 
@@ -144,6 +147,8 @@ void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageInde
 
 void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 {
+	if (cbsComplete[cb]) return;
+
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
 	auto rbo = dev.GetRecordingBufferObject(cb);
@@ -155,9 +160,12 @@ void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 
 uint32_t RenderInstance::BeginFrame()
 {
+
+	completeGuard[currentFrame].Wait();
+
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	currentCBIndex = dev.RequestCommandBuffer(UINT64_MAX, currentFrame);
+	currentCBIndex = dev.RequestAndResetCommandBuffer(UINT64_MAX, currentFrame, !cbsComplete[currentFrame]);
 
 	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
@@ -187,7 +195,11 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 		RecreateSwapChain();
 	}
 
+	cbsComplete[currentCBIndex] = true;
+
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+	completeGuard[currentCBIndex].Notify();
 }
 
 
@@ -267,10 +279,23 @@ void RenderInstance::CreateGlobalBuffer()
 	);
 }
 
-void RenderInstance::UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame)
+void RenderInstance::UpdateDynamicGlobalBufferCurrent(void* data, size_t dataSize, size_t offset)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * frame));
+	dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * this->currentFrame));
+}
+
+void RenderInstance::UpdateDynamicGlobalBufferAbsolute(void* data, size_t dataSize, size_t offset)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	dev.WriteToHostBuffer(globalIndex, data, dataSize, offset);
+}
+
+void RenderInstance::UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	for (int i = 0; i<MAX_FRAMES_IN_FLIGHT; i++)
+		dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * i));
 }
 
 
@@ -409,7 +434,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 
-	majorDevice.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
+	cbsIndices = majorDevice.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 
 	CreateGlobalBuffer();
 
@@ -443,12 +468,6 @@ VkSampler RenderInstance::GetSampler(uint32_t index)
 void RenderInstance::SetResizeBool(bool set)
 {
 	resizeWindow = set;
-}
-
-RecordingBufferObject RenderInstance::GetCurrentCommandBuffer()
-{
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.GetRecordingBufferObject(currentCBIndex);
 }
 
 uint32_t RenderInstance::GetCurrentFrame() const
@@ -487,10 +506,17 @@ void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 
 void RenderInstance::DrawScene()
 {
+	if (cbsComplete[currentCBIndex]) return;
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	auto rcb = dev.GetRecordingBufferObject(currentCBIndex);
 	auto& graphIndex = dev.graphMapping[mainRenderPass];
 	auto& graph = dev.graphs[graphIndex];
 	graph->DrawScene(rcb, currentFrame);
+}
+
+void RenderInstance::InvalidateRecordBuffer(uint32_t i)
+{
+	SemaphoreGuard guard(completeGuard[i]);
+	cbsComplete[i] = false;
 }
 

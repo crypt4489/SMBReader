@@ -17,7 +17,9 @@ public:
 
 	void SetMatrix(glm::mat4& f);
 
-	void SetFunctionPointer(std::function<void(GenericObject*)> f);
+	void SetPerObjectCallback(std::function<void(GenericObject*)> f);
+
+	void SetPerObjectMemoryCallback(std::function<void(void*, size_t, size_t)> ptr);
 
 	void CallUpdate();
 
@@ -27,7 +29,8 @@ public:
 	std::vector<AppTexture> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
-	std::function<void()> updateObject;
+	std::function<void(GenericObject*)> updateObject;
+	std::function<void(void*, size_t, size_t)> memoryCallback;
 	OffsetIndex memoryOffset;
 };
 

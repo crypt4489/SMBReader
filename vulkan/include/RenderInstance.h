@@ -41,7 +41,11 @@ public:
 
 	void CreateGlobalBuffer();
 
-	void UpdateDynamicGlobalBuffer(void* data, size_t dataSize, size_t offset, uint32_t frame);
+	void UpdateDynamicGlobalBufferAbsolute(void* data, size_t dataSize, size_t offset);
+
+	void UpdateDynamicGlobalBufferCurrent(void* data, size_t dataSize, size_t offset);
+
+	void UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset);
 
 	OffsetIndex GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
@@ -74,8 +78,6 @@ public:
 
 	void SetResizeBool(bool set);
 
-	RecordingBufferObject GetCurrentCommandBuffer();
-
 	DescriptorSetBuilder CreateDescriptorSet(std::string layoutname, uint32_t frames);
 	
 	uint32_t GetCurrentFrame() const;
@@ -92,6 +94,8 @@ public:
 
 	void DrawScene();
 
+	void InvalidateRecordBuffer(uint32_t i);
+
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	VKInstance vkInstance;
@@ -106,6 +110,7 @@ public:
 	BufferIndex globalIndex;
 	uint32_t mainRenderPass;
 	uint32_t currentCBIndex;
+	std::vector<uint32_t> cbsIndices;
 
 	WindowManager *windowMan = nullptr;
 
@@ -117,6 +122,9 @@ public:
 
 	VkFormat depthFormat;
 
+	std::array<bool, MAX_FRAMES_IN_FLIGHT> cbsComplete;
+
+	std::array<Semaphore, MAX_FRAMES_IN_FLIGHT> completeGuard;
 	
 };
 

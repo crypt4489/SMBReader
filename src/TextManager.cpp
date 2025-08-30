@@ -63,9 +63,9 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	size_t allocatedDataSize = sizeof(TextVertex) * allocatedVerts;
 
-	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
+	VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferAbsolute(
 		text->textVertices.data(), vertsDataSize,
-		bufferOffset + vertexBufferOffset, 0);
+		bufferOffset + vertexBufferOffset);
 
 	VkDrawIndirectCommand command;
 
@@ -76,9 +76,9 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	size_t commandOffset = commandCount * sizeof(VkDrawIndirectCommand);
 
-	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
+	VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferAbsolute(
 		&command, vertsDataSize,
-		indirectCommandsOffset + commandOffset, 0);
+		indirectCommandsOffset + commandOffset);
 
 	textsCommand.push_back({ text, commandCount++, bufferOffset });
 
@@ -108,16 +108,14 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 	size_t newCount = textVertexCount - startingOffset;
 
-	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
+	VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferAbsolute(
 		text->textVertices.data(), newCount * sizeof(TextVertex),
-		vertexBufferOffset + bOffset + startingOffset , 0);
+		vertexBufferOffset + bOffset + startingOffset);
 
-	VKRenderer::gRenderInstance->UpdateDynamicGlobalBuffer(
+	VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferAbsolute(
 		&textVertexCount, sizeof(uint32_t),
 		indirectCommandsOffset + offsetof(VkDrawIndirectCommand, vertexCount) +
-		 (cCount * sizeof(VkDrawIndirectCommand))
-		, 0);
-
+		 (cCount * sizeof(VkDrawIndirectCommand)));
 }
 
 void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)

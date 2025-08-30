@@ -149,7 +149,15 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 		glm::mat4 proj;
 	} what = { view,  proj };
 	what.proj[1][1] *= -1;
-	rend->UpdateDynamicGlobalBuffer(&what, sizeof(glm::mat4) * 2, globalBufferLocation, frame);
+
+	if (frame >= RenderInstance::MAX_FRAMES_IN_FLIGHT)
+	{
+		rend->UpdateDynamicGlobalBufferForAllFrames(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+	}
+	else
+	{
+		rend->UpdateDynamicGlobalBufferCurrent(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+	}
 }
 
 
@@ -170,6 +178,11 @@ void ApplicationLoop::InitializeRuntime()
 
 	rend->CreateVulkanRenderer(mainWindow);
 
+	gMemoryCallback = [this](void* _d, size_t _si, size_t _off)
+		{
+			rend->UpdateDynamicGlobalBufferCurrent(_d, _si, _off);
+		};
+
 	//TextManager::CreateFontTextManager("text.bmp", "text.dat");
 
 	//std::string name = "FPS : ";
@@ -183,11 +196,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	UpdateCameraMatrix();
 
-	for (uint32_t i = 0; i < rend->MAX_FRAMES_IN_FLIGHT; i++)
-	{
-		WriteCameraMatrix(i);
-	}
-
+	WriteCameraMatrix(rend->MAX_FRAMES_IN_FLIGHT);
 
 }
 
@@ -253,15 +262,18 @@ void ApplicationLoop::LoadObject(const std::string& file)
 
 	glm::mat4 identity = glm::identity<glm::mat4>();
 
-	//glm::mat4 identity = glm::zero<glm::mat4>();;
-
 	obj->SetMatrix(identity);
 
-	obj->SetFunctionPointer(Rotate);
+	obj->SetPerObjectCallback(Rotate);
+
+	obj->SetPerObjectMemoryCallback(gMemoryCallback);
 
 	SemaphoreGuard lock(objsSema);
 
 	renderables.push_back(obj);
+
+	for (int i = 0; i < RenderInstance::MAX_FRAMES_IN_FLIGHT; i++)
+		rend->InvalidateRecordBuffer(i);
 }
 
 void ApplicationLoop::LoadThreadedWrapper(const std::string file)

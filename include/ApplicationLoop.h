@@ -26,7 +26,6 @@ class ApplicationLoop
 public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
-private:
 
 	void InitializeCommandMap();
 
@@ -69,5 +68,6 @@ private:
 	Text *text1, *text2;
 	glm::mat4 proj, view;
 	OffsetIndex globalBufferLocation;
+	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 };
 
