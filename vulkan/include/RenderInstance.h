@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include <functional>
 #include <vulkan/vulkan.h>
 
 #include "AppTypes.h"
@@ -10,6 +10,54 @@
 #include "VKRenderGraph.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
+
+
+
+struct ThreadedRecordBuffer
+{
+	std::array<uint32_t, 3> buffers; //indices
+	uint32_t currentBuffer = 2; // current good buffer
+	Semaphore currentGuard{};
+	SPSC invalidate{};
+	uint32_t outputImageIndex;
+	std::function<void(uint32_t, uint32_t)> drawingFunction;
+
+	uint32_t GetCurrentBuffer()
+	{
+		currentGuard.Wait();
+		return buffers[currentBuffer];
+	}
+
+	void ReleaseCurrentCommandBuffer()
+	{
+		currentGuard.Notify();
+	}
+
+	void Invalidate()
+	{
+		invalidate.Notify();
+	}
+
+	void DrawLoop()
+	{
+		std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
+
+		if (!invalidate.Wait(timeout)) return;
+		
+		uint32_t next = (currentBuffer + 1) % 3;
+
+		uint32_t recordBuffer = buffers[next];
+
+		//do stuff
+
+		drawingFunction(recordBuffer, outputImageIndex);
+
+		{
+			SemaphoreGuard guard(currentGuard);
+			currentBuffer = next;
+		}
+	}
+};
 
 class RenderInstance
 {
@@ -92,11 +140,13 @@ public:
 
 	OffsetIndex CreateRenderGraph(size_t datasize, size_t alignment);
 
-	void DrawScene();
+	void DrawScene(uint32_t cbindex);
 
 	void InvalidateRecordBuffer(uint32_t i);
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+
+	void MonolithicDrawingTask(uint32_t commandBufferIndex, uint32_t imageIndex);
 
 	VKInstance vkInstance;
 	DeviceIndex deviceIndex;
@@ -109,7 +159,7 @@ public:
 	BufferIndex stagingBufferIndex;
 	BufferIndex globalIndex;
 	uint32_t mainRenderPass;
-	uint32_t currentCBIndex;
+	std::array<uint32_t, 3> currentCBIndex;
 	std::vector<uint32_t> cbsIndices;
 
 	WindowManager *windowMan = nullptr;
@@ -122,9 +172,7 @@ public:
 
 	VkFormat depthFormat;
 
-	std::array<bool, MAX_FRAMES_IN_FLIGHT> cbsComplete;
-
-	std::array<Semaphore, MAX_FRAMES_IN_FLIGHT> completeGuard;
+	std::array<ThreadedRecordBuffer, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 	
 };
 

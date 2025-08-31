@@ -45,3 +45,31 @@ void Semaphore::Notify()
     }
     cv.notify_one();
 }
+
+
+void SPSC::Wait()
+{
+    std::unique_lock guard(lock);
+    cv.wait(guard, [this]() { return count == false; });
+    count = true;
+}
+
+bool SPSC::Wait(std::chrono::nanoseconds timeout)
+{
+    std::unique_lock guard(lock);
+    if (!cv.wait_for(guard, timeout, [this]() { return count == false; }))
+    {
+        return false;
+    }
+    count = true;
+    return true;
+}
+
+void SPSC::Notify()
+{
+    {
+        std::unique_lock guard(lock);
+        count = false;
+    }
+    cv.notify_one();
+}

@@ -83,6 +83,7 @@ void ApplicationLoop::Execute()
 
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
+					std::cout << FPS << std::endl;
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -102,15 +103,16 @@ void ApplicationLoop::Execute()
 			//text1->UpdateText(newstring);
 			//TextManager::UpdateVertexBuffer(text1, stringLoc);
 
+			
 			if (mainWindow->ShouldCloseWindow()) break;
 
 			UpdateRenderables();
 
 			auto index = rend->BeginFrame();
 			
-			if (index == ~0ui32) break;
+			if (index == ~0ui32) continue;
 
-			rend->DrawScene();
+			//rend->DrawScene();
 
 			rend->SubmitFrame(index);
 

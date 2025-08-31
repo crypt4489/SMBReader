@@ -125,8 +125,6 @@ void RenderInstance::CreateRenderPass()
 
 void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex)
 {
-	
-	if (cbsComplete[cb]) return;
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
@@ -145,9 +143,21 @@ void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageInde
 
 }
 
+void RenderInstance::MonolithicDrawingTask(uint32_t commandBufferIndex, uint32_t imageIndex)
+{
+	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+
+	commandBufferIndex = dev.RequestWithPossibleBufferResetAndFenceReset(UINT64_MAX, commandBufferIndex, true, false);
+
+	BeginCommandBufferRecording(commandBufferIndex, imageIndex);
+
+	DrawScene(commandBufferIndex);
+
+	EndCommandBufferRecording(commandBufferIndex);
+}
+
 void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 {
-	if (cbsComplete[cb]) return;
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -160,14 +170,22 @@ void RenderInstance::EndCommandBufferRecording(uint32_t cb)
 
 uint32_t RenderInstance::BeginFrame()
 {
-
-	completeGuard[currentFrame].Wait();
-
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	currentCBIndex = dev.RequestAndResetCommandBuffer(UINT64_MAX, currentFrame, !cbsComplete[currentFrame]);
+	auto& trb = threadedRecordBuffers[currentFrame];
 
-	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
+	uint32_t nextCbIndex = trb.GetCurrentBuffer();
+
+	int32_t res;
+
+	if (nextCbIndex != currentCBIndex[currentFrame])
+		res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); //wait on previous
+
+	currentCBIndex[currentFrame] = nextCbIndex;
+
+	res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); // wait on current, could be updated queue
+
+	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, trb.outputImageIndex);
 
 	if (imageIndex == ~0ui32)
 	{
@@ -175,31 +193,27 @@ uint32_t RenderInstance::BeginFrame()
 		return imageIndex;
 	}
 
-	BeginCommandBufferRecording(currentCBIndex, imageIndex);
-
-	return imageIndex;
+	return trb.outputImageIndex;
 }
 
 void RenderInstance::SubmitFrame(uint32_t imageIndex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EndCommandBufferRecording(currentCBIndex);
+	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, currentFrame, currentCBIndex);
-
-	res = dev.PresentSwapChain(swapChainIndex, currentFrame, imageIndex);
+	res = dev.PresentSwapChain(swapChainIndex, imageIndex);
 
 	if (!res || resizeWindow) {
 		resizeWindow = false;
 		RecreateSwapChain();
 	}
 
-	cbsComplete[currentCBIndex] = true;
+	auto& trb = threadedRecordBuffers[currentFrame];
+
+	trb.ReleaseCurrentCommandBuffer();
 
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-
-	completeGuard[currentCBIndex].Notify();
 }
 
 
@@ -440,6 +454,23 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreatePipelines();
 
+	auto drawingCallback = [this](uint32_t cbIndex, uint32_t iIndex)
+		{
+			this->MonolithicDrawingTask(cbIndex, iIndex);
+		};
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		auto& ref = threadedRecordBuffers[i];
+		currentCBIndex[i] = (i * 3);
+		for (int j = i * 3; j < ((i + 1) * 3); j++)
+		{
+			ref.buffers[j % 3] = cbsIndices[j];
+		}
+		ref.outputImageIndex = i;
+		ref.drawingFunction = drawingCallback;
+		ref.DrawLoop();
+	}
 }
 
 OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
@@ -504,11 +535,11 @@ void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 	graph->AddObject(pipeline);
 }
 
-void RenderInstance::DrawScene()
+void RenderInstance::DrawScene(uint32_t cbindex)
 {
-	if (cbsComplete[currentCBIndex]) return;
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto rcb = dev.GetRecordingBufferObject(currentCBIndex);
+	if (!dev.graphMapping.count(mainRenderPass)) return;
+	auto rcb = dev.GetRecordingBufferObject(cbindex);
 	auto& graphIndex = dev.graphMapping[mainRenderPass];
 	auto& graph = dev.graphs[graphIndex];
 	graph->DrawScene(rcb, currentFrame);
@@ -516,7 +547,7 @@ void RenderInstance::DrawScene()
 
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)
 {
-	SemaphoreGuard guard(completeGuard[i]);
-	cbsComplete[i] = false;
+	threadedRecordBuffers[i].Invalidate();
+	threadedRecordBuffers[i].DrawLoop();
 }
 

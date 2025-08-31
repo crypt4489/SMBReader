@@ -101,6 +101,23 @@ private:
     std::condition_variable cv;
 };
 
+class SPSC
+{
+public:
+    explicit SPSC(bool c = false) : count(c) {};
+
+    void Wait(); //both used by producer
+
+    bool Wait(std::chrono::nanoseconds timeout);
+
+    void Notify(); //used by consumer
+
+private:
+    bool count;
+    std::mutex lock;
+    std::condition_variable cv;
+};
+
 class SemaphoreGuard
 {
 public:

@@ -974,7 +974,7 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t fr
 	return SubmitCommandBuffer(depends[0], waitStages, depends[1], cbIndex);
 }
 
-uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx)
+uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx)
 {
 	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(PRESENT);
@@ -1008,7 +1008,7 @@ uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, ui
 	VkSwapchainKHR swapChains[] = { swc.swapChain };
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = swapChains;
-	presentInfo.pImageIndices = &imageIdx;
+	presentInfo.pImageIndices = &frameIdx;
 	presentInfo.pResults = nullptr;
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
@@ -1105,7 +1105,7 @@ uint32_t VKDevice::GetCommandBufferIndex(uint64_t timeout)
 	return ~0u;
 }
 
-uint32_t VKDevice::RequestAndResetCommandBuffer(uint64_t timeout, uint32_t bufferIndex, bool reset)
+uint32_t VKDevice::RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, uint32_t bufferIndex, bool reset, bool fenceReset)
 {
 	std::shared_lock lock(deviceLock);
 	auto& vkcb = commandBuffers[bufferIndex];
@@ -1118,12 +1118,31 @@ uint32_t VKDevice::RequestAndResetCommandBuffer(uint64_t timeout, uint32_t buffe
 	if (res == VK_TIMEOUT)
 		return ~0U;
 
-	vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
+	if (fenceReset)
+		vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
 	
 	if (reset)
 		vkResetCommandBuffer(vkcb.buffer, 0);
 
 	return bufferIndex;
+}
+
+int32_t VKDevice::WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, uint32_t bufferIndex, bool resetfence)
+{
+	std::shared_lock lock(deviceLock);
+	auto& vkcb = commandBuffers[bufferIndex];
+
+	if (vkcb.fenceIdx == ~0U)
+		return 0;
+
+	VkResult res = vkWaitForFences(device, 1, &fences[vkcb.fenceIdx], VK_TRUE, timeout);
+
+	if (res == VK_TIMEOUT)
+		return -1;
+	if (resetfence)
+		vkResetFences(device, 1, &fences[vkcb.fenceIdx]);
+
+	return 0;
 }
 
 uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent)

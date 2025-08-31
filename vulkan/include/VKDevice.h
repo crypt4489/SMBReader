@@ -414,14 +414,16 @@ public:
 	uint32_t SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
 		uint32_t cbIndex);
 
-	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t imageIdx);
+	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx);
 
 	std::vector<uint32_t> CreateReusableCommandBuffers(
 		uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites);
 	
 	uint32_t GetCommandBufferIndex(uint64_t timeout);
 
-	uint32_t RequestAndResetCommandBuffer(uint64_t timeout, uint32_t bufferIndex, bool reset);
+	uint32_t RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, uint32_t bufferIndex, bool reset, bool fenceReset);
+
+	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, uint32_t bufferIndex, bool resetfence);
 
 	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
 
