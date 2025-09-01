@@ -416,7 +416,7 @@ std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> VKDevice::GetQueueHandle(uint
 void VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
 	std::shared_lock lock(deviceLock);
-	queueManagers.emplace_back(new QueueManager(std::vector<uint32_t>{0}, maxCount, queueIndex, queueFlags, presentsupport, *this));
+	queueManagers.emplace_back(new QueueManager(std::vector<uint32_t>{}, maxCount, queueIndex, queueFlags, presentsupport, *this));
 }
 
 void VKDevice::AllocateCommandPools(uint32_t size)
@@ -882,16 +882,11 @@ std::vector<uint32_t> VKDevice::CreateSemaphores(uint32_t count)
 	return ret;
 }
 
-std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
+std::vector<uint32_t> VKDevice::CreateFences(uint32_t first, uint32_t count, VkFenceCreateFlags flags)
 {
 	std::shared_lock lock(deviceLock);
-	uint32_t startingIndex = static_cast<uint32_t>(fences.size());
-	std::vector<uint32_t> ret{ startingIndex };
-	fences.emplace_back(VK_NULL_HANDLE);
-	for (uint32_t i = 1; i < count; i++) {
-		ret.push_back(startingIndex + i);
-		fences.emplace_back(VK_NULL_HANDLE);
-	}
+	uint32_t startingIndex = first;
+	std::vector<uint32_t> ret(count);
 
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -901,6 +896,8 @@ std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags 
 		if (vkCreateFence(device, &fenceInfo, nullptr, &fences[startingIndex + i]) != VK_SUCCESS) {
 			throw std::runtime_error("failed to create fences!");
 		}
+
+		ret[i] = startingIndex + i;
 	}
 
 	return ret;
@@ -974,16 +971,26 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t fr
 	return SubmitCommandBuffer(depends[0], waitStages, depends[1], cbIndex);
 }
 
-uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx)
+uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t commandBufferIndex)
 {
 	std::shared_lock lock(deviceLock);
-	auto queueDetails = GetQueueHandle(PRESENT);
-
-	uint32_t managerIndex = std::get<0>(queueDetails);
-	uint32_t queueIndex = std::get<1>(queueDetails);
-	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
-
 	VkQueue queue;
+	uint32_t managerIndex, queueIndex, queueFamilyIndex;
+	if (commandBufferIndex == ~0U)
+	{
+		auto queueDetails = GetQueueHandle(PRESENT);
+		managerIndex = std::get<0>(queueDetails);
+		queueIndex = std::get<1>(queueDetails);
+		queueFamilyIndex = std::get<2>(queueDetails);
+	}
+	else {
+		auto rbo = commandBuffers[commandBufferIndex];
+		queueIndex = rbo.queueIndex;
+		queueFamilyIndex = rbo.queueFamilyIndex;
+	}
+	
+
+	
 
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
@@ -1019,13 +1026,18 @@ uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx)
 	else if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to present swap chain image!");
 	}
-	auto& ref = queueManagers[managerIndex];
-	ref->ReturnQueue(queueIndex);
+	
+	if (commandBufferIndex == ~0U)
+	{
+		auto& ref = queueManagers[managerIndex];
+		ref->ReturnQueue(queueIndex);
+	}
+
 	return 1;
 }
 
 std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers( 
-	uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
+	uint32_t numberOfCommandBuffers, uint32_t firstCommandBuffer, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
 {
 
 	std::shared_lock lock(deviceLock);
@@ -1035,10 +1047,6 @@ std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers(
 	uint32_t queueIndex = std::get<1>(queueDetails);
 	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
 	uint32_t poolIndex = std::get<3>(queueDetails);
-
-	uint32_t size = static_cast<uint32_t>(commandBuffers.size());
-
-	commandBuffers.resize(size + numberOfCommandBuffers);
 
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1055,26 +1063,24 @@ std::vector<uint32_t> VKDevice::CreateReusableCommandBuffers(
 
 	std::vector<uint32_t> ret(numberOfCommandBuffers);
 
-	auto base = std::prev(commandBuffers.end(), numberOfCommandBuffers);
+	uint32_t j = 0;
 
-	auto iter = base;
-
-	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
-		iter->buffer = l[i];
-		iter->queueFamilyIndex = queueFamilyIndex;
-		iter->queueIndex = queueIndex;
-		iter->poolIndex = poolIndex;
-		ret[i] = size + i;
-		iter = std::next(iter, 1);
+	for (uint32_t i = firstCommandBuffer; i < firstCommandBuffer + numberOfCommandBuffers; i++, j++) {
+		auto& iter = commandBuffers[i];
+		iter.buffer = l[j];
+		iter.queueFamilyIndex = queueFamilyIndex;
+		iter.queueIndex = queueIndex;
+		iter.poolIndex = poolIndex;
+		ret[j] = i;
 	}
 
 	if (createFences)
 	{
-		iter = base;
-		auto fencesidx = CreateFences(numberOfCommandBuffers, VK_FENCE_CREATE_SIGNALED_BIT);
-		for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
-			iter->fenceIdx = fencesidx[i];
-			iter = std::next(iter, 1);
+		auto fencesidx = CreateFences(firstCommandBuffer, numberOfCommandBuffers, VK_FENCE_CREATE_SIGNALED_BIT);
+		j = 0;
+		for (uint32_t i = firstCommandBuffer; i < firstCommandBuffer + numberOfCommandBuffers; i++, j++) {
+			auto& iter = commandBuffers[i];
+			iter.fenceIdx = fencesidx[j];
 		}
 	}
 

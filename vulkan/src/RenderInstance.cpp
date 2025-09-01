@@ -202,7 +202,7 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	res = dev.PresentSwapChain(swapChainIndex, imageIndex);
+	res = dev.PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
 	if (!res || resizeWindow) {
 		resizeWindow = false;
@@ -448,8 +448,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
 
-	cbsIndices = majorDevice.CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT * 3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
-
 	CreateGlobalBuffer();
 
 	CreatePipelines();
@@ -459,17 +457,25 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 			this->MonolithicDrawingTask(cbIndex, iIndex);
 		};
 
+	majorDevice.commandBuffers.resize(MAX_FRAMES_IN_FLIGHT * 3);
+	majorDevice.fences.resize(MAX_FRAMES_IN_FLIGHT * 3);
+
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
+		cbsIndices = majorDevice.CreateReusableCommandBuffers(3, i*3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 		auto& ref = threadedRecordBuffers[i];
-		currentCBIndex[i] = (i * 3);
-		for (int j = i * 3; j < ((i + 1) * 3); j++)
+		int n = MAX_FRAMES_IN_FLIGHT;
+		currentCBIndex[i] = (i * n);
+		for (int j = 0; j < 3; j++)
 		{
-			ref.buffers[j % 3] = cbsIndices[j];
+			ref.buffers[j] = cbsIndices[j];
 		}
 		ref.outputImageIndex = i;
 		ref.drawingFunction = drawingCallback;
-		ref.DrawLoop();
+		//ref.DrawMain();
+		ThreadManager::LaunchBackgroundThread(
+			std::bind(std::mem_fn(&ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>::DrawLoop),
+				&ref, std::placeholders::_1));
 	}
 }
 
@@ -548,6 +554,6 @@ void RenderInstance::DrawScene(uint32_t cbindex)
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)
 {
 	threadedRecordBuffers[i].Invalidate();
-	threadedRecordBuffers[i].DrawLoop();
+	//threadedRecordBuffers[i].DrawLoop();
 }
 

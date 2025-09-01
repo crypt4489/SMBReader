@@ -108,14 +108,18 @@ public:
 
     void Wait(); //both used by producer
 
-    bool Wait(std::chrono::nanoseconds timeout);
+    bool Wait(std::chrono::milliseconds timeout);
+
+    bool Wait(std::chrono::milliseconds timeout, std::stop_token &token);
+
+    void Wait(std::stop_token& token);
 
     void Notify(); //used by consumer
 
 private:
     bool count;
     std::mutex lock;
-    std::condition_variable cv;
+    std::condition_variable_any cv;
 };
 
 class SemaphoreGuard

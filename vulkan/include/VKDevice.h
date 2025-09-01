@@ -205,6 +205,9 @@ public:
 		buffer(VK_NULL_HANDLE), fenceIdx(~0U), poolIndex(~0U), queueIndex(~0U), queueFamilyIndex(~0U) {};
 	VKCommandBuffer(VkCommandBuffer _b, uint32_t i, uint32_t pi, uint32_t qi, uint32_t qfi)
 		: buffer(_b), fenceIdx(i), poolIndex(pi), queueIndex(qi), queueFamilyIndex(qfi) {};
+	VKCommandBuffer(const VKCommandBuffer& other) = default;
+	VKCommandBuffer(VKCommandBuffer&& other) = default;
+
 	VkCommandBuffer buffer;
 	uint32_t fenceIdx = ~0U;
 	uint32_t poolIndex;
@@ -401,7 +404,7 @@ public:
 
 	std::vector<uint32_t> CreateSemaphores(uint32_t count);
 
-	std::vector<uint32_t> CreateFences(uint32_t count, VkFenceCreateFlags flags);
+	std::vector<uint32_t> CreateFences(uint32_t first, uint32_t count, VkFenceCreateFlags flags);
 
 	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage);
 
@@ -414,10 +417,10 @@ public:
 	uint32_t SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
 		uint32_t cbIndex);
 
-	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx);
+	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t commandBufferIndex);
 
 	std::vector<uint32_t> CreateReusableCommandBuffers(
-		uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites);
+		uint32_t numberOfCommandBuffers, uint32_t firstCommandBuffer, VkCommandBufferLevel level, bool createFences, uint32_t capabilites);
 	
 	uint32_t GetCommandBufferIndex(uint64_t timeout);
 

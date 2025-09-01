@@ -54,7 +54,7 @@ void SPSC::Wait()
     count = true;
 }
 
-bool SPSC::Wait(std::chrono::nanoseconds timeout)
+bool SPSC::Wait(std::chrono::milliseconds timeout)
 {
     std::unique_lock guard(lock);
     if (!cv.wait_for(guard, timeout, [this]() { return count == false; }))
@@ -63,6 +63,24 @@ bool SPSC::Wait(std::chrono::nanoseconds timeout)
     }
     count = true;
     return true;
+}
+
+bool SPSC::Wait(std::chrono::milliseconds timeout, std::stop_token& token)
+{
+    std::unique_lock guard(lock);
+    if (!cv.wait_for(guard, token, timeout, [this]() { return count == false; }))
+    {
+        return false;
+    }
+    count = true;
+    return true;
+}
+
+void SPSC::Wait(std::stop_token& token)
+{
+    std::unique_lock guard(lock);
+    cv.wait(guard, token, [this]() { return count == false; });
+    count = true;
 }
 
 void SPSC::Notify()

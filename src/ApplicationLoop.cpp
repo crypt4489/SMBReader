@@ -97,22 +97,21 @@ void ApplicationLoop::Execute()
 
 		while (running)
 		{
-			std::string base = std::string("FPS : ");
-			std::string newstring = base + std::to_string(FPS);
-			size_t stringLoc = base.size() - 1;
+			//std::string base = std::string("FPS : ");
+			//std::string newstring = base + std::to_string(FPS);
+			//size_t stringLoc = base.size() - 1;
 			//text1->UpdateText(newstring);
 			//TextManager::UpdateVertexBuffer(text1, stringLoc);
 
-			
+		
+
 			if (mainWindow->ShouldCloseWindow()) break;
 
 			UpdateRenderables();
 
 			auto index = rend->BeginFrame();
-			
-			if (index == ~0ui32) continue;
 
-			//rend->DrawScene();
+			if (index == ~0ui32) continue;
 
 			rend->SubmitFrame(index);
 

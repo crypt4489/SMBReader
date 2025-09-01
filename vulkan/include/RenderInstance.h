@@ -12,16 +12,16 @@
 #include "WindowManager.h"
 
 
-
+template <int N>
 struct ThreadedRecordBuffer
 {
-	std::array<uint32_t, 3> buffers; //indices
-	uint32_t currentBuffer = 2; // current good buffer
+	std::array<uint32_t, N> buffers; //indices
+	uint32_t currentBuffer = N-1; // current good buffer
 	Semaphore currentGuard{};
 	SPSC invalidate{};
 	uint32_t outputImageIndex;
 	std::function<void(uint32_t, uint32_t)> drawingFunction;
-
+	
 	uint32_t GetCurrentBuffer()
 	{
 		currentGuard.Wait();
@@ -38,13 +38,26 @@ struct ThreadedRecordBuffer
 		invalidate.Notify();
 	}
 
-	void DrawLoop()
+	void DrawLoop(std::stop_token stoken)
 	{
-		std::chrono::nanoseconds timeout = std::chrono::nanoseconds(1);
+		while (true)
+		{
+			invalidate.Wait(stoken);
 
-		if (!invalidate.Wait(timeout)) return;
-		
-		uint32_t next = (currentBuffer + 1) % 3;
+			if (stoken.stop_requested()) break;
+
+			DrawMain(false);
+		}
+	}
+
+
+	void DrawMain(bool wait = true)
+	{
+		if (wait) {
+			invalidate.Wait();
+		}
+
+		uint32_t next = (currentBuffer + 1) % N;
 
 		uint32_t recordBuffer = buffers[next];
 
@@ -172,7 +185,7 @@ public:
 
 	VkFormat depthFormat;
 
-	std::array<ThreadedRecordBuffer, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
+	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 	
 };
 
