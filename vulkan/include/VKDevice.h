@@ -483,10 +483,7 @@ public:
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	std::vector<QueueManager*> queueManagers;
-	std::vector<VkCommandPool> commandPools;
-	std::vector<VkDescriptorPool> descriptorPools;
 	std::vector<VKSwapChain> swapChains;
-	std::vector<VkDeviceMemory> deviceMemories; //memoryIndex, deviceMemory pool
 	std::vector<VKAllocator> allocators;
 	std::vector<std::pair<VkBuffer, VkDeviceMemory>> deviceBuffers;
 	std::vector<std::pair<VkBuffer, VkDeviceMemory>> hostBuffers;
@@ -494,19 +491,23 @@ public:
 	std::vector<VkImageView> imageViews;
 	std::vector<VkSampler> samplers; 
 	std::vector<std::pair<uint32_t, VKAllocator>> hostAllocators;
-	std::vector<VkRenderPass> renderPasses;
-	std::vector<VkSemaphore> semaphores;
-	std::vector<VkFence> fences;
+
+
 	std::vector<VKCommandBuffer> commandBuffers;
-	std::vector<VkFramebuffer> frameBuffers;
 	std::vector<RenderTarget> renderTargets;
-	VKShaderCache shaders;
+	
 	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
+	VKShaderCache shaders;
+
 	SharedExclusiveFlag deviceLock;
 
 	std::unordered_map<uint32_t, uint32_t> graphMapping;
 	std::vector<VKRenderGraph*> graphs;
+
+
+	uintptr_t entries[250];
+	size_t indexForEntries = 0;
 };
 

@@ -375,13 +375,18 @@ void RenderInstance::DeleteVulkanSampler(ImageIndex& index)
 	majorDevice.DestorySampler(index);
 }
 
+
+#define MB 1024 * 1024
+#define GB 1024 * MB
+
+
 void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 {
 	this->windowMan = window;
 	windowMan->SetWindowResizeCallback(frameResizeCB);
 	glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 
-
+	vkInstance.SetInstanceDataAndSize(16 * MB);
 	vkInstance.CreateRenderInstance();
 	vkInstance.CreateDrawingSurface(window->GetWindow());
 
@@ -458,7 +463,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		};
 
 	majorDevice.commandBuffers.resize(MAX_FRAMES_IN_FLIGHT * 3);
-	majorDevice.fences.resize(MAX_FRAMES_IN_FLIGHT * 3);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{

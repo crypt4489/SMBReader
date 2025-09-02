@@ -13,6 +13,61 @@
 #include <stdexcept>
 #include <vector>
 
+
+struct VKInstanceAllocator
+{
+
+	uint8_t* instanceData;
+	size_t instanceDataSize;
+	size_t offset;
+
+	VkAllocationCallbacks operator()() const {
+		VkAllocationCallbacks res;
+
+		res.pUserData = (void*)this;
+
+		res.pfnAllocation = &Allocation;
+		res.pfnReallocation = &Reallocation;
+		res.pfnFree = &Free;
+
+		res.pfnInternalAllocation = nullptr;
+		res.pfnInternalFree = nullptr;
+
+		return res;
+	}
+
+	static void* VKAPI_CALL Allocation(
+		void* userData,
+		size_t size,
+		size_t alignment,
+		VkSystemAllocationScope allocationScope
+	);
+
+
+	static void* VKAPI_CALL Reallocation(
+		void* userData,
+		void *original,
+		size_t size,
+		size_t alignment,
+		VkSystemAllocationScope allocationScope
+	);
+
+	static void VKAPI_CALL Free(
+		void* userData,
+		void* memory
+	);
+
+	void* RealAlloc(size_t size,
+		size_t alignment, VkSystemAllocationScope allocationScope);
+
+	void* RealRealloc(void* original, size_t size,
+		size_t alignment, VkSystemAllocationScope allocationScope);
+
+	void RealFree(void* memory);
+
+
+};
+
 class VKInstance
 {
 public:
@@ -38,6 +93,8 @@ public:
 
 	VKDevice& GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
+	void SetInstanceDataAndSize(size_t datasize);
+
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 	
@@ -47,5 +104,7 @@ public:
 
 	std::vector<VkPhysicalDevice> gpus;
 	std::vector<std::pair<VkPhysicalDevice, std::vector<VKDevice>>> logicalDevices;
+	
+	VKInstanceAllocator allocator;
 };
 

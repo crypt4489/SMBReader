@@ -1,23 +1,26 @@
 #include "VKInstance.h"
 
+
+
+
 VKInstance::~VKInstance() {
 
-	for (auto&& ref : logicalDevices)
+
+	for (auto& ref : logicalDevices)
 	{
+		for (auto& ref2 : ref.second)
+		{
+			ref2.WaitOnDevice();
+		}
+
 		ref.second.clear();
 	}
 
-	if (renderSurface)
+	if (allocator.instanceData)
 	{
-		vkDestroySurfaceKHR(instance, renderSurface, nullptr);
+		delete[] allocator.instanceData;
 	}
 
-	VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
-
-	if (instance)
-	{
-		vkDestroyInstance(instance, nullptr);
-	}
 }
 
 VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuIndex)
@@ -130,7 +133,9 @@ void VKInstance::CreateRenderInstance()
 
 	createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
 
-	VkResult result = vkCreateInstance(&createInfo, nullptr, &instance);
+	auto ret = allocator();
+
+	VkResult result = vkCreateInstance(&createInfo, &ret, &instance);
 
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to create instance!");
@@ -306,4 +311,70 @@ VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& de
 VKDevice& VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
 	return logicalDevices[gpuIndex].second[deviceIndex];
+}
+
+void VKInstance::SetInstanceDataAndSize(size_t datasize)
+{
+	allocator.instanceDataSize = datasize;
+	
+	allocator.instanceData = new uint8_t[datasize];
+}
+
+
+void* VKAPI_CALL VKInstanceAllocator::Allocation(
+	void* userData,
+	size_t size,
+	size_t alignment,
+	VkSystemAllocationScope allocationScope
+)
+{
+	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	return allocator->RealAlloc(size, alignment, allocationScope);
+}
+
+
+void* VKAPI_CALL VKInstanceAllocator::Reallocation(
+	void* userData,
+	void* original,
+	size_t size,
+	size_t alignment,
+	VkSystemAllocationScope allocationScope
+)
+{
+	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	return allocator->RealRealloc(original, size, alignment, allocationScope);
+}
+
+void VKAPI_CALL VKInstanceAllocator::Free(
+	void* userData,
+	void* memory
+)
+{
+	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	allocator->RealFree(memory);
+}
+
+void* VKInstanceAllocator::RealAlloc(size_t size,
+	size_t alignment,
+	VkSystemAllocationScope allocationScope)
+{
+	uintptr_t head = (uintptr_t)instanceData + offset;
+	size_t makeup = (head & (alignment - 1));
+	head += makeup;
+	offset += (size+makeup);
+	return (void*)head;
+}
+
+void* VKInstanceAllocator::RealRealloc(void* original, size_t size,
+	size_t alignment,
+	VkSystemAllocationScope allocationScope)
+{
+	void* newaddr = RealAlloc(size, alignment, allocationScope);
+	memcpy(newaddr, original, size);
+	return newaddr;
+}
+
+void VKInstanceAllocator::RealFree(void* memory)
+{
+
 }
