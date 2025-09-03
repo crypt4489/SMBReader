@@ -334,12 +334,14 @@ public:
 		std::vector<const char*>& deviceExtensions,
 		uint32_t queueFlags,
 		VkPhysicalDeviceFeatures& features,
-		VkSurfaceKHR renderSurface
+		VkSurfaceKHR renderSurface,
+		size_t perDeviceDataSize,
+		float deviceRatio
 	);
 
 	std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> GetQueueHandle(uint32_t capabilites);
 
-	void CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
+	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	uint32_t CreateCommandPool(QueueIndex& queueIndex);
 
@@ -404,7 +406,7 @@ public:
 
 	std::vector<uint32_t> CreateSemaphores(uint32_t count);
 
-	std::vector<uint32_t> CreateFences(uint32_t first, uint32_t count, VkFenceCreateFlags flags);
+	std::vector<uint32_t> CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
 	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage);
 
@@ -450,7 +452,11 @@ public:
 	
 	VkFramebuffer GetFrameBuffer(uint32_t index);
 
+	VkBuffer GetHostBuffer(size_t index);
+
 	VKShaderCache& GetShaders();
+
+	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
 	VKDescriptorSetCache& GetDescriptorSets();
 
@@ -480,34 +486,35 @@ public:
 
 	void GetSharedLock();
 
+	VKCommandBuffer* GetCommandBuffer(uint32_t index);
+
 	VkDevice device;
 	VkPhysicalDevice gpu;
-	std::vector<QueueManager*> queueManagers;
+	size_t queueManagers;
+	size_t queueManagersSize;
 	std::vector<VKSwapChain> swapChains;
-	std::vector<VKAllocator> allocators;
-	std::vector<std::pair<VkBuffer, VkDeviceMemory>> deviceBuffers;
-	std::vector<std::pair<VkBuffer, VkDeviceMemory>> hostBuffers;
 	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
 	std::vector<VkImageView> imageViews;
 	std::vector<VkSampler> samplers; 
-	std::vector<std::pair<uint32_t, VKAllocator>> hostAllocators;
-
-
-	std::vector<VKCommandBuffer> commandBuffers;
-	std::vector<RenderTarget> renderTargets;
 	
-	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
+	
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
 	VKShaderCache shaders;
 
 	SharedExclusiveFlag deviceLock;
 
+	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
 	std::unordered_map<uint32_t, uint32_t> graphMapping;
 	std::vector<VKRenderGraph*> graphs;
 
 
-	uintptr_t entries[250];
+	uintptr_t *entries;
 	size_t indexForEntries = 0;
+	size_t numberOfEntries = 0;
+
+	void* perDeviceData;
+	size_t perDeviceOffset = 0;
+	size_t perDeviceSize;
 };
 

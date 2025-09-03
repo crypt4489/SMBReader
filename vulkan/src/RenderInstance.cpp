@@ -326,7 +326,7 @@ uint32_t RenderInstance::GetMainBufferIndex() const
 
 VkBuffer RenderInstance::GetDynamicUniformBuffer()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).hostBuffers[globalIndex].first;
+	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetHostBuffer(globalIndex);
 }
 
 ImageIndex RenderInstance::CreateVulkanImage(
@@ -404,14 +404,14 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers, 
 		vkInstance.deviceExtensions, 
-		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, features, vkInstance.renderSurface);
+		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, features, vkInstance.renderSurface, 6 * MB, 1.0f/6.0f);
 
 	depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
 		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	stagingBufferIndex = majorDevice.CreateHostBuffer(64'000'000, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	stagingBufferIndex = majorDevice.CreateHostBuffer(64 * MB, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface, 3);
 
@@ -433,7 +433,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	attachmentsIndex = majorDevice.CreateImageMemoryPool(512'000'000, depthPool.first);
+	attachmentsIndex = majorDevice.CreateImageMemoryPool(512 * MB, depthPool.first);
 
 	CreateMSAAColorResources(800, 600);
 
@@ -462,14 +462,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 			this->MonolithicDrawingTask(cbIndex, iIndex);
 		};
 
-	majorDevice.commandBuffers.resize(MAX_FRAMES_IN_FLIGHT * 3);
-
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		cbsIndices = majorDevice.CreateReusableCommandBuffers(3, i*3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 		auto& ref = threadedRecordBuffers[i];
 		int n = MAX_FRAMES_IN_FLIGHT;
-		currentCBIndex[i] = (i * n);
+		currentCBIndex[i] = cbsIndices[0];
 		for (int j = 0; j < 3; j++)
 		{
 			ref.buffers[j] = cbsIndices[j];
