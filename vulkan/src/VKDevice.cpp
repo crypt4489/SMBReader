@@ -133,7 +133,7 @@ template<typename T_VkType>
 static size_t AddVkTypeToEntry(VKDevice* device, T_VkType handle)
 {
 	size_t ret = device->indexForEntries;
-	device->entries[device->indexForEntries++] = (uintptr_t)handle;
+	device->entries[device->indexForEntries++] = reinterpret_cast<uintptr_t>(handle);
 	return ret;
 }
 
@@ -141,10 +141,10 @@ static size_t AddVkTypeToEntry(VKDevice* device, T_VkType handle)
 template<typename T_Type>
 static T_Type AllocTypeFromEntry(VKDevice* device, size_t size)
 {
-	uintptr_t head = (uintptr_t)device->perDeviceData;
+	uintptr_t head = reinterpret_cast<uintptr_t>(device->perDeviceData);
 	uintptr_t ret = head + device->perDeviceOffset;
 	device->perDeviceOffset += size;
-	return (T_Type)ret;
+	return reinterpret_cast<T_Type>(ret);
 }
 
 
@@ -161,11 +161,6 @@ VKDevice::~VKDevice()
 		shaders.DestroyShaderCache();
 
 		descriptorLayoutCache.DestroyLayoutCache();
-
-		//for (auto& sc : swapChains)
-		{
-			//sc.DestroySwapChain();
-		}
 
 		if (perDeviceData)
 		{
@@ -406,13 +401,11 @@ void VKDevice::CreateQueueManager(QueueManager *manager, uint32_t queueIndex, ui
 
 void VKDevice::AllocateCommandPools(uint32_t size)
 {
-	//commandPools.resize(size);
 }
 
 uint32_t VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 {
 	std::shared_lock lock(deviceLock);
-	//uint32_t poolIndex = static_cast<uint32_t>(commandPools.size());
 	
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -532,14 +525,7 @@ uint32_t VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedI
 
 		swc = std::construct_at(swc, this, parentInstance->renderSurface, attachmentCount, requestedImageCount, swcsupport, stages, maxSemaphorePerStage);
 
-		void* swcperdata = AllocTypeFromEntry<void*>(this,
-			sizeof(uintptr_t) * swc->imageCount * (1 + swc->attachmentCount)  +
-			sizeof(VkImage) * swc->imageCount +
-			sizeof(uint32_t) * 2 +
-			sizeof(uintptr_t) * (swc->imageCount * (maxSemaphorePerStage * stages) + swc->imageCount)
-		);
-
-		swc->SetSWCLocalData(swcperdata);
+		swc->SetSWCLocalData(AllocTypeFromEntry<void*>(this, swc->CalculateSwapChainMemoryUsage()));
 
 		index = AddVkTypeToEntry(this, swc);
 	}
@@ -1333,7 +1319,6 @@ VKDescriptorLayoutCache& VKDevice::GetDescriptorLayouts()
 void VKDevice::CreatePipelineCache(uint32_t renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
-	//renderPassPipelineCache.insert({ renderPassIndex, VKPipelineCache(device, GetRenderPass(renderPassIndex), this) });
 
 	auto renderPassData = reinterpret_cast<VKPipelineCache*>((GetVkTypeFromEntry(this, renderPassIndex + 1)+sizeof(VKRenderGraph)));
 
@@ -1379,7 +1364,8 @@ uint32_t VKDevice::CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebu
 {
 	std::shared_lock lock(deviceLock);
 	auto renderTarget = AllocTypeFromEntry<RenderTarget*>(this, sizeof(RenderTarget));
-	std::construct_at(renderTarget, renderPassIndex, framebufferCount);
+	void* data = AllocTypeFromEntry<void*>(this, sizeof(size_t) * framebufferCount * 2);
+	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
 	return AddVkTypeToEntry(this, renderTarget);
 }
 

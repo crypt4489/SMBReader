@@ -258,15 +258,20 @@ class RenderTarget
 {
 public:
 	RenderTarget() = default;
-	RenderTarget(uint32_t renderPass, uint32_t imageCount)
+	RenderTarget(uint32_t renderPass, uint32_t imageCount, void *data)
 	{
 		renderPassIndex = renderPass;
-		framebufferIndices.resize(imageCount);
-		imageViews.resize(imageCount);
+		count = imageCount;
+
+		size_t* head = reinterpret_cast<size_t*>(data);
+
+		framebufferIndices = head;
+		imageViews = std::next(head, imageCount);
 	}
 	uint32_t renderPassIndex;
-	std::vector<uint32_t> framebufferIndices;
-	std::vector<ImageIndex> imageViews;
+	uint32_t count;
+	size_t* framebufferIndices;
+	size_t* imageViews;
 };
 
 enum VKQueueCapabilities : uint32_t
@@ -507,7 +512,7 @@ public:
 
 	SharedExclusiveFlag deviceLock;
 
-	uintptr_t *entries;
+	uintptr_t* entries;
 	size_t indexForEntries = 0;
 	size_t numberOfEntries = 0;
 

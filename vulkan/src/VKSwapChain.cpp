@@ -5,6 +5,131 @@
 #include "VKUtilities.h"
 
 
+static VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
+	for (const auto& availableFormat : availableFormats) {
+		if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return availableFormat;
+		}
+	}
+
+	return availableFormats[0];
+}
+
+static VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
+	for (const auto& availablePresentMode : availablePresentModes) {
+		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+			return availablePresentMode;
+		}
+	}
+
+	return VK_PRESENT_MODE_FIFO_KHR;
+}
+
+
+static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) {
+	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+		return capabilities.currentExtent;
+	}
+	else {
+
+		VkExtent2D actualExtent = {
+			width,
+			height
+		};
+
+		actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+		actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+
+		return actualExtent;
+	}
+}
+
+static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
+
+	VkExtent2D actualExtent = {
+		width,
+		height
+	};
+
+	return actualExtent;
+
+}
+
+static uintptr_t GetDependencies(VKSwapChain* swc)
+{
+	return 
+		swc->headofperdata +
+		SWCATTACHMENTSOFFSET(swc->imageCount) +
+		SWCQFCOFFSET(swc->imageCount, swc->attachmentCount) +
+		SWCDEPENDSOFFSET(swc->queueFamiliesCacheCount);
+}
+
+static uintptr_t* GetDependenciesPtr(VKSwapChain* swc)
+{
+	return reinterpret_cast<uintptr_t*>(GetDependencies(swc));
+}
+
+
+static VkImage* GetSwapChainImages(VKSwapChain* swc)
+{
+	return reinterpret_cast<VkImage*>(swc->headofperdata);
+}
+
+
+static uintptr_t GetHeadOfAttachments(VKSwapChain* swc)
+{
+	uintptr_t headofattachments = swc->headofperdata + SWCATTACHMENTSOFFSET(swc->imageCount);
+
+	return headofattachments;
+}
+
+static uintptr_t* GetHeadOfAttachmentsPtr(VKSwapChain* swc)
+{
+	return reinterpret_cast<uintptr_t*>(GetHeadOfAttachments(swc));
+}
+
+static uint32_t* GetQueueFamilyCache(VKSwapChain* swc)
+{
+	return reinterpret_cast<uint32_t*>(swc->headofperdata + SWCATTACHMENTSOFFSET(swc->imageCount) + SWCQFCOFFSET(swc->imageCount, swc->attachmentCount));
+}
+
+size_t VKSwapChain::CalculateSwapChainMemoryUsage()
+{
+	return 
+		sizeof(uintptr_t)* imageCount * (1 + attachmentCount) +
+		sizeof(VkImage) * imageCount +
+		sizeof(uint32_t) * 2 +
+		sizeof(uintptr_t) * (imageCount * ((semaphorePerStage * numberOfStages) + 1));
+}
+
+void VKSwapChain::AddFramebufferAttachments(std::vector<ImageIndex*>& attachmentIndices)
+{
+	uint32_t i = 0;
+	uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
+
+
+	uintptr_t headofattachments = GetHeadOfAttachments(this);
+
+	uintptr_t* attaches = reinterpret_cast<uintptr_t*>(headofattachments);
+
+	uintptr_t outputaddr = headofattachments + sizeof(size_t) * imageCount;
+
+	while (i < imageCount)
+	{
+		attaches[i] = outputaddr;
+
+		size_t* output = reinterpret_cast<size_t*>(outputaddr);
+
+		for (uint32_t j = 0; j < attachIndicesSize; j++)
+		{
+			output[j] = reinterpret_cast<size_t>(attachmentIndices[j]);
+		}
+		outputaddr += sizeof(size_t) * attachmentCount;
+		i++;
+
+	}
+}
+
 void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount)
 {
 	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
@@ -22,7 +147,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 		}
 	}
 	else {
-		imageCount = std::max(_imageCount, swapChainSupport.capabilities.minImageCount);
+		imageCount = std::min(std::max(_imageCount, swapChainSupport.capabilities.minImageCount), swapChainSupport.capabilities.maxImageCount);
 	}
 }
 
@@ -53,7 +178,7 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
 
 
-	uint32_t* qfc = reinterpret_cast<uint32_t*>(headofperdata + SWCATTACHMENTSOFFSET(imageCount) + SWCQFCOFFSET(imageCount, attachmentCount));
+	uint32_t* qfc = GetQueueFamilyCache(this);
 	queueFamiliesCacheCount = numberOfQueueFamilies;
 
 	for (uint32_t i = 0; i < numberOfQueueFamilies; i++) 
@@ -69,7 +194,7 @@ void VKSwapChain::CreateSwapChain(
 		throw std::runtime_error("failed to create swap chain!");
 	}
 	
-	VkImage *swcImages = reinterpret_cast<VkImage*>(headofperdata);
+	VkImage *swcImages = GetSwapChainImages(this);
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 
@@ -79,7 +204,7 @@ void VKSwapChain::CreateSwapChain(
 
 	AddFramebufferAttachments(attachmentIndices);
 
-	uintptr_t* attaches = reinterpret_cast<uintptr_t*>(headofperdata + SWCATTACHMENTSOFFSET(imageCount));
+	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
@@ -96,15 +221,14 @@ void VKSwapChain::CreateSyncObject()
 	std::vector<uint32_t> imageAvailablesIndices = device->CreateSemaphores(imageCount);
 	std::vector<uint32_t> renderFinishedIndices = device->CreateSemaphores(imageCount);
 
-	uintptr_t dependencies = headofperdata +
-		SWCATTACHMENTSOFFSET(imageCount) +
-		SWCQFCOFFSET(imageCount, attachmentCount) +
-		SWCDEPENDSOFFSET(queueFamiliesCacheCount);
+	uintptr_t dependencies = GetDependencies(this);
 
 	uintptr_t dependenciesdata = dependencies + (sizeof(uintptr_t) * imageCount);
 
 	uintptr_t* ptr1 = reinterpret_cast<uintptr_t*>(dependencies);
 	uintptr_t* ptr2 = reinterpret_cast<uintptr_t*>(dependenciesdata);
+
+	size_t stride = semaphorePerStage * numberOfStages;
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
@@ -112,19 +236,14 @@ void VKSwapChain::CreateSyncObject()
 		ptr2[0] = imageAvailablesIndices[i];
 		ptr2[1] = renderFinishedIndices[i];
 		
-		ptr2 = std::next(ptr2, 2);
-		dependenciesdata += sizeof(uintptr_t) * 2;
+		ptr2 = std::next(ptr2, stride);
+		dependenciesdata += sizeof(uintptr_t) * stride;
 	}
 }
 
 size_t* VKSwapChain::GetDependenciesForImageIndex(uint32_t imageIndex)
 {
-	uintptr_t dependencies = headofperdata +
-		SWCATTACHMENTSOFFSET(imageCount) +
-		SWCQFCOFFSET(imageCount, attachmentCount) +
-		SWCDEPENDSOFFSET(queueFamiliesCacheCount);
-
-	uintptr_t* ptr1 = reinterpret_cast<uintptr_t*>(dependencies);
+	uintptr_t* ptr1 = GetDependenciesPtr(this);
 
 	return reinterpret_cast<size_t*>(ptr1[imageIndex]);
 }
@@ -156,7 +275,7 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 	createInfo.imageSharingMode = queueSharing;
 
-	uint32_t* qfc = reinterpret_cast<uint32_t*>(headofperdata + SWCATTACHMENTSOFFSET(imageCount) + SWCQFCOFFSET(imageCount, attachmentCount));
+	uint32_t* qfc = GetQueueFamilyCache(this);
 
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
 	createInfo.pQueueFamilyIndices = qfc;
@@ -170,7 +289,7 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 		throw std::runtime_error("failed to create swap chain!");
 	}
 
-	VkImage* swcImages = reinterpret_cast<VkImage*>(headofperdata);
+	VkImage* swcImages = GetSwapChainImages(this);
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 
@@ -183,7 +302,7 @@ void VKSwapChain::CreateSwapChainElements()
 
 	auto& renderTarget = device->GetRenderTarget(renderTargetIndex);
 
-	uintptr_t* attaches = reinterpret_cast<uintptr_t*>(headofperdata + SWCATTACHMENTSOFFSET(imageCount));
+	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
 
 	VkImage* swcImages = reinterpret_cast<VkImage*>(headofperdata);
 
