@@ -413,13 +413,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	stagingBufferIndex = majorDevice.CreateHostBuffer(64 * MB, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-	swapChainIndex = majorDevice.CreateSwapChain(vkInstance.renderSurface, 3);
+	swapChainIndex = majorDevice.CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
 
 	VKSwapChain& swapChain = majorDevice.GetSwapChain(swapChainIndex);
-
-	auto scd = vkInstance.GetSwapChainSupport(physicalIndex);
-
-	swapChain.SetSwapChainProperties(scd);
 
 	VkFormat swcFormat = swapChain.GetSwapChainFormat();
 
@@ -440,8 +436,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	CreateDepthImage(800, 600);
 
 	CreateRenderPass();
-
-	majorDevice.CreatePipelineCache(mainRenderPass);
 
 	std::vector attachmentViews = { &colorView, &depthView };
 
@@ -489,7 +483,7 @@ OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 	dsb.AddDescriptorsToCache("mainrenderpass");
 	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
 	std::vector<uint32_t> data(1, perRenderPassStuff);
-	majorDevice.CreateRenderGraph(mainRenderPass, data, "mainrenderpass");
+	majorDevice.UpdateRenderGraph(mainRenderPass, data, "mainrenderpass");
 	return perRenderPassStuff;
 }
 
@@ -538,19 +532,18 @@ DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname,
 void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto& graphIndex = dev.graphMapping[mainRenderPass];
-	auto& graph = dev.graphs[graphIndex];
-	graph->AddObject(pipeline);
+	auto& graph = dev.GetRenderGraph(mainRenderPass);
+	graph.AddObject(pipeline);
 }
 
 void RenderInstance::DrawScene(uint32_t cbindex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	if (!dev.graphMapping.count(mainRenderPass)) return;
+
+	auto& graph = dev.GetRenderGraph(mainRenderPass);
+	//if (!graph.objects.size()) return;
 	auto rcb = dev.GetRecordingBufferObject(cbindex);
-	auto& graphIndex = dev.graphMapping[mainRenderPass];
-	auto& graph = dev.graphs[graphIndex];
-	graph->DrawScene(rcb, currentFrame);
+	graph.DrawScene(rcb, currentFrame);
 }
 
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)

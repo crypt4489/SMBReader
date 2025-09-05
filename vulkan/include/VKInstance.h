@@ -77,6 +77,8 @@ public:
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex);
 
+	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
+
 	void CreateDrawingSurface(GLFWwindow* wind);
 
 	void CreateRenderInstance();

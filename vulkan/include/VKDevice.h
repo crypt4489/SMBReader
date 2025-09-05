@@ -304,7 +304,7 @@ public:
 class VKDevice
 {
 public:
-	VKDevice(VkPhysicalDevice _gpu);
+	VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst);
 	~VKDevice();
 
 	VKDevice& operator=(const VKDevice& _dev) = delete;
@@ -355,9 +355,7 @@ public:
 
 	uint32_t CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
-	uint32_t CreateSwapChain(VkSurfaceKHR surface);
-
-	uint32_t CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount);
+	uint32_t CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
 
 
 	ImageIndex CreateImage(uint32_t width,
@@ -402,7 +400,7 @@ public:
 
 	uint32_t CreateRenderPasses(VKRenderPassBuilder& builder);
 
-	void CreateRenderGraph(uint32_t renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
+	void CreateRenderGraph(uint32_t renderPass);
 
 	std::vector<uint32_t> CreateSemaphores(uint32_t count);
 
@@ -430,7 +428,7 @@ public:
 
 	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, uint32_t bufferIndex, bool resetfence);
 
-	uint32_t CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
+	uint32_t CreateFrameBuffer(std::vector<size_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
 
 	VkCommandBuffer GetCommandBufferHandle(uint32_t index);
 
@@ -476,6 +474,10 @@ public:
 
 	RenderTarget& GetRenderTarget(uint32_t renderTargetIndex);
 
+	VKRenderGraph& GetRenderGraph(size_t renderPassIndex);
+
+	void UpdateRenderGraph(uint32_t renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
+
 	void AllocateCommandPools(uint32_t size);
 
 	void WaitOnDevice();
@@ -490,9 +492,10 @@ public:
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
+	VKInstance* parentInstance;
 	size_t queueManagers;
 	size_t queueManagersSize;
-	std::vector<VKSwapChain> swapChains;
+
 	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
 	std::vector<VkImageView> imageViews;
 	std::vector<VkSampler> samplers; 
@@ -503,11 +506,6 @@ public:
 	VKShaderCache shaders;
 
 	SharedExclusiveFlag deviceLock;
-
-	std::unordered_map<uint32_t, VKPipelineCache> renderPassPipelineCache;
-	std::unordered_map<uint32_t, uint32_t> graphMapping;
-	std::vector<VKRenderGraph*> graphs;
-
 
 	uintptr_t *entries;
 	size_t indexForEntries = 0;

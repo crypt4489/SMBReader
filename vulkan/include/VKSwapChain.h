@@ -10,52 +10,37 @@
 #include <unordered_map>
 #include <vector>
 
-class VKFrameBufferAttachments
-{
-public:
-	VKFrameBufferAttachments() = default;
-	VKFrameBufferAttachments(uint32_t size) {
-		attachments.resize(size);
-	}
 
-	std::vector<ImageIndex*> attachments;
-};
 
-class VKSwapChainDependencies
-{
-public:
 
-	VKSwapChainDependencies() = default;
-
-	void AddIndicesForImage(uint32_t iIndex, std::vector<std::vector<uint32_t>>& depenencies)
-	{
-		if (chains.count(iIndex))
-		{
-			throw std::runtime_error(std::format("Trying to recreate the swap chain dependencies for image %d", iIndex));
-		}
-		chains[iIndex] = depenencies;
-	}
-
-	std::unordered_map<uint32_t, std::vector<std::vector<uint32_t>>> chains;
-};
+#define SWCATTACHMENTSOFFSET(x) sizeof(VkImage) * x
+#define SWCQFCOFFSET(x, y) sizeof(size_t) * x * (1 + y)
+#define SWCDEPENDSOFFSET(x) sizeof(uint32_t) * x
 
 class VKSwapChain
 {
 public:
 	VKSwapChain() = default;
 
-	VKSwapChain(VKDevice *_d, VkSurfaceKHR _surface) : device(_d), surface(_surface) {}
+	//VKSwapChain(VKDevice *_d, VkSurfaceKHR _surface, void *) : device(_d), surface(_surface) {}
 
-	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, uint32_t _attachmentCount)
-		: device(_d), surface(_surface), attachmentCount(_attachmentCount) {}
-
-	void SetDeviceAndSurface(VKDevice *_device, VkSurfaceKHR _surface)
-	{
-		this->device = _device;
-		this->surface = _surface;
+	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, 
+		uint32_t _attachmentCount, uint32_t requestImages, 
+		VK::Utils::SwapChainSupportDetails& swapChainSupport, size_t stages, size_t semaphoreperstage)
+		: 
+		device(_d), surface(_surface), attachmentCount(_attachmentCount), 
+		semaphorePerStage(semaphoreperstage), numberOfStages(stages) {
+		SetSwapChainProperties(swapChainSupport, requestImages);
 	}
 
-	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport);
+	void SetSWCLocalData(void* data)
+	{
+		headofperdata = reinterpret_cast<uintptr_t>(data);
+	}
+
+	size_t* GetDependenciesForImageIndex(uint32_t imageIndex);
+
+	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
 
 	void RecreateSwapChain(uint32_t width, uint32_t height);
 
@@ -77,10 +62,27 @@ public:
 	{
 		uint32_t i = 0;
 		uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
+
+
+		uintptr_t headofattachments = headofperdata + SWCATTACHMENTSOFFSET(imageCount);
+
+		uintptr_t* attaches = reinterpret_cast<uintptr_t*>(headofattachments);
+
+		uintptr_t outputaddr = headofattachments + sizeof(size_t) * imageCount;
+
 		while (i < imageCount)
 		{
-			auto& fbref = attachments[i++];
-			for (uint32_t j = 0; j < attachIndicesSize; j++) fbref.attachments[j] = attachmentIndices[j];
+			attaches[i] = outputaddr;
+
+			size_t* output = reinterpret_cast<size_t*>(outputaddr);
+
+			for (uint32_t j = 0; j < attachIndicesSize; j++)
+			{
+				output[j] = reinterpret_cast<size_t>(attachmentIndices[j]);
+			}
+			outputaddr += sizeof(size_t) * attachmentCount;
+			i++;
+			
 		}
 	}
 
@@ -153,11 +155,7 @@ public:
 		return swapChainExtent.width;
 	}
 
-
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-
-	std::vector<VkImage> swapChainImages;
-	std::vector<VKFrameBufferAttachments> attachments;
 	uint32_t renderTargetIndex = ~0ui32;
 
 	VkSurfaceFormatKHR swapChainImageFormat;
@@ -166,12 +164,16 @@ public:
 
 	uint32_t attachmentCount;
 	uint32_t imageCount;
+	uint32_t queueFamiliesCacheCount;
+
+	size_t semaphorePerStage;
+	size_t numberOfStages;
 
 	VkSharingMode queueSharing;
 	VkSurfaceTransformFlagBitsKHR preTransform;
-	std::vector<uint32_t> queueFamiliesCache;
+
+	uintptr_t headofperdata;
 	
-	VKSwapChainDependencies dependencies;
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain
 };

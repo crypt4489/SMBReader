@@ -1,5 +1,6 @@
 #include "VKDevice.h"
 #include "VKRenderGraph.h"
+#include "VKInstance.h"
 #include <mutex>
 #include <shared_mutex>
 
@@ -119,7 +120,7 @@ void RecordingBufferObject::EndRecordingCommand()
 	}
 }
 
-template<typename T_VkType>
+template<typename T_VkType = uintptr_t>
 static T_VkType GetVkTypeFromEntry(VKDevice* device, size_t index)
 {
 	T_VkType ret = (T_VkType)device->entries[index];
@@ -147,7 +148,7 @@ static T_Type AllocTypeFromEntry(VKDevice* device, size_t size)
 }
 
 
-VKDevice::VKDevice(VkPhysicalDevice _gpu) : gpu(_gpu), device(VK_NULL_HANDLE)
+VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance *_inst) : gpu(_gpu), parentInstance(_inst), device(VK_NULL_HANDLE)
 {
 }
 
@@ -161,14 +162,9 @@ VKDevice::~VKDevice()
 
 		descriptorLayoutCache.DestroyLayoutCache();
 
-		for (auto& [index, poc] : renderPassPipelineCache)
+		//for (auto& sc : swapChains)
 		{
-			poc.DestroyPipelineCache();
-		}
-
-		for (auto& sc : swapChains)
-		{
-			sc.DestroySwapChain();
+			//sc.DestroySwapChain();
 		}
 
 		if (perDeviceData)
@@ -189,7 +185,7 @@ VKDevice& VKDevice::operator=(VKDevice&& _dev) noexcept {
 	this->gpu = _dev.gpu;
 	_dev.gpu = VK_NULL_HANDLE;
 	
-	this->swapChains = std::move(_dev.swapChains);
+	//this->swapChains = std::move(_dev.swapChains);
 	this->images = std::move(_dev.images);
 	this->imageViews = std::move(_dev.imageViews);
 	this->shaders = std::move(_dev.shaders);
@@ -202,7 +198,7 @@ VKDevice::VKDevice(VKDevice&& _dev)  noexcept
 	_dev.device = VK_NULL_HANDLE;
 	this->gpu = _dev.gpu;
 	_dev.gpu = VK_NULL_HANDLE;
-	this->swapChains = std::move(_dev.swapChains);
+	//this->swapChains = std::move(_dev.swapChains);
 	this->images = std::move(_dev.images);
 	this->imageViews = std::move(_dev.imageViews);
 	this->shaders = std::move(_dev.shaders);
@@ -522,19 +518,32 @@ uint32_t VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryT
 	return ret;
 }
 
-uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface)
-{
-	std::shared_lock lock(deviceLock);
-	uint32_t index = static_cast<uint32_t>(swapChains.size());
-	swapChains.emplace_back(this, surface);
-	return index;
-}
 
-uint32_t VKDevice::CreateSwapChain(VkSurfaceKHR surface, uint32_t attachmentCount)
+uint32_t VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages)
 {
+
 	std::shared_lock lock(deviceLock);
-	uint32_t index = static_cast<uint32_t>(swapChains.size());
-	swapChains.emplace_back(this, surface, attachmentCount);
+	uint32_t index;
+
+	{
+		VKSwapChain* swc = AllocTypeFromEntry<VKSwapChain*>(this, sizeof(VKSwapChain));
+
+		auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
+
+		swc = std::construct_at(swc, this, parentInstance->renderSurface, attachmentCount, requestedImageCount, swcsupport, stages, maxSemaphorePerStage);
+
+		void* swcperdata = AllocTypeFromEntry<void*>(this,
+			sizeof(uintptr_t) * swc->imageCount * (1 + swc->attachmentCount)  +
+			sizeof(VkImage) * swc->imageCount +
+			sizeof(uint32_t) * 2 +
+			sizeof(uintptr_t) * (swc->imageCount * (maxSemaphorePerStage * stages) + swc->imageCount)
+		);
+
+		swc->SetSWCLocalData(swcperdata);
+
+		index = AddVkTypeToEntry(this, swc);
+	}
+
 	return index;
 }
 
@@ -823,7 +832,7 @@ void VKDevice::DestroyImage(ImageIndex& imageIndex)
 {
 	std::shared_lock lock(deviceLock);
 	vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
-	auto alloc = GetVkTypeFromEntry<VKAllocator*>(this, std::get<uint32_t>(images[imageIndex]));
+	auto alloc = GetVkTypeFromEntry<VKAllocator*>(this, std::get<uint32_t>(images[imageIndex])+1);
 	alloc->FreeMemory(std::get<VkDeviceSize>(images[imageIndex])); //image, address, and memory type index
 	images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
 }
@@ -860,21 +869,29 @@ uint32_t VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 		throw std::runtime_error("failed to create render pass!");
 	}
 
-	uint32_t ret = AddVkTypeToEntry(this, ref);
+	uint32_t ret;
+	
+	{
+		auto renderPassDataHandle = AllocTypeFromEntry<void*>(this, sizeof(VKRenderGraph) + sizeof(VKPipelineCache));
+
+		ret = AddVkTypeToEntry(this, ref);
+
+		AddVkTypeToEntry(this, renderPassDataHandle);
+	}
+
+	CreatePipelineCache(ret);
+
+	CreateRenderGraph(ret);
 
 	return ret;
 }
 
-void VKDevice::CreateRenderGraph(uint32_t renderPass, std::vector<uint32_t> &dynamicOffsets, std::string perGraphDescriptor)
+void VKDevice::UpdateRenderGraph(uint32_t renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor)
 {
 	std::shared_lock lock(deviceLock);
 
-	uint32_t index = static_cast<uint32_t>(graphs.size());
-	graphs.push_back( new VKRenderGraph(renderPass) );
-	auto& graph = graphs[index];
+	auto graph = GetVkTypeFromEntry<VKRenderGraph*>(this, renderPass + 1);
 
-	auto ret = graphMapping.insert({ renderPass,  index});
-	//VKRenderGraph& iter = ret.first->second;
 	if (!perGraphDescriptor.empty())
 	{
 		graph->descriptorname = perGraphDescriptor;
@@ -884,6 +901,15 @@ void VKDevice::CreateRenderGraph(uint32_t renderPass, std::vector<uint32_t> &dyn
 	{
 		graph->dynamicOffsets.push_back(i);
 	}
+}
+
+void VKDevice::CreateRenderGraph(uint32_t renderPass)
+{
+	std::shared_lock lock(deviceLock);
+
+	auto renderPassData = GetVkTypeFromEntry<VKRenderGraph*>(this, renderPass + 1);
+
+	auto graph = std::construct_at(renderPassData, renderPass);
 }
 
 std::vector<uint32_t> VKDevice::CreateSemaphores(uint32_t count)
@@ -933,7 +959,7 @@ std::vector<uint32_t> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags 
 uint32_t VKDevice::BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage)
 {
 	std::shared_lock lock(deviceLock);
-	VKSwapChain& swapChain = swapChains[swapChainIndex];
+	VKSwapChain& swapChain = GetSwapChain(swapChainIndex);
 
 	uint32_t imageIndex = swapChain.AcquireNextSwapChainImage(UINT64_MAX, requestedImage);
 
@@ -993,10 +1019,15 @@ uint32_t VKDevice::SubmitCommandBuffer(
 uint32_t VKDevice::SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex, uint32_t cbIndex)
 {
 	//std::shared_lock lock(deviceLock);
-	VKSwapChain& swc = swapChains[swapChainIdx];
-	auto& depends = swc.dependencies.chains[frameIndex];
+	VKSwapChain& swc = GetSwapChain(swapChainIdx);
+	auto depends = swc.GetDependenciesForImageIndex(frameIndex);
 	std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	return SubmitCommandBuffer(depends[0], waitStages, depends[1], cbIndex);
+
+	std::vector<uint32_t> dummie1{ static_cast<uint32_t>(depends[0]) };
+
+	std::vector<uint32_t> dummie2{ static_cast<uint32_t>(depends[1]) };
+
+	return SubmitCommandBuffer(dummie1, waitStages, dummie2, cbIndex);
 }
 
 uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t commandBufferIndex)
@@ -1022,15 +1053,14 @@ uint32_t VKDevice::PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, ui
 
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
-	VKSwapChain& swc = swapChains[swapChainIdx];
-	auto& depends = swc.dependencies.chains[frameIdx];
-	auto& waitIndices = depends[1];
+	VKSwapChain& swc = GetSwapChain(swapChainIdx);
+	auto depends = swc.GetDependenciesForImageIndex(frameIdx);
 
-	uint32_t waitCount = static_cast<uint32_t>(waitIndices.size());
+	uint32_t waitCount = static_cast<uint32_t>(swc.semaphorePerStage);
 	std::vector<VkSemaphore> waitSemaphores(waitCount, VK_NULL_HANDLE);
 	for (uint32_t i = 0; i < waitCount; i++)
 	{
-		waitSemaphores[i] = GetVkTypeFromEntry<VkSemaphore>(this, depends[1][i]);
+		waitSemaphores[i] = GetVkTypeFromEntry<VkSemaphore>(this, depends[waitCount+i]);
 	}
 
 
@@ -1184,7 +1214,7 @@ int32_t VKDevice::WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, uin
 	return 0;
 }
 
-uint32_t VKDevice::CreateFrameBuffer(std::vector<uint32_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent)
+uint32_t VKDevice::CreateFrameBuffer(std::vector<size_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -1258,7 +1288,7 @@ VkDescriptorPool VKDevice::GetDescriptorPool(uint32_t poolIndex)
 VKSwapChain& VKDevice::GetSwapChain(uint32_t index)
 {
 	std::shared_lock lock(deviceLock);
-	return swapChains[index];
+	return *GetVkTypeFromEntry<VKSwapChain*>(this, index);
 }
 
 VkRenderPass VKDevice::GetRenderPass(uint32_t index)
@@ -1303,13 +1333,26 @@ VKDescriptorLayoutCache& VKDevice::GetDescriptorLayouts()
 void VKDevice::CreatePipelineCache(uint32_t renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
-	renderPassPipelineCache.insert({ renderPassIndex, VKPipelineCache(device, GetRenderPass(renderPassIndex), this) });
+	//renderPassPipelineCache.insert({ renderPassIndex, VKPipelineCache(device, GetRenderPass(renderPassIndex), this) });
+
+	auto renderPassData = reinterpret_cast<VKPipelineCache*>((GetVkTypeFromEntry(this, renderPassIndex + 1)+sizeof(VKRenderGraph)));
+
+	auto renderPass = GetVkTypeFromEntry<VkRenderPass>(this, renderPassIndex);
+
+	std::construct_at(renderPassData, device, renderPass, this);
 }
 
 VKPipelineCache& VKDevice::GetPipelineCache(uint32_t renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
-	return renderPassPipelineCache[renderPassIndex];
+	return *reinterpret_cast<VKPipelineCache*>((GetVkTypeFromEntry(this, renderPassIndex + 1) + sizeof(VKRenderGraph)));;
+}
+
+VKRenderGraph& VKDevice::GetRenderGraph(size_t renderPassIndex)
+{
+	std::shared_lock lock(deviceLock);
+	auto renderPassData = GetVkTypeFromEntry<VKRenderGraph*>(this, renderPassIndex + 1);
+	return *renderPassData;
 }
 
 DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets)

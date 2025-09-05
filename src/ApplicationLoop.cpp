@@ -284,6 +284,9 @@ void ApplicationLoop::LoadThreadedWrapper(const std::string file)
 
 void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file)
 {
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
 	this->LoadObject(file);
 
 	flag->store(true);

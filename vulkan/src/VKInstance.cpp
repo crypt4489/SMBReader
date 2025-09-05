@@ -29,6 +29,12 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuI
 	return ret;
 }
 
+VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDevice gpu)
+{
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
+	return ret;
+}
+
 void VKInstance::CreateDrawingSurface(GLFWwindow* wind)
 {
 	VkResult res = glfwCreateWindowSurface(instance, wind, nullptr, &renderSurface);
@@ -300,11 +306,11 @@ VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& de
 		std::vector<VKDevice> devices;
 		logicalDevices.emplace_back(gpu, std::vector<VKDevice>{});
 		auto& ref = logicalDevices.back().second;
-		return ref.emplace_back(gpu);
+		return ref.emplace_back(gpu, this);
 	}
 
 	auto& ref = iter->second;
-	ref.emplace_back(gpu);
+	ref.emplace_back(gpu, this);
 	return ref.back();
 }
 
