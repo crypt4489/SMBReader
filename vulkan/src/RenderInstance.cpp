@@ -490,12 +490,12 @@ OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 VkImageView RenderInstance::GetImageView(uint32_t viewIndex)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.imageViews[viewIndex];
+	return majorDevice.GetImageView(viewIndex);
 }
 
 VkSampler RenderInstance::GetSampler(uint32_t index)
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).samplers[index];
+	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSampler(index);
 }
 
 void RenderInstance::SetResizeBool(bool set)

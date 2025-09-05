@@ -495,17 +495,14 @@ public:
 
 	VKCommandBuffer* GetCommandBuffer(uint32_t index);
 
+	VkSampler GetSampler(size_t index);
+
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
 	size_t queueManagers;
 	size_t queueManagersSize;
 
-	std::vector<std::tuple<VkImage, VkDeviceSize, uint32_t>> images; 
-	std::vector<VkImageView> imageViews;
-	std::vector<VkSampler> samplers; 
-	
-	
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
 	VKShaderCache shaders;

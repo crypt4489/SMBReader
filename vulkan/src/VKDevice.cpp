@@ -181,8 +181,7 @@ VKDevice& VKDevice::operator=(VKDevice&& _dev) noexcept {
 	_dev.gpu = VK_NULL_HANDLE;
 	
 	//this->swapChains = std::move(_dev.swapChains);
-	this->images = std::move(_dev.images);
-	this->imageViews = std::move(_dev.imageViews);
+	
 	this->shaders = std::move(_dev.shaders);
 	return *this;
 };
@@ -194,8 +193,6 @@ VKDevice::VKDevice(VKDevice&& _dev)  noexcept
 	this->gpu = _dev.gpu;
 	_dev.gpu = VK_NULL_HANDLE;
 	//this->swapChains = std::move(_dev.swapChains);
-	this->images = std::move(_dev.images);
-	this->imageViews = std::move(_dev.imageViews);
 	this->shaders = std::move(_dev.shaders);
 };
 
@@ -268,7 +265,6 @@ void VKDevice::CreateLogicalDevice(
 
 	if (perDeviceDataSize)
 	{
-		
 		size_t entriesalloc = deviceRatio * perDeviceDataSize;
 
 		perDeviceSize = perDeviceDataSize - entriesalloc;
@@ -574,9 +570,19 @@ ImageIndex VKDevice::CreateImage(uint32_t width,
 
 	vkBindImageMemory(device, image, iter, addr);
 
-	images.push_back(std::tuple(image, addr, memIndex));
+	size_t ret;
 
-	return std::move(ImageIndex(images.size() - 1));
+	{
+		size_t* ptr = AllocTypeFromEntry<size_t*>(this,  sizeof(size_t) * 3);
+
+		ptr[0] = reinterpret_cast<uintptr_t>(image);
+		ptr[1] = addr;
+		ptr[2] = memIndex;
+
+		ret = AddVkTypeToEntry(this, ptr);
+	}
+
+	return std::move(ImageIndex(ret));
 }
 
 ImageIndex VKDevice::CreateImageView(
@@ -585,8 +591,11 @@ ImageIndex VKDevice::CreateImageView(
 {
 	std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
+
+	VkImage image = *GetVkTypeFromEntry<VkImage*>(this, imageIndex);
+
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	viewInfo.image = std::get<VkImage>(images[imageIndex]);
+	viewInfo.image = image;
 	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	viewInfo.format = type;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
@@ -599,9 +608,13 @@ ImageIndex VKDevice::CreateImageView(
 		throw std::runtime_error("failed to create texture image view!");
 	}
 
-	imageViews.push_back(imageView);
+	size_t ret;
 
-	return std::move(ImageIndex(imageViews.size() - 1));
+	{
+		ret = AddVkTypeToEntry(this, imageView);
+	}
+
+	return std::move(ImageIndex(ret));
 }
 
 ImageIndex VKDevice::CreateImageView(
@@ -624,9 +637,13 @@ ImageIndex VKDevice::CreateImageView(
 		throw std::runtime_error("failed to create texture image view!");
 	}
 
-	imageViews.push_back(imageView);
+	size_t ret;
 
-	return std::move(ImageIndex(imageViews.size() - 1));
+	{
+		ret = AddVkTypeToEntry(this, imageView);
+	}
+
+	return std::move(ImageIndex(ret));
 }
 
 BufferIndex VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage)
@@ -708,22 +725,25 @@ ImageIndex VKDevice::CreateSampledImage(
 		VK_IMAGE_USAGE_SAMPLED_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memIndex);
 
+
+	VkImage image = *GetVkTypeFromEntry<VkImage*>(this, imageIndex);
+
 	VkCommandPool pool = GetVkTypeFromEntry<VkCommandPool>(this, static_cast<size_t>(poolIndex));
 
 	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
 
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, std::get<VkImage>(images[imageIndex]), format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
 
 	VkDeviceSize offset = 0U;
 
 	for (auto i = 0U; i < mipLevels; i++) {
 
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, std::get<VkImage>(images[imageIndex]), width >> i, height >> i, i, offset, { 0, 0, 0 });
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
 
 		offset += static_cast<VkDeviceSize>(sizes[i]);
 	}
 
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, std::get<VkImage>(images[imageIndex]), format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
@@ -745,13 +765,13 @@ void VKDevice::TransitionImageLayout(ImageIndex& imageIndex,
 	uint32_t poolIndex = std::get<3>(queueDetails);
 
 	VkCommandPool pool = GetVkTypeFromEntry<VkCommandPool>(this, static_cast<size_t>(poolIndex));
-
+	VkImage image = *GetVkTypeFromEntry<VkImage*>(this, imageIndex);
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 	VK::Utils::TransitionImageLayout(
 		device,
 		pool, queue,
-		std::get<VkImage>(images[imageIndex]), format,
+		image, format,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1, 1
 	);
@@ -789,38 +809,55 @@ ImageIndex VKDevice::CreateSampler(uint32_t mipLevels)
 	samplerInfo.minLod = 0.0f;
 	samplerInfo.maxLod = static_cast<float>(mipLevels);
 
-	auto ret = ImageIndex(samplers.size());
+	VkSampler sampler = VK_NULL_HANDLE;
 
-	samplers.emplace_back(VK_NULL_HANDLE);
-
-	if (vkCreateSampler(device, &samplerInfo, nullptr, &samplers.back()) != VK_SUCCESS) {
+	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create texture sampler!");
 	}
 
-	return ret;
+	size_t ret;
+
+	{
+		ret = AddVkTypeToEntry(this, sampler);
+	}
+
+	return ImageIndex(ret);
 }
 
 void VKDevice::DestorySampler(ImageIndex& samplerIndex)
 {
 	std::shared_lock lock(deviceLock);
-	vkDestroySampler(device, samplers[samplerIndex], nullptr);
-	samplers[samplerIndex] = VK_NULL_HANDLE;
+
+	VkSampler sampler = GetVkTypeFromEntry<VkSampler>(this, samplerIndex);
+
+	vkDestroySampler(device, sampler, nullptr);
+	//samplers[samplerIndex] = VK_NULL_HANDLE;
 }
 
 void VKDevice::DestroyImageView(ImageIndex& imageViewIndex)
 {
 	std::shared_lock lock(deviceLock);
-	vkDestroyImageView(device, imageViews[imageViewIndex], nullptr);
-	imageViews[imageViewIndex] = VK_NULL_HANDLE;
+
+	VkImageView view = GetVkTypeFromEntry<VkImageView>(this, imageViewIndex);
+
+	vkDestroyImageView(device, view, nullptr);
+	//imageViews[imageViewIndex] = VK_NULL_HANDLE;
 }
 
 void VKDevice::DestroyImage(ImageIndex& imageIndex)
 {
 	std::shared_lock lock(deviceLock);
-	vkDestroyImage(device, std::get<VkImage>(images[imageIndex]), nullptr);
-	auto alloc = GetVkTypeFromEntry<VKAllocator*>(this, std::get<uint32_t>(images[imageIndex])+1);
-	alloc->FreeMemory(std::get<VkDeviceSize>(images[imageIndex])); //image, address, and memory type index
-	images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
+
+	auto image = GetVkTypeFromEntry<VkImage*>(this, imageIndex);
+	uintptr_t ptr = (uintptr_t)image;
+	auto addr = *reinterpret_cast<VkDeviceSize*>(ptr + sizeof(VkImage));
+	auto memIndex = *reinterpret_cast<size_t*>(ptr + sizeof(VkImage) + sizeof(VkDeviceSize));
+	vkDestroyImage(device, *image, nullptr);
+	auto alloc = GetVkTypeFromEntry<VKAllocator*>(this, memIndex + 1);
+	
+	alloc->FreeMemory(addr); //image, address, and memory type index
+//	images[imageIndex] = std::tuple(VK_NULL_HANDLE, 0, 0);
+
 }
 
 void VKDevice::WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size, size_t offset)
@@ -1207,7 +1244,9 @@ uint32_t VKDevice::CreateFrameBuffer(std::vector<size_t>& attachmentIndices, uin
 	uint32_t attachmentsCount = static_cast<uint32_t>(attachmentIndices.size());
 	std::vector<VkImageView> attachments(attachmentsCount);
 
-	for (uint32_t i = 0; i < attachmentsCount; i++) attachments[i] = imageViews[attachmentIndices[i]];
+	for (uint32_t i = 0; i < attachmentsCount; i++) {
+		attachments[i] = GetVkTypeFromEntry<VkImageView>(this, attachmentIndices[i]);
+	}
 
 	VkFramebufferCreateInfo framebufferInfo{};
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1256,7 +1295,12 @@ VkCommandBuffer VKDevice::GetCommandBufferHandle(uint32_t index)
 VkImageView VKDevice::GetImageView(uint32_t index)
 {
 	std::shared_lock lock(deviceLock);
-	return imageViews[index];
+	return GetVkTypeFromEntry<VkImageView>(this, index);
+}
+
+VkSampler VKDevice::GetSampler(size_t index)
+{
+	return GetVkTypeFromEntry<VkSampler>(this, index);
 }
 
 VkCommandPool VKDevice::GetCommandPool(uint32_t poolIndex)
