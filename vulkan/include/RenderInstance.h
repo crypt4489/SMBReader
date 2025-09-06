@@ -15,14 +15,14 @@
 template <int N>
 struct ThreadedRecordBuffer
 {
-	std::array<uint32_t, N> buffers; //indices
+	std::array<EntryHandle, N> buffers; //indices
 	uint32_t currentBuffer = N-1; // current good buffer
 	Semaphore currentGuard{};
 	SPSC invalidate{};
 	uint32_t outputImageIndex;
-	std::function<void(uint32_t, uint32_t)> drawingFunction;
+	std::function<void(EntryHandle, uint32_t)> drawingFunction;
 	
-	uint32_t GetCurrentBuffer()
+	EntryHandle GetCurrentBuffer()
 	{
 		currentGuard.Wait();
 		return buffers[currentBuffer];
@@ -59,7 +59,7 @@ struct ThreadedRecordBuffer
 
 		uint32_t next = (currentBuffer + 1) % N;
 
-		uint32_t recordBuffer = buffers[next];
+		EntryHandle recordBuffer = buffers[next];
 
 		//do stuff
 
@@ -86,9 +86,9 @@ public:
 
 	void CreateRenderPass();
 
-	void BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex);
+	void BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex);
 
-	void EndCommandBufferRecording(uint32_t cb);
+	void EndCommandBufferRecording(EntryHandle cb);
 
 	uint32_t BeginFrame();
 
@@ -110,32 +110,32 @@ public:
 
 	OffsetIndex GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
-	uint32_t GetMainBufferIndex() const;
+	EntryHandle GetMainBufferIndex() const;
 
 	VkBuffer GetDynamicUniformBuffer();
 
-	ImageIndex CreateVulkanImage(
+	EntryHandle CreateVulkanImage(
 		std::vector<std::vector<char>>& imageData,
 		std::vector<uint32_t>& imageSizes,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type);
 
-	ImageIndex CreateVulkanImageView(ImageIndex& imageIndex, uint32_t mipLevels,
+	EntryHandle CreateVulkanImageView(EntryHandle& imageIndex, uint32_t mipLevels,
 		ImageFormat type, VkImageAspectFlags aspectMask);
 
-	ImageIndex CreateVulkanSampler(uint32_t mipLevels);
+	EntryHandle CreateVulkanSampler(uint32_t mipLevels);
 
-	void DeleteVulkanImageView(ImageIndex& index);
+	void DeleteVulkanImageView(EntryHandle& index);
 
-	void DeleteVulkanImage(ImageIndex& index);
+	void DeleteVulkanImage(EntryHandle& index);
 
-	void DeleteVulkanSampler(ImageIndex& index);
+	void DeleteVulkanSampler(EntryHandle& index);
 
 	void CreateVulkanRenderer(WindowManager* window);
 
-	VkImageView GetImageView(uint32_t viewIndex);
+	VkImageView GetImageView(EntryHandle viewIndex);
 
-	VkSampler GetSampler(uint32_t index);
+	VkSampler GetSampler(EntryHandle index);
 
 	void SetResizeBool(bool set);
 
@@ -153,27 +153,27 @@ public:
 
 	OffsetIndex CreateRenderGraph(size_t datasize, size_t alignment);
 
-	void DrawScene(uint32_t cbindex);
+	void DrawScene(EntryHandle cbindex);
 
 	void InvalidateRecordBuffer(uint32_t i);
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
-	void MonolithicDrawingTask(uint32_t commandBufferIndex, uint32_t imageIndex);
+	void MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex);
 
 	VKInstance vkInstance;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
-	uint32_t descriptorPoolIndex;
-	uint32_t swapChainIndex;
-	uint32_t attachmentsIndex;
-	ImageIndex depthView, depthImage;
-	ImageIndex colorView, colorImage;
-	BufferIndex stagingBufferIndex;
-	BufferIndex globalIndex;
-	uint32_t mainRenderPass;
-	std::array<uint32_t, 3> currentCBIndex;
-	std::vector<uint32_t> cbsIndices;
+	EntryHandle descriptorPoolIndex;
+	EntryHandle swapChainIndex;
+	EntryHandle attachmentsIndex;
+	EntryHandle depthView, depthImage;
+	EntryHandle colorView, colorImage;
+	EntryHandle stagingBufferIndex;
+	EntryHandle globalIndex;
+	EntryHandle mainRenderPass;
+	std::array<EntryHandle, 3> currentCBIndex;
+	std::vector<EntryHandle> cbsIndices;
 
 	WindowManager *windowMan = nullptr;
 

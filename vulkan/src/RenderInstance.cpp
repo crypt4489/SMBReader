@@ -123,7 +123,7 @@ void RenderInstance::CreateRenderPass()
 	mainRenderPass = dev.CreateRenderPasses(rpb);
 }
 
-void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageIndex)
+void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex)
 {
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
@@ -143,7 +143,7 @@ void RenderInstance::BeginCommandBufferRecording(uint32_t cb, uint32_t imageInde
 
 }
 
-void RenderInstance::MonolithicDrawingTask(uint32_t commandBufferIndex, uint32_t imageIndex)
+void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -156,7 +156,7 @@ void RenderInstance::MonolithicDrawingTask(uint32_t commandBufferIndex, uint32_t
 	EndCommandBufferRecording(commandBufferIndex);
 }
 
-void RenderInstance::EndCommandBufferRecording(uint32_t cb)
+void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
 {
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
@@ -174,7 +174,7 @@ uint32_t RenderInstance::BeginFrame()
 
 	auto& trb = threadedRecordBuffers[currentFrame];
 
-	uint32_t nextCbIndex = trb.GetCurrentBuffer();
+	EntryHandle nextCbIndex = trb.GetCurrentBuffer();
 
 	int32_t res;
 
@@ -319,7 +319,7 @@ OffsetIndex RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t align
 	return std::move(dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment));
 }
 
-uint32_t RenderInstance::GetMainBufferIndex() const
+EntryHandle RenderInstance::GetMainBufferIndex() const
 {
 	return globalIndex;
 }
@@ -329,7 +329,7 @@ VkBuffer RenderInstance::GetDynamicUniformBuffer()
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetHostBuffer(globalIndex);
 }
 
-ImageIndex RenderInstance::CreateVulkanImage(
+EntryHandle RenderInstance::CreateVulkanImage(
 	std::vector<std::vector<char>>& imageData,
 	std::vector<uint32_t>& imageSizes,
 	uint32_t width, uint32_t height,
@@ -344,32 +344,32 @@ ImageIndex RenderInstance::CreateVulkanImage(
 		stagingBufferIndex);
 }
 
-ImageIndex RenderInstance::CreateVulkanImageView(ImageIndex& imageIndex, uint32_t mipLevels,
+EntryHandle RenderInstance::CreateVulkanImageView(EntryHandle& imageIndex, uint32_t mipLevels,
 	ImageFormat type, VkImageAspectFlags aspectMask)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
 }
 
-ImageIndex RenderInstance::CreateVulkanSampler(uint32_t mipLevels)
+EntryHandle RenderInstance::CreateVulkanSampler(uint32_t mipLevels)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice.CreateSampler(mipLevels);
 }
 
-void RenderInstance::DeleteVulkanImageView(ImageIndex& index)
+void RenderInstance::DeleteVulkanImageView(EntryHandle& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestroyImage(index);
 }
 
-void RenderInstance::DeleteVulkanImage(ImageIndex& index)
+void RenderInstance::DeleteVulkanImage(EntryHandle& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestroyImage(index);
 }
 
-void RenderInstance::DeleteVulkanSampler(ImageIndex& index)
+void RenderInstance::DeleteVulkanSampler(EntryHandle& index)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	majorDevice.DestorySampler(index);
@@ -451,14 +451,14 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreatePipelines();
 
-	auto drawingCallback = [this](uint32_t cbIndex, uint32_t iIndex)
+	auto drawingCallback = [this](EntryHandle cbIndex, uint32_t iIndex)
 		{
 			this->MonolithicDrawingTask(cbIndex, iIndex);
 		};
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		cbsIndices = majorDevice.CreateReusableCommandBuffers(3, i*3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
+		cbsIndices = majorDevice.CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 		auto& ref = threadedRecordBuffers[i];
 		int n = MAX_FRAMES_IN_FLIGHT;
 		currentCBIndex[i] = cbsIndices[0];
@@ -487,13 +487,13 @@ OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 	return perRenderPassStuff;
 }
 
-VkImageView RenderInstance::GetImageView(uint32_t viewIndex)
+VkImageView RenderInstance::GetImageView(EntryHandle viewIndex)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice.GetImageView(viewIndex);
 }
 
-VkSampler RenderInstance::GetSampler(uint32_t index)
+VkSampler RenderInstance::GetSampler(EntryHandle index)
 {
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSampler(index);
 }
@@ -536,7 +536,7 @@ void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 	graph.AddObject(pipeline);
 }
 
-void RenderInstance::DrawScene(uint32_t cbindex)
+void RenderInstance::DrawScene(EntryHandle cbindex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 

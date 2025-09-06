@@ -38,7 +38,7 @@ public:
 
 	size_t CalculateSwapChainMemoryUsage();
 
-	size_t* GetDependenciesForImageIndex(uint32_t imageIndex);
+	EntryHandle* GetDependenciesForImageIndex(uint32_t imageIndex);
 
 	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
 
@@ -48,7 +48,7 @@ public:
 
 	void CreateSwapChain(
 		uint32_t width, uint32_t height,
-		uint32_t _renderPassIndex, std::vector<ImageIndex*>& attachmentIndices);
+		EntryHandle _renderPassIndex, std::vector<EntryHandle*>& attachmentIndices);
 
 	void CreateSyncObject();
 
@@ -56,9 +56,9 @@ public:
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
-	void CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present);
+	void CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present);
 
-	void AddFramebufferAttachments(std::vector<ImageIndex*>& attachmentIndices);
+	void AddFramebufferAttachments(std::vector<EntryHandle*>& attachmentIndices);
 
 	VkFormat GetSwapChainFormat() const
 	{
@@ -76,7 +76,7 @@ public:
 	}
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-	uint32_t renderTargetIndex = ~0ui32;
+	EntryHandle renderTargetIndex;
 
 	VkSurfaceFormatKHR swapChainImageFormat;
 	VkPresentModeKHR presentMode;

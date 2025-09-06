@@ -18,9 +18,9 @@ public:
 
 	~VKTexture();
 
-	ImageIndex imageIndex;
-	ImageIndex viewIndex;
-	ImageIndex samplerIndex;
+	EntryHandle imageIndex;
+	EntryHandle viewIndex;
+	EntryHandle samplerIndex;
 
 	void CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes, 
 		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);

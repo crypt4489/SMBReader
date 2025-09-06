@@ -9,10 +9,10 @@
 struct VKPipelineObjectCreateInfo
 {
 	uint32_t drawType;
-	uint32_t vertexBufferIndex;
+	EntryHandle vertexBufferIndex;
 	uint32_t vertexBufferOffset;
 	uint32_t vertexCount;
-	uint32_t indirectDrawBuffer;
+	EntryHandle indirectDrawBuffer;
 	uint32_t indirectDrawOffset;
 	std::string pipelinename;
 	std::string descriptorsetname;
@@ -42,7 +42,8 @@ public:
 
 	std::string pipelineType, descriptorSetName;
 
-	uint32_t vertexBufferIndex, indirectBufferIndex, drawType;
+	EntryHandle vertexBufferIndex, indirectBufferIndex;
+	uint32_t drawType;
 
 	std::size_t vertexBufferOffset, indirectBufferOffset;
 	std::size_t vertexCount;

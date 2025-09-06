@@ -40,7 +40,7 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, 1, dynamicOffsets.data());
 	}
 
-	if (vertexBufferIndex != ~0ui32)
+	if (vertexBufferIndex != ~0ui64)
 	{
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
@@ -69,7 +69,7 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 	}
 		
 
-	if (vertexBufferIndex != ~0ui32)
+	if (vertexBufferIndex != ~0ui64)
 	{
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}

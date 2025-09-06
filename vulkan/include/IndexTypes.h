@@ -195,3 +195,78 @@ public:
 private:
 	size_t ID = ~0UL;
 };
+
+class EntryHandle
+{
+public:
+	EntryHandle() = default;
+	~EntryHandle() = default;
+	//explicit EntryHandle(uint64_t _id) : ID(_id) {};
+	explicit EntryHandle(size_t _id) : ID(_id) {};
+	//EntryHandle(size_t _id) : ID(_id) {};
+	//integer assignment
+	//constexpr EntryHandle& operator=(const uint32_t) = delete;
+	
+	EntryHandle& operator=(const size_t n) {
+		this->ID = n;
+		return *this;
+	};
+	
+	constexpr EntryHandle& operator=(const EntryHandle& other) {
+		this->ID = other.ID;
+		return *this;
+	};
+
+	EntryHandle(const EntryHandle& other)
+	{
+		this->ID = other.ID;
+	}
+
+	//keep moves
+	EntryHandle(EntryHandle&&) = default;
+	constexpr EntryHandle& operator=(EntryHandle&&) = default;
+
+	constexpr auto operator()() const {
+		return ID;
+	}
+
+	constexpr operator size_t() const {
+		return ID;
+	}
+
+	constexpr operator uint32_t() const {
+		return static_cast<uint32_t>(ID);
+	}
+
+	EntryHandle operator+(const EntryHandle& other)
+	{
+		return EntryHandle(other.ID + ID);
+	}
+
+	EntryHandle operator+(const size_t other)
+	{
+		return EntryHandle(other + ID);
+	}
+
+	EntryHandle operator+(const int other)
+	{
+		return EntryHandle(other + ID);
+	}
+
+	constexpr bool operator==(const EntryHandle& other) const {
+		return this->ID == other.ID;
+	}
+
+	constexpr bool operator==(size_t n) const {
+		return this->ID == n;
+	}
+
+	constexpr bool operator!=(size_t n) const {
+		return this->ID != n;
+	}
+
+private:
+	size_t ID = ~0ui64;
+};
+
+

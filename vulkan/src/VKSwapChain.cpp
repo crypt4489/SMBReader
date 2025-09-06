@@ -102,7 +102,7 @@ size_t VKSwapChain::CalculateSwapChainMemoryUsage()
 		sizeof(uintptr_t) * (imageCount * ((semaphorePerStage * numberOfStages) + 1));
 }
 
-void VKSwapChain::AddFramebufferAttachments(std::vector<ImageIndex*>& attachmentIndices)
+void VKSwapChain::AddFramebufferAttachments(std::vector<EntryHandle*>& attachmentIndices)
 {
 	uint32_t i = 0;
 	uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
@@ -118,11 +118,11 @@ void VKSwapChain::AddFramebufferAttachments(std::vector<ImageIndex*>& attachment
 	{
 		attaches[i] = outputaddr;
 
-		size_t* output = reinterpret_cast<size_t*>(outputaddr);
+		EntryHandle** output = reinterpret_cast<EntryHandle**>(outputaddr);
 
 		for (uint32_t j = 0; j < attachIndicesSize; j++)
 		{
-			output[j] = reinterpret_cast<size_t>(attachmentIndices[j]);
+			output[j] = attachmentIndices[j];
 		}
 		outputaddr += sizeof(size_t) * attachmentCount;
 		i++;
@@ -154,7 +154,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 
 void VKSwapChain::CreateSwapChain( 
 	uint32_t width, uint32_t height, 
-	uint32_t _renderPassIndex, std::vector<ImageIndex*> &attachmentIndices)
+	EntryHandle _renderPassIndex, std::vector<EntryHandle*> &attachmentIndices)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
 	
@@ -218,8 +218,8 @@ void VKSwapChain::CreateSwapChain(
 
 void VKSwapChain::CreateSyncObject()
 {
-	std::vector<uint32_t> imageAvailablesIndices = device->CreateSemaphores(imageCount);
-	std::vector<uint32_t> renderFinishedIndices = device->CreateSemaphores(imageCount);
+	std::vector<EntryHandle> imageAvailablesIndices = device->CreateSemaphores(imageCount);
+	std::vector<EntryHandle> renderFinishedIndices = device->CreateSemaphores(imageCount);
 
 	uintptr_t dependencies = GetDependencies(this);
 
@@ -241,14 +241,14 @@ void VKSwapChain::CreateSyncObject()
 	}
 }
 
-size_t* VKSwapChain::GetDependenciesForImageIndex(uint32_t imageIndex)
+EntryHandle* VKSwapChain::GetDependenciesForImageIndex(uint32_t imageIndex)
 {
 	uintptr_t* ptr1 = GetDependenciesPtr(this);
 
-	return reinterpret_cast<size_t*>(ptr1[imageIndex]);
+	return reinterpret_cast<EntryHandle*>(ptr1[imageIndex]);
 }
 
-void VKSwapChain::CreateSwapChainDependency(uint32_t imageIndex, uint32_t beforeDrawing, uint32_t present)
+void VKSwapChain::CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present)
 {
 	//std::vector<std::vector<uint32_t>> copy{ {beforeDrawing}, {present} };
 	//dependencies.AddIndicesForImage(imageIndex, copy);
@@ -298,7 +298,7 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 void VKSwapChain::CreateSwapChainElements()
 {
-	std::vector<size_t> indices(attachmentCount);
+	std::vector<EntryHandle> indices(attachmentCount);
 
 	auto& renderTarget = device->GetRenderTarget(renderTargetIndex);
 
@@ -307,12 +307,12 @@ void VKSwapChain::CreateSwapChainElements()
 	VkImage* swcImages = reinterpret_cast<VkImage*>(headofperdata);
 
 	for (size_t i = 0; i < imageCount; i++) {
-		auto ref2 = reinterpret_cast<size_t*>(attaches[i]);
+		auto ref2 = reinterpret_cast<EntryHandle**>(attaches[i]);
 
 		renderTarget.imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
 
 		for (size_t j = 0; j < attachmentCount; j++) {
-			indices[j] = *reinterpret_cast<ImageIndex*>(ref2[j]);
+			indices[j] = *ref2[j];
 		}
 
 		renderTarget.framebufferIndices[i] = device->CreateFrameBuffer(indices, renderTarget.renderPassIndex, swapChainExtent);

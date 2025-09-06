@@ -1,6 +1,6 @@
 #include "VKRenderGraph.h"
 #include <mutex>
-VKRenderGraph::VKRenderGraph(uint32_t _renderTargetIndex) : renderTargetIndex(_renderTargetIndex) {};
+VKRenderGraph::VKRenderGraph(EntryHandle _renderTargetIndex) : renderTargetIndex(_renderTargetIndex) {};
 
 void VKRenderGraph::DrawScene(RecordingBufferObject& rbo, uint32_t frameNum)
 {

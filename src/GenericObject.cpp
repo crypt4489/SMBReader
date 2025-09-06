@@ -41,10 +41,10 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		VKPipelineObjectCreateInfo create = {
 			.drawType = 0,
-			.vertexBufferIndex = ~0U,
+			.vertexBufferIndex{},
 			.vertexBufferOffset = ~0U,
 			.vertexCount = static_cast<uint32_t>(vertexCount),
-			.indirectDrawBuffer = ~0U,
+			.indirectDrawBuffer{},
 			.indirectDrawOffset = ~0U,
 			.pipelinename = genericpipeline,
 			.descriptorsetname = genericpipeline

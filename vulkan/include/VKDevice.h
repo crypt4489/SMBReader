@@ -203,13 +203,13 @@ class VKCommandBuffer
 public:
 	VKCommandBuffer() :
 		buffer(VK_NULL_HANDLE), fenceIdx(~0U), poolIndex(~0U), queueIndex(~0U), queueFamilyIndex(~0U) {};
-	VKCommandBuffer(VkCommandBuffer _b, uint32_t i, uint32_t pi, uint32_t qi, uint32_t qfi)
+	VKCommandBuffer(VkCommandBuffer _b, EntryHandle i, uint32_t pi, uint32_t qi, uint32_t qfi)
 		: buffer(_b), fenceIdx(i), poolIndex(pi), queueIndex(qi), queueFamilyIndex(qfi) {};
 	VKCommandBuffer(const VKCommandBuffer& other) = default;
 	VKCommandBuffer(VKCommandBuffer&& other) = default;
 
 	VkCommandBuffer buffer;
-	uint32_t fenceIdx = ~0U;
+	EntryHandle fenceIdx;
 	uint32_t poolIndex;
 	uint32_t queueIndex;
 	uint32_t queueFamilyIndex;
@@ -221,18 +221,18 @@ public:
 
 	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
 
-	void BindPipeline(uint32_t renderTarget, std::string pipelinename);
+	void BindPipeline(EntryHandle renderTarget, std::string pipelinename);
 
 	void BindDescriptorSets(std::string descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
-	void BindVertexBuffer(uint32_t bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
+	void BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
 
 	void BindingDrawCmd(uint32_t first, uint32_t drawSize);
 
-	void BindingIndirectDrawCmd(uint32_t indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
+	void BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
 
-	void BeginRenderPassCommand(uint32_t renderTargetIndex, uint32_t imageIndex,
+	void BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 		VkRect2D rect,
 		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
@@ -257,21 +257,24 @@ public:
 class RenderTarget
 {
 public:
+	
 	RenderTarget() = default;
-	RenderTarget(uint32_t renderPass, uint32_t imageCount, void *data)
+	
+	RenderTarget(EntryHandle renderPass, uint32_t imageCount, void *data)
 	{
 		renderPassIndex = renderPass;
 		count = imageCount;
 
-		size_t* head = reinterpret_cast<size_t*>(data);
+		EntryHandle* head = reinterpret_cast<EntryHandle*>(data);
 
 		framebufferIndices = head;
 		imageViews = std::next(head, imageCount);
 	}
-	uint32_t renderPassIndex;
+
+	EntryHandle renderPassIndex;
 	uint32_t count;
-	size_t* framebufferIndices;
-	size_t* imageViews;
+	EntryHandle* framebufferIndices;
+	EntryHandle* imageViews;
 };
 
 enum VKQueueCapabilities : uint32_t
@@ -286,11 +289,17 @@ class QueueManager
 {
 public:
 
-	QueueManager(std::vector<uint32_t> _cqs, int32_t _mqc, uint32_t _qfi, uint32_t _queueCapabilities, bool present, VKDevice& _d);
+	QueueManager(std::vector<uint32_t> _cqs, 
+		int32_t _mqc, 
+		uint32_t _qfi, 
+		uint32_t _queueCapabilities, 
+		bool present, 
+		VKDevice& _d,
+		void *data);
 
 	uint32_t GetQueue();
 
-	void ReturnQueue(int32_t queueNum);
+	void ReturnQueue(size_t queueNum);
 
 	uint32_t ConvertQueueProps(uint32_t flags, bool present);
 
@@ -298,10 +307,10 @@ public:
 	const int32_t maxQueueCount;
 	const uint32_t queueFamilyIndex;
 	const uint32_t queueCapabilities;
-	std::vector<uint32_t> poolIndices;
+	EntryHandle* poolIndices;
 	VKDevice& device;
-	Semaphore sema;
-	std::mutex bitwiseMutex;
+	Semaphore queueSema;
+	Semaphore bitwiseMutex;
 };
 
 
@@ -309,6 +318,7 @@ public:
 class VKDevice
 {
 public:
+	
 	VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst);
 	~VKDevice();
 
@@ -320,19 +330,38 @@ public:
 
 	VKDevice(VKDevice&& _dev) noexcept;
 
-	VkPhysicalDevice GetGPU() const;
 
-	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
+	//CREATORS
 
-	int32_t GetPresentQueue(QueueIndex& queueIdx,
-		QueueIndex& maxQueueCount,
-		std::vector<VkQueueFamilyProperties>& famProps,
-		VkSurfaceKHR& renderSurface);
+	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
-	int32_t GetQueueByMask(QueueIndex& queueIdx,
-		QueueIndex& maxQueueCount,
-		std::vector<VkQueueFamilyProperties>& famProps,
-		uint32_t queueMask);
+	DescriptorSetBuilder CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets);
+
+	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder();
+
+	VkDescriptorPool CreateDesciptorPool(EntryHandle& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets);
+
+	std::vector<EntryHandle> CreateFences(uint32_t count, VkFenceCreateFlags flags);
+
+	EntryHandle CreateFrameBuffer(std::vector<EntryHandle>& attachmentIndices, EntryHandle renderPassIndex, VkExtent2D& extent);
+
+	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
+
+	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
+
+	EntryHandle CreateImage(uint32_t width,
+		uint32_t height, uint32_t mipLevels,
+		VkFormat type, uint32_t layers,
+		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkMemoryPropertyFlags memProps, EntryHandle memIndex);
+
+	EntryHandle CreateImageView(
+		EntryHandle imageIndex, uint32_t mipLevels,
+		VkFormat type, VkImageAspectFlags aspectMask);
+
+	EntryHandle CreateImageView(
+		VkImage image, uint32_t mipLevels,
+		VkFormat type, VkImageAspectFlags aspectMask);
 
 	void CreateLogicalDevice(
 		std::vector<const char*>& instanceLayers,
@@ -344,13 +373,98 @@ public:
 		float deviceRatio
 	);
 
-	std::tuple<uint32_t, uint32_t, uint32_t, uint32_t> GetQueueHandle(uint32_t capabilites);
-
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
-	uint32_t CreateCommandPool(QueueIndex& queueIndex);
+	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 
-	VkDescriptorPool CreateDesciptorPool(uint32_t& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets);
+	void CreateRenderGraph(EntryHandle renderPass);
+
+	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
+
+	void CreatePipelineCache(EntryHandle renderPassIndex);
+
+	std::vector<EntryHandle> CreateReusableCommandBuffers(
+		uint32_t numberOfCommandBuffers,
+		VkCommandBufferLevel level, bool createFences, 
+		uint32_t capabilites
+	);
+
+	EntryHandle CreateSampledImage(
+		std::vector<std::vector<char>>& imageData,
+		std::vector<uint32_t>& imageSizes,
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, VkFormat type,
+		EntryHandle memIndex,
+		EntryHandle hostIndex
+	);
+
+	EntryHandle CreateSampler(uint32_t mipLevels);
+
+	std::vector<EntryHandle> CreateSemaphores(uint32_t count);
+
+	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
+
+	//GETTERS
+
+	VKCommandBuffer* GetCommandBuffer(EntryHandle index);
+
+	VkCommandBuffer GetCommandBufferHandle(EntryHandle index);
+
+	VkCommandPool GetCommandPool(EntryHandle poolIndex);
+
+	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
+
+	uint32_t GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamilies, uint32_t capabilities);
+
+	VkFence GetFence(EntryHandle index);
+
+	VkFramebuffer GetFrameBuffer(EntryHandle index);
+	
+	VkBuffer GetHostBuffer(EntryHandle index);
+
+	VkImageView GetImageView(EntryHandle index);
+
+	VKPipelineCache& GetPipelineCache(EntryHandle renderPassIndex);
+
+	int32_t GetPresentQueue(QueueIndex& queueIdx,
+		QueueIndex& maxQueueCount,
+		std::vector<VkQueueFamilyProperties>& famProps,
+		VkSurfaceKHR& renderSurface);
+
+	int32_t GetQueueByMask(QueueIndex& queueIdx,
+		QueueIndex& maxQueueCount,
+		std::vector<VkQueueFamilyProperties>& famProps,
+		uint32_t queueMask);
+
+	std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> GetQueueHandle(uint32_t capabilites);
+
+	RecordingBufferObject GetRecordingBufferObject(EntryHandle commandBufferIndex);
+
+	VKRenderGraph& GetRenderGraph(EntryHandle renderPassIndex);
+
+	VkRenderPass GetRenderPass(EntryHandle index);
+
+	RenderTarget& GetRenderTarget(EntryHandle renderTargetIndex);
+
+	VkSampler GetSampler(EntryHandle index);
+
+	VkSemaphore GetSemaphore(EntryHandle index);
+
+	VKSwapChain& GetSwapChain(EntryHandle index);
+
+	//Destructors
+
+	void DestroyImage(EntryHandle imageIndex);
+
+	void DestroyImageView(EntryHandle imageViewIndex);
+
+	void DestorySampler(EntryHandle samplerIndex);
+
+
+	//ACTIONS
+
+
+	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
 
 	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
@@ -358,149 +472,41 @@ public:
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps);
 
-	uint32_t CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
-
-	uint32_t CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
-
-
-	ImageIndex CreateImage(uint32_t width,
-		uint32_t height, uint32_t mipLevels,
-		VkFormat type, uint32_t layers,
-		VkImageUsageFlags flags, uint32_t sampleCount,
-		VkMemoryPropertyFlags memProps, uint32_t memIndex);
-
-	ImageIndex CreateImageView(
-		ImageIndex& imageIndex, uint32_t mipLevels,
-		VkFormat type, VkImageAspectFlags aspectMask);
-
-	ImageIndex CreateImageView(
-		VkImage image, uint32_t mipLevels,
-		VkFormat type, VkImageAspectFlags aspectMask);
-
-	BufferIndex CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
-
-	ImageIndex CreateSampledImage(
-		std::vector<std::vector<char>>& imageData,
-		std::vector<uint32_t>& imageSizes,
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, VkFormat type,
-		uint32_t memIndex,
-		uint32_t hostIndex);
-
-	void TransitionImageLayout(ImageIndex& imageIndex,
+	void TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	ImageIndex CreateSampler(uint32_t mipLevels);
+	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset);
 
-	void DestorySampler(ImageIndex& samplerIndex);
+	OffsetIndex GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	void DestroyImageView(ImageIndex& imageViewIndex);
-
-	void DestroyImage(ImageIndex& imageIndex);
-
-	void WriteToHostBuffer(BufferIndex& hostIndex, void* data, size_t size, size_t offset);
-
-	OffsetIndex GetOffsetIntoHostBuffer(BufferIndex& hostIndex, size_t size, uint32_t alignment);
-
-	uint32_t CreateRenderPasses(VKRenderPassBuilder& builder);
-
-	void CreateRenderGraph(uint32_t renderPass);
-
-	std::vector<uint32_t> CreateSemaphores(uint32_t count);
-
-	std::vector<uint32_t> CreateFences(uint32_t count, VkFenceCreateFlags flags);
-
-	uint32_t BeginFrameForSwapchain(uint32_t swapChainIndex, uint32_t requestedImage);
+	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
 
 	uint32_t SubmitCommandBuffer(
-		std::vector<uint32_t>& wait,
+		std::vector<EntryHandle>& wait,
 		std::vector<VkPipelineStageFlags>& waitStages,
-		std::vector<uint32_t>& signal,
-		uint32_t cbIndex);
+		std::vector<EntryHandle>& signal,
+		EntryHandle cbIndex);
 
-	uint32_t SubmitCommandsForSwapChain(uint32_t swapChainIdx, uint32_t frameIndex,
-		uint32_t cbIndex);
+	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex,
+		EntryHandle cbIndex);
 
-	uint32_t PresentSwapChain(uint32_t swapChainIdx, uint32_t frameIdx, uint32_t commandBufferIndex);
+	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
 
-	std::vector<uint32_t> CreateReusableCommandBuffers(
-		uint32_t numberOfCommandBuffers, uint32_t firstCommandBuffer, VkCommandBufferLevel level, bool createFences, uint32_t capabilites);
-	
-	uint32_t GetCommandBufferIndex(uint64_t timeout);
+	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset);
 
-	uint32_t RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, uint32_t bufferIndex, bool reset, bool fenceReset);
-
-	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, uint32_t bufferIndex, bool resetfence);
-
-	uint32_t CreateFrameBuffer(std::vector<size_t>& attachmentIndices, uint32_t renderPassIndex, VkExtent2D& extent);
-
-	VkCommandBuffer GetCommandBufferHandle(uint32_t index);
-
-	uint32_t GetFamiliesOfCapableQueues(std::vector<uint32_t> &queueFamilies, uint32_t capabilities);
-
-	VkImageView GetImageView(uint32_t index);
-
-	VkCommandPool GetCommandPool(uint32_t poolIndex);
-
-	VkDescriptorPool GetDescriptorPool(uint32_t poolIndex);
-
-	VKSwapChain& GetSwapChain(uint32_t index);
-
-	VkRenderPass GetRenderPass(uint32_t index); 
-
-	VkFence GetFence(uint32_t index);
-
-	VkSemaphore GetSemaphore(uint32_t index);
-	
-	VkFramebuffer GetFrameBuffer(uint32_t index);
-
-	VkBuffer GetHostBuffer(size_t index);
-
-	VKShaderCache& GetShaders();
+	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
 
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
-	VKDescriptorSetCache& GetDescriptorSets();
-
-	VKDescriptorLayoutCache& GetDescriptorLayouts();
-
-	void CreatePipelineCache(uint32_t renderPassIndex);
-
-	VKPipelineCache& GetPipelineCache(uint32_t renderPassIndex);
-
-	DescriptorSetBuilder CreateDescriptorSetBuilder(uint32_t poolIndex, std::string layoutname, uint32_t numberofsets);
-
-	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder();
-
-	RecordingBufferObject GetRecordingBufferObject(uint32_t commandBufferIndex);
-
-	uint32_t CreateRenderTarget(uint32_t renderPassIndex, uint32_t framebufferCount);
-
-	RenderTarget& GetRenderTarget(uint32_t renderTargetIndex);
-
-	VKRenderGraph& GetRenderGraph(size_t renderPassIndex);
-
-	void UpdateRenderGraph(uint32_t renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
-
-	void AllocateCommandPools(uint32_t size);
+	void UpdateRenderGraph(EntryHandle renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
 
 	void WaitOnDevice();
-
-	void GetExclusiveLock();
-
-	void UnlockExclusiveLock();
-
-	void GetSharedLock();
-
-	VKCommandBuffer* GetCommandBuffer(uint32_t index);
-
-	VkSampler GetSampler(size_t index);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
-	size_t queueManagers;
+	EntryHandle queueManagers;
 	size_t queueManagersSize;
 
 	VKDescriptorLayoutCache descriptorLayoutCache;

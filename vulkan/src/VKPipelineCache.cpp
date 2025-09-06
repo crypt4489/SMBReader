@@ -35,8 +35,8 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders(snl);
 	// get 
 
-	auto& dslc = majorDev->GetDescriptorLayouts();
-	auto& sc = majorDev->GetShaders();
+	auto& dslc = majorDev->descriptorLayoutCache;
+	auto& sc = majorDev->shaders;
 
 	for (std::size_t i = 0; i < dslcns; i++)
 	{

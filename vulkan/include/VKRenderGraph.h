@@ -20,13 +20,13 @@ public:
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(uint32_t _renderTargetIndex);
+	VKRenderGraph(EntryHandle _renderTargetIndex);
 
 	void DrawScene(RecordingBufferObject& rbo, uint32_t frameNum);
 
 	void AddObject(VKPipelineObject* obj);
 	
-	uint32_t renderTargetIndex;
+	EntryHandle renderTargetIndex;
 
 	std::string currentPipeline = "";
 
