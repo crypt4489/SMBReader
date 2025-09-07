@@ -20,11 +20,13 @@ public:
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(EntryHandle _renderTargetIndex);
+	VKRenderGraph(EntryHandle _renderTargetIndex, void *data, size_t dCount, size_t pCount);
 
 	void DrawScene(RecordingBufferObject& rbo, uint32_t frameNum);
 
 	void AddObject(VKPipelineObject* obj);
+
+	void AddDynamicOffset(uint32_t offset);
 	
 	EntryHandle renderTargetIndex;
 
@@ -32,10 +34,13 @@ public:
 
 	std::string descriptorname = "";
 
-	std::vector<uint32_t> dynamicOffsets;
+	uint32_t* dynamicOffsets;
 
 	SharedExclusiveFlag objectGuard;
 
-	std::vector<VKPipelineObject*> objects;
+	VKPipelineObject** objects;
+
+	size_t dynamicOffsetCount, dynamicOffsetSize;
+	size_t pipelineObjCount, pipelineObjSize;
 };
 

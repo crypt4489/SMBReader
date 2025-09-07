@@ -9,3 +9,5 @@ class VKPipelineObject;
 class VKDescriptorLayoutCache;
 class VKDescriptorSetCache;
 class VKRenderGraph;
+struct DescriptorSetLayoutBuilder;
+class VKRenderPassBuilder;

@@ -5,24 +5,24 @@
 #include <cassert>
 #include <cmath>
 #include <forward_list>
-#include <map>
 #include <numeric>
-
-#include <unordered_map>
 #include <set>
 
 #include "vulkan/vulkan.h"
 #include "IndexTypes.h"
 #include "ThreadManager.h"
+
+
+#include "VKTypes.h"
+
+
 #include "VKPipelineCache.h"
 #include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
 #include "VKShaderCache.h"
 #include "VKRenderPassBuilder.h"
-#include "VKTypes.h"
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
-
 
 class VKDevice;
 
@@ -335,11 +335,11 @@ public:
 
 	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
+	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
+
 	DescriptorSetBuilder CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets);
 
 	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder();
-
-	VkDescriptorPool CreateDesciptorPool(EntryHandle& poolIndex, DescriptorPoolBuilder& builder, uint32_t maxSets);
 
 	std::vector<EntryHandle> CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
@@ -347,13 +347,13 @@ public:
 
 	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
 
-	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
-
 	EntryHandle CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps, EntryHandle memIndex);
+
+	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
 	EntryHandle CreateImageView(
 		EntryHandle imageIndex, uint32_t mipLevels,
@@ -373,15 +373,15 @@ public:
 		float deviceRatio
 	);
 
-	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
+	void CreatePipelineCache(EntryHandle renderPassIndex);
 
-	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
+	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	void CreateRenderGraph(EntryHandle renderPass);
 
-	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
+	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 
-	void CreatePipelineCache(EntryHandle renderPassIndex);
+	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
 
 	std::vector<EntryHandle> CreateReusableCommandBuffers(
 		uint32_t numberOfCommandBuffers,
@@ -422,9 +422,11 @@ public:
 	
 	VkBuffer GetHostBuffer(EntryHandle index);
 
+	VkImage GetImage(EntryHandle index);
+
 	VkImageView GetImageView(EntryHandle index);
 
-	VKPipelineCache& GetPipelineCache(EntryHandle renderPassIndex);
+	VKPipelineCache* GetPipelineCache(EntryHandle renderPassIndex);
 
 	int32_t GetPresentQueue(QueueIndex& queueIdx,
 		QueueIndex& maxQueueCount,
@@ -440,17 +442,17 @@ public:
 
 	RecordingBufferObject GetRecordingBufferObject(EntryHandle commandBufferIndex);
 
-	VKRenderGraph& GetRenderGraph(EntryHandle renderPassIndex);
+	VKRenderGraph* GetRenderGraph(EntryHandle renderPassIndex);
 
 	VkRenderPass GetRenderPass(EntryHandle index);
 
-	RenderTarget& GetRenderTarget(EntryHandle renderTargetIndex);
+	RenderTarget* GetRenderTarget(EntryHandle renderTargetIndex);
 
 	VkSampler GetSampler(EntryHandle index);
 
 	VkSemaphore GetSemaphore(EntryHandle index);
 
-	VKSwapChain& GetSwapChain(EntryHandle index);
+	VKSwapChain* GetSwapChain(EntryHandle index);
 
 	//Destructors
 
@@ -460,11 +462,19 @@ public:
 
 	void DestorySampler(EntryHandle samplerIndex);
 
+	//Allocation
 
-	//ACTIONS
+	void* GetVkTypeFromEntry(EntryHandle index);
+
+	EntryHandle AddVkTypeToEntry(void* handle);
+
+	void* AllocTypeFromEntry(size_t size);
 
 
-	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
+	//ACTIONS/HELPERS
+
+
+	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
 
 	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
@@ -472,15 +482,15 @@ public:
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps);
 
-	void TransitionImageLayout(EntryHandle imageIndex,
-		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
-		uint32_t mips, uint32_t layers);
-
-	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset);
-
 	OffsetIndex GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
+	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
+
+	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
+
+	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset);
+
+	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
 	uint32_t SubmitCommandBuffer(
 		std::vector<EntryHandle>& wait,
@@ -491,17 +501,17 @@ public:
 	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex,
 		EntryHandle cbIndex);
 
-	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
-
-	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset);
-
-	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
-
-	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
+	void TransitionImageLayout(EntryHandle imageIndex,
+		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
+		uint32_t mips, uint32_t layers);
 
 	void UpdateRenderGraph(EntryHandle renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
 
+	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
+	
 	void WaitOnDevice();
+
+	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
@@ -522,5 +532,10 @@ public:
 	void* perDeviceData;
 	size_t perDeviceOffset = 0;
 	size_t perDeviceSize;
+
+	void* deviceLocalCache;
+	size_t cacheRead;
+	size_t cacheWrite;
+	size_t deviceLocalCacheSize;
 };
 

@@ -69,7 +69,7 @@ void RenderInstance::DestroySwapChainAttachments()
 void RenderInstance::RecreateSwapChain() {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VkDevice logicalDevice = dev.device;
-	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 	int width = 0, height = 0;
 	glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
 	while (width == 0 || height == 0) {
@@ -80,21 +80,21 @@ void RenderInstance::RecreateSwapChain() {
 	vkDeviceWaitIdle(logicalDevice);
 
 	DestroySwapChainAttachments();
-	swapChain.DestroySwapChain();
+	swapChain->DestroySwapChain();
 
 	CreateMSAAColorResources(width, height);
 	CreateDepthImage(width, height);
 
-	swapChain.RecreateSwapChain(width, height);
+	swapChain->RecreateSwapChain(width, height);
 }
 
 void RenderInstance::CreateRenderPass()
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 
 	VKRenderPassBuilder rpb{};
-	VkFormat format = swapChain.GetSwapChainFormat();
+	VkFormat format = swapChain->GetSwapChainFormat();
 
 	rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, msaaSamples,
 		VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
@@ -127,15 +127,15 @@ void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageI
 {
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 
 	auto rbo = dev.GetRecordingBufferObject(cb);
 
 	rbo.BeginRecordingCommand();
 	
-	rbo.BeginRenderPassCommand(swapChain.renderTargetIndex, imageIndex, { {0, 0}, swapChain.swapChainExtent });
+	rbo.BeginRenderPassCommand(swapChain->renderTargetIndex, imageIndex, { {0, 0}, swapChain->swapChainExtent });
 
-	uint32_t x = swapChain.GetSwapChainWidth(), y = swapChain.GetSwapChainHeight();
+	uint32_t x = swapChain->GetSwapChainWidth(), y = swapChain->GetSwapChainHeight();
 
 	rbo.SetViewportCommand(0, 0, x, y, 0.0f, 1.0f);
 
@@ -222,16 +222,16 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VkDevice logicalDevice = dev.device;
-	VKSwapChain& swapChain = dev.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 
 	colorImage = dev.CreateImage(width, height,
-		1, swapChain.GetSwapChainFormat(), 1,
+		1, swapChain->GetSwapChainFormat(), 1,
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		msaaSamples,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
 
-	colorView = dev.CreateImageView(colorImage, 1, swapChain.GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
+	colorView = dev.CreateImageView(colorImage, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void RenderInstance::WaitOnRender()
@@ -250,7 +250,7 @@ void RenderInstance::CreatePipelines()
 
 	std::vector<std::string> shaders2 = { "text.vert.spv" , "text.frag.spv" };
 
-	auto &mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
+	auto mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
 
 	DescriptorSetLayoutBuilder textDescriptor = dev.CreateDescriptorSetLayoutBuilder();
 	DescriptorSetLayoutBuilder globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(); 
@@ -272,9 +272,9 @@ void RenderInstance::CreatePipelines()
 
 	genericObjectBuilder.CreateDescriptorSetLayout(regularMeshConatiners[1]);
 
-	mainRenderPassCache.CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders1, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
+	mainRenderPassCache->CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders1, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
 
-	mainRenderPassCache.CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+	mainRenderPassCache->CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
 }
 
 void RenderInstance::CreateGlobalBuffer()
@@ -415,9 +415,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	swapChainIndex = majorDevice.CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
 
-	VKSwapChain& swapChain = majorDevice.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = majorDevice.GetSwapChain(swapChainIndex);
 
-	VkFormat swcFormat = swapChain.GetSwapChainFormat();
+	VkFormat swcFormat = swapChain->GetSwapChainFormat();
 
 	auto swcPool = majorDevice.FindImageMemoryIndexForPool(1920, 1200,
 		1, swcFormat, 1,
@@ -439,13 +439,13 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	std::vector attachmentViews = { &colorView, &depthView };
 
-	swapChain.CreateSwapChain(800, 600, mainRenderPass, attachmentViews);
+	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews);
 
 	DescriptorPoolBuilder builder{};
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 
-	majorDevice.CreateDesciptorPool(descriptorPoolIndex, builder, MAX_FRAMES_IN_FLIGHT * 100);
+	descriptorPoolIndex = majorDevice.CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
 
 	CreateGlobalBuffer();
 
@@ -515,12 +515,12 @@ VkSampleCountFlagBits RenderInstance::GetMSAASamples() const
 
 uint32_t RenderInstance::GetSwapChainHeight()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainHeight();
+	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex)->GetSwapChainHeight();
 }
 
 uint32_t RenderInstance::GetSwapChainWidth()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex).GetSwapChainWidth();
+	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex)->GetSwapChainWidth();
 }
 
 DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname, uint32_t frames)
@@ -532,18 +532,18 @@ DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname,
 void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto& graph = dev.GetRenderGraph(mainRenderPass);
-	graph.AddObject(pipeline);
+	auto graph = dev.GetRenderGraph(mainRenderPass);
+	graph->AddObject(pipeline);
 }
 
 void RenderInstance::DrawScene(EntryHandle cbindex)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
-	auto& graph = dev.GetRenderGraph(mainRenderPass);
+	auto graph = dev.GetRenderGraph(mainRenderPass);
 	//if (!graph.objects.size()) return;
 	auto rcb = dev.GetRecordingBufferObject(cbindex);
-	graph.DrawScene(rcb, currentFrame);
+	graph->DrawScene(rcb, currentFrame);
 }
 
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)

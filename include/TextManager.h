@@ -1,9 +1,13 @@
 #pragma once
 
 #include <tuple>
+#include <vector>
 
 #include "AppTexture.h"
+#include "RenderInstance.h"
+#include "VertexTypes.h"
 
+#include <glm/glm.hpp>
 
 struct Font
 {

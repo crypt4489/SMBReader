@@ -1,5 +1,5 @@
 #include "VKTexture.h"
-
+#include "RenderInstance.h"
 VKTexture::VKTexture(SMBTexture& tex) :
 	imageIndex(),
 	viewIndex(),

@@ -3,7 +3,6 @@
 
 #include "AppTextureImpl.h"
 #include "IndexTypes.h"
-#include "RenderInstance.h"
 #include "SMBTexture.h"
 class VKTexture
 {

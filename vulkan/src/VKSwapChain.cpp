@@ -200,7 +200,7 @@ void VKSwapChain::CreateSwapChain(
 
 	renderTargetIndex = device->CreateRenderTarget(_renderPassIndex, imageCount);
 
-	auto &ref = device->GetRenderTarget(renderTargetIndex);
+	auto ref = device->GetRenderTarget(renderTargetIndex);
 
 	AddFramebufferAttachments(attachmentIndices);
 
@@ -208,8 +208,8 @@ void VKSwapChain::CreateSwapChain(
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
-		auto fbref = reinterpret_cast<size_t*>(attaches[i]);
-		fbref[attachmentCount-1] = reinterpret_cast<size_t>(&ref.imageViews[i]);
+		auto fbref = reinterpret_cast<EntryHandle**>(attaches[i]);
+		fbref[attachmentCount-1] = &ref->imageViews[i];
 	}
 
 	CreateSwapChainElements();
@@ -300,7 +300,7 @@ void VKSwapChain::CreateSwapChainElements()
 {
 	std::vector<EntryHandle> indices(attachmentCount);
 
-	auto& renderTarget = device->GetRenderTarget(renderTargetIndex);
+	auto renderTarget = device->GetRenderTarget(renderTargetIndex);
 
 	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
 
@@ -309,13 +309,13 @@ void VKSwapChain::CreateSwapChainElements()
 	for (size_t i = 0; i < imageCount; i++) {
 		auto ref2 = reinterpret_cast<EntryHandle**>(attaches[i]);
 
-		renderTarget.imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
+		renderTarget->imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
 
 		for (size_t j = 0; j < attachmentCount; j++) {
 			indices[j] = *ref2[j];
 		}
 
-		renderTarget.framebufferIndices[i] = device->CreateFrameBuffer(indices, renderTarget.renderPassIndex, swapChainExtent);
+		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices, renderTarget->renderPassIndex, swapChainExtent);
 	}
 }
 
