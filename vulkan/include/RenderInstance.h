@@ -173,7 +173,6 @@ public:
 	EntryHandle globalIndex;
 	EntryHandle mainRenderPass;
 	std::array<EntryHandle, 3> currentCBIndex;
-	std::vector<EntryHandle> cbsIndices;
 
 	WindowManager *windowMan = nullptr;
 

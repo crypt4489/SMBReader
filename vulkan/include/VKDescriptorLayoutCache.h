@@ -1,7 +1,7 @@
 #pragma once
+#include "VKTypes.h"
 #include "VKUtilities.h"
 #include <unordered_map>
-#include <vector>
 
 
 
@@ -20,7 +20,7 @@ public:
 
 struct DescriptorSetLayoutBuilder
 {
-	DescriptorSetLayoutBuilder(VkDevice d, VKDescriptorLayoutCache *coa) : device(d), cacheObj(coa) {}
+	DescriptorSetLayoutBuilder(VKDevice* d, VKDescriptorLayoutCache* coa, uint32_t _bc);
 	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout(std::string name);
 	void AddPixelImageSamplerLayout(uint32_t binding);
 
@@ -28,9 +28,11 @@ struct DescriptorSetLayoutBuilder
 
 	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
 
-	std::vector<VkDescriptorSetLayoutBinding> descSetBindings;
+	VkDescriptorSetLayoutBinding* descSetBindings;
 
-	VkDevice device;
+	VKDevice *device;
 	VKDescriptorLayoutCache* cacheObj;
+	uint32_t bindingCounts;
+	uint32_t counter;
 };
 

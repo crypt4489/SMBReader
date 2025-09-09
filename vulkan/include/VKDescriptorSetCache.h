@@ -1,5 +1,6 @@
 #pragma once
 
+#include "VKTypes.h"
 #include "VKUtilities.h"
 #include <unordered_map>
 
@@ -7,7 +8,7 @@ class VKDescriptorSetCache;
 
 struct DescriptorSetBuilder
 {
-	DescriptorSetBuilder(VkDevice _d, VKDescriptorSetCache* c) : device(_d), cache(c) {};
+	DescriptorSetBuilder(VKDevice* _d, VKDescriptorSetCache* c, size_t _ds);
 
 	void AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames);
 
@@ -19,9 +20,10 @@ struct DescriptorSetBuilder
 
 	void AddDescriptorsToCache(std::string name);
 
-	std::vector<VkDescriptorSet> descriptorSets;
-	VkDevice device;
+	VkDescriptorSet* descriptorSets;
+	VKDevice *device;
 	VKDescriptorSetCache* cache;
+	size_t counter, descriptorSize;
 };
 
 
@@ -30,9 +32,9 @@ class VKDescriptorSetCache
 public:
 	VkDescriptorSet GetDescriptorSetPerFrame(std::string& id, uint32_t frame);
 
-	void AddDesciptorSet(std::string& id, std::vector<VkDescriptorSet>& set);
+	void AddDesciptorSet(std::string& id, VkDescriptorSet* set, uint32_t frames);
 
 private:
-	std::unordered_map<std::string, std::vector<VkDescriptorSet>> descriptorSetCache;
+	std::unordered_map<std::string, std::pair<uint32_t, VkDescriptorSet*>> descriptorSetCache;
 
 };

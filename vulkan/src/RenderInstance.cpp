@@ -252,9 +252,9 @@ void RenderInstance::CreatePipelines()
 
 	auto mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
 
-	DescriptorSetLayoutBuilder textDescriptor = dev.CreateDescriptorSetLayoutBuilder();
-	DescriptorSetLayoutBuilder globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(); 
-	DescriptorSetLayoutBuilder genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder();
+	DescriptorSetLayoutBuilder textDescriptor = dev.CreateDescriptorSetLayoutBuilder(1);
+	DescriptorSetLayoutBuilder globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(1); 
+	DescriptorSetLayoutBuilder genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder(2);
 	std::vector<std::string> textDescriptorContainers = { "oneimage" };
 	std::vector<std::string> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
@@ -441,7 +441,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews);
 
-	DescriptorPoolBuilder builder{};
+	DescriptorPoolBuilder builder = majorDevice.CreateDescriptorPoolBuilder(2);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 
@@ -458,7 +458,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		cbsIndices = majorDevice.CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
+		EntryHandle* cbsIndices = majorDevice.CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 		auto& ref = threadedRecordBuffers[i];
 		int n = MAX_FRAMES_IN_FLIGHT;
 		currentCBIndex[i] = cbsIndices[0];
@@ -483,7 +483,7 @@ OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 	dsb.AddDescriptorsToCache("mainrenderpass");
 	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
 	std::vector<uint32_t> data(1, perRenderPassStuff);
-	majorDevice.UpdateRenderGraph(mainRenderPass, data, "mainrenderpass");
+	majorDevice.UpdateRenderGraph(mainRenderPass, data.data(), data.size(), "mainrenderpass");
 	return perRenderPassStuff;
 }
 

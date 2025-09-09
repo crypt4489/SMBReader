@@ -154,7 +154,7 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 	perDeviceOffset(0),
 	perDeviceSize(0),
 	deviceLocalCache(nullptr),
-	cacheRead(0),
+	//cacheRead(0),
 	cacheWrite(0),
 	deviceLocalCacheSize(0)
 {
@@ -180,6 +180,11 @@ VKDevice::~VKDevice()
 		{
 			delete[] entries;
 		}
+
+		if (deviceLocalCache)
+		{
+			delete[] deviceLocalCache;
+		}
 	}
 }
 
@@ -196,7 +201,7 @@ VKDevice& VKDevice::operator=(VKDevice&& _dev) noexcept {
 	this->indexForEntries = _dev.indexForEntries;
 	this->numberOfEntries = _dev.numberOfEntries;
 
-	this->cacheRead = _dev.cacheRead;
+	//this->cacheRead = _dev.cacheRead;
 	this->cacheWrite = _dev.cacheWrite;
 	this->deviceLocalCache = _dev.deviceLocalCache;
 	this->deviceLocalCacheSize = _dev.deviceLocalCacheSize;
@@ -213,7 +218,7 @@ VKDevice& VKDevice::operator=(VKDevice&& _dev) noexcept {
 	_dev.indexForEntries = ~0ui64;
 	_dev.numberOfEntries = ~0ui64;
 
-	_dev.cacheRead = ~0ui64;
+	//_dev.cacheRead = ~0ui64;
 	_dev.cacheWrite = ~0ui64;
 	_dev.deviceLocalCache = nullptr;
 	_dev.deviceLocalCacheSize = ~0ui64;
@@ -235,7 +240,7 @@ VKDevice::VKDevice(VKDevice&& _dev)  noexcept
 	this->indexForEntries = _dev.indexForEntries;
 	this->numberOfEntries = _dev.numberOfEntries;
 
-	this->cacheRead = _dev.cacheRead;
+	//this->cacheRead = _dev.cacheRead;
 	this->cacheWrite = _dev.cacheWrite;
 	this->deviceLocalCache = _dev.deviceLocalCache;
 	this->deviceLocalCacheSize = _dev.deviceLocalCacheSize;
@@ -252,7 +257,7 @@ VKDevice::VKDevice(VKDevice&& _dev)  noexcept
 	_dev.indexForEntries = ~0ui64;
 	_dev.numberOfEntries = ~0ui64;
 
-	_dev.cacheRead = 0ui64;
+	//_dev.cacheRead = 0ui64;
 	_dev.cacheWrite = 0ui64;
 	_dev.deviceLocalCache = nullptr;
 	_dev.deviceLocalCacheSize = ~0ui64;
@@ -280,6 +285,21 @@ void* VKDevice::GetVkTypeFromEntry(EntryHandle index)
 {
 	void* ret = reinterpret_cast<void*>(entries[index()]);
 	return ret;
+}
+
+
+void* VKDevice::AllocFromDeviceCache(size_t size)
+{
+	if ((cacheWrite + size) >= deviceLocalCacheSize)
+	{
+		cacheWrite = 0;
+	}
+
+	uintptr_t head = reinterpret_cast<uintptr_t>(deviceLocalCache) + cacheWrite;
+
+	cacheWrite += size;
+
+	return reinterpret_cast<void*>(head);
 }
 
 //CREATORS
@@ -310,12 +330,12 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32
 {
 	std::shared_lock lock(deviceLock);
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
-	uint32_t poolSizeCount = static_cast<uint32_t>(builder.poolSizes.size());
+	uint32_t poolSizeCount = static_cast<uint32_t>(builder.poolSizesSize);
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = poolSizeCount;
-	poolInfo.pPoolSizes = builder.poolSizes.data();
+	poolInfo.pPoolSizes = builder.poolSizes;
 	poolInfo.maxSets = maxSets;
 
 	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
@@ -328,24 +348,35 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32
 	return poolIndex;
 }
 
+DescriptorPoolBuilder VKDevice::CreateDescriptorPoolBuilder(size_t poolSize)
+{
+
+	VkDescriptorPoolSize* sizes = reinterpret_cast<VkDescriptorPoolSize*>(AllocFromDeviceCache(sizeof(VkDescriptorPoolSize) * poolSize));
+
+	DescriptorPoolBuilder builder(sizes, poolSize);
+
+	return builder;
+}
+
 DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets)
 {
 	std::shared_lock lock(deviceLock);
-	DescriptorSetBuilder dsb{ device, &descriptorSetCache };
+	DescriptorSetBuilder dsb{ this, &descriptorSetCache, numberofsets };
 	auto ref = descriptorLayoutCache.GetLayout(layoutname);
 	dsb.AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets);
 	return dsb;
 }
 
-DescriptorSetLayoutBuilder VKDevice::CreateDescriptorSetLayoutBuilder()
+DescriptorSetLayoutBuilder VKDevice::CreateDescriptorSetLayoutBuilder(uint32_t bindingCount)
 {
-	return { device, &descriptorLayoutCache };
+	return { this, &descriptorLayoutCache, bindingCount };
 }
 
-std::vector<EntryHandle> VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
+EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 {
 	std::shared_lock lock(deviceLock);
-	std::vector<EntryHandle> ret(count);
+
+	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -364,12 +395,11 @@ std::vector<EntryHandle> VKDevice::CreateFences(uint32_t count, VkFenceCreateFla
 	return ret;
 }
 
-EntryHandle VKDevice::CreateFrameBuffer(std::vector<EntryHandle>& attachmentIndices, EntryHandle renderPassIndex, VkExtent2D& extent)
+EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D& extent)
 {
 	std::shared_lock lock(deviceLock);
 
-	uint32_t attachmentsCount = static_cast<uint32_t>(attachmentIndices.size());
-	std::vector<VkImageView> attachments(attachmentsCount);
+	VkImageView* attachments = reinterpret_cast<VkImageView*>(AllocFromDeviceCache(sizeof(VkImageView) * attachmentsCount));
 
 	for (uint32_t i = 0; i < attachmentsCount; i++) {
 		attachments[i] = GetImageView(attachmentIndices[i]);
@@ -378,8 +408,8 @@ EntryHandle VKDevice::CreateFrameBuffer(std::vector<EntryHandle>& attachmentIndi
 	VkFramebufferCreateInfo framebufferInfo{};
 	framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 	framebufferInfo.renderPass = GetRenderPass(renderPassIndex);
-	framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	framebufferInfo.pAttachments = attachments.data();
+	framebufferInfo.attachmentCount = attachmentsCount;
+	framebufferInfo.pAttachments = attachments;
 	framebufferInfo.width = extent.width;
 	framebufferInfo.height = extent.height;
 	framebufferInfo.layers = 1;
@@ -577,57 +607,69 @@ void VKDevice::CreateLogicalDevice(
 	float deviceRatio
 )
 {
-
+#define CACHESIZE 512 * 1024
 	if (perDeviceDataSize)
 	{
 		size_t entriesalloc = static_cast<size_t>(deviceRatio * perDeviceDataSize);
 
+		deviceLocalCacheSize = CACHESIZE;
+		deviceLocalCache = (void*)new char[deviceLocalCacheSize];
+
 		perDeviceSize = perDeviceDataSize - entriesalloc;
 		perDeviceData = (void*)new char[perDeviceSize];
-		perDeviceOffset = 0;
 
 		numberOfEntries = entriesalloc / sizeof(uintptr_t);
 		entries = new uintptr_t[numberOfEntries];
-		indexForEntries = 0;
 	}
 
 	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
-	std::vector<VkQueueFamilyProperties> famProps;
+	uint32_t familyCount;
+	VkQueueFamilyProperties* famProps;
 	QueueIndex index, maxCount;
 
-	QueueFamilyDetails(famProps);
+	famProps = QueueFamilyDetails(&familyCount);
 
-	GetQueueByMask(index, maxCount, famProps, queueFlags);
+	GetQueueByMask(index, maxCount, famProps, familyCount, queueFlags);
 
 	queueIndices[index] = { maxCount, false };
 
 	if (renderSurface)
 	{
-		GetPresentQueue(index, maxCount, famProps, renderSurface);
+		GetPresentQueue(index, maxCount, famProps, familyCount, renderSurface);
 		queueIndices[index] = { maxCount, true };
 	}
 
-	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+	VkDeviceQueueCreateInfo* queueCreateInfos = reinterpret_cast<VkDeviceQueueCreateInfo*>(AllocFromDeviceCache(sizeof(VkDeviceQueueCreateInfo) * familyCount));
 
 	auto result = std::max_element(queueIndices.begin(), queueIndices.end(), [](auto& ref, auto& ref2) {
 		return std::get<uint32_t>(ref.second) < std::get<uint32_t>(ref2.second);
 		});
 
-	std::vector<float> queuePriorties(std::get<uint32_t>((*result).second), 1.0f);
+
+	uint32_t prioSize = std::get<uint32_t>((*result).second);
+
+	float* queuePriorites = reinterpret_cast<float*>(AllocFromDeviceCache(sizeof(float) * prioSize));
+
+	for (uint32_t i = 0; i < prioSize; i++)
+	{
+		queuePriorites[i] = 1.0f;
+	}
+
+	uint32_t i = 0;
 
 	for (const auto& queueFamily : queueIndices) {
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = queueFamily.first;
 		queueCreateInfo.queueCount = std::get<uint32_t>(queueFamily.second);
-		queueCreateInfo.pQueuePriorities = queuePriorties.data();
-		queueCreateInfos.push_back(queueCreateInfo);
+		queueCreateInfo.pQueuePriorities = queuePriorites;
+		queueCreateInfos[i++] = queueCreateInfo;
 	}
 
 	VkDeviceCreateInfo logDeviceInfo{};
 	logDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	logDeviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-	logDeviceInfo.pQueueCreateInfos = queueCreateInfos.data();
+	logDeviceInfo.queueCreateInfoCount = i;
+	logDeviceInfo.pQueueCreateInfos = queueCreateInfos;
 	logDeviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
 	logDeviceInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
 	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
@@ -679,7 +721,11 @@ void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, ui
 
 	void* queueManagerData = reinterpret_cast<void*>(AllocTypeFromEntry(sizeof(size_t) * maxCount));
 
-	std::construct_at(manager, std::vector<uint32_t>{}, maxCount, queueIndex, queueFlags, presentsupport, * this, queueManagerData);
+	std::construct_at(manager, 
+		nullptr, 0, 
+		maxCount, queueIndex, 
+		queueFlags, presentsupport, 
+		*this, queueManagerData);
 }
 
 #define MAX_PIPELINE_OBJECTS 50
@@ -732,7 +778,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 	return AddVkTypeToEntry(renderTarget);
 }
 
-std::vector<EntryHandle> VKDevice::CreateReusableCommandBuffers(
+EntryHandle* VKDevice::CreateReusableCommandBuffers(
 	uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
 {
 
@@ -751,14 +797,15 @@ std::vector<EntryHandle> VKDevice::CreateReusableCommandBuffers(
 	allocInfo.level = level;
 	allocInfo.commandBufferCount = numberOfCommandBuffers;
 
-	std::vector<VkCommandBuffer> l(numberOfCommandBuffers);
+	VkCommandBuffer* l = reinterpret_cast<VkCommandBuffer*>(AllocFromDeviceCache(sizeof(VkCommandBuffer) * numberOfCommandBuffers));
 
-	if (vkAllocateCommandBuffers(device, &allocInfo, l.data()) != VK_SUCCESS) {
+	if (vkAllocateCommandBuffers(device, &allocInfo, l) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate command buffers!");
 	}
 
-	std::vector<EntryHandle> ret(numberOfCommandBuffers);
-	std::vector<VKCommandBuffer*> temp(numberOfCommandBuffers);
+	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * numberOfCommandBuffers));
+
+	VKCommandBuffer** temp = reinterpret_cast<VKCommandBuffer**>(AllocFromDeviceCache(sizeof(VKCommandBuffer*) * numberOfCommandBuffers));
 
 	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
 		auto iter = reinterpret_cast<VKCommandBuffer*>(AllocTypeFromEntry(sizeof(VKCommandBuffer)));
@@ -900,11 +947,11 @@ EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 	return ret;
 }
 
-std::vector<EntryHandle> VKDevice::CreateSemaphores(uint32_t count)
+EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 {
 	std::shared_lock lock(deviceLock);
 
-	std::vector<EntryHandle> ret(count);
+	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
 	VkSemaphore sema = nullptr;
 
@@ -1007,16 +1054,22 @@ VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle poolIndex)
 	return reinterpret_cast<VkDescriptorPool>(GetVkTypeFromEntry(poolIndex));
 }
 
-uint32_t VKDevice::GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamilies, uint32_t capabilities)
+uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t *size, uint32_t capabilities)
 {
 	std::shared_lock lock(deviceLock);
 	auto iter = reinterpret_cast<QueueManager*>(GetVkTypeFromEntry(queueManagers));
+
+	uint32_t* out = *queueFamilies;
+	uint32_t index = 0;
 	for (size_t i = 0; i < queueManagersSize && capabilities; i++)
 	{
 		uint32_t comp = capabilities;
 		capabilities &= ~(iter[i].queueCapabilities & capabilities);
-		if (comp != capabilities) queueFamilies.push_back(iter[i].queueFamilyIndex);
+		if (comp != capabilities) out[index++] = iter[i].queueFamilyIndex;
 	}
+
+	*size = index;
+
 	return capabilities;
 }
 
@@ -1060,18 +1113,19 @@ VKPipelineCache* VKDevice::GetPipelineCache(EntryHandle renderPassIndex)
 
 int32_t VKDevice::GetPresentQueue(QueueIndex& queueIdx,
 	QueueIndex& maxQueueCount,
-	std::vector<VkQueueFamilyProperties>& famProps,
+	VkQueueFamilyProperties* famProps,
+	uint32_t famPropsCount,
 	VkSurfaceKHR& renderSurface)
 {
-	uint32_t i = 0;
-	for (const auto& props : famProps)
+	for (uint32_t i = 0; i<famPropsCount; i++)
 	{
+		VkQueueFamilyProperties *props = &famProps[i];
 		VkBool32 presentSupport = VK_FALSE;
 		vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, renderSurface, &presentSupport);
 
 		if (presentSupport)
 		{
-			maxQueueCount = QueueIndex(props.queueCount);
+			maxQueueCount = QueueIndex(props->queueCount);
 			queueIdx = QueueIndex(i);
 			return 0;
 		}
@@ -1082,16 +1136,17 @@ int32_t VKDevice::GetPresentQueue(QueueIndex& queueIdx,
 
 int32_t VKDevice::GetQueueByMask(QueueIndex& queueIdx,
 	QueueIndex& maxQueueCount,
-	std::vector<VkQueueFamilyProperties>& famProps,
+	VkQueueFamilyProperties* famProps,
+	uint32_t famPropsCount,
 	uint32_t queueMask)
 {
 	uint32_t i = 0;
-	for (const auto& props : famProps)
+	for (uint32_t i = 0; i < famPropsCount; i++)
 	{
-
-		if ((props.queueFlags & queueMask) == queueMask) {
+		VkQueueFamilyProperties* props = &famProps[i];
+		if ((props->queueFlags & queueMask) == queueMask) {
 			queueIdx = QueueIndex(i);
-			maxQueueCount = QueueIndex(props.queueCount);
+			maxQueueCount = QueueIndex(props->queueCount);
 			return 0;
 		}
 		i++;
@@ -1235,7 +1290,9 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	auto depends = swc->GetDependenciesForImageIndex(frameIdx);
 
 	uint32_t waitCount = static_cast<uint32_t>(swc->semaphorePerStage);
-	std::vector<VkSemaphore> waitSemaphores(waitCount, VK_NULL_HANDLE);
+	
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
+
 	for (uint32_t i = 0; i < waitCount; i++)
 	{
 		waitSemaphores[i] = GetSemaphore(depends[waitCount + i]);
@@ -1246,7 +1303,7 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
 	presentInfo.waitSemaphoreCount = waitCount;
-	presentInfo.pWaitSemaphores = waitSemaphores.data();
+	presentInfo.pWaitSemaphores = waitSemaphores;
 
 	VkSwapchainKHR swapChains[] = { swc->swapChain };
 	presentInfo.swapchainCount = 1;
@@ -1271,14 +1328,15 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	return 1;
 }
 
-void VKDevice::QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps)
+VkQueueFamilyProperties* VKDevice::QueueFamilyDetails(uint32_t *size)
 {
-	uint32_t queueFamilyCount = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamilyCount, nullptr);
+	vkGetPhysicalDeviceQueueFamilyProperties(gpu, size, nullptr);
 
-	famProps.resize(queueFamilyCount);
+	VkQueueFamilyProperties* ret = reinterpret_cast<VkQueueFamilyProperties*>(AllocFromDeviceCache(sizeof(VkQueueFamilyProperties) * *size));
 
-	vkGetPhysicalDeviceQueueFamilyProperties(gpu, &queueFamilyCount, famProps.data());
+	vkGetPhysicalDeviceQueueFamilyProperties(gpu, size, ret);
+
+	return ret;
 }
 
 EntryHandle VKDevice::RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset)
@@ -1313,9 +1371,11 @@ void VKDevice::ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex)
 }
 
 uint32_t VKDevice::SubmitCommandBuffer(
-	std::vector<EntryHandle>& wait,
-	std::vector<VkPipelineStageFlags>& waitStages,
-	std::vector<EntryHandle>& signal,
+	EntryHandle* wait,
+	VkPipelineStageFlags* waitStages,
+	EntryHandle* signal,
+	uint32_t waitCount,
+	uint32_t signalCount,
 	EntryHandle cbIndex)
 {
 	std::shared_lock lock(deviceLock);
@@ -1323,17 +1383,14 @@ uint32_t VKDevice::SubmitCommandBuffer(
 	VkQueue queue;
 	vkGetDeviceQueue(device, vkcb->queueFamilyIndex, vkcb->queueIndex, &queue);
 
-	uint32_t woCount = static_cast<uint32_t>(wait.size());
-	uint32_t signalCount = static_cast<uint32_t>(signal.size());
-
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-	std::vector<VkSemaphore> waitSemaphores(woCount, VK_NULL_HANDLE);
-	std::vector<VkSemaphore> signalSemaphores(signalCount, VK_NULL_HANDLE);
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
+	VkSemaphore* signalSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * signalCount));
 
 	uint32_t i;
-	for (i = 0; i < woCount; i++)
+	for (i = 0; i < waitCount; i++)
 	{
 		waitSemaphores[i] = GetSemaphore(wait[i]);
 	}
@@ -1343,12 +1400,12 @@ uint32_t VKDevice::SubmitCommandBuffer(
 		signalSemaphores[i] = GetSemaphore(signal[i]);
 	}
 
-	submitInfo.waitSemaphoreCount = woCount;
-	submitInfo.pWaitSemaphores = waitSemaphores.data();
-	submitInfo.pWaitDstStageMask = waitStages.data();
+	submitInfo.waitSemaphoreCount = waitCount;
+	submitInfo.pWaitSemaphores = waitSemaphores;
+	submitInfo.pWaitDstStageMask = waitStages;
 
 	submitInfo.signalSemaphoreCount = signalCount;
-	submitInfo.pSignalSemaphores = signalSemaphores.data();
+	submitInfo.pSignalSemaphores = signalSemaphores;
 
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &vkcb->buffer;
@@ -1367,13 +1424,12 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t
 	//std::shared_lock lock(deviceLock);
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
 	auto depends = swc->GetDependenciesForImageIndex(frameIndex);
-	std::vector<VkPipelineStageFlags> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-	std::vector<EntryHandle> dummie1{ (depends[0]) };
+	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags) * swc->semaphorePerStage));
 
-	std::vector<EntryHandle> dummie2{ (depends[1]) };
+	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	return SubmitCommandBuffer(dummie1, waitStages, dummie2, cbIndex);
+	return SubmitCommandBuffer(depends, waitStages, &depends[1], 1, 1, cbIndex);
 }
 
 
@@ -1405,7 +1461,7 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 }
 
 
-void VKDevice::UpdateRenderGraph(EntryHandle renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor)
+void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, std::string perGraphDescriptor)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -1416,9 +1472,9 @@ void VKDevice::UpdateRenderGraph(EntryHandle renderPass, std::vector<uint32_t>& 
 		graph->descriptorname = perGraphDescriptor;
 	}
 
-	for (auto i : dynamicOffsets)
+	for (uint32_t i = 0; i<dos; i++)
 	{
-		graph->AddDynamicOffset(i);
+		graph->AddDynamicOffset(dynamicOffsets[i]);
 	}
 }
 
@@ -1462,7 +1518,11 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 
 /*---------------------------------------------------------*/
 
-QueueManager::QueueManager(std::vector<uint32_t> _cqs, int32_t _mqc, uint32_t _qfi, uint32_t _queueCapabilities, bool present, VKDevice& _d, void *data) :
+QueueManager::QueueManager(
+	uint32_t* _cqs, uint32_t _cqss, 
+	int32_t _mqc, uint32_t _qfi, 
+	uint32_t _queueCapabilities, bool present, 
+	VKDevice& _d, void *data) :
 	bitmap(0U),
 	maxQueueCount(_mqc),
 	queueFamilyIndex(_qfi),
@@ -1483,7 +1543,7 @@ QueueManager::QueueManager(std::vector<uint32_t> _cqs, int32_t _mqc, uint32_t _q
 		poolIndices[i] = _d.CreateCommandPool(index);
 	}
 
-	for (size_t i = 0; i < _cqs.size(); i++)
+	for (size_t i = 0; i < _cqss; i++)
 	{
 		bitmap.set(_cqs[i]);
 	}

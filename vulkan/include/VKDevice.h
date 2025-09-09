@@ -28,17 +28,26 @@ class VKDevice;
 
 struct DescriptorPoolBuilder
 {
+	DescriptorPoolBuilder(void* data, size_t _pslSize) 
+		: 
+		poolSizesSize(_pslSize),
+		counter(0),
+		poolSizes(reinterpret_cast<VkDescriptorPoolSize*>(data))
+	{
+	}
 	void AddUniformPoolSize(uint32_t size)
 	{
-		poolSizes.emplace_back(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, size);
+		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, size };
 	}
 
 	void AddImageSampler(uint32_t size)
 	{
-		poolSizes.emplace_back(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size);
+		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size };
 	}
 
-	std::vector<VkDescriptorPoolSize> poolSizes{};
+	VkDescriptorPoolSize* poolSizes;
+	size_t poolSizesSize;
+	size_t counter; 
 };
 
 class VKAllocator
@@ -289,13 +298,10 @@ class QueueManager
 {
 public:
 
-	QueueManager(std::vector<uint32_t> _cqs, 
-		int32_t _mqc, 
-		uint32_t _qfi, 
-		uint32_t _queueCapabilities, 
-		bool present, 
-		VKDevice& _d,
-		void *data);
+	QueueManager(uint32_t* _cqs, uint32_t _cqss,
+		int32_t _mqc, uint32_t _qfi,
+		uint32_t _queueCapabilities, bool present,
+		VKDevice& _d, void* data);
 
 	uint32_t GetQueue();
 
@@ -337,13 +343,15 @@ public:
 
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
 
+	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize);
+
 	DescriptorSetBuilder CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets);
 
-	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder();
+	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder(uint32_t bindingCount);
 
-	std::vector<EntryHandle> CreateFences(uint32_t count, VkFenceCreateFlags flags);
+	EntryHandle* CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
-	EntryHandle CreateFrameBuffer(std::vector<EntryHandle>& attachmentIndices, EntryHandle renderPassIndex, VkExtent2D& extent);
+	EntryHandle CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D& extent);
 
 	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
 
@@ -383,7 +391,7 @@ public:
 
 	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
 
-	std::vector<EntryHandle> CreateReusableCommandBuffers(
+	EntryHandle* CreateReusableCommandBuffers(
 		uint32_t numberOfCommandBuffers,
 		VkCommandBufferLevel level, bool createFences, 
 		uint32_t capabilites
@@ -400,7 +408,7 @@ public:
 
 	EntryHandle CreateSampler(uint32_t mipLevels);
 
-	std::vector<EntryHandle> CreateSemaphores(uint32_t count);
+	EntryHandle* CreateSemaphores(uint32_t count);
 
 	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
 
@@ -414,7 +422,7 @@ public:
 
 	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
 
-	uint32_t GetFamiliesOfCapableQueues(std::vector<uint32_t>& queueFamilies, uint32_t capabilities);
+	uint32_t GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t* size, uint32_t capabilities);
 
 	VkFence GetFence(EntryHandle index);
 
@@ -430,12 +438,14 @@ public:
 
 	int32_t GetPresentQueue(QueueIndex& queueIdx,
 		QueueIndex& maxQueueCount,
-		std::vector<VkQueueFamilyProperties>& famProps,
+		VkQueueFamilyProperties* famProps,
+		uint32_t famPropsCount,
 		VkSurfaceKHR& renderSurface);
 
 	int32_t GetQueueByMask(QueueIndex& queueIdx,
 		QueueIndex& maxQueueCount,
-		std::vector<VkQueueFamilyProperties>& famProps,
+		VkQueueFamilyProperties* famProps,
+		uint32_t famPropsCount,
 		uint32_t queueMask);
 
 	std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> GetQueueHandle(uint32_t capabilites);
@@ -470,6 +480,8 @@ public:
 
 	void* AllocTypeFromEntry(size_t size);
 
+	void* AllocFromDeviceCache(size_t size);
+
 
 	//ACTIONS/HELPERS
 
@@ -486,16 +498,18 @@ public:
 
 	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
 
-	void QueueFamilyDetails(std::vector<VkQueueFamilyProperties>& famProps);
+	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
 
 	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset);
 
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
 	uint32_t SubmitCommandBuffer(
-		std::vector<EntryHandle>& wait,
-		std::vector<VkPipelineStageFlags>& waitStages,
-		std::vector<EntryHandle>& signal,
+		EntryHandle* wait,
+		VkPipelineStageFlags* waitStages,
+		EntryHandle* signal,
+		uint32_t waitCount,
+		uint32_t signalCount,
 		EntryHandle cbIndex);
 
 	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex,
@@ -505,7 +519,7 @@ public:
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	void UpdateRenderGraph(EntryHandle renderPass, std::vector<uint32_t>& dynamicOffsets, std::string perGraphDescriptor);
+	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, std::string perGraphDescriptor);
 
 	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
 	
@@ -534,7 +548,7 @@ public:
 	size_t perDeviceSize;
 
 	void* deviceLocalCache;
-	size_t cacheRead;
+	//size_t cacheRead;
 	size_t cacheWrite;
 	size_t deviceLocalCacheSize;
 };

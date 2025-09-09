@@ -1,4 +1,17 @@
 #include "VKDescriptorSetCache.h"
+#include "VKDevice.h"
+
+
+DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, VKDescriptorSetCache* c, size_t _ds)
+	:
+	device(_d),
+	cache(c),
+	counter(0),
+	descriptorSize(_ds),
+	descriptorSets(reinterpret_cast<VkDescriptorSet*>(_d->AllocTypeFromEntry(sizeof(VkDescriptorSet) * _ds)))
+{
+};
+
 void DescriptorSetBuilder::AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames)
 {
 	VkDescriptorImageInfo imageInfo{};
@@ -6,7 +19,8 @@ void DescriptorSetBuilder::AddPixelShaderImageDescription(VkImageView view, VkSa
 	imageInfo.imageView = view;
 	imageInfo.sampler = sampler;
 
-	std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
+
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
 
 	for (uint32_t frame = 0; frame < frames; frame++)
 	{
@@ -21,13 +35,15 @@ void DescriptorSetBuilder::AddPixelShaderImageDescription(VkImageView view, VkSa
 		descriptorWrites[frame] = descriptorWrite;
 	}
 
-	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
 }
 
 void DescriptorSetBuilder::AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
-	std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
-	std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
+
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
+	VkDescriptorBufferInfo* bufferInfos = reinterpret_cast<VkDescriptorBufferInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorBufferInfo) * frames));
+
 
 	for (uint32_t i = 0; i < frames; i++)
 	{
@@ -50,13 +66,13 @@ void DescriptorSetBuilder::AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, 
 		offset += size;
 	}
 
-	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
 }
 
 void DescriptorSetBuilder::AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
-	std::vector<VkDescriptorBufferInfo> bufferInfos(frames);
-	std::vector<VkWriteDescriptorSet> descriptorWrites(frames);
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
+	VkDescriptorBufferInfo* bufferInfos = reinterpret_cast<VkDescriptorBufferInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorBufferInfo) * frames));
 
 	for (uint32_t i = 0; i < frames; i++)
 	{
@@ -79,28 +95,34 @@ void DescriptorSetBuilder::AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize
 		offset += size;
 	}
 
-	vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
 }
 
 void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames)
 {
-	descriptorSets.resize(frames);
-	std::vector<VkDescriptorSetLayout> layouts(frames, descriptorSetLayout);
+
+	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(device->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * frames));
+
+	for (uint32_t i = 0; i < frames; i++)
+	{
+		layouts[i] = descriptorSetLayout;
+	}
+
 
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = pool;
 	allocInfo.descriptorSetCount = frames;
-	allocInfo.pSetLayouts = layouts.data();
+	allocInfo.pSetLayouts = layouts;
 
-	if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
+	if (vkAllocateDescriptorSets(device->device, &allocInfo, descriptorSets) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate descriptor sets!");
 	}
 }
 
 void DescriptorSetBuilder::AddDescriptorsToCache(std::string name)
 {
-	cache->AddDesciptorSet(name, descriptorSets);
+	cache->AddDesciptorSet(name, descriptorSets, descriptorSize);
 }
 
 VkDescriptorSet VKDescriptorSetCache::GetDescriptorSetPerFrame(std::string& id, uint32_t frame)
@@ -113,16 +135,16 @@ VkDescriptorSet VKDescriptorSetCache::GetDescriptorSetPerFrame(std::string& id, 
 		throw std::runtime_error("No descriptor set found");
 	}
 	auto& sets = found->second;
-	size_t size = sets.size();
+	size_t size = sets.first;
 	if (frame >= size)
 	{
 		throw std::runtime_error("No descriptor set found for frame number");
 	}
-	set = sets[frame];
+	set = sets.second[frame];
 	return set;
 }
 
-void VKDescriptorSetCache::AddDesciptorSet(std::string& id, std::vector<VkDescriptorSet>& set)
+void VKDescriptorSetCache::AddDesciptorSet(std::string& id, VkDescriptorSet* set, uint32_t frames)
 {
-	descriptorSetCache[id] = set; // this is a copy right
+	descriptorSetCache[id] = { frames, set }; // this is a copy right
 }

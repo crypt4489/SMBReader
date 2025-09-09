@@ -170,19 +170,12 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	
 	
-	std::vector<uint32_t> queueFamilyIndices;
-	uint32_t ret = device->GetFamiliesOfCapableQueues(queueFamilyIndices, GRAPHICS | TRANSFER | PRESENT);
-	uint32_t numberOfQueueFamilies = static_cast<uint32_t>(queueFamilyIndices.size());
-	queueSharing = createInfo.imageSharingMode = (numberOfQueueFamilies > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-	createInfo.queueFamilyIndexCount = numberOfQueueFamilies;
-	createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
-
-
 	uint32_t* qfc = GetQueueFamilyCache(this);
-	queueFamiliesCacheCount = numberOfQueueFamilies;
+	uint32_t ret = device->GetFamiliesOfCapableQueues(&qfc, &queueFamiliesCacheCount, GRAPHICS | TRANSFER | PRESENT);
+	queueSharing = createInfo.imageSharingMode = (queueFamiliesCacheCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
+	createInfo.pQueueFamilyIndices = qfc;
 
-	for (uint32_t i = 0; i < numberOfQueueFamilies; i++) 
-		qfc[i] = queueFamilyIndices[i];
 
 	createInfo.preTransform = preTransform;
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -218,8 +211,8 @@ void VKSwapChain::CreateSwapChain(
 
 void VKSwapChain::CreateSyncObject()
 {
-	std::vector<EntryHandle> imageAvailablesIndices = device->CreateSemaphores(imageCount);
-	std::vector<EntryHandle> renderFinishedIndices = device->CreateSemaphores(imageCount);
+	EntryHandle* imageAvailablesIndices = device->CreateSemaphores(imageCount);
+	EntryHandle* renderFinishedIndices = device->CreateSemaphores(imageCount);
 
 	uintptr_t dependencies = GetDependencies(this);
 
@@ -315,7 +308,7 @@ void VKSwapChain::CreateSwapChainElements()
 			indices[j] = *ref2[j];
 		}
 
-		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices, renderTarget->renderPassIndex, swapChainExtent);
+		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices.data(), attachmentCount, renderTarget->renderPassIndex, swapChainExtent);
 	}
 }
 

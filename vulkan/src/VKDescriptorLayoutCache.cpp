@@ -1,17 +1,33 @@
 #include "VKDescriptorLayoutCache.h"
+#include "VKDevice.h"
+
+DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(VKDevice* d, VKDescriptorLayoutCache* coa, uint32_t _bc)
+	:
+	device(d),
+	cacheObj(coa),
+	bindingCounts(_bc),
+	counter(0),
+	descSetBindings(
+		reinterpret_cast<VkDescriptorSetLayoutBinding*>(
+		d->AllocFromDeviceCache(sizeof(VkDescriptorSetLayoutBinding)
+			* _bc)))
+{
+
+}
+
 VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(std::string name)
 {
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
-	if (!descSetBindings.size())
+	if (!counter)
 		return descriptorSetLayout;
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = static_cast<uint32_t>(descSetBindings.size());
-	layoutInfo.pBindings = descSetBindings.data();
+	layoutInfo.bindingCount = bindingCounts;
+	layoutInfo.pBindings = descSetBindings;
 
-	if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+	if (vkCreateDescriptorSetLayout(device->device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor set layout!");
 	}
 
@@ -28,7 +44,7 @@ void DescriptorSetLayoutBuilder::AddPixelImageSamplerLayout(uint32_t binding)
 	layoutBinding.descriptorCount = 1;
 	layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	descSetBindings.push_back(layoutBinding);
+	descSetBindings[counter++] = layoutBinding;
 }
 
 void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStageFlags flags)
@@ -39,7 +55,7 @@ void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStage
 	layoutBinding.descriptorCount = 1;
 	layoutBinding.stageFlags = flags;
 
-	descSetBindings.push_back(layoutBinding);
+	descSetBindings[counter++] = layoutBinding;
 }
 
 void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags)
@@ -50,7 +66,7 @@ void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShad
 	layoutBinding.descriptorCount = 1;
 	layoutBinding.stageFlags = flags;
 
-	descSetBindings.push_back(layoutBinding);
+	descSetBindings[counter++] = layoutBinding;
 }
 
 

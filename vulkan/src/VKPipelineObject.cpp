@@ -26,7 +26,7 @@ VKPipelineObject::VKPipelineObject(
 
 void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t firstSet)
 {
-	uint32_t drawSize = vertexCount;
+	uint32_t drawSize = static_cast<uint32_t>(vertexCount);
 
 	if (!descriptorSetName.empty()) {
 
@@ -45,7 +45,7 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	rbo.BindingDrawCmd(0, 4);
+	rbo.BindingDrawCmd(0, drawSize);
 }
 
 void VKPipelineObject::DrawIndirectOneBuffer(
