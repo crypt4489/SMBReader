@@ -26,19 +26,27 @@ public:
 	PipelineCacheObject* GetPipelineFromCache(const std::string& name);
 
 	PipelineCacheObject CreatePipeline(
-		std::vector<std::string>& descriptorSetLayoutNames,
-		std::optional<VkVertexInputBindingDescription> bindDescription,
-		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-		std::vector<std::string>& shaderNames,
+		std::string* descriptorSetLayoutNames,
+		size_t descriptorSetCount,
+		VkVertexInputBindingDescription* bindDescription,
+		uint32_t bindingCount,
+		VkVertexInputAttributeDescription* vertAttributes,
+		size_t vertAttributecount,
+		std::string* shaderNames,
+		size_t shaderCount,
 		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 		std::string name);
 
-	VkPipelineLayout CreatePipelineLayout(std::vector<VkDescriptorSetLayout>& descriptorSetLayout);
+	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
 
-	PipelineCacheObject CreateGraphicsPipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
-		std::optional<VkVertexInputBindingDescription> bindDescription,
-		std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-		std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
+	PipelineCacheObject CreateGraphicsPipeline(VkDescriptorSetLayout* descriptorSetLayouts,
+		size_t descriptorSetCount,
+		VkVertexInputBindingDescription* bindDescription,
+		uint32_t bindingCount,
+		VkVertexInputAttributeDescription* vertAttributes,
+		size_t vertAttributecount,
+		std::pair<VkShaderModule, VkShaderStageFlagBits>* shaders,
+		size_t shaderCount,
 		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount);
 
 	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);

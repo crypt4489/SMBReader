@@ -22,50 +22,60 @@ PipelineCacheObject* VKPipelineCache::operator[](std::string name)
 }
 
 PipelineCacheObject VKPipelineCache::CreatePipeline(
-	std::vector<std::string>& descriptorSetLayoutNames,
-	std::optional<VkVertexInputBindingDescription> bindDescription,
-	std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-	std::vector<std::string>& shaderNames,
+	std::string* descriptorSetLayoutNames,
+	size_t descriptorSetCount,
+	VkVertexInputBindingDescription* bindDescription,
+	uint32_t bindingCount,
+	VkVertexInputAttributeDescription* vertAttributes,
+	size_t vertAttributecount,
+	std::string* shaderNames,
+	size_t shaderCount,
 	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 	std::string name)
 {
-	std::size_t dslcns = descriptorSetLayoutNames.size();
-	std::size_t snl = shaderNames.size();
-	std::vector<VkDescriptorSetLayout> layouts(dslcns);
-	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>> shaders(snl);
-	// get 
+	
+
+	VkDescriptorSetLayout *layouts = reinterpret_cast<VkDescriptorSetLayout*>(majorDev->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout)*descriptorSetCount));
+
+
+	std::pair<VkShaderModule, VkShaderStageFlagBits> *shaders = reinterpret_cast<std::pair<VkShaderModule, VkShaderStageFlagBits>*>(
+																majorDev->AllocFromDeviceCache(sizeof(std::pair<VkShaderModule, VkShaderStageFlagBits>) * shaderCount));
 
 	auto& dslc = majorDev->descriptorLayoutCache;
 	auto& sc = majorDev->shaders;
 
-	for (std::size_t i = 0; i < dslcns; i++)
+	for (std::size_t i = 0; i < descriptorSetCount; i++)
 	{
 		layouts[i] = dslc.GetLayout(descriptorSetLayoutNames[i]);
 	}
 
-	for (std::size_t i = 0; i < snl; i++)
+	for (std::size_t i = 0; i < shaderCount; i++)
 	{
 		shaders[i] = sc.GetShader(shaderNames[i]);
 	}
 
-	auto co = CreateGraphicsPipeline(layouts, bindDescription, vertAttributes, shaders, depthOp, sampleCount);
+	auto co = CreateGraphicsPipeline(layouts, descriptorSetCount, 
+		bindDescription, bindingCount,
+		vertAttributes, vertAttributecount, 
+		shaders, shaderCount, 
+		depthOp, sampleCount
+	);
+
 	pipelines[name] = co;
 	return co;
 }
 
-VkPipelineLayout VKPipelineCache::CreatePipelineLayout(std::vector<VkDescriptorSetLayout>& descriptorSetLayout)
+VkPipelineLayout VKPipelineCache::CreatePipelineLayout(VkDescriptorSetLayout *descriptorSetLayout, uint32_t count)
 {
 	VkPipelineLayout pipelineLayout;
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-	size_t num = 0;
-	if (num = descriptorSetLayout.size())
-	{
-		pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(num);
-		pipelineLayoutInfo.pSetLayouts = descriptorSetLayout.data();
-	}
+	
+	pipelineLayoutInfo.setLayoutCount = count;
+	pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
+	
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -76,24 +86,28 @@ VkPipelineLayout VKPipelineCache::CreatePipelineLayout(std::vector<VkDescriptorS
 	return pipelineLayout;
 }
 
-PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(std::vector<VkDescriptorSetLayout>& descriptorSetLayout,
-	std::optional<VkVertexInputBindingDescription> bindDescription,
-	std::optional<std::vector<VkVertexInputAttributeDescription>> vertAttributes,
-	std::vector<std::pair<VkShaderModule, VkShaderStageFlagBits>>& shaders,
+PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(VkDescriptorSetLayout* descriptorSetLayouts,
+	size_t descriptorSetCount,
+	VkVertexInputBindingDescription* bindDescription,
+	uint32_t bindingCount,
+	VkVertexInputAttributeDescription* vertAttributes,
+	size_t vertAttributecount,
+	std::pair<VkShaderModule, VkShaderStageFlagBits>* shaders,
+	size_t shaderCount,
 	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount)
 {
 	VkPipeline graphicsPipeline;
 
-	VkPipelineLayout pipelineLayout = CreatePipelineLayout(descriptorSetLayout);
+	VkPipelineLayout pipelineLayout = CreatePipelineLayout(descriptorSetLayouts, descriptorSetCount);
 
 	std::array<VkDynamicState, 2> dynamicStates = {
 		VK_DYNAMIC_STATE_VIEWPORT,
 		VK_DYNAMIC_STATE_SCISSOR
 	};
 
-	std::vector<VkPipelineShaderStageCreateInfo> shaderInfos(shaders.size());
+	VkPipelineShaderStageCreateInfo* shaderInfos = reinterpret_cast<VkPipelineShaderStageCreateInfo*>(majorDev->AllocFromDeviceCache(sizeof(VkPipelineShaderStageCreateInfo) * shaderCount));
 
-	for (int i = 0; i < shaders.size(); i++)
+	for (int i = 0; i < shaderCount; i++)
 	{
 		shaderInfos[i] = AddShader(shaders[i].first, shaders[i].second);
 	}
@@ -105,18 +119,13 @@ PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(std::vector<VkDescri
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	if (bindDescription.has_value())
-	{
-		vertexInputInfo.vertexBindingDescriptionCount = 1;
-		vertexInputInfo.pVertexBindingDescriptions = &bindDescription.value();
-	}
-
-	if (vertAttributes.has_value())
-	{
-		auto& attr = vertAttributes.value();
-		vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attr.size());
-		vertexInputInfo.pVertexAttributeDescriptions = attr.data();
-	}
+	
+	vertexInputInfo.vertexBindingDescriptionCount = bindingCount;
+	vertexInputInfo.pVertexBindingDescriptions = bindDescription;
+	
+	vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertAttributecount);
+	vertexInputInfo.pVertexAttributeDescriptions = vertAttributes;
+	
 
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -175,8 +184,8 @@ PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(std::vector<VkDescri
 
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineInfo.stageCount = static_cast<uint32_t>(shaderInfos.size());
-	pipelineInfo.pStages = shaderInfos.data();
+	pipelineInfo.stageCount = static_cast<uint32_t>(shaderCount);
+	pipelineInfo.pStages = shaderInfos;
 
 	VkPipelineDepthStencilStateCreateInfo depthStencil{};
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -210,7 +219,7 @@ PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(std::vector<VkDescri
 	}
 
 	PipelineCacheObject co = {
-		.descLayout = (descriptorSetLayout.size() > 0) ? descriptorSetLayout[0] : VK_NULL_HANDLE,
+		.descLayout = (descriptorSetCount > 0) ? descriptorSetLayouts[0] : VK_NULL_HANDLE,
 		.pipelineLayout = pipelineLayout,
 		.pipeline = graphicsPipeline
 	};

@@ -93,7 +93,7 @@ void RenderInstance::CreateRenderPass()
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 
-	VKRenderPassBuilder rpb{};
+	VKRenderPassBuilder rpb = dev.CreateRenderPassBuilder(3, 1, 1);
 	VkFormat format = swapChain->GetSwapChainFormat();
 
 	rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, msaaSamples,
@@ -175,6 +175,9 @@ uint32_t RenderInstance::BeginFrame()
 	auto& trb = threadedRecordBuffers[currentFrame];
 
 	EntryHandle nextCbIndex = trb.GetCurrentBuffer();
+
+	if (nextCbIndex == EntryHandle())
+		return ~0ui32;
 
 	int32_t res;
 
@@ -272,9 +275,21 @@ void RenderInstance::CreatePipelines()
 
 	genericObjectBuilder.CreateDescriptorSetLayout(regularMeshConatiners[1]);
 
-	mainRenderPassCache->CreatePipeline(regularMeshConatiners, std::nullopt, std::nullopt, shaders1, VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline");
+	mainRenderPassCache->CreatePipeline(regularMeshConatiners.data(), regularMeshConatiners.size(), nullptr, 0, nullptr, 0, 
+		shaders1.data(), shaders1.size(), VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline"
+	);
 
-	mainRenderPassCache->CreatePipeline(textDescriptorContainers, TextVertex::getBindingDescription(), TextVertex::getAttributeDescriptions(), shaders2, VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text");
+	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
+
+	auto ref = TextVertex::getAttributeDescriptions();
+
+	mainRenderPassCache->CreatePipeline(
+		textDescriptorContainers.data(), textDescriptorContainers.size(), 
+		bindings.data(), 1,
+		ref.data(), ref.size(), 
+		shaders2.data(), shaders2.size(), 
+		VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text"
+	);
 }
 
 void RenderInstance::CreateGlobalBuffer()
@@ -437,9 +452,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreateRenderPass();
 
-	std::vector attachmentViews = { &colorView, &depthView };
+	std::array attachmentViews = { &colorView, &depthView };
 
-	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews);
+	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews.data(), 2);
 
 	DescriptorPoolBuilder builder = majorDevice.CreateDescriptorPoolBuilder(2);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);

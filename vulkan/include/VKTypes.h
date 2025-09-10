@@ -11,3 +11,4 @@ class VKDescriptorSetCache;
 class VKRenderGraph;
 struct DescriptorSetLayoutBuilder;
 class VKRenderPassBuilder;
+class RecordingBufferObject;

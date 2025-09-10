@@ -1,4 +1,20 @@
 #include "VKRenderPassBuilder.h"
+#include "VKDevice.h"
+VKRenderPassBuilder::VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachments, uint32_t numberofsubpassdependency, uint32_t numberofsubpassdescriptions)
+	:
+	device(d),
+	totalAttachmentCount(numberofattachments),
+	subpassdepcount(numberofsubpassdependency),
+	subpassdesccount(numberofsubpassdescriptions),
+	subpassdepcounter(0),
+	subpassdesccounter(0),
+	attachmentCounter(0),
+	attachments(reinterpret_cast<VkAttachmentDescription*>(d->AllocFromDeviceCache(sizeof(VkAttachmentDescription) * numberofattachments))),
+	subpassDependencies(reinterpret_cast<VkSubpassDependency*>(d->AllocFromDeviceCache(sizeof(VkSubpassDependency) * numberofsubpassdependency))),
+	subpassDescription(reinterpret_cast<VkSubpassDescription*>(d->AllocFromDeviceCache(sizeof(VkSubpassDescription) * numberofsubpassdescriptions)))
+{
+
+}
 
 void VKRenderPassBuilder::CreateAttachment(VKRenderPassAttachmentType type, VkFormat format,
 	VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
@@ -6,7 +22,6 @@ void VKRenderPassBuilder::CreateAttachment(VKRenderPassAttachmentType type, VkFo
 	VkAttachmentStoreOp stencilStoreOp, VkImageLayout initialLayout,
 	VkImageLayout finalLayout, uint32_t binding)
 {
-	totalAttachmentCount++;
 	VkAttachmentDescription attachmentDescription{};
 	attachmentDescription.format = format;
 	attachmentDescription.samples = sampleCount;
@@ -55,7 +70,7 @@ void VKRenderPassBuilder::CreateSubPassDependency(uint32_t srcSubpass, uint32_t 
 	dependency.srcAccessMask = srcAccessFlags;
 	dependency.dstStageMask = dstStageMask;
 	dependency.dstAccessMask = dstAccessFlags;
-	subpassDependencies.push_back(dependency);
+	subpassDependencies[subpassdepcounter++] = dependency;
 }
 
 void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint, uint32_t firstColorAttachment,
@@ -67,12 +82,11 @@ void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint
 	subpass.pColorAttachments = &attachmentsMap[COLORATTACH].second[firstColorAttachment];
 	subpass.pResolveAttachments = &attachmentsMap[COLORRESOLVEATTACH].second[colorResolveIndex];
 	subpass.pDepthStencilAttachment = &attachmentsMap[DEPTHSTENCILATTACH].second[depthAttachmentIndex];
-	subpassDescription.push_back(subpass);
+	subpassDescription[subpassdesccounter++] = subpass;
 }
 
 void VKRenderPassBuilder::CreateInfo()
 {
-	attachments.resize(totalAttachmentCount);
 	for (auto attach : attachmentsMap)
 	{
 		auto size = attach.second.first.size();
@@ -83,10 +97,10 @@ void VKRenderPassBuilder::CreateInfo()
 	}
 
 	createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	createInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-	createInfo.pAttachments = attachments.data();
-	createInfo.subpassCount = static_cast<uint32_t>(subpassDescription.size());
-	createInfo.pSubpasses = subpassDescription.data();
-	createInfo.dependencyCount = static_cast<uint32_t>(subpassDependencies.size());
-	createInfo.pDependencies = subpassDependencies.data();
+	createInfo.attachmentCount = totalAttachmentCount;
+	createInfo.pAttachments = attachments;
+	createInfo.subpassCount = subpassdesccount;
+	createInfo.pSubpasses = subpassDescription;
+	createInfo.dependencyCount = subpassdepcount;
+	createInfo.pDependencies = subpassDependencies;
 }

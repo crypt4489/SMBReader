@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IndexTypes.h"
-#include "VKDevice.h"
+#include "VKTypes.h"
 #include "vulkan/vulkan.h"
 #include <string>
 #include <vector>
@@ -16,6 +16,8 @@ struct VKPipelineObjectCreateInfo
 	uint32_t indirectDrawOffset;
 	std::string pipelinename;
 	std::string descriptorsetname;
+	uint32_t maxDynCap;
+	uint32_t* data;
 };
 
 
@@ -24,7 +26,7 @@ class VKPipelineObject
 public:
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(VKPipelineObjectCreateInfo &createinfo);
+	VKPipelineObject(VKPipelineObjectCreateInfo *createinfo);
 
 	~VKPipelineObject() = default;
 
@@ -38,7 +40,8 @@ public:
 
 	void SetPerObjectData(uint32_t objectlocation);
 
-	std::vector<uint32_t> objectData;
+	uint32_t *objectData;
+	uint32_t maxObjectCapacity, objectCount;
 
 	std::string pipelineType, descriptorSetName;
 

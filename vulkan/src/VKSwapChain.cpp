@@ -102,11 +102,9 @@ size_t VKSwapChain::CalculateSwapChainMemoryUsage()
 		sizeof(uintptr_t) * (imageCount * ((semaphorePerStage * numberOfStages) + 1));
 }
 
-void VKSwapChain::AddFramebufferAttachments(std::vector<EntryHandle*>& attachmentIndices)
+void VKSwapChain::AddFramebufferAttachments(EntryHandle** attachmentIndices, uint32_t attachIndicesSize)
 {
 	uint32_t i = 0;
-	uint32_t attachIndicesSize = static_cast<uint32_t>(attachmentIndices.size());
-
 
 	uintptr_t headofattachments = GetHeadOfAttachments(this);
 
@@ -154,7 +152,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 
 void VKSwapChain::CreateSwapChain( 
 	uint32_t width, uint32_t height, 
-	EntryHandle _renderPassIndex, std::vector<EntryHandle*> &attachmentIndices)
+	EntryHandle _renderPassIndex, EntryHandle** attachmentIndices, uint32_t numattaches)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
 	
@@ -195,7 +193,7 @@ void VKSwapChain::CreateSwapChain(
 
 	auto ref = device->GetRenderTarget(renderTargetIndex);
 
-	AddFramebufferAttachments(attachmentIndices);
+	AddFramebufferAttachments(attachmentIndices, numattaches);
 
 	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
 
@@ -239,12 +237,6 @@ EntryHandle* VKSwapChain::GetDependenciesForImageIndex(uint32_t imageIndex)
 	uintptr_t* ptr1 = GetDependenciesPtr(this);
 
 	return reinterpret_cast<EntryHandle*>(ptr1[imageIndex]);
-}
-
-void VKSwapChain::CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present)
-{
-	//std::vector<std::vector<uint32_t>> copy{ {beforeDrawing}, {present} };
-	//dependencies.AddIndicesForImage(imageIndex, copy);
 }
 
 void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
@@ -291,7 +283,8 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 void VKSwapChain::CreateSwapChainElements()
 {
-	std::vector<EntryHandle> indices(attachmentCount);
+
+	EntryHandle* indices = reinterpret_cast<EntryHandle*>(device->AllocFromDeviceCache(sizeof(EntryHandle) * attachmentCount));
 
 	auto renderTarget = device->GetRenderTarget(renderTargetIndex);
 
@@ -308,7 +301,7 @@ void VKSwapChain::CreateSwapChainElements()
 			indices[j] = *ref2[j];
 		}
 
-		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices.data(), attachmentCount, renderTarget->renderPassIndex, swapChainExtent);
+		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices, attachmentCount, renderTarget->renderPassIndex, swapChainExtent);
 	}
 }
 

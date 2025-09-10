@@ -1,4 +1,5 @@
 #pragma once
+#include "VKTypes.h"
 #include "VKUtilities.h"
 #include <unordered_map>
 #include <vector>
@@ -13,6 +14,8 @@ public:
 	};
 
 	using enum VKRenderPassAttachmentType;
+
+	VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachments, uint32_t numberofsubpassdependency, uint32_t numberofsubpassdescriptions);
 
 	void CreateAttachment(VKRenderPassAttachmentType type, VkFormat format,
 		VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
@@ -29,11 +32,21 @@ public:
 
 	void CreateInfo();
 
-	std::vector<VkAttachmentDescription> attachments;
 	std::unordered_map<VKRenderPassAttachmentType, std::pair<std::vector<VkAttachmentDescription>, std::vector<VkAttachmentReference>>> attachmentsMap;
-	uint32_t totalAttachmentCount;
-	std::vector<VkSubpassDescription> subpassDescription;
-	std::vector<VkSubpassDependency> subpassDependencies;
+
+	uint32_t subpassdesccount, subpassdesccounter;
+
+	uint32_t subpassdepcount, subpassdepcounter;
+
+	uint32_t totalAttachmentCount, attachmentCounter;
+
+	VkAttachmentDescription* attachments;
+
+	VkSubpassDescription* subpassDescription;
+
+	VkSubpassDependency* subpassDependencies;
+
 	VkRenderPassCreateInfo createInfo{};
+	VKDevice* device;
 };
 

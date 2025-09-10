@@ -21,9 +21,12 @@ struct ThreadedRecordBuffer
 	SPSC invalidate{};
 	uint32_t outputImageIndex;
 	std::function<void(EntryHandle, uint32_t)> drawingFunction;
+
+	std::atomic<bool> ready = false;
 	
 	EntryHandle GetCurrentBuffer()
 	{
+		if (!ready.load()) return EntryHandle();
 		currentGuard.Wait();
 		return buffers[currentBuffer];
 	}
@@ -47,6 +50,9 @@ struct ThreadedRecordBuffer
 			if (stoken.stop_requested()) break;
 
 			DrawMain(false);
+
+			if (!ready.load())
+				ready.store(true);
 		}
 	}
 
@@ -69,6 +75,8 @@ struct ThreadedRecordBuffer
 			SemaphoreGuard guard(currentGuard);
 			currentBuffer = next;
 		}
+
+		
 	}
 };
 

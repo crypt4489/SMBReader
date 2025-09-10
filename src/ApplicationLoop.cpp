@@ -111,9 +111,9 @@ void ApplicationLoop::Execute()
 
 			auto index = rend->BeginFrame();
 
-			if (index == ~0ui32) continue;
-
-			rend->SubmitFrame(index);
+			if (index != ~0ui32) {
+				rend->SubmitFrame(index);
+			}
 
 			ProcessCommands();
 

@@ -607,7 +607,7 @@ void VKDevice::CreateLogicalDevice(
 	float deviceRatio
 )
 {
-#define CACHESIZE 512 * 1024
+#define CACHESIZE 2 * 1024
 	if (perDeviceDataSize)
 	{
 		size_t entriesalloc = static_cast<size_t>(deviceRatio * perDeviceDataSize);
@@ -715,6 +715,25 @@ void VKDevice::CreatePipelineCache(EntryHandle renderPassIndex)
 	std::construct_at(renderPassData, device, renderPass, this);
 }
 
+EntryHandle VKDevice::CreatePipelineObject(VKPipelineObjectCreateInfo* info)
+{
+	EntryHandle ret;
+
+	VKPipelineObject* objLoc = reinterpret_cast<VKPipelineObject*>(AllocTypeFromEntry(sizeof(VKPipelineObject)));
+
+	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocTypeFromEntry(sizeof(uint32_t) * info->maxDynCap));
+
+	info->data = dynData;
+
+	objLoc = std::construct_at(objLoc, info);
+
+	{
+		ret = AddVkTypeToEntry(objLoc);
+	}
+
+	return ret;
+}
+
 void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
 	std::shared_lock lock(deviceLock);
@@ -767,6 +786,11 @@ EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 	CreateRenderGraph(ret);
 
 	return ret;
+}
+
+VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint32_t numDeps, uint32_t numDescs)
+{
+	return { this, numAttaches, numDeps, numDescs };
 }
 
 EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount)
@@ -1107,6 +1131,12 @@ VKPipelineCache* VKDevice::GetPipelineCache(EntryHandle renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
 	return reinterpret_cast<VKPipelineCache*>((reinterpret_cast<uintptr_t>(GetRenderGraph(renderPassIndex)) + sizeof(VKRenderGraph)));
+}
+
+VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VKPipelineObject*>(GetVkTypeFromEntry(index));
 }
 
 

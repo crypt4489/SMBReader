@@ -17,6 +17,7 @@
 
 
 #include "VKPipelineCache.h"
+#include "VKPipelineObject.h"
 #include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
 #include "VKShaderCache.h"
@@ -383,11 +384,15 @@ public:
 
 	void CreatePipelineCache(EntryHandle renderPassIndex);
 
+	EntryHandle CreatePipelineObject(VKPipelineObjectCreateInfo* info);
+
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	void CreateRenderGraph(EntryHandle renderPass);
 
 	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
+
+	VKRenderPassBuilder CreateRenderPassBuilder(uint32_t numAttaches, uint32_t numDeps, uint32_t numDescs);
 
 	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
 
@@ -435,6 +440,8 @@ public:
 	VkImageView GetImageView(EntryHandle index);
 
 	VKPipelineCache* GetPipelineCache(EntryHandle renderPassIndex);
+
+	VKPipelineObject* GetPipelineObject(EntryHandle index);
 
 	int32_t GetPresentQueue(QueueIndex& queueIdx,
 		QueueIndex& maxQueueCount,

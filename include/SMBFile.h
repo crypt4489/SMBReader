@@ -3,7 +3,8 @@
 #include <string>
 #include <vector>
 #include "FileManager.h"
-
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #define BEGINNINGSMBChunk 0xa77e4dfa
 #define ENDTAG 0xbeef1234
@@ -15,6 +16,42 @@ enum chunktype
 	TEXTURE = 1,
 	GR2 = 6,
 	Joints = 20,
+};
+
+
+//First Part of SMB GEo Chunk is the BaseGeometry Definition BaseGeometryDef
+
+//Second part is I think the GeometryDef
+
+struct GEOBaseChunk
+{
+	uint32_t numLods;
+	uint32_t geometryFlags;
+	uint32_t lopSpecs[6];
+	glm::vec4 sphere;
+	glm::vec3 boxecorner;
+};
+
+struct GEOResourceChunk
+{
+	uint32_t unknown[2];
+	uint32_t resourceType;
+	uint32_t unknown2[2];
+};
+
+struct GEOGeometryBase
+{
+	uint32_t materialSize;
+	uint32_t collidableSize;
+	uint32_t renderablesize;
+	uint32_t numberofinstances;
+
+	uint32_t numberofskels;
+	uint32_t numskinnedcollidables;
+	uint32_t rigidrenderables;
+	uint32_t skinnedRenderables;
+
+	uint32_t rigidcollidables;
 };
 
 struct SMBChunk

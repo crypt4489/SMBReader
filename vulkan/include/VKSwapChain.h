@@ -48,7 +48,7 @@ public:
 
 	void CreateSwapChain(
 		uint32_t width, uint32_t height,
-		EntryHandle _renderPassIndex, std::vector<EntryHandle*>& attachmentIndices);
+		EntryHandle _renderPassIndex, EntryHandle** attachmentIndices, uint32_t numattaches);
 
 	void CreateSyncObject();
 
@@ -58,7 +58,7 @@ public:
 
 	void CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present);
 
-	void AddFramebufferAttachments(std::vector<EntryHandle*>& attachmentIndices);
+	void AddFramebufferAttachments(EntryHandle** attachmentIndices, uint32_t attachIndicesSize);
 
 	VkFormat GetSwapChainFormat() const
 	{

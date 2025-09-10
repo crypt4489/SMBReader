@@ -5,15 +5,13 @@
 
 #include "AppTexture.h"
 #include "SMBFile.h"
-#include "VKPipelineObject.h"
+
 class GenericObject
 {
 public:
 	GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi);
 
 	~GenericObject();
-
-	VKPipelineObject* GetPipelineObject() const;
 
 	void SetMatrix(glm::mat4& f);
 
@@ -24,7 +22,7 @@ public:
 	void CallUpdate();
 
 
-	VKPipelineObject* vkPipelineObject;
+	EntryHandle pipelineIndex;
 	size_t vertexCount;
 	std::vector<AppTexture> textures;
 	size_t objectIndex;

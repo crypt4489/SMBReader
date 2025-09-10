@@ -3,8 +3,9 @@
 #include "AppTypes.h"
 #include "RenderInstance.h"
 #include "VertexTypes.h"
+#include "VKPipelineObject.h"
 
-GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : vkPipelineObject(nullptr), objectIndex(_oi)
+GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : objectIndex(_oi)
 {
 	vertexCount = 4;
 	for (const auto& chunk : file.chunks)
@@ -47,10 +48,17 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.indirectDrawBuffer{},
 			.indirectDrawOffset = ~0U,
 			.pipelinename = genericpipeline,
-			.descriptorsetname = genericpipeline
+			.descriptorsetname = genericpipeline,
+			.maxDynCap = 1,
+			.data = nullptr
+
 		};
 
-		vkPipelineObject = new VKPipelineObject(create);
+		auto& ref = rendInst->vkInstance.GetLogicalDevice(rendInst->physicalIndex, rendInst->deviceIndex);
+
+		pipelineIndex = ref.CreatePipelineObject(&create);
+
+		VKPipelineObject* vkPipelineObject = ref.GetPipelineObject(pipelineIndex);
 
 		vkPipelineObject->SetPerObjectData(offset);
 
@@ -62,13 +70,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 GenericObject::~GenericObject()
 {
-	if (vkPipelineObject) delete vkPipelineObject;
 	textures.clear();
-}
-
-VKPipelineObject* GenericObject::GetPipelineObject() const
-{
-	return vkPipelineObject;
 }
 
 void GenericObject::SetMatrix(glm::mat4& f)

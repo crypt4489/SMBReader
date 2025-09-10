@@ -33,10 +33,12 @@ void TextManager::CreatePipelineObject()
 		.indirectDrawBuffer = rendInst->GetMainBufferIndex(),
 		.indirectDrawOffset = indirectCommandsOffset,
 		.pipelinename = text,
-		.descriptorsetname = text
+		.descriptorsetname = text,
+		.maxDynCap = 0,
+		.data = nullptr
 	};
 	
-	obj = new VKPipelineObject(create);
+	obj = new VKPipelineObject(&create);
 
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 	DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("oneimage", frames);

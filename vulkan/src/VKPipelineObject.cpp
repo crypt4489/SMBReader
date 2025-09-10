@@ -6,19 +6,23 @@
 
 #include "AppTypes.h"
 #include "RenderInstance.h"
+#include "VKDevice.h"
 #include "VKPipelineCache.h"
 
 VKPipelineObject::VKPipelineObject(
-	VKPipelineObjectCreateInfo& createinfo)
+	VKPipelineObjectCreateInfo* createinfo)
 	:
-	pipelineType(createinfo.pipelinename),
-	descriptorSetName(createinfo.descriptorsetname),
-	vertexCount(createinfo.vertexCount),
-	vertexBufferOffset(createinfo.vertexBufferOffset),
-	vertexBufferIndex(createinfo.vertexBufferIndex),
-	indirectBufferIndex(createinfo.indirectDrawBuffer),
-	indirectBufferOffset(createinfo.indirectDrawOffset),
-	drawType(createinfo.drawType)
+	pipelineType(createinfo->pipelinename),
+	descriptorSetName(createinfo->descriptorsetname),
+	vertexCount(createinfo->vertexCount),
+	vertexBufferOffset(createinfo->vertexBufferOffset),
+	vertexBufferIndex(createinfo->vertexBufferIndex),
+	indirectBufferIndex(createinfo->indirectDrawBuffer),
+	indirectBufferOffset(createinfo->indirectDrawOffset),
+	drawType(createinfo->drawType),
+	objectData(createinfo->data),
+	maxObjectCapacity(createinfo->maxDynCap),
+	objectCount(0ui32)
 {
 
 }
@@ -30,14 +34,7 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 
 	if (!descriptorSetName.empty()) {
 
-		std::vector<uint32_t> dynamicOffsets;
-
-		for (auto& c : objectData)
-		{
-			dynamicOffsets.push_back(c);
-		}
-
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, 1, dynamicOffsets.data());
+		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, objectCount, objectData);
 	}
 
 	if (vertexBufferIndex != ~0ui64)
@@ -58,14 +55,8 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 	
 
 	if (!descriptorSetName.empty()) {
-		std::vector<uint32_t> dynamicOffsets;
 
-		for (auto& c : objectData)
-		{
-			dynamicOffsets.push_back(static_cast<uint32_t>(c));
-		}
-
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, static_cast<uint32_t>(dynamicOffsets.size()), dynamicOffsets.data());
+		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, objectCount, objectData);
 	}
 		
 
@@ -80,5 +71,5 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 
 void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 {
-	objectData.emplace_back(_dynamicOffset);
+	objectData[objectCount++] = _dynamicOffset;
 }
