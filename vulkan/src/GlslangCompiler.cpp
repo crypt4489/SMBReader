@@ -120,7 +120,7 @@ namespace GLSLANG
 
     }
 
-    VkShaderModule CompileShader(VkDevice& device, std::vector<char>& data, VkShaderStageFlags stage)
+    VkShaderModule CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage)
     {
         glslang_stage_t glslstage = GLSLANG_STAGE_COUNT;
 
@@ -151,7 +151,7 @@ namespace GLSLANG
             .client_version = GLSLANG_TARGET_VULKAN_1_3,
             .target_language = GLSLANG_TARGET_SPV,
             .target_language_version = GLSLANG_TARGET_SPV_1_6,
-            .code = data.data(),
+            .code = data,
             .default_version = 100,
             .default_profile = GLSLANG_NO_PROFILE,
             .force_default_version_and_profile = false,
@@ -203,9 +203,9 @@ namespace GLSLANG
 
         char* ptr = reinterpret_cast<char*>(glslang_program_SPIRV_get_ptr(program));
 
-        std::vector<char> compiledShader(ptr, ptr + (glslang_program_SPIRV_get_size(program) * sizeof(unsigned int)));
+        size_t size = glslang_program_SPIRV_get_size(program) * sizeof(unsigned int);
 
-        VkShaderModule ret = VK::Utils::createShaderModule(device, compiledShader);
+        VkShaderModule ret = VK::Utils::createShaderModule(device, ptr, size);
 
         glslang_program_delete(program);
 

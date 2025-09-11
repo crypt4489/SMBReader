@@ -417,12 +417,22 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	features.samplerAnisotropy = VK_TRUE;
 	features.multiDrawIndirect = VK_TRUE;
 
-	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers, 
+	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers,
+		vkInstance.instanceLayerCount,
 		vkInstance.deviceExtensions, 
-		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, features, vkInstance.renderSurface, 6 * MB, 1.0f/6.0f);
+		vkInstance.deviceExtCount,
+		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
+		features, vkInstance.renderSurface, 
+		6 * MB, 
+		1 * MB);
+
+
+
+	std::array<VkFormat, 3> formats = { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
 
 	depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
-		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+		formats.data(),
+		formats.size(),
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 

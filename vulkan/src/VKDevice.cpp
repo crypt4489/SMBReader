@@ -598,27 +598,28 @@ EntryHandle VKDevice::CreateImageView(
 }
 
 void VKDevice::CreateLogicalDevice(
-	std::vector<const char*>& instanceLayers,
-	std::vector<const char*>& deviceExtensions,
+	const char** instanceLayers,
+	uint32_t layerCount,
+	const char** deviceExtensions,
+	uint32_t deviceExtCount,
 	uint32_t queueFlags,
 	VkPhysicalDeviceFeatures& features,
 	VkSurfaceKHR renderSurface,
 	size_t perDeviceDataSize,
-	float deviceRatio
+	size_t perEntriesSize
 )
 {
 #define CACHESIZE 2 * 1024
 	if (perDeviceDataSize)
 	{
-		size_t entriesalloc = static_cast<size_t>(deviceRatio * perDeviceDataSize);
-
+		
 		deviceLocalCacheSize = CACHESIZE;
 		deviceLocalCache = (void*)new char[deviceLocalCacheSize];
 
-		perDeviceSize = perDeviceDataSize - entriesalloc;
+		perDeviceSize = perDeviceDataSize - perEntriesSize;
 		perDeviceData = (void*)new char[perDeviceSize];
 
-		numberOfEntries = entriesalloc / sizeof(uintptr_t);
+		numberOfEntries = perEntriesSize / sizeof(uintptr_t);
 		entries = new uintptr_t[numberOfEntries];
 	}
 
@@ -670,10 +671,10 @@ void VKDevice::CreateLogicalDevice(
 	logDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	logDeviceInfo.queueCreateInfoCount = i;
 	logDeviceInfo.pQueueCreateInfos = queueCreateInfos;
-	logDeviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-	logDeviceInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
-	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
-	logDeviceInfo.ppEnabledLayerNames = instanceLayers.data();
+	logDeviceInfo.enabledExtensionCount = deviceExtCount;
+	logDeviceInfo.enabledLayerCount = layerCount;
+	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions;
+	logDeviceInfo.ppEnabledLayerNames = instanceLayers;
 	logDeviceInfo.pEnabledFeatures = &features;
 
 	VkResult res = vkCreateDevice(gpu, &logDeviceInfo, nullptr, &device);

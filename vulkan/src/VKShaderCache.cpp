@@ -33,7 +33,7 @@ VkShaderModule VKShaderCache::CreateShader(const std::string& name, VkShaderStag
 
 		if (ret) throw std::runtime_error("Cannot handle shader file " + name + " being opened");
 
-		mod = VK::Utils::createShaderModule(device, buffer);
+		mod = VK::Utils::createShaderModule(device, buffer.data(), buffer.size());
 	}
 	else
 	{
@@ -45,7 +45,7 @@ VkShaderModule VKShaderCache::CreateShader(const std::string& name, VkShaderStag
 
 		if (buffer.back() != '\0') buffer.push_back('\0');
 
-		mod = GLSLANG::CompileShader(device, buffer, flags);
+		mod = GLSLANG::CompileShader(device, buffer.data(), flags);
 	}
 
 	return mod;

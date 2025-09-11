@@ -43,9 +43,9 @@ namespace VK {
 
 		uint32_t findMemoryType(VkPhysicalDevice& physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-		VkShaderModule createShaderModule(VkDevice& device, const std::vector<char>& code);
+		VkShaderModule createShaderModule(VkDevice& device, char* code, size_t size);
 
 		std::pair<VkBuffer, VkDeviceMemory> createBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice,
 				VkDeviceSize bufferSize,

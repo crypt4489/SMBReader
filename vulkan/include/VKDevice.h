@@ -373,13 +373,15 @@ public:
 		VkFormat type, VkImageAspectFlags aspectMask);
 
 	void CreateLogicalDevice(
-		std::vector<const char*>& instanceLayers,
-		std::vector<const char*>& deviceExtensions,
+		const char** instanceLayers,
+		uint32_t layerCount,
+		const char** deviceExtensions,
+		uint32_t deviceExtCount,
 		uint32_t queueFlags,
 		VkPhysicalDeviceFeatures& features,
 		VkSurfaceKHR renderSurface,
 		size_t perDeviceDataSize,
-		float deviceRatio
+		size_t perEntriesSize
 	);
 
 	void CreatePipelineCache(EntryHandle renderPassIndex);

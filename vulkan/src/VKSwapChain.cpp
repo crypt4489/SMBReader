@@ -5,8 +5,10 @@
 #include "VKUtilities.h"
 
 
-static VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
-	for (const auto& availableFormat : availableFormats) {
+static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount) {
+	for (uint32_t i = 0; i < formatCount; i++)
+	{
+		VkSurfaceFormatKHR availableFormat = availableFormats[i];
 		if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			return availableFormat;
 		}
@@ -15,8 +17,12 @@ static VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFor
 	return availableFormats[0];
 }
 
-static VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
-	for (const auto& availablePresentMode : availablePresentModes) {
+static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, size_t presentCount) {
+
+
+	for (uint32_t i = 0; i < presentCount; i++)
+	{ 
+		VkPresentModeKHR availablePresentMode = availablePresentModes[i];
 		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
 			return availablePresentMode;
 		}
@@ -130,8 +136,8 @@ void VKSwapChain::AddFramebufferAttachments(EntryHandle** attachmentIndices, uin
 
 void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount)
 {
-	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-	presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats.data(), swapChainSupport.formats.size());
+	presentMode = chooseSwapPresentMode(swapChainSupport.presentModes.data(), swapChainSupport.presentModes.size());
 	
 	preTransform = swapChainSupport.capabilities.currentTransform;
 

@@ -97,12 +97,26 @@ public:
 
 	void SetInstanceDataAndSize(size_t datasize);
 
+	void* AllocFromInstanceCache(size_t size);
+
+	void* AllocFromInstanceData(size_t size);
+
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 	
-	std::vector<const char*> instanceExtensions{};
-	std::vector<const char*> instanceLayers{};
-	std::vector<const char*> deviceExtensions{};
+	const char** instanceLayers;
+	const char** instanceExtensions;
+	const char** deviceExtensions;
+
+	uint32_t instanceExtCount;
+	uint32_t instanceLayerCount;
+	uint32_t deviceExtCount;
+
+
+	uintptr_t instanceTempMemory;
+	size_t instanceTempOffset;
+	size_t instanceTempBase;
+	size_t instanceTempSize;
 
 	std::vector<VkPhysicalDevice> gpus;
 	std::vector<std::pair<VkPhysicalDevice, std::vector<VKDevice>>> logicalDevices;

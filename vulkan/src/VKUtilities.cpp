@@ -157,10 +157,11 @@ namespace VK {
 				throw std::runtime_error("failed to find suitable memory type!");
 		}
 
-		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features)
+		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features)
 		{
-				for (auto format : candidates)
+				for (size_t i = 0; i<candidateSize; i++)
 				{
+					auto format = candidates[i];
 					VkFormatProperties props;
 					vkGetPhysicalDeviceFormatProperties(gpu, format, &props);
 					if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
@@ -174,11 +175,11 @@ namespace VK {
 				throw std::runtime_error("failed to find supported format!");
 		}
 
-		VkShaderModule createShaderModule(VkDevice& device, const std::vector<char>& code) {
+		VkShaderModule createShaderModule(VkDevice& device, char* code, size_t size) {
 				VkShaderModuleCreateInfo createInfo{};
 				createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-				createInfo.codeSize = code.size();
-				createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+				createInfo.codeSize = size;;
+				createInfo.pCode = reinterpret_cast<const uint32_t*>(code);
 				VkShaderModule shaderModule;
 				if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
 					throw std::runtime_error("failed to create shader module!");

@@ -8,6 +8,6 @@ namespace GLSLANG
 {
 	void resource();
 
-    VkShaderModule CompileShader(VkDevice& device, std::vector<char>& data, VkShaderStageFlags stage);
+    VkShaderModule CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage);
 }
 

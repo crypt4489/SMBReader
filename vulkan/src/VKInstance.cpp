@@ -21,7 +21,40 @@ VKInstance::~VKInstance() {
 		delete[] allocator.instanceData;
 	}
 
+	if (instanceTempMemory)
+	{
+		delete[](void*)instanceTempMemory;
+	}
+
 }
+
+void* VKInstance::AllocFromInstanceCache(size_t size)
+{
+	if ((instanceTempOffset + size) >= instanceTempSize)
+	{
+		instanceTempOffset = instanceTempBase;
+	}
+
+	uintptr_t head = instanceTempMemory + instanceTempOffset;
+
+	instanceTempOffset += size;
+
+	return reinterpret_cast<void*>(head);
+}
+
+
+void* VKInstance::AllocFromInstanceData(size_t size)
+{
+	uintptr_t head = instanceTempMemory + instanceTempBase;
+
+	instanceTempBase += size;
+
+	if (instanceTempBase > instanceTempOffset)
+		instanceTempOffset = instanceTempBase;
+
+	return reinterpret_cast<void*>(head);
+}
+
 
 VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuIndex)
 {
@@ -44,8 +77,17 @@ void VKInstance::CreateDrawingSurface(GLFWwindow* wind)
 	}
 }
 
+
+#define TEMPCACHESIZE 512 * 1024
+
 void VKInstance::CreateRenderInstance()
 {
+
+	instanceTempMemory = reinterpret_cast<uintptr_t>(new char[TEMPCACHESIZE]);
+	instanceTempSize = TEMPCACHESIZE;
+	instanceTempBase = 0;
+	instanceTempOffset = 0;
+
 	VkApplicationInfo appInfoStruct{};
 
 	appInfoStruct.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -56,21 +98,29 @@ void VKInstance::CreateRenderInstance()
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfoStruct;
 
-
-	instanceLayers.push_back("VK_LAYER_KHRONOS_validation");
-
 	uint32_t glfwReqExtCount;
 
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwReqExtCount);
 
+	instanceExtCount = glfwReqExtCount + 1;
+
+	instanceLayerCount = 1;
+
+	instanceLayers = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*)*instanceLayerCount));
+
+	instanceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * instanceExtCount));
+
+	instanceLayers[0] = "VK_LAYER_KHRONOS_validation";
+
 	for (uint32_t i = 0; i < glfwReqExtCount; i++)
 	{
-		instanceExtensions.push_back(glfwExtensions[i]);
+		instanceExtensions[i] = glfwExtensions[i];
 	}
 
-	instanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-
+	instanceExtensions[2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	
 	uint32_t instExtensionRequired = 0;
+
 	vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, nullptr);
 
 	if (!instExtensionRequired)
@@ -78,19 +128,28 @@ void VKInstance::CreateRenderInstance()
 		throw std::runtime_error("Need extension layers, found none");
 	}
 
-	std::vector<VkExtensionProperties> extensions(instExtensionRequired);
+	VkExtensionProperties* extensions = reinterpret_cast<VkExtensionProperties*>(AllocFromInstanceCache(sizeof(VkExtensionProperties) * instExtensionRequired));
 
-	if (vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, extensions.data()) != VK_SUCCESS)
+	if (vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, extensions) != VK_SUCCESS)
 	{
 		throw std::runtime_error("vkEnumerateInstanceExtensionProperties failed second time");
 	}
-	;
+	
 
-	for (auto& requested : instanceExtensions)
+	for (uint32_t i = 0; i < instanceExtCount; i++)
 	{
-		if (std::find_if(extensions.begin(), extensions.end(), [&requested](auto i) {
-			return strcmp(requested, i.extensionName) == 0;
-			}) == std::end(extensions))
+		const char* requested = instanceExtensions[i];
+	
+		uint32_t j = 0;
+		for (; j < instExtensionRequired; j++)
+		{
+			VkExtensionProperties props = extensions[j];
+			if (strcmp(requested, props.extensionName) == 0) {
+				break;
+			}
+		}
+
+		if (j == instExtensionRequired)
 		{
 			std::cerr << "Extension " << requested << " not available\n";
 			throw std::runtime_error("Cannot find extension");
@@ -98,6 +157,7 @@ void VKInstance::CreateRenderInstance()
 	}
 
 	uint32_t layersCount = 0;
+
 	vkEnumerateInstanceLayerProperties(&layersCount, nullptr);
 
 	if (!layersCount)
@@ -105,29 +165,39 @@ void VKInstance::CreateRenderInstance()
 		throw std::runtime_error("Need validation layers, found none");
 	}
 
-	std::vector<VkLayerProperties> layerProps(layersCount);
+	VkLayerProperties* layerProps = reinterpret_cast<VkLayerProperties*>(AllocFromInstanceCache(sizeof(VkLayerProperties) * layersCount));
 
-	if (vkEnumerateInstanceLayerProperties(&layersCount, layerProps.data()) != VK_SUCCESS)
+	if (vkEnumerateInstanceLayerProperties(&layersCount, layerProps) != VK_SUCCESS)
 	{
 		throw std::runtime_error("vkEnumerateInstanceLayerProperties failed second time");
 	}
 
-	for (auto& requested : instanceLayers)
+	for (uint32_t i = 0; i < instanceLayerCount; i++)
 	{
-		if (std::find_if(layerProps.begin(), layerProps.end(), [&requested](auto i) {
-			return strcmp(requested, i.layerName) == 0;
-			}) == std::end(layerProps))
+		const char* requested = instanceLayers[i];
+
+		uint32_t j = 0;
+		for (; j < layersCount; j++)
+		{
+			VkLayerProperties props = layerProps[j];
+			if (strcmp(requested, props.layerName) == 0) {
+				break;
+			}
+		}
+
+		if (j == layersCount)
 		{
 			std::cerr << "Validation layer " << requested << " not available\n";
 			throw std::runtime_error("Cannot find validation layer");
 		}
 	}
 
-	createInfo.enabledExtensionCount = static_cast<uint32_t>(instanceExtensions.size());
-	createInfo.ppEnabledExtensionNames = instanceExtensions.data();
 
-	createInfo.ppEnabledLayerNames = instanceLayers.data();
-	createInfo.enabledLayerCount = static_cast<uint32_t>(instanceLayers.size());
+	createInfo.enabledExtensionCount = instanceExtCount;
+	createInfo.ppEnabledExtensionNames = instanceExtensions;
+
+	createInfo.ppEnabledLayerNames = instanceLayers;
+	createInfo.enabledLayerCount = instanceLayerCount;
 
 	VkDebugUtilsMessengerCreateInfoEXT instanceDebugInfo{};
 	instanceDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -165,32 +235,40 @@ void VKInstance::CreateRenderInstance()
 DeviceIndex VKInstance::CreatePhysicalDevice()
 {
 	uint32_t physicalDeviceCount = 0;
+
+	deviceExtCount = 1;
+
+	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
+
+	deviceExtensions[0] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+
 	VkResult result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
 
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to get device count");
 	}
 
-	std::vector<VkPhysicalDevice> physicalDevices(physicalDeviceCount);
+	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
 
-	result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
+	result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
 
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to get device pointers");
 	}
 
-	deviceExtensions.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 
 	VkPhysicalDeviceProperties deviceProperties;
 	VkPhysicalDeviceFeatures deviceFeatures;
 
 	std::multimap<int, VkPhysicalDevice> gpuScores;
 
-	for (const auto& i : physicalDevices)
+	for (uint32_t i = 0; i<physicalDeviceCount; i++)
 	{
-		GetPhysicalDevicePropertiesandFeatures(i, deviceProperties, deviceFeatures);
+		VkPhysicalDevice potentGPU = physicalDevices[i];
 
-		if (!isDeviceSuitable(i)) continue;
+		GetPhysicalDevicePropertiesandFeatures(potentGPU, deviceProperties, deviceFeatures);
+
+		if (!isDeviceSuitable(potentGPU)) continue;
 
 		gpuScores.insert(std::pair<int, VkPhysicalDevice>([&deviceProperties, &deviceFeatures]() {
 			int score = 0;
@@ -212,7 +290,7 @@ DeviceIndex VKInstance::CreatePhysicalDevice()
 			}
 
 			return score;
-			}(), i));
+			}(), potentGPU));
 	}
 
 	auto bestCase = gpuScores.rbegin();
@@ -261,16 +339,25 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 	uint32_t extensionCount;
 	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
-	std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+	VkExtensionProperties* availableExtensions = reinterpret_cast<VkExtensionProperties*>(AllocFromInstanceCache(sizeof(VkExtensionProperties) * extensionCount));
+	
+	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions);
 
-
-
-	for (auto& requested : deviceExtensions)
+	for (uint32_t i = 0; i<deviceExtCount; i++)
 	{
-		if (std::find_if(availableExtensions.begin(), availableExtensions.end(), [&requested](auto extension) {
-			return strcmp(requested, extension.extensionName) == 0;
-			}) == std::end(availableExtensions))
+		const char* ext = deviceExtensions[i];
+
+		uint32_t j = 0;
+		for (; j < extensionCount; j++)
+		{
+			VkExtensionProperties prop2 = availableExtensions[j];
+			if (strcmp(ext, prop2.extensionName) == 0)
+			{
+				break;
+			}
+		}
+
+		if (j == extensionCount)
 		{
 			return false;
 		}
