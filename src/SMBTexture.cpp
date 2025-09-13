@@ -2,14 +2,18 @@
 SMBTexture::SMBTexture(ImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips)
 	: type(_type), width(_width), height(_height), miplevels(_mips)
 {
-	data.resize(_mips);
-	imageSizes.resize(_mips);
+	
 }
 
 void SMBTexture::MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data)
 {
-	auto ref = data.at(miplevel);
-	std::copy(_data.begin(), _data.end(), ref.begin());
+	int offset = 0;
+	for (uint32_t i = 0; i < miplevel; i++)
+	{
+		offset += imageSizes[i];
+	}
+	auto ref = data + offset;
+	memcpy(ref, _data.data(), _data.size());
 }
 
 SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFormat::IMAGE_UNKNOWN), height(0), width(0), miplevels(0)
@@ -22,20 +26,20 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFo
 
 	file.read(reinterpret_cast<char*>(this), 4 * 4);
 
-	data.resize(miplevels);
-	imageSizes.resize(miplevels);
+	imageSizes = new uint32_t[miplevels];
 
 	file.seekg(chunk.contigOffset + smb.fileOffset, std::ios_base::beg);
 
 	int writeWidth = width;
 	int	writeHeight = height;
 
-	size_t size = 0;
+	int size = 0;
+
+	int totalBlobSize = 0;
 
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-		std::vector<char>& image = data[i];
-
+	
 		switch (type)
 		{
 			//case SMBImageFormat::X8L8U8V8:
@@ -43,31 +47,35 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFo
 			//	return;
 		case ImageFormat::DXT1:
 			size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
-			image.resize(size);
-			file.read(image.data(), size);
-			//DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned long*>(image.data()));
 			break;
 		case ImageFormat::DXT3:
 			size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
-			image.resize(size);
-			file.read(image.data(), size);
-			//DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, reinterpret_cast<unsigned char*>(input.data()), reinterpret_cast<unsigned char*>(image.data()));
 			break;
 		case ImageFormat::R8G8B8A8:
 			size = writeWidth * writeHeight * 4;
-			image.resize(size);
-			file.read(image.data(), size);
 			break;
 		default:
 			std::cerr << type << "\n";
-			data.clear();
-			imageSizes.clear();
+			delete[] imageSizes;
 			return;
 		}
 
 		imageSizes[i] = static_cast<uint32_t>(size);
 
+		totalBlobSize += size;
+
 		writeHeight >>= 1;
 		writeWidth >>= 1;
 	}
+
+	data = new std::byte[totalBlobSize];
+
+	std::byte* readHead = data;
+
+	for (uint32_t i = 0; i < miplevels; i++)
+	{
+		file.read((char*)readHead, imageSizes[i]);
+		readHead += imageSizes[i];
+	}
+
 }

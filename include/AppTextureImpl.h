@@ -14,8 +14,8 @@ public:
 	ImageFormat type;
 	uint32_t dataSize;
 	uint32_t width, height, miplevels;
-	std::vector<char> data;
-private:
+	std::byte* data;
+
 	void ParseBMP(std::vector<char>& _fileData);
 };
 

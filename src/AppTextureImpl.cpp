@@ -57,21 +57,21 @@ void AppTextureImpl::ParseBMP(std::vector<char>& _fileData)
 	uLine = bottomLine;
 
 
-	iter = _fileData.begin() + (fh.bfOffBits + (uLine * bytesPerRow));
+	auto iter2 = _fileData.data() + (fh.bfOffBits + (uLine * bytesPerRow));
 
-	data.resize(dataSize);
+	data = new std::byte[dataSize];
 
-	auto copy = data.begin();
+	auto copy = data;
 
 	for (; i < bottomLine; i++)
 	{
-		std::copy(iter, iter + bytesPerRow, copy);
+		memcpy(copy, iter2, bytesPerRow);
 		copy += bytesPerRow;
-		iter -= bytesPerRow;
+		iter2 -= bytesPerRow;
 	}
 
-	std::copy(iter, iter + bytesPerRow, copy);
+	memcpy(copy, iter2, bytesPerRow);
 
-	TexUtils::BGRATexture(data.data(), height, width, (bitcount == 24 ? 3 : 4));
+	TexUtils::BGRATexture((char*)data, height, width, (bitcount == 24 ? 3 : 4));
 
 }

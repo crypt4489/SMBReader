@@ -42,6 +42,8 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 	SMBTexture tex(smb, chunk);
 
+	auto ptr = tex.data;
+
 	for (uint32_t i = 0; i < tex.miplevels; i++)
 	{
 		std::string writeFileName = name + std::to_string(i + 1) + ".bmp";
@@ -65,9 +67,9 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		TexUtils::BMP::WriteOutBMPHeaders(outputFile, writeWidth, writeHeight);
 
-		std::vector<char> bgra = tex.data[i];
+		std::byte* bgra = ptr;
 
-		TexUtils::BGRATexture(bgra.data(), tex.width >> i, tex.width >> i, 4);
+		TexUtils::BGRATexture((char*)bgra, tex.width >> i, tex.width >> i, 4);
 
 		uint32_t bpr = writeWidth * 4;
 
@@ -75,11 +77,11 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			outputFile.write(bgra.data() + offset, bpr);
+			outputFile.write((char*)bgra + offset, bpr);
 			offset -= bpr;
 		}
 
-
+		ptr += tex.imageSizes[i];
 
 		FileManager::RemoveOpenFile(outputfilehandle.value());
 	}

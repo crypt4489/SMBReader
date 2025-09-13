@@ -855,8 +855,8 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 }
 
 EntryHandle VKDevice::CreateSampledImage(
-	std::vector<std::vector<char>>& imageData,
-	std::vector<uint32_t>& imageSizes,
+	char* imageData,
+	uint32_t* imageSizes,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
 	EntryHandle memIndex,
@@ -873,7 +873,12 @@ EntryHandle VKDevice::CreateSampledImage(
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
-	VkDeviceSize imagesSize = std::accumulate(imageSizes.begin(), imageSizes.end(), 0UL);
+	VkDeviceSize imagesSize = 0UL;
+
+	for (uint32_t i = 0; i < mipLevels; i++)
+	{
+		imagesSize += imageSizes[i];
+	}
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -886,8 +891,9 @@ EntryHandle VKDevice::CreateSampledImage(
 	auto& pixels = imageData;
 	vkMapMemory(device, stagingMemory, 0, imagesSize, 0, reinterpret_cast<void**>(&data));
 	for (auto i = 0U; i < mipLevels; i++) {
-		std::memcpy(data, pixels[i].data(), sizes[i]);
+		std::memcpy(data, pixels, sizes[i]);
 		data += sizes[i];
+		pixels += sizes[i];
 	}
 	vkUnmapMemory(device, stagingMemory);
 
@@ -1190,8 +1196,8 @@ std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> VKDevice::GetQueueHandle(u
 	QueueManager* ptr = reinterpret_cast<QueueManager*>(GetVkTypeFromEntry(queueManagers));
 	auto ret = FindQueueManagerByCapapbilites(ptr, queueManagersSize, capabilites);
 	uint32_t queueIdx = ptr[ret].GetQueue();
-	uint32_t managerIndex = queueManagers;
-	managerIndex += ret;
+	EntryHandle managerIndex = queueManagers;
+	managerIndex = managerIndex + ret;
 	return { managerIndex, queueIdx, ptr[ret].queueFamilyIndex, ptr[ret].poolIndices[queueIdx] };
 }
 

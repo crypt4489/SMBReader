@@ -5,7 +5,7 @@ VKTexture::VKTexture(SMBTexture& tex) :
 	viewIndex(),
 	samplerIndex()
 {
-	CreateImageResources(tex.data, tex.imageSizes, tex.width, tex.height, tex.miplevels, tex.type);
+	CreateImageResources((char*)tex.data, tex.imageSizes, tex.width, tex.height, tex.miplevels, tex.type);
 	CreateImageViews(tex.miplevels, tex.type);
 	CreateImageSampler(tex.miplevels);
 };
@@ -15,9 +15,7 @@ VKTexture::VKTexture(AppTextureImpl& tex) :
 	viewIndex(),
 	samplerIndex()
 {
-	std::vector<std::vector<char>>imageVec(1, tex.data);
-	std::vector<uint32_t> imageSize(1, tex.dataSize);
-	CreateImageResources(imageVec ,imageSize, tex.width, tex.height, tex.miplevels, tex.type);
+	CreateImageResources((char*)tex.data , &tex.dataSize, tex.width, tex.height, tex.miplevels, tex.type);
 	CreateImageViews(tex.miplevels, tex.type);
 	CreateImageSampler(tex.miplevels);
 }
@@ -54,7 +52,7 @@ void VKTexture::DeleteResources()
 	VKRenderer::gRenderInstance->DeleteVulkanSampler(samplerIndex);
 }
 
-void VKTexture::CreateImageResources(std::vector<std::vector<char>>& imageData, std::vector<uint32_t>& imageSizes,
+void VKTexture::CreateImageResources(char* imageData, uint32_t* imageSizes,
 	uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type)
 {	
 	imageIndex = VKRenderer::gRenderInstance->CreateVulkanImage(imageData, imageSizes, width, height, mipLevels, type);
