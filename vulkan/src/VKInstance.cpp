@@ -6,15 +6,7 @@
 VKInstance::~VKInstance() {
 
 
-	for (auto& ref : logicalDevices)
-	{
-		for (auto& ref2 : ref.second)
-		{
-			ref2.WaitOnDevice();
-		}
-
-		ref.second.clear();
-	}
+	
 
 	if (allocator.instanceData)
 	{
@@ -58,7 +50,9 @@ void* VKInstance::AllocFromInstanceData(size_t size)
 
 VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuIndex)
 {
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpus[gpuIndex], renderSurface);
+	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
+	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
 	return ret;
 }
 
@@ -230,11 +224,21 @@ void VKInstance::CreateRenderInstance()
 	{
 		throw std::runtime_error("Cannot establish debug callback");
 	}
+
+	result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+
+	if (result != VK_SUCCESS) {
+		throw std::runtime_error("failed to get device pointers");
+	}
+
+	gpusAndLogicalDevices = reinterpret_cast<uintptr_t*>(AllocFromInstanceData(sizeof(uintptr_t) * physicalDeviceCount));
 }
 
-DeviceIndex VKInstance::CreatePhysicalDevice()
+DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 {
-	uint32_t physicalDeviceCount = 0;
+	uintptr_t* devices = reinterpret_cast<uintptr_t*>(AllocFromInstanceData(sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1)));
+
+	memset(devices, 0, sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1));
 
 	deviceExtCount = 1;
 
@@ -242,15 +246,9 @@ DeviceIndex VKInstance::CreatePhysicalDevice()
 
 	deviceExtensions[0] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 
-	VkResult result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
-
-	if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to get device count");
-	}
-
 	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
 
-	result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
+	VkResult result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
 
 	if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to get device pointers");
@@ -302,16 +300,20 @@ DeviceIndex VKInstance::CreatePhysicalDevice()
 
 	VkPhysicalDevice gpu = bestCase->second;
 
-	gpus.push_back(gpu);
 
-	return DeviceIndex(gpus.size() - 1);
+	
+	devices[0] = reinterpret_cast<uintptr_t>(gpu);
+
+	gpusAndLogicalDevices[physicalDeviceCounter] = reinterpret_cast<uintptr_t>(devices);
+
+	return DeviceIndex(physicalDeviceCounter++);
 }
 
 
 
 VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(DeviceIndex& gpuIndex)
 {
-	VkPhysicalDevice gpu = gpus[gpuIndex];
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 	VkPhysicalDeviceProperties physicalDeviceProperties;
 	vkGetPhysicalDeviceProperties(gpu, &physicalDeviceProperties);
 
@@ -379,31 +381,47 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 
 VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
-	auto& gpu = gpus[gpuIndex];
-	auto iter = logicalDevices.begin();
-	while (iter != std::end(logicalDevices))
-	{
-		if (iter->first == gpu) break;
-		iter = iter++;
-	}
+	uintptr_t* devices = GetDeviceArray(gpuIndex);
+	
+	VkPhysicalDevice gpu = reinterpret_cast<VkPhysicalDevice>(devices[0]);
 
-	if (iter == std::end(logicalDevices))
-	{
-		deviceIndex = std::move(DeviceIndex(0U));
-		std::vector<VKDevice> devices;
-		logicalDevices.emplace_back(gpu, std::vector<VKDevice>{});
-		auto& ref = logicalDevices.back().second;
-		return ref.emplace_back(gpu, this);
-	}
+	uintptr_t* iter = &devices[1];
 
-	auto& ref = iter->second;
-	ref.emplace_back(gpu, this);
-	return ref.back();
+	uint32_t i = 0;
+
+	while (iter[0])
+	{
+		i++;
+		iter = &iter[1];
+	}
+	
+	VKDevice* device = reinterpret_cast<VKDevice*>(AllocFromInstanceData(sizeof(VKDevice)));
+
+	device = std::construct_at(device, gpu, this);
+
+	iter[0] = reinterpret_cast<uintptr_t>(device);
+
+	deviceIndex = DeviceIndex(i);
+
+	return *device;
 }
 
 VKDevice& VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
-	return logicalDevices[gpuIndex].second[deviceIndex];
+	uintptr_t* devices = GetDeviceArray(gpuIndex);
+	VKDevice* dev = reinterpret_cast<VKDevice*>(devices[1]);
+	return *dev;
+}
+
+VkPhysicalDevice VKInstance::GetPhysicalDevice(DeviceIndex& gpuIndex)
+{
+	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
+	return reinterpret_cast<VkPhysicalDevice>(devices[0]);
+}
+
+uintptr_t* VKInstance::GetDeviceArray(DeviceIndex& gpuIndex)
+{
+	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);;
 }
 
 void VKInstance::SetInstanceDataAndSize(size_t datasize)

@@ -75,6 +75,10 @@ public:
 	VKInstance() = default;
 	~VKInstance();
 
+	VkPhysicalDevice GetPhysicalDevice(DeviceIndex& gpuIndex);
+
+	uintptr_t* GetDeviceArray(DeviceIndex& gpuIndex);
+
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex);
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
@@ -83,7 +87,7 @@ public:
 
 	void CreateRenderInstance();
 
-	DeviceIndex CreatePhysicalDevice();
+	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);
 
 	VkSampleCountFlagBits GetMaxMSAALevels(DeviceIndex& gpuIndex);
 
@@ -118,8 +122,10 @@ public:
 	size_t instanceTempBase;
 	size_t instanceTempSize;
 
-	std::vector<VkPhysicalDevice> gpus;
-	std::vector<std::pair<VkPhysicalDevice, std::vector<VKDevice>>> logicalDevices;
+	uintptr_t *gpusAndLogicalDevices;
+
+	uint32_t physicalDeviceCount = 0;
+	uint32_t physicalDeviceCounter = 0;
 	
 	VKInstanceAllocator allocator;
 };

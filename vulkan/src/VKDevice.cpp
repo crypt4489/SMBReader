@@ -1,6 +1,7 @@
 #include "VKDevice.h"
 #include "VKRenderGraph.h"
 #include "VKInstance.h"
+#include "VKTexture.h"
 #include <mutex>
 #include <shared_mutex>
 
@@ -402,7 +403,7 @@ EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t
 	VkImageView* attachments = reinterpret_cast<VkImageView*>(AllocFromDeviceCache(sizeof(VkImageView) * attachmentsCount));
 
 	for (uint32_t i = 0; i < attachmentsCount; i++) {
-		attachments[i] = GetImageView(attachmentIndices[i]);
+		attachments[i] = GetImageViewByIndex(attachmentIndices[i]);
 	}
 
 	VkFramebufferCreateInfo framebufferInfo{};
@@ -543,7 +544,7 @@ EntryHandle VKDevice::CreateImageView(
 	std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
 
-	VkImage image = GetImage(imageIndex);
+	VkImage image = GetImageByIndex(imageIndex);
 
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
@@ -860,7 +861,7 @@ EntryHandle VKDevice::CreateSampledImage(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
 	EntryHandle memIndex,
-	EntryHandle hostIndex)
+	EntryHandle hostIndex, VkImageAspectFlags flags)
 {
 	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(GRAPHICS | TRANSFER);
@@ -907,7 +908,7 @@ EntryHandle VKDevice::CreateSampledImage(
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memIndex);
 
 
-	VkImage image = GetImage(imageIndex);
+	VkImage image = GetImageByIndex(imageIndex);
 
 	VkCommandPool pool = GetCommandPool(poolIndex);
 
@@ -930,7 +931,21 @@ EntryHandle VKDevice::CreateSampledImage(
 
 	ReturnQueueToManager(managerIndex, queueIndex);
 
-	return imageIndex;
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+
+	EntryHandle samplerIndex = CreateSampler(mipLevels);
+
+	EntryHandle ret;
+
+	{
+		VKTexture* tex = reinterpret_cast<VKTexture*>(AllocTypeFromEntry(sizeof(VKTexture)));
+
+		tex = std::construct_at(tex, imageIndex, viewIndex, samplerIndex);
+
+		ret = AddVkTypeToEntry(tex);
+	}
+
+	return ret;
 }
 
 EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
@@ -1122,16 +1137,30 @@ VkBuffer VKDevice::GetHostBuffer(EntryHandle index)
 	return reinterpret_cast<VkBuffer>(GetVkTypeFromEntry(index));
 }
 
-VkImage VKDevice::GetImage(EntryHandle index)
+VkImage VKDevice::GetImageByIndex(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	return *reinterpret_cast<VkImage*>(GetVkTypeFromEntry(index));
 }
 
-VkImageView VKDevice::GetImageView(EntryHandle index)
+VkImage VKDevice::GetImageByTexture(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	VKTexture* tex = GetTexture(index);
+	return GetImageByIndex(tex->imageIndex);
+}
+
+VkImageView VKDevice::GetImageViewByIndex(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	return reinterpret_cast<VkImageView>(GetVkTypeFromEntry(index));
+}
+
+VkImageView VKDevice::GetImageViewByTexture(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	VKTexture* tex = GetTexture(index);
+	return GetImageViewByIndex(tex->viewIndex);
 }
 
 VKPipelineCache* VKDevice::GetPipelineCache(EntryHandle renderPassIndex)
@@ -1227,9 +1256,16 @@ RenderTarget* VKDevice::GetRenderTarget(EntryHandle index)
 }
 
 
-VkSampler VKDevice::GetSampler(EntryHandle index)
+VkSampler VKDevice::GetSamplerByIndex(EntryHandle index)
 {
 	return reinterpret_cast<VkSampler>(GetVkTypeFromEntry(index));
+}
+
+VkSampler VKDevice::GetSamplerByTexture(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	VKTexture* tex = GetTexture(index);
+	return GetSamplerByIndex(tex->samplerIndex);
 }
 
 VkSemaphore VKDevice::GetSemaphore(EntryHandle index)
@@ -1242,6 +1278,12 @@ VKSwapChain* VKDevice::GetSwapChain(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	return reinterpret_cast<VKSwapChain*>(GetVkTypeFromEntry(index));
+}
+
+VKTexture* VKDevice::GetTexture(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VKTexture*>(GetVkTypeFromEntry(index));
 }
 
 //ACTIONS
@@ -1483,7 +1525,7 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	EntryHandle poolIndex = std::get<3>(queueDetails);
 
 	VkCommandPool pool = GetCommandPool(poolIndex);
-	VkImage image = GetImage(imageIndex);
+	VkImage image = GetImageByIndex(imageIndex);
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 	VK::Utils::TransitionImageLayout(

@@ -23,6 +23,7 @@
 #include "VKShaderCache.h"
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
+#include "VKTexture.h"
 #include "VKUtilities.h"
 
 class VKDevice;
@@ -410,7 +411,7 @@ public:
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkFormat type,
 		EntryHandle memIndex,
-		EntryHandle hostIndex);
+		EntryHandle hostIndex, VkImageAspectFlags flags);
 
 	EntryHandle CreateSampler(uint32_t mipLevels);
 
@@ -436,9 +437,13 @@ public:
 	
 	VkBuffer GetHostBuffer(EntryHandle index);
 
-	VkImage GetImage(EntryHandle index);
+	VkImage GetImageByIndex(EntryHandle index);
 
-	VkImageView GetImageView(EntryHandle index);
+	VkImage GetImageByTexture(EntryHandle index);
+
+	VkImageView GetImageViewByIndex(EntryHandle index);
+
+	VkImageView GetImageViewByTexture(EntryHandle index);
 
 	VKPipelineCache* GetPipelineCache(EntryHandle renderPassIndex);
 
@@ -466,11 +471,16 @@ public:
 
 	RenderTarget* GetRenderTarget(EntryHandle renderTargetIndex);
 
-	VkSampler GetSampler(EntryHandle index);
+	VkSampler GetSamplerByIndex(EntryHandle index);
+
+	VkSampler GetSamplerByTexture(EntryHandle index);
 
 	VkSemaphore GetSemaphore(EntryHandle index);
 
 	VKSwapChain* GetSwapChain(EntryHandle index);
+
+
+	VKTexture* GetTexture(EntryHandle handle);
 
 	//Destructors
 

@@ -1,15 +1,10 @@
 #pragma once
-#include <numeric>
-
-#include "AppTextureImpl.h"
 #include "IndexTypes.h"
-#include "SMBTexture.h"
 class VKTexture
 {
 public:
-	VKTexture(SMBTexture& tex);
 
-	VKTexture(AppTextureImpl& tex);
+	VKTexture(EntryHandle piIndex, EntryHandle pvIndex, EntryHandle psIndex);
 
 	VKTexture(VKTexture&& other) noexcept;
 
@@ -20,15 +15,6 @@ public:
 	EntryHandle imageIndex;
 	EntryHandle viewIndex;
 	EntryHandle samplerIndex;
-
-	void CreateImageResources(char* imageData, uint32_t* imageSizes,
-		uint32_t width, uint32_t height, uint32_t mipLevels, ImageFormat type);
-
-	void CreateImageViews(uint32_t miplevels, ImageFormat type);
-
-	void CreateImageSampler(uint32_t mipLevels);
-	
-	void DeleteResources();
 
 #if 0
 	void TransitionMips(VkDevice& device, VkPhysicalDevice &gpu, VkCommandPool &pool, VkQueue &queue, uint32_t width, uint32_t height, uint32_t mips)

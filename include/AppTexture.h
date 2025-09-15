@@ -22,6 +22,6 @@ public:
 
 	AppTextureImpl* texImpl;
 	SMBTexture* smbTex;
-	VKTexture* vkImpl;
+	EntryHandle vkImpl;
 };
 

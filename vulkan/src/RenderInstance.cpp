@@ -356,7 +356,7 @@ EntryHandle RenderInstance::CreateVulkanImage(
 		width, height,
 		mipLevels, VK::API::ConvertSMBToVkFormat(type),
 		attachmentsIndex, 
-		stagingBufferIndex);
+		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 EntryHandle RenderInstance::CreateVulkanImageView(EntryHandle& imageIndex, uint32_t mipLevels,
@@ -405,7 +405,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	vkInstance.CreateRenderInstance();
 	vkInstance.CreateDrawingSurface(window->GetWindow());
 
-	physicalIndex = vkInstance.CreatePhysicalDevice();
+	physicalIndex = vkInstance.CreatePhysicalDevice(1);
 	VKDevice& majorDevice = vkInstance.CreateLogicalDevice(physicalIndex, deviceIndex);
 
 	msaaSamples = vkInstance.GetMaxMSAALevels(physicalIndex);
@@ -515,12 +515,12 @@ OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 VkImageView RenderInstance::GetImageView(EntryHandle viewIndex)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.GetImageView(viewIndex);
+	return majorDevice.GetImageViewByTexture(viewIndex);
 }
 
 VkSampler RenderInstance::GetSampler(EntryHandle index)
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSampler(index);
+	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSamplerByTexture(index);
 }
 
 void RenderInstance::SetResizeBool(bool set)

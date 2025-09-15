@@ -42,7 +42,7 @@ void TextManager::CreatePipelineObject()
 
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 	DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("oneimage", frames);
-	dsb.AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl->viewIndex), rendInst->GetSampler(fonts->texture->vkImpl->samplerIndex), 0, frames);
+	dsb.AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
 	dsb.AddDescriptorsToCache(text);
 
 	//rendInst->CreateVulkanPipelineObject(obj);

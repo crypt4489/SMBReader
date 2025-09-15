@@ -37,7 +37,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("genericobject", frames);
 		OffsetIndex offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
 		dsb.AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, 0);
-		dsb.AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl->viewIndex), rendInst->GetSampler(textures[0].vkImpl->samplerIndex), 1, frames);
+		dsb.AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
 		dsb.AddDescriptorsToCache(genericpipeline);
 
 		VKPipelineObjectCreateInfo create = {
