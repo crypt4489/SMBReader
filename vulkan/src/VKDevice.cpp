@@ -1384,11 +1384,12 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	presentInfo.waitSemaphoreCount = waitCount;
 	presentInfo.pWaitSemaphores = waitSemaphores;
 
-	VkSwapchainKHR swapChains[] = { swc->swapChain };
+	VkResult results[2];
+
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
+	presentInfo.pSwapchains = &swc->swapChain;
 	presentInfo.pImageIndices = &frameIdx;
-	presentInfo.pResults = nullptr;
+	presentInfo.pResults = results;
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
 

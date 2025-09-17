@@ -86,6 +86,11 @@ void RenderInstance::RecreateSwapChain() {
 	CreateDepthImage(width, height);
 
 	swapChain->RecreateSwapChain(width, height);
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		InvalidateRecordBuffer(i);
+	}
 }
 
 void RenderInstance::CreateRenderPass()
@@ -176,19 +181,20 @@ uint32_t RenderInstance::BeginFrame()
 
 	EntryHandle nextCbIndex = trb.GetCurrentBuffer();
 
-	if (nextCbIndex == EntryHandle())
+	if (nextCbIndex == EntryHandle()) {
 		return ~0ui32;
+	}
 
 	int32_t res;
 
 	if (nextCbIndex != currentCBIndex[currentFrame])
-		res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); //wait on previous
+		res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false); //wait on previous, but don't reset
 
 	currentCBIndex[currentFrame] = nextCbIndex;
 
 	res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); // wait on current, could be updated queue
 
-	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, trb.outputImageIndex);
+	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
 	if (imageIndex == ~0ui32)
 	{
@@ -196,7 +202,7 @@ uint32_t RenderInstance::BeginFrame()
 		return imageIndex;
 	}
 
-	return trb.outputImageIndex;
+	return imageIndex;
 }
 
 void RenderInstance::SubmitFrame(uint32_t imageIndex)
@@ -207,16 +213,18 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	res = dev.PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	if (!res || resizeWindow) {
-		resizeWindow = false;
-		RecreateSwapChain();
-	}
-
 	auto& trb = threadedRecordBuffers[currentFrame];
 
 	trb.ReleaseCurrentCommandBuffer();
 
-	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+	if (!res || resizeWindow) {
+		resizeWindow = false;
+		RecreateSwapChain();
+		currentFrame = 0;
+	}
+	else {
+		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+	}
 }
 
 
@@ -224,7 +232,6 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VkDevice logicalDevice = dev.device;
 	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
 
 	colorImage = dev.CreateImage(width, height,
@@ -390,8 +397,8 @@ void RenderInstance::DeleteVulkanSampler(EntryHandle& index)
 	majorDevice.DestorySampler(index);
 }
 
-
-#define MB 1024 * 1024
+#define KB 1024
+#define MB 1024 * KB
 #define GB 1024 * MB
 
 
@@ -401,7 +408,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	windowMan->SetWindowResizeCallback(frameResizeCB);
 	glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 
-	vkInstance.SetInstanceDataAndSize(16 * MB);
+	vkInstance.SetInstanceDataAndSize(16 * MB, 256 * KB);
 	vkInstance.CreateRenderInstance();
 	vkInstance.CreateDrawingSurface(window->GetWindow());
 

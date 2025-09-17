@@ -38,6 +38,7 @@ struct ThreadedRecordBuffer
 
 	void Invalidate()
 	{
+		ready.store(false);
 		invalidate.Notify();
 	}
 

@@ -2,6 +2,7 @@
 
 #include "VKSwapChain.h"
 #include "VKDevice.h"
+#include "VKInstance.h"
 #include "VKUtilities.h"
 
 
@@ -186,7 +187,6 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-
 	if (vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create swap chain!");
 	}
@@ -327,10 +327,10 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t fram
 
 	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(depends[0]), VK_NULL_HANDLE, &imageIndex);
 
-	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
 		return 0xFFFFFFFF;
 	}
-	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+	else if (result != VK_SUCCESS) {
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 

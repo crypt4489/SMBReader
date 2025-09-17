@@ -213,7 +213,7 @@ void VKInstance::CreateRenderInstance()
 
 	VkDebugUtilsMessengerCreateInfoEXT debugInfo{};
 	debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 	debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	debugInfo.pfnUserCallback = VK::Utils::debugCallback;
 	debugInfo.pUserData = nullptr;
@@ -424,11 +424,14 @@ uintptr_t* VKInstance::GetDeviceArray(DeviceIndex& gpuIndex)
 	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);;
 }
 
-void VKInstance::SetInstanceDataAndSize(size_t datasize)
+void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
 {
-	allocator.instanceDataSize = datasize;
-	
-	allocator.instanceData = new uint8_t[datasize];
+	allocator.instanceDataSize = totalDataSize-cacheSize;
+	allocator.instanceDataOffset = 0;
+	allocator.instanceData = new uint8_t[totalDataSize];
+	allocator.commandDataSize = cacheSize;
+	allocator.commandDataOffset = 0;
+	allocator.commandData = allocator.instanceData + allocator.instanceDataSize;
 }
 
 
@@ -469,10 +472,28 @@ void* VKInstanceAllocator::RealAlloc(size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
-	uintptr_t head = (uintptr_t)instanceData + offset;
-	size_t makeup = (head & (alignment - 1));
-	head += makeup;
-	offset += (size+makeup);
+	uintptr_t head = 0;
+		
+	if (allocationScope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)
+	{
+		if (commandDataOffset + size >= commandDataSize)
+		{
+			commandDataOffset = 0;
+		}
+
+		head = (uintptr_t)commandData + commandDataOffset;
+		size_t makeup = (head & (alignment - 1));
+		head += makeup;
+		commandDataOffset += (size + makeup);
+	}
+	else 
+	{
+		head = (uintptr_t)instanceData + instanceDataOffset;
+		size_t makeup = (head & (alignment - 1));
+		head += makeup;
+		instanceDataOffset += (size + makeup);
+	}
+	
 	return (void*)head;
 }
 

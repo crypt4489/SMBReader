@@ -19,7 +19,10 @@ struct VKInstanceAllocator
 
 	uint8_t* instanceData;
 	size_t instanceDataSize;
-	size_t offset;
+	size_t instanceDataOffset;
+	uint8_t* commandData;
+	size_t commandDataSize;
+	size_t commandDataOffset;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;
@@ -99,7 +102,7 @@ public:
 
 	VKDevice& GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
-	void SetInstanceDataAndSize(size_t datasize);
+	void SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize);
 
 	void* AllocFromInstanceCache(size_t size);
 
