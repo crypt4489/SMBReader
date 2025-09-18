@@ -15,6 +15,8 @@ AppTexture::~AppTexture()
 {
 	if (smbTex) delete smbTex;
 	if (texImpl) delete texImpl;
+	if (vkImpl != EntryHandle()) VKRenderer::gRenderInstance->DestoryTexture(vkImpl);
+	//vkImpl = EntryHandle();
 }
 
 AppTexture::AppTexture(AppTexture&& other) noexcept {
@@ -23,6 +25,7 @@ AppTexture::AppTexture(AppTexture&& other) noexcept {
 	this->texImpl = other.texImpl;
 	other.smbTex = nullptr;
 	other.texImpl = nullptr;
+	other.vkImpl = EntryHandle();
 }
 
 AppTexture::AppTexture(AppTexture& other) noexcept {
@@ -31,4 +34,5 @@ AppTexture::AppTexture(AppTexture& other) noexcept {
 	this->texImpl = other.texImpl;
 	other.smbTex = nullptr;
 	other.texImpl = nullptr;
+	other.vkImpl = EntryHandle();
 }

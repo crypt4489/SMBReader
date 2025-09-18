@@ -72,9 +72,6 @@
     <ClCompile Include="vulkan\src\VKRenderGraph.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\src\VKShaderCache.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="vulkan\src\VKTexture.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -162,9 +159,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKRenderGraph.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKShaderCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKTexture.h">

@@ -19,7 +19,6 @@
 #include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
 #include "VKSwapChain.h"
-#include "VKShaderCache.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
 
@@ -37,6 +36,50 @@ RenderInstance::RenderInstance()
 {
 
 };
+
+RenderInstance::~RenderInstance()
+{
+	auto& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	for (size_t i = 0; i < shaders.size(); i++)
+	{
+		dev.DestroyShader(shaders[i]);
+	}
+
+	for (size_t i = 0; i < threadedRecordBuffers.size(); i++)
+	{
+		auto& trb = threadedRecordBuffers[i];
+		for (size_t j = 0; j < trb.buffers.size(); j++)
+		{
+			dev.DestroyCommandBuffer(trb.buffers[j]);
+		}
+	}
+
+	dev.DestroyDescriptorPool(descriptorPoolIndex);
+
+	dev.DestroyRenderPass(mainRenderPass);
+
+	DestroySwapChainAttachments();
+
+	dev.DestroyImagePool(attachmentsIndex);
+
+	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+
+	swapChain->DestroySwapChain();
+
+	swapChain->DestroySyncObject();
+
+	dev.DestroyBuffer(stagingBufferIndex);
+
+	dev.DestroyBuffer(globalIndex);
+
+	dev.DestroyDevice();
+};
+
+void RenderInstance::DestoryTexture(EntryHandle handle)
+{
+	auto& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	dev.DestroyTexture(handle);
+}
 
 void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
 {
@@ -256,9 +299,66 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 
+	
+
 	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv" };
 
+	std::vector<EntryHandle> shaders1Handles;
+
+	size_t counter = 0;
+
+	for (size_t i = 0; i < shaders1.size(); i++)
+	{
+		std::string name = shaders1[i];
+		std::vector<char> buffer;
+		if (FileManager::FileExists(name)) {
+			
+			auto ret = FileManager::ReadFileInFull(name, buffer);
+
+			shaders1Handles.push_back(dev.CreateShader(buffer.data(), buffer.size(), dev.ConvertShaderFlags(name)));
+		}
+		else
+		{
+			std::string uncompiled = name.substr(0, name.length() - 4);
+
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+
+			if (buffer.back() != '\0') buffer.push_back('\0');
+
+			shaders1Handles.push_back(dev.CompileShader(buffer.data(), dev.ConvertShaderFlags(name)));
+		}
+
+		shaders[counter++] = shaders1Handles[i];
+	}
+
 	std::vector<std::string> shaders2 = { "text.vert.spv" , "text.frag.spv" };
+
+	std::vector<EntryHandle> shaders2Handles;
+
+	for (size_t i = 0; i < shaders2.size(); i++)
+	{
+		std::string name = shaders2[i];
+		std::vector<char> buffer;
+		if (FileManager::FileExists(name)) {
+
+			auto ret = FileManager::ReadFileInFull(name, buffer);
+
+			shaders2Handles.push_back(dev.CreateShader(buffer.data(), buffer.size(), dev.ConvertShaderFlags(name)));
+		}
+		else
+		{
+			std::string uncompiled = name.substr(0, name.length() - 4);
+
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+
+			if (buffer.back() != '\0') buffer.push_back('\0');
+
+			shaders2Handles.push_back(dev.CompileShader(buffer.data(), dev.ConvertShaderFlags(name)));
+		}
+
+		shaders[counter++] = shaders2Handles[i];
+	}
+
 
 	auto mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
 
@@ -283,7 +383,7 @@ void RenderInstance::CreatePipelines()
 	genericObjectBuilder.CreateDescriptorSetLayout(regularMeshConatiners[1]);
 
 	mainRenderPassCache->CreatePipeline(regularMeshConatiners.data(), regularMeshConatiners.size(), nullptr, 0, nullptr, 0, 
-		shaders1.data(), shaders1.size(), VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline"
+		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline"
 	);
 
 	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
@@ -294,7 +394,7 @@ void RenderInstance::CreatePipelines()
 		textDescriptorContainers.data(), textDescriptorContainers.size(), 
 		bindings.data(), 1,
 		ref.data(), ref.size(), 
-		shaders2.data(), shaders2.size(), 
+		shaders2Handles.data(), shaders2Handles.size(),
 		VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text"
 	);
 }

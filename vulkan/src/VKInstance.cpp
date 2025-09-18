@@ -5,18 +5,25 @@
 
 VKInstance::~VKInstance() {
 
+	auto callbacks = allocator();
 
-	
+	vkDestroySurfaceKHR(instance, renderSurface, nullptr);
+
+	VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
+
+	vkDestroyInstance(instance, &callbacks);
+
+	if (instanceTempMemory)
+	{
+		delete[](void*)instanceTempMemory;
+	}
 
 	if (allocator.instanceData)
 	{
 		delete[] allocator.instanceData;
 	}
 
-	if (instanceTempMemory)
-	{
-		delete[](void*)instanceTempMemory;
-	}
+	
 
 }
 

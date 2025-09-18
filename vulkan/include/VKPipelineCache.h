@@ -1,4 +1,5 @@
 #pragma once
+#include "IndexTypes.h"
 #include "VKUtilities.h"
 #include "VKTypes.h"
 #include "VertexTypes.h"
@@ -32,7 +33,7 @@ public:
 		uint32_t bindingCount,
 		VkVertexInputAttributeDescription* vertAttributes,
 		size_t vertAttributecount,
-		std::string* shaderNames,
+		EntryHandle* shaderHandles,
 		size_t shaderCount,
 		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 		std::string name);

@@ -28,7 +28,7 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 	uint32_t bindingCount,
 	VkVertexInputAttributeDescription* vertAttributes,
 	size_t vertAttributecount,
-	std::string* shaderNames,
+	EntryHandle* shaderHandles,
 	size_t shaderCount,
 	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
 	std::string name)
@@ -42,7 +42,6 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 																majorDev->AllocFromDeviceCache(sizeof(std::pair<VkShaderModule, VkShaderStageFlagBits>) * shaderCount));
 
 	auto& dslc = majorDev->descriptorLayoutCache;
-	auto& sc = majorDev->shaders;
 
 	for (std::size_t i = 0; i < descriptorSetCount; i++)
 	{
@@ -51,7 +50,7 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 
 	for (std::size_t i = 0; i < shaderCount; i++)
 	{
-		shaders[i] = sc.GetShader(shaderNames[i]);
+		shaders[i] = majorDev->GetShader(shaderHandles[i]);
 	}
 
 	auto co = CreateGraphicsPipeline(layouts, descriptorSetCount, 

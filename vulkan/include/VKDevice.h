@@ -20,7 +20,6 @@
 #include "VKPipelineObject.h"
 #include "VKDescriptorSetCache.h"
 #include "VKDescriptorLayoutCache.h"
-#include "VKShaderCache.h"
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
 #include "VKTexture.h"
@@ -341,6 +340,8 @@ public:
 
 	//CREATORS
 
+	EntryHandle CompileShader(char* data, VkShaderStageFlags flags);
+
 	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
@@ -417,6 +418,8 @@ public:
 
 	EntryHandle* CreateSemaphores(uint32_t count);
 
+	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
+
 	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
 
 	//GETTERS
@@ -477,6 +480,8 @@ public:
 
 	VkSemaphore GetSemaphore(EntryHandle index);
 
+	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShader(EntryHandle shaderHandle);
+
 	VKSwapChain* GetSwapChain(EntryHandle index);
 
 
@@ -484,11 +489,33 @@ public:
 
 	//Destructors
 
+	void DestroyBuffer(EntryHandle handle);
+
+	void DestroyCommandBuffer(EntryHandle handle);
+
+	void DestroyDescriptorPool(EntryHandle handle);
+
+	void DestroyDevice();
+
 	void DestroyImage(EntryHandle imageIndex);
+
+	void DestroyImagePool(EntryHandle handle);
 
 	void DestroyImageView(EntryHandle imageViewIndex);
 
+	void DestroyPipelineCache(EntryHandle handle);
+
+	void DestroyRenderPass(EntryHandle handle);
+
+	void DestroyRenderTarget(EntryHandle handle);
+
 	void DestorySampler(EntryHandle samplerIndex);
+
+	void DestroySemaphore(EntryHandle handle);
+
+	void DestroyShader(EntryHandle shaderHandle);
+
+	void DestroyTexture(EntryHandle textureHandle);
 
 	//Allocation
 
@@ -505,6 +532,8 @@ public:
 
 
 	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
+
+	VkShaderStageFlagBits ConvertShaderFlags(const std::string& filename);
 
 	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
@@ -553,7 +582,6 @@ public:
 
 	VKDescriptorLayoutCache descriptorLayoutCache;
 	VKDescriptorSetCache descriptorSetCache;
-	VKShaderCache shaders;
 
 	SharedExclusiveFlag deviceLock;
 
@@ -566,7 +594,6 @@ public:
 	size_t perDeviceSize;
 
 	void* deviceLocalCache;
-	//size_t cacheRead;
 	size_t cacheWrite;
 	size_t deviceLocalCacheSize;
 };

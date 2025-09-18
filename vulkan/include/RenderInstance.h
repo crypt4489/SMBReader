@@ -48,7 +48,9 @@ struct ThreadedRecordBuffer
 		{
 			invalidate.Wait(stoken);
 
-			if (stoken.stop_requested()) break;
+			if (stoken.stop_requested()) {
+				break;
+			}
 
 			DrawMain(false);
 
@@ -86,6 +88,8 @@ class RenderInstance
 public:
 
 	RenderInstance();
+
+	~RenderInstance();
 
 	void CreateDepthImage(uint32_t width, uint32_t height);
 
@@ -170,6 +174,8 @@ public:
 
 	void MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex);
 
+	void DestoryTexture(EntryHandle handle);
+
 	VKInstance vkInstance;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -194,6 +200,8 @@ public:
 	VkFormat depthFormat;
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
+
+	std::array<EntryHandle, 4> shaders;
 	
 };
 

@@ -54,6 +54,8 @@ public:
 
 	void DestroySwapChain();
 
+	void DestroySyncObject();
+
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
 	void CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present);

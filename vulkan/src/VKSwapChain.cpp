@@ -316,6 +316,25 @@ void VKSwapChain::DestroySwapChain()
 {
 	if (swapChain) {
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
+		swapChain = VK_NULL_HANDLE;
+	}
+
+	device->DestroyRenderTarget(renderTargetIndex);
+}
+
+void VKSwapChain::DestroySyncObject()
+{
+	size_t totalCount = semaphorePerStage * numberOfStages * imageCount;
+
+	uintptr_t dependencies = GetDependencies(this);
+
+	uintptr_t dependenciesdata = dependencies + (sizeof(uintptr_t) * imageCount);
+
+	EntryHandle* ptr2 = reinterpret_cast<EntryHandle*>(dependenciesdata);
+	
+	for (size_t i = 0; i < totalCount; i++)
+	{
+		device->DestroySemaphore(ptr2[i]);
 	}
 }
 
