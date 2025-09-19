@@ -81,10 +81,10 @@
     <ClCompile Include="vulkan\src\VKPipelineCache.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\src\VKDescriptorLayoutCache.cpp">
+    <ClCompile Include="vulkan\src\VKDescriptorLayoutBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\src\VKDescriptorSetCache.cpp">
+    <ClCompile Include="vulkan\src\VKDescriptorSetBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="vulkan\src\VKInstance.cpp">
@@ -167,7 +167,7 @@
     <ClInclude Include="vulkan\include\VKPipelineCache.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan\include\VKDescriptorLayoutCache.h">
+    <ClInclude Include="vulkan\include\VKDescriptorLayoutBuilder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\MathTypes.h">
@@ -179,7 +179,7 @@
     <ClInclude Include="vulkan\include\VKDevice.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan\include\VKDescriptorSetCache.h">
+    <ClInclude Include="vulkan\include\VKDescriptorSetBuilder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="vulkan\include\VKUtilities.h">

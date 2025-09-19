@@ -3,6 +3,7 @@
 #include "AppTypes.h"
 #include "RenderInstance.h"
 #include "VertexTypes.h"
+#include "VKDescriptorSetBuilder.h"
 #include "VKPipelineObject.h"
 
 GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : objectIndex(_oi)
@@ -34,11 +35,11 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		auto rendInst = VKRenderer::gRenderInstance;
 		uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 
-		DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("genericobject", frames);
+		DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["genericobject"], frames);
 		OffsetIndex offset = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, 16);
-		dsb.AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, 0);
-		dsb.AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
-		dsb.AddDescriptorsToCache(genericpipeline);
+		dsb->AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, 0);
+		dsb->AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
+		EntryHandle descHandle = dsb->AddDescriptorsToCache();
 
 		VKPipelineObjectCreateInfo create = {
 			.drawType = 0,
@@ -47,8 +48,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.vertexCount = static_cast<uint32_t>(vertexCount),
 			.indirectDrawBuffer{},
 			.indirectDrawOffset = ~0U,
-			.pipelinename = genericpipeline,
-			.descriptorsetname = genericpipeline,
+			.pipelinename = rendInst->pipelinesIdentifier[genericpipeline],
+			.descriptorsetid = descHandle,
 			.maxDynCap = 1,
 			.data = nullptr
 

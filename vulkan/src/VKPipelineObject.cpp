@@ -13,7 +13,7 @@ VKPipelineObject::VKPipelineObject(
 	VKPipelineObjectCreateInfo* createinfo)
 	:
 	pipelineType(createinfo->pipelinename),
-	descriptorSetName(createinfo->descriptorsetname),
+	descriptorSetId(createinfo->descriptorsetid),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
@@ -32,9 +32,9 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 {
 	uint32_t drawSize = static_cast<uint32_t>(vertexCount);
 
-	if (!descriptorSetName.empty()) {
+	if (EntryHandle() != descriptorSetId) {
 
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, objectCount, objectData);
+		rbo.BindDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
 	}
 
 	if (vertexBufferIndex != ~0ui64)
@@ -54,9 +54,9 @@ void VKPipelineObject::DrawIndirectOneBuffer(
 	
 	
 
-	if (!descriptorSetName.empty()) {
+	if (EntryHandle() != descriptorSetId) {
 
-		rbo.BindDescriptorSets(descriptorSetName, frame, 1, firstSet, objectCount, objectData);
+		rbo.BindDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
 	}
 		
 

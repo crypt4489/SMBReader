@@ -1,10 +1,9 @@
-#include "VKDescriptorLayoutCache.h"
+#include "VKDescriptorLayoutBuilder.h"
 #include "VKDevice.h"
 
-DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(VKDevice* d, VKDescriptorLayoutCache* coa, uint32_t _bc)
+DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc)
 	:
 	device(d),
-	cacheObj(coa),
 	bindingCounts(_bc),
 	counter(0),
 	descSetBindings(
@@ -15,11 +14,11 @@ DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(VKDevice* d, VKDescriptor
 
 }
 
-VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(std::string name)
+VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 {
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
-	if (!counter)
+	if (counter != bindingCounts)
 		return descriptorSetLayout;
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
@@ -30,8 +29,6 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout(std:
 	if (vkCreateDescriptorSetLayout(device->device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor set layout!");
 	}
-
-	cacheObj->AddLayout(name, descriptorSetLayout);
 
 	return descriptorSetLayout;
 }
@@ -67,32 +64,4 @@ void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShad
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[counter++] = layoutBinding;
-}
-
-
-VkDescriptorSetLayout VKDescriptorLayoutCache::GetLayout(std::string name)
-{
-	auto found = cache.find(name);
-	if (found == std::end(cache))
-	{
-		throw std::runtime_error("Cannot find descriptor set layout from cache");
-	}
-	return found->second;
-}
-
-void VKDescriptorLayoutCache::AddLayout(std::string name, VkDescriptorSetLayout& layout)
-{
-	auto found = cache.find(name);
-	if (found == std::end(cache))
-	{
-		cache[name] = layout;
-	}
-}
-
-void VKDescriptorLayoutCache::DestroyLayoutCache()
-{
-	for (auto& i : cache)
-	{
-		vkDestroyDescriptorSetLayout(device, i.second, nullptr);
-	}
 }

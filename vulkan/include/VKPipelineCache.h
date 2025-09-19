@@ -20,14 +20,14 @@ class VKPipelineCache
 {
 public:
 	VKPipelineCache() = default;
-	VKPipelineCache(VkDevice _d, VkRenderPass _rp, VKDevice *d);
+	VKPipelineCache(VkRenderPass _rp, VKDevice *d);
 
-	PipelineCacheObject* operator[](std::string name);
+	PipelineCacheObject* operator[](EntryHandle name);
 
-	PipelineCacheObject* GetPipelineFromCache(const std::string& name);
+	PipelineCacheObject* GetPipelineFromCache(EntryHandle name);
 
-	PipelineCacheObject CreatePipeline(
-		std::string* descriptorSetLayoutNames,
+	EntryHandle CreatePipeline(
+		EntryHandle* descriptorlaysids,
 		size_t descriptorSetCount,
 		VkVertexInputBindingDescription* bindDescription,
 		uint32_t bindingCount,
@@ -35,8 +35,7 @@ public:
 		size_t vertAttributecount,
 		EntryHandle* shaderHandles,
 		size_t shaderCount,
-		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
-		std::string name);
+		VkCompareOp depthOp, VkSampleCountFlagBits sampleCount);
 
 	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
 
@@ -52,11 +51,7 @@ public:
 
 	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);
 
-	void DestroyPipelineCache();
-
-	std::unordered_map<std::string, PipelineCacheObject> pipelines;
 	VkRenderPass renderPass;
-	VkDevice device;
 	VKDevice *majorDev;
 };
 

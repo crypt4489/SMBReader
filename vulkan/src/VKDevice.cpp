@@ -3,6 +3,11 @@
 #include "GlslangCompiler.h"
 #include "VKRenderGraph.h"
 #include "VKInstance.h"
+#include "VKRenderPassBuilder.h"
+#include "VKDescriptorLayoutBuilder.h"
+#include "VKDescriptorSetBuilder.h"
+#include "VKPipelineCache.h"
+#include "VKSwapChain.h"
 #include "VKTexture.h"
 #include "VKUtilities.h"
 
@@ -15,7 +20,7 @@ RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& 
 
 }
 
-void RecordingBufferObject::BindPipeline(EntryHandle renderTarget, std::string pipelinename)
+void RecordingBufferObject::BindPipeline(EntryHandle renderTarget, EntryHandle pipelinename)
 {
 	auto pbo = vkDeviceHandle.GetPipelineCache(renderTarget);
 	auto pco = (*pbo)[pipelinename];
@@ -24,11 +29,10 @@ void RecordingBufferObject::BindPipeline(EntryHandle renderTarget, std::string p
 	vkCmdBindPipeline(cbBufferHandler.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currPipeline);
 }
 
-void RecordingBufferObject::BindDescriptorSets(std::string descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
+void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
 	uint32_t dynamicOffsetCount, uint32_t* offsets)
 {
-	auto descsets = vkDeviceHandle.descriptorSetCache;
-	auto descset = descsets.GetDescriptorSetPerFrame(descriptorname, descriptorNumber);
+	auto descset = vkDeviceHandle.GetDescriptorSet(descriptorname, descriptorNumber);
 	vkCmdBindDescriptorSets(
 		cbBufferHandler.buffer, 
 		VK_PIPELINE_BIND_POINT_GRAPHICS, currLayout, 
@@ -148,8 +152,6 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 	parentInstance(_inst),
 	queueManagers(),
 	queueManagersSize(0),
-	descriptorLayoutCache(),
-	descriptorSetCache(),
 	deviceLock(),
 	entries(nullptr),
 	indexForEntries(0),
@@ -170,8 +172,6 @@ VKDevice::~VKDevice()
 	if (device)
 	{
 		vkDeviceWaitIdle(device);
-
-		descriptorLayoutCache.DestroyLayoutCache();
 
 		if (perDeviceData)
 		{
@@ -388,19 +388,57 @@ DescriptorPoolBuilder VKDevice::CreateDescriptorPoolBuilder(size_t poolSize)
 	return builder;
 }
 
-DescriptorSetBuilder VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets)
+DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle layout, uint32_t numberofsets)
 {
 	std::shared_lock lock(deviceLock);
-	DescriptorSetBuilder dsb{ this, &descriptorSetCache, numberofsets };
-	auto ref = descriptorLayoutCache.GetLayout(layoutname);
-	dsb.AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets);
+
+	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
+
+	DescriptorSetBuilder *dsb = std::construct_at(data, this, numberofsets);
+	auto ref = GetDescriptorSetLayout(layout);
+	dsb->AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets);
 	return dsb;
 }
 
-DescriptorSetLayoutBuilder VKDevice::CreateDescriptorSetLayoutBuilder(uint32_t bindingCount)
+DescriptorSetLayoutBuilder* VKDevice::CreateDescriptorSetLayoutBuilder(uint32_t bindingCount)
 {
-	return { this, &descriptorLayoutCache, bindingCount };
+	DescriptorSetLayoutBuilder* builder = reinterpret_cast<DescriptorSetLayoutBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetLayoutBuilder)));
+
+	builder = std::construct_at(builder, this, bindingCount);
+
+	return builder;
 }
+
+
+
+EntryHandle VKDevice::CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets) {
+	using LocalType = std::pair<uint32_t, VkDescriptorSet*>;
+	LocalType* alloc = reinterpret_cast<LocalType*>(AllocTypeFromEntry(sizeof(LocalType)));
+	alloc->first = numberOfSets;
+	alloc->second = set;
+
+	EntryHandle ret;
+
+	{
+		ret = AddVkTypeToEntry(alloc);
+	}
+
+	return ret;
+}
+
+EntryHandle VKDevice::CreateDescriptorSetLayout(DescriptorSetLayoutBuilder* builder)
+{
+	VkDescriptorSetLayout descLay = builder->CreateDescriptorSetLayout();
+
+	EntryHandle ret;
+
+	{
+		ret = AddVkTypeToEntry(descLay);
+	}
+
+	return ret;
+}
+
 
 EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 {
@@ -714,8 +752,6 @@ void VKDevice::CreateLogicalDevice(
 		throw std::runtime_error("failed to create logical GPU, mate!");
 	}
 
-	descriptorLayoutCache.device = device;
-
 	QueueManager* ptr = (QueueManager*)AllocTypeFromEntry(sizeof(QueueManager) * queueIndices.size());
 
 	queueManagersSize = queueIndices.size();
@@ -741,7 +777,7 @@ void VKDevice::CreatePipelineCache(EntryHandle renderPassIndex)
 
 	auto renderPass = GetRenderPass(renderPassIndex);
 
-	std::construct_at(renderPassData, device, renderPass, this);
+	std::construct_at(renderPassData, renderPass, this);
 }
 
 EntryHandle VKDevice::CreatePipelineObject(VKPipelineObjectCreateInfo* info)
@@ -774,6 +810,25 @@ void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, ui
 		maxCount, queueIndex, 
 		queueFlags, presentsupport, 
 		*this, queueManagerData);
+}
+
+EntryHandle VKDevice::CreatePipelineCacheObect(PipelineCacheObject* obj)
+{
+	std::shared_lock lock(deviceLock);
+
+	PipelineCacheObject* perObj = reinterpret_cast<PipelineCacheObject*>(AllocTypeFromEntry(sizeof(PipelineCacheObject)));
+
+	perObj->descLayout = obj->descLayout;
+	perObj->pipeline = obj->pipeline;
+	perObj->pipelineLayout = obj->pipelineLayout;
+
+	EntryHandle ret;
+
+	{
+		ret = AddVkTypeToEntry(perObj);
+	}
+
+	return ret;
 }
 
 #define MAX_PIPELINE_OBJECTS 50
@@ -1116,11 +1171,16 @@ void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 	vkDestroyDescriptorPool(device, pool, nullptr);
 }
 
+void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	VkDescriptorSetLayout lay = GetDescriptorSetLayout(handle);
+	vkDestroyDescriptorSetLayout(device, lay, nullptr);
+}
+
 void VKDevice::DestroyDevice()
 {
 	vkDeviceWaitIdle(device);
-
-	descriptorLayoutCache.DestroyLayoutCache();
 
 	QueueManager* ptr = reinterpret_cast<QueueManager*>(GetVkTypeFromEntry(queueManagers));
 
@@ -1181,8 +1241,6 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 
-	DestroyPipelineCache(handle);
-
 	VkRenderPass pass = GetRenderPass(handle);
 
 	vkDestroyRenderPass(device, pass, nullptr);
@@ -1211,13 +1269,17 @@ void VKDevice::DestroyImageView(EntryHandle imageViewIndex)
 	vkDestroyImageView(device, view, nullptr);
 }
 
-void VKDevice::DestroyPipelineCache(EntryHandle handle)
+void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 
-	VKPipelineCache* cache = GetPipelineCache(handle);
+	PipelineCacheObject* obj = GetPipelineCacheObject(handle);
 
-	cache->DestroyPipelineCache();
+	vkDestroyPipeline(device, obj->pipeline, nullptr);
+
+	vkDestroyPipelineLayout(device, obj->pipelineLayout, nullptr);
+
+	
 }
 
 void VKDevice::DestorySampler(EntryHandle samplerIndex)
@@ -1282,6 +1344,23 @@ VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle poolIndex)
 	std::shared_lock lock(deviceLock);
 	return reinterpret_cast<VkDescriptorPool>(GetVkTypeFromEntry(poolIndex));
 }
+
+VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
+{
+	std::shared_lock lock(deviceLock);
+	using LocalType = std::pair<uint32_t, VkDescriptorSet*>;
+	LocalType* set = reinterpret_cast<LocalType*>(GetVkTypeFromEntry(handle));
+	if (set->first <= index) throw std::runtime_error("Come on!");
+	return set->second[index];
+
+}
+
+VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VkDescriptorSetLayout>(GetVkTypeFromEntry(index));
+}
+
 
 uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t *size, uint32_t capabilities)
 {
@@ -1350,6 +1429,12 @@ VKPipelineCache* VKDevice::GetPipelineCache(EntryHandle renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
 	return reinterpret_cast<VKPipelineCache*>((reinterpret_cast<uintptr_t>(GetRenderGraph(renderPassIndex)) + sizeof(VKRenderGraph)));
+}
+
+PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<PipelineCacheObject*>(GetVkTypeFromEntry(index));
 }
 
 VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle index)
@@ -1750,17 +1835,14 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 }
 
 
-void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, std::string perGraphDescriptor)
+void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle perGraphDescriptor)
 {
 	std::shared_lock lock(deviceLock);
 
 	auto graph = reinterpret_cast<VKRenderGraph*>(GetVkTypeFromEntry(renderPass + 1));
 
-	if (!perGraphDescriptor.empty())
-	{
-		graph->descriptorname = perGraphDescriptor;
-	}
-
+	graph->descriptorId = perGraphDescriptor;
+	
 	for (uint32_t i = 0; i<dos; i++)
 	{
 		graph->AddDynamicOffset(dynamicOffsets[i]);

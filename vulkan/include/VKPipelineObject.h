@@ -14,8 +14,8 @@ struct VKPipelineObjectCreateInfo
 	uint32_t vertexCount;
 	EntryHandle indirectDrawBuffer;
 	uint32_t indirectDrawOffset;
-	std::string pipelinename;
-	std::string descriptorsetname;
+	EntryHandle pipelinename;
+	EntryHandle descriptorsetid;
 	uint32_t maxDynCap;
 	uint32_t* data;
 };
@@ -43,7 +43,8 @@ public:
 	uint32_t *objectData;
 	uint32_t maxObjectCapacity, objectCount;
 
-	std::string pipelineType, descriptorSetName;
+	EntryHandle pipelineType;
+	EntryHandle descriptorSetId;
 
 	EntryHandle vertexBufferIndex, indirectBufferIndex;
 	uint32_t drawType;

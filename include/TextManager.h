@@ -71,5 +71,6 @@ public:
 	static Font* fonts;
 	static VKPipelineObject* obj;
 	static std::vector<std::tuple<Text*, size_t, size_t>> textsCommand;
+	static EntryHandle descHandle;
 };
 

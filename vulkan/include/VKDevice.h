@@ -16,15 +16,6 @@
 #include "VKTypes.h"
 
 
-#include "VKPipelineCache.h"
-#include "VKPipelineObject.h"
-#include "VKDescriptorSetCache.h"
-#include "VKDescriptorLayoutCache.h"
-#include "VKRenderPassBuilder.h"
-#include "VKSwapChain.h"
-#include "VKTexture.h"
-#include "VKUtilities.h"
-
 class VKDevice;
 
 struct DescriptorPoolBuilder
@@ -231,9 +222,9 @@ public:
 
 	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
 
-	void BindPipeline(EntryHandle renderTarget, std::string pipelinename);
+	void BindPipeline(EntryHandle renderTarget, EntryHandle pipelinename);
 
-	void BindDescriptorSets(std::string descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+	void BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
 	void BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
@@ -348,9 +339,13 @@ public:
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize);
 
-	DescriptorSetBuilder CreateDescriptorSetBuilder(EntryHandle poolIndex, std::string layoutname, uint32_t numberofsets);
+	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle layout, uint32_t numberofsets);
 
-	DescriptorSetLayoutBuilder CreateDescriptorSetLayoutBuilder(uint32_t bindingCount);
+	DescriptorSetLayoutBuilder* CreateDescriptorSetLayoutBuilder(uint32_t bindingCount);
+
+	EntryHandle CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets);
+
+	EntryHandle CreateDescriptorSetLayout(DescriptorSetLayoutBuilder* builder);
 
 	EntryHandle* CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
@@ -387,6 +382,8 @@ public:
 	);
 
 	void CreatePipelineCache(EntryHandle renderPassIndex);
+
+	EntryHandle CreatePipelineCacheObect(PipelineCacheObject* obj);
 
 	EntryHandle CreatePipelineObject(VKPipelineObjectCreateInfo* info);
 
@@ -432,6 +429,10 @@ public:
 
 	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
 
+	VkDescriptorSet GetDescriptorSet(EntryHandle handle, uint32_t index);
+
+	VkDescriptorSetLayout GetDescriptorSetLayout(EntryHandle index);
+
 	uint32_t GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t* size, uint32_t capabilities);
 
 	VkFence GetFence(EntryHandle index);
@@ -449,6 +450,8 @@ public:
 	VkImageView GetImageViewByTexture(EntryHandle index);
 
 	VKPipelineCache* GetPipelineCache(EntryHandle renderPassIndex);
+
+	PipelineCacheObject* GetPipelineCacheObject(EntryHandle index);
 
 	VKPipelineObject* GetPipelineObject(EntryHandle index);
 
@@ -495,6 +498,8 @@ public:
 
 	void DestroyDescriptorPool(EntryHandle handle);
 
+	void DestroyDescriptorLayout(EntryHandle handle);
+
 	void DestroyDevice();
 
 	void DestroyImage(EntryHandle imageIndex);
@@ -503,7 +508,7 @@ public:
 
 	void DestroyImageView(EntryHandle imageViewIndex);
 
-	void DestroyPipelineCache(EntryHandle handle);
+	void DestroyPipelineCacheObject(EntryHandle handle);
 
 	void DestroyRenderPass(EntryHandle handle);
 
@@ -566,7 +571,7 @@ public:
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, std::string perGraphDescriptor);
+	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle perGraphDescriptor);
 
 	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
 	
@@ -579,9 +584,6 @@ public:
 	VKInstance* parentInstance;
 	EntryHandle queueManagers;
 	size_t queueManagersSize;
-
-	VKDescriptorLayoutCache descriptorLayoutCache;
-	VKDescriptorSetCache descriptorSetCache;
 
 	SharedExclusiveFlag deviceLock;
 

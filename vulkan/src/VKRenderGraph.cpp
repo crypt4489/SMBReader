@@ -20,19 +20,19 @@ void VKRenderGraph::DrawScene(RecordingBufferObject& rbo, uint32_t frameNum)
 
 		auto obj = objects[i];
 
-		std::string name = obj->pipelineType;
+		EntryHandle handle = obj->pipelineType;
 
-		if (name != currentPipeline)
+		if (handle != currentPipeline)
 		{
-			currentPipeline = name;
-			rbo.BindPipeline(renderTargetIndex, name);
-			rbo.BindDescriptorSets(descriptorname, frameNum, 1, 0, dynamicCount, dynamicOffsets);
+			currentPipeline = handle;
+			rbo.BindPipeline(renderTargetIndex, handle);
+			rbo.BindDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
 		}
 
 		obj->Draw(rbo, frameNum, 1);
 	}
 
-	currentPipeline.clear();
+	currentPipeline = EntryHandle();
 }
 
 void VKRenderGraph::AddObject(VKPipelineObject* obj)

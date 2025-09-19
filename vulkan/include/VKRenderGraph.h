@@ -30,9 +30,9 @@ public:
 	
 	EntryHandle renderTargetIndex;
 
-	std::string currentPipeline = "";
+	EntryHandle currentPipeline;
 
-	std::string descriptorname = "";
+	EntryHandle descriptorId;
 
 	uint32_t* dynamicOffsets;
 

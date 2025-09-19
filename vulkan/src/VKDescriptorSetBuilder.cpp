@@ -1,15 +1,15 @@
-#include "VKDescriptorSetCache.h"
+#include "VKDescriptorSetBuilder.h"
 #include "VKDevice.h"
 
 
-DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, VKDescriptorSetCache* c, size_t _ds)
+DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, size_t _ds)
 	:
 	device(_d),
-	cache(c),
 	counter(0),
 	descriptorSize(_ds),
 	descriptorSets(reinterpret_cast<VkDescriptorSet*>(_d->AllocTypeFromEntry(sizeof(VkDescriptorSet) * _ds)))
 {
+
 };
 
 void DescriptorSetBuilder::AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames)
@@ -120,31 +120,7 @@ void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescript
 	}
 }
 
-void DescriptorSetBuilder::AddDescriptorsToCache(std::string name)
+EntryHandle DescriptorSetBuilder::AddDescriptorsToCache()
 {
-	cache->AddDesciptorSet(name, descriptorSets, descriptorSize);
-}
-
-VkDescriptorSet VKDescriptorSetCache::GetDescriptorSetPerFrame(std::string& id, uint32_t frame)
-{
-	VkDescriptorSet set = VK_NULL_HANDLE;
-
-	auto found = descriptorSetCache.find(id);
-	if (found == std::end(descriptorSetCache))
-	{
-		throw std::runtime_error("No descriptor set found");
-	}
-	auto& sets = found->second;
-	size_t size = sets.first;
-	if (frame >= size)
-	{
-		throw std::runtime_error("No descriptor set found for frame number");
-	}
-	set = sets.second[frame];
-	return set;
-}
-
-void VKDescriptorSetCache::AddDesciptorSet(std::string& id, VkDescriptorSet* set, uint32_t frames)
-{
-	descriptorSetCache[id] = { frames, set }; // this is a copy right
+	return device->CreateDescriptorSet(descriptorSets, descriptorSize);
 }

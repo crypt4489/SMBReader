@@ -1,28 +1,22 @@
 #include "VKPipelineCache.h"
 #include "VKDevice.h"
-VKPipelineCache::VKPipelineCache(VkDevice _d, VkRenderPass _rp, VKDevice *d) : device(_d), renderPass(_rp), majorDev(d)
+VKPipelineCache::VKPipelineCache(VkRenderPass _rp, VKDevice *d) : renderPass(_rp), majorDev(d)
 {
 
 }
 
-PipelineCacheObject* VKPipelineCache::GetPipelineFromCache(const std::string& name)
+PipelineCacheObject* VKPipelineCache::GetPipelineFromCache(EntryHandle handle)
 {
-	auto found = pipelines.find(name);
-	if (found == std::end(pipelines))
-	{
-		throw std::runtime_error("Cannot find pipeline from cache");
-	}
-	return &(found->second);
-
+	return majorDev->GetPipelineCacheObject(handle);
 }
 
-PipelineCacheObject* VKPipelineCache::operator[](std::string name)
+PipelineCacheObject* VKPipelineCache::operator[](EntryHandle name)
 {
 	return GetPipelineFromCache(name);
 }
 
-PipelineCacheObject VKPipelineCache::CreatePipeline(
-	std::string* descriptorSetLayoutNames,
+EntryHandle VKPipelineCache::CreatePipeline(
+	EntryHandle* descriptorlaysids,
 	size_t descriptorSetCount,
 	VkVertexInputBindingDescription* bindDescription,
 	uint32_t bindingCount,
@@ -30,8 +24,7 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 	size_t vertAttributecount,
 	EntryHandle* shaderHandles,
 	size_t shaderCount,
-	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount,
-	std::string name)
+	VkCompareOp depthOp, VkSampleCountFlagBits sampleCount)
 {
 	
 
@@ -41,11 +34,9 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 	std::pair<VkShaderModule, VkShaderStageFlagBits> *shaders = reinterpret_cast<std::pair<VkShaderModule, VkShaderStageFlagBits>*>(
 																majorDev->AllocFromDeviceCache(sizeof(std::pair<VkShaderModule, VkShaderStageFlagBits>) * shaderCount));
 
-	auto& dslc = majorDev->descriptorLayoutCache;
-
 	for (std::size_t i = 0; i < descriptorSetCount; i++)
 	{
-		layouts[i] = dslc.GetLayout(descriptorSetLayoutNames[i]);
+		layouts[i] = majorDev->GetDescriptorSetLayout(descriptorlaysids[i]);
 	}
 
 	for (std::size_t i = 0; i < shaderCount; i++)
@@ -60,8 +51,8 @@ PipelineCacheObject VKPipelineCache::CreatePipeline(
 		depthOp, sampleCount
 	);
 
-	pipelines[name] = co;
-	return co;
+	EntryHandle ret = majorDev->CreatePipelineCacheObect(&co);
+	return ret;
 }
 
 VkPipelineLayout VKPipelineCache::CreatePipelineLayout(VkDescriptorSetLayout *descriptorSetLayout, uint32_t count)
@@ -78,7 +69,7 @@ VkPipelineLayout VKPipelineCache::CreatePipelineLayout(VkDescriptorSetLayout *de
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
-	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+	if (vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create pipeline layout!");
 	}
 
@@ -213,7 +204,7 @@ PipelineCacheObject VKPipelineCache::CreateGraphicsPipeline(VkDescriptorSetLayou
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
+	if (vkCreateGraphicsPipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create graphics pipeline!");
 	}
 
@@ -234,14 +225,4 @@ VkPipelineShaderStageCreateInfo VKPipelineCache::AddShader(VkShaderModule& mod, 
 	shaderStageInfo.module = mod;
 	shaderStageInfo.pName = "main";
 	return shaderStageInfo;
-}
-
-void VKPipelineCache::DestroyPipelineCache()
-{
-	for (auto& i : pipelines)
-	{
-		vkDestroyPipeline(device, i.second.pipeline, nullptr);
-
-		vkDestroyPipelineLayout(device, i.second.pipelineLayout, nullptr);
-	}
 }

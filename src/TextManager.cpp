@@ -1,8 +1,10 @@
 #include "TextManager.h"
 #include "FileManager.h"
+
 #include "RenderInstance.h"
 #include "VertexTypes.h"
 #include "VKPipelineObject.h"
+#include "VKDescriptorSetBuilder.h"
 OffsetIndex TextManager::bufferOffset = std::move(OffsetIndex(0UL));
 Font* TextManager::fonts;
 size_t TextManager::vertexCount = 0;
@@ -10,7 +12,7 @@ size_t TextManager::commandCount = 0;
 VKPipelineObject* TextManager::obj;
 std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
 OffsetIndex TextManager::vertexBufferOffset = std::move(OffsetIndex(0UL)), TextManager::indirectCommandsOffset = std::move(OffsetIndex(0UL));
-
+EntryHandle TextManager::descHandle;
 
 void TextManager::CreateFontTextManager(const std::string& imageName, const std::string& dataName)
 {
@@ -25,6 +27,12 @@ void TextManager::CreatePipelineObject()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
+
+	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+	DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["oneimage"], frames);
+	dsb->AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
+	descHandle = dsb->AddDescriptorsToCache();
+
 	VKPipelineObjectCreateInfo create = {
 		.drawType = 1,
 		.vertexBufferIndex = rendInst->GetMainBufferIndex(),
@@ -32,20 +40,13 @@ void TextManager::CreatePipelineObject()
 		.vertexCount = ~0U,
 		.indirectDrawBuffer = rendInst->GetMainBufferIndex(),
 		.indirectDrawOffset = indirectCommandsOffset,
-		.pipelinename = text,
-		.descriptorsetname = text,
+		.pipelinename = rendInst->pipelinesIdentifier[text],
+		.descriptorsetid = descHandle,
 		.maxDynCap = 0,
 		.data = nullptr
 	};
 	
 	obj = new VKPipelineObject(&create);
-
-	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-	DescriptorSetBuilder dsb = rendInst->CreateDescriptorSet("oneimage", frames);
-	dsb.AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
-	dsb.AddDescriptorsToCache(text);
-
-	//rendInst->CreateVulkanPipelineObject(obj);
 }
 
 void TextManager::CreateTextBuffer()

@@ -11,9 +11,10 @@
 
 class SharedExclusiveFlag
 {
+public:
     std::atomic_flag exclusiveFlag;
     std::atomic<int> sharedCount;
-public:
+
 
     void lock() noexcept
     {
@@ -95,7 +96,6 @@ public:
     
     void Notify();
 
-private:
     int count;
     std::mutex lock;
     std::condition_variable cv;
@@ -116,7 +116,6 @@ public:
 
     void Notify(); //used by consumer
 
-private:
     bool count;
     std::mutex lock;
     std::condition_variable_any cv;
@@ -128,7 +127,6 @@ public:
     SemaphoreGuard(Semaphore& _s) : sema(_s) { sema.Wait(); }
     ~SemaphoreGuard() { sema.Notify(); }
 
-private:
     Semaphore& sema;
 };
 

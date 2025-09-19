@@ -6,7 +6,6 @@
 #include "AppTypes.h"
 #include "IndexTypes.h"
 #include "VKInstance.h"
-#include "VKDescriptorSetCache.h"
 #include "VKRenderGraph.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
@@ -38,7 +37,6 @@ struct ThreadedRecordBuffer
 
 	void Invalidate()
 	{
-		ready.store(false);
 		invalidate.Notify();
 	}
 
@@ -66,6 +64,7 @@ struct ThreadedRecordBuffer
 			invalidate.Wait();
 		}
 
+	
 		uint32_t next = (currentBuffer + 1) % N;
 
 		EntryHandle recordBuffer = buffers[next];
@@ -82,6 +81,7 @@ struct ThreadedRecordBuffer
 		
 	}
 };
+
 
 class RenderInstance
 {
@@ -152,7 +152,7 @@ public:
 
 	void SetResizeBool(bool set);
 
-	DescriptorSetBuilder CreateDescriptorSet(std::string layoutname, uint32_t frames);
+	DescriptorSetBuilder* CreateDescriptorSet(EntryHandle layoutname, uint32_t frames);
 	
 	uint32_t GetCurrentFrame() const;
 
@@ -202,6 +202,10 @@ public:
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	std::array<EntryHandle, 4> shaders;
+
+	std::unordered_map<std::string, EntryHandle> pipelinesIdentifier;
+	std::unordered_map<std::string, EntryHandle> descriptorLayouts;
+
 	
 };
 

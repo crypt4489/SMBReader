@@ -12,3 +12,7 @@ class VKRenderGraph;
 struct DescriptorSetLayoutBuilder;
 class VKRenderPassBuilder;
 class RecordingBufferObject;
+struct VKPipelineObjectCreateInfo;
+struct DescriptorSetLayoutBuilder;
+struct DescriptorSetBuilder;
+struct PipelineCacheObject;

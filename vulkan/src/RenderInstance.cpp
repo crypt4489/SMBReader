@@ -8,16 +8,12 @@
 #include <iostream>
 #include <vector>
 #include <limits>
-#include <map>
-#include <optional>
-#include <set>
-#include <unordered_map>
 
 #include "FileManager.h"
 #include "ThreadManager.h"
-#include "VKInstance.h"
-#include "VKDescriptorSetCache.h"
-#include "VKDescriptorLayoutCache.h"
+#include "VKDescriptorLayoutBuilder.h"
+#include "VKDescriptorSetBuilder.h"
+#include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
@@ -54,7 +50,17 @@ RenderInstance::~RenderInstance()
 		}
 	}
 
+	for (auto& i : descriptorLayouts)
+	{
+		dev.DestroyDescriptorLayout(i.second);
+	}
+
 	dev.DestroyDescriptorPool(descriptorPoolIndex);
+
+	for (auto& i : pipelinesIdentifier)
+	{
+		dev.DestroyPipelineCacheObject(i.second);
+	}
 
 	dev.DestroyRenderPass(mainRenderPass);
 
@@ -159,7 +165,7 @@ void RenderInstance::CreateRenderPass()
 		VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
-	rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 0, 0);
+	rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 2, 1);
 
 	rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
 		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
@@ -362,40 +368,43 @@ void RenderInstance::CreatePipelines()
 
 	auto mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
 
-	DescriptorSetLayoutBuilder textDescriptor = dev.CreateDescriptorSetLayoutBuilder(1);
-	DescriptorSetLayoutBuilder globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(1); 
-	DescriptorSetLayoutBuilder genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder(2);
-	std::vector<std::string> textDescriptorContainers = { "oneimage" };
-	std::vector<std::string> regularMeshConatiners = { "mainrenderpass", "genericobject" };
+	DescriptorSetLayoutBuilder* textDescriptor = dev.CreateDescriptorSetLayoutBuilder(1);
+	DescriptorSetLayoutBuilder* globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(1); 
+	DescriptorSetLayoutBuilder* genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder(2);
+	std::array<std::string, 1> textDescriptorContainers = { "oneimage" };
+	std::array<std::string, 2> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
-	textDescriptor.AddPixelImageSamplerLayout(0);
+	std::array<EntryHandle, 1> tdsIDs;
+	std::array<EntryHandle, 2> rmcIDs;
 
-	textDescriptor.CreateDescriptorSetLayout(textDescriptorContainers[0]);
+	textDescriptor->AddPixelImageSamplerLayout(0);
 
-	globalBufferBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+	descriptorLayouts[textDescriptorContainers[0]] = tdsIDs[0] = dev.CreateDescriptorSetLayout(textDescriptor);
 
-	globalBufferBuilder.CreateDescriptorSetLayout(regularMeshConatiners[0]);
+	globalBufferBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
-	genericObjectBuilder.AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
+	descriptorLayouts[regularMeshConatiners[0]] = rmcIDs[0] = dev.CreateDescriptorSetLayout(globalBufferBuilder);
 
-	genericObjectBuilder.AddPixelImageSamplerLayout(1);
+	genericObjectBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
-	genericObjectBuilder.CreateDescriptorSetLayout(regularMeshConatiners[1]);
+	genericObjectBuilder->AddPixelImageSamplerLayout(1);
 
-	mainRenderPassCache->CreatePipeline(regularMeshConatiners.data(), regularMeshConatiners.size(), nullptr, 0, nullptr, 0, 
-		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples(), "genericpipeline"
+	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev.CreateDescriptorSetLayout(genericObjectBuilder);
+
+	pipelinesIdentifier["genericpipeline"] = mainRenderPassCache->CreatePipeline(rmcIDs.data(), 2, nullptr, 0, nullptr, 0,
+		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples()
 	);
 
 	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
-	mainRenderPassCache->CreatePipeline(
-		textDescriptorContainers.data(), textDescriptorContainers.size(), 
+	pipelinesIdentifier["text"] = mainRenderPassCache->CreatePipeline(
+		tdsIDs.data(), 1,
 		bindings.data(), 1,
 		ref.data(), ref.size(), 
 		shaders2Handles.data(), shaders2Handles.size(),
-		VK_COMPARE_OP_ALWAYS, GetMSAASamples(), "text"
+		VK_COMPARE_OP_ALWAYS, GetMSAASamples()
 	);
 }
 
@@ -610,12 +619,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 {
 	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	DescriptorSetBuilder dsb = CreateDescriptorSet("mainrenderpass", MAX_FRAMES_IN_FLIGHT);
-	dsb.AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
-	dsb.AddDescriptorsToCache("mainrenderpass");
+	DescriptorSetBuilder *dsb = CreateDescriptorSet(descriptorLayouts["mainrenderpass"], MAX_FRAMES_IN_FLIGHT);
+	dsb->AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
+	EntryHandle mrpDescId =  dsb->AddDescriptorsToCache();
 	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
 	std::vector<uint32_t> data(1, perRenderPassStuff);
-	majorDevice.UpdateRenderGraph(mainRenderPass, data.data(), data.size(), "mainrenderpass");
+	majorDevice.UpdateRenderGraph(mainRenderPass, data.data(), data.size(), mrpDescId);
 	return perRenderPassStuff;
 }
 
@@ -655,7 +664,7 @@ uint32_t RenderInstance::GetSwapChainWidth()
 	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex)->GetSwapChainWidth();
 }
 
-DescriptorSetBuilder RenderInstance::CreateDescriptorSet(std::string layoutname, uint32_t frames)
+DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname, uint32_t frames)
 {
 	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
 	return dev.CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
