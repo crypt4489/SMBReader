@@ -1,9 +1,9 @@
 #pragma once
 
 #include "AppTextureImpl.h"
+#include "IndexTypes.h"
 #include "SMBFile.h"
 #include "SMBTexture.h"
-#include "VKTexture.h"
 
 
 class AppTexture

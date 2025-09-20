@@ -1,5 +1,5 @@
 #include "ApplicationLoop.h"
-
+#include "RenderInstance.h"
 #if defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
@@ -109,10 +109,10 @@ void ApplicationLoop::Execute()
 
 			UpdateRenderables();
 
-			auto index = rend->BeginFrame();
+			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
 			if (index != ~0ui32) {
-				rend->SubmitFrame(index);
+				VKRenderer::gRenderInstance->SubmitFrame(index);
 			}
 
 			ProcessCommands();
@@ -138,7 +138,7 @@ void ApplicationLoop::UpdateRenderables()
 
 void ApplicationLoop::UpdateCameraMatrix()
 {
-	proj = glm::perspective(glm::radians(45.0f), rend->GetSwapChainWidth() / (float)rend->GetSwapChainHeight(), 0.1f, 10000.0f);
+	proj = glm::perspective(glm::radians(45.0f), VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f);
 
 	view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 }
@@ -153,11 +153,11 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 
 	if (frame >= RenderInstance::MAX_FRAMES_IN_FLIGHT)
 	{
-		rend->UpdateDynamicGlobalBufferForAllFrames(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferForAllFrames(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
 	}
 	else
 	{
-		rend->UpdateDynamicGlobalBufferCurrent(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
 	}
 }
 
@@ -171,17 +171,15 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance = new RenderInstance();
 
-	rend = VKRenderer::gRenderInstance;
-
 	mainWindow = new WindowManager();
 
 	mainWindow->CreateWindowInstance();
 
-	rend->CreateVulkanRenderer(mainWindow);
+	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
 	gMemoryCallback = [this](void* _d, size_t _si, size_t _off)
 		{
-			rend->UpdateDynamicGlobalBufferCurrent(_d, _si, _off);
+			VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(_d, _si, _off);
 		};
 
 	//TextManager::CreateFontTextManager("text.bmp", "text.dat");
@@ -193,18 +191,18 @@ void ApplicationLoop::InitializeRuntime()
 	//TextManager::UploadToVertexBuffer(text1);
 
 
-	globalBufferLocation = rend->CreateRenderGraph(sizeof(glm::mat4) * 2 * rend->MAX_FRAMES_IN_FLIGHT, 16);
+	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16);
 
 	UpdateCameraMatrix();
 
-	WriteCameraMatrix(rend->MAX_FRAMES_IN_FLIGHT);
+	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 }
 
 
 void ApplicationLoop::CleanupRuntime()
 {
-	rend->WaitOnRender();
+	VKRenderer::gRenderInstance->WaitOnRender();
 
 	for (auto renderable : renderables)
 	{
@@ -274,7 +272,7 @@ void ApplicationLoop::LoadObject(const std::string& file)
 	renderables.push_back(obj);
 
 	for (int i = 0; i < RenderInstance::MAX_FRAMES_IN_FLIGHT; i++)
-		rend->InvalidateRecordBuffer(i);
+		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
 }
 
 void ApplicationLoop::LoadThreadedWrapper(const std::string file)

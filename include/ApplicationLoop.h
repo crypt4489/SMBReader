@@ -15,11 +15,9 @@
 #include "Exporter.h"
 #include "ProgramArgs.h"
 #include "GenericObject.h"
-#include "RenderInstance.h"
 #include "SMBFile.h"
 #include "TextManager.h"
 #include "ThreadManager.h"
-#include "VKRenderGraph.h"
 
 class ApplicationLoop
 {
@@ -64,7 +62,6 @@ public:
 	std::vector<GenericObject*> renderables;
 	bool running, cleaned;
 	WindowManager* mainWindow;
-	RenderInstance* rend;
 	Text *text1, *text2;
 	glm::mat4 proj, view;
 	OffsetIndex globalBufferLocation;

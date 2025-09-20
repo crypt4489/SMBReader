@@ -1,11 +1,34 @@
 #include "VKInstance.h"
 
+#include "VKDevice.h"
 
 
+#include <iostream>
+#include <map>
+#include <set>
+#include <stdexcept>
+
+VKInstance::VKInstance()
+	: 
+	instanceLayers(nullptr),
+	instanceExtensions(nullptr),
+	deviceExtensions(nullptr),
+	instanceExtCount(0),
+	instanceLayerCount(0),
+	deviceExtCount(0),
+	instanceTempMemory(0),
+	instanceTempOffset(0),
+	instanceTempSize(0),
+	instancePerSize(0),
+	instancePerMemory(0),
+	gpusAndLogicalDevices(nullptr),
+	allocator(new VKInstanceAllocator())
+{
+}
 
 VKInstance::~VKInstance() {
 
-	auto callbacks = allocator();
+	auto callbacks = (*allocator)();
 
 	vkDestroySurfaceKHR(instance, renderSurface, nullptr);
 
@@ -18,25 +41,28 @@ VKInstance::~VKInstance() {
 		delete[](void*)instanceTempMemory;
 	}
 
-	if (allocator.instanceData)
+	if (allocator->instanceData)
 	{
-		delete[] allocator.instanceData;
+		delete[] allocator->instanceData;
 	}
-
-	
-
 }
 
 void* VKInstance::AllocFromInstanceCache(size_t size)
 {
-	if ((instanceTempOffset + size) >= instanceTempSize)
-	{
-		instanceTempOffset = instanceTempBase;
-	}
+	size_t val, desired, out;
+	val = instanceTempOffset.load(std::memory_order_relaxed);
+	do {
+		desired = val + size;
+		out = val;
+		if ((val + size) >= instanceTempSize)
+		{
+			out = 0;
+			desired = out + size;
+		}
+	} while (!instanceTempOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
 
-	uintptr_t head = instanceTempMemory + instanceTempOffset;
 
-	instanceTempOffset += size;
+	uintptr_t head = instanceTempMemory + out;
 
 	return reinterpret_cast<void*>(head);
 }
@@ -44,13 +70,16 @@ void* VKInstance::AllocFromInstanceCache(size_t size)
 
 void* VKInstance::AllocFromInstanceData(size_t size)
 {
-	uintptr_t head = instanceTempMemory + instanceTempBase;
+	size_t val, desired, out;
+	val = instancePerOffset.load(std::memory_order_relaxed);
+	do {
+		
+		desired = val + size;
+		out = val;
+	} while (!instancePerOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
 
-	instanceTempBase += size;
-
-	if (instanceTempBase > instanceTempOffset)
-		instanceTempOffset = instanceTempBase;
-
+	uintptr_t head = instancePerMemory + out;
+	
 	return reinterpret_cast<void*>(head);
 }
 
@@ -80,14 +109,22 @@ void VKInstance::CreateDrawingSurface(GLFWwindow* wind)
 
 
 #define TEMPCACHESIZE 512 * 1024
+#define PERCAHCESIZE 256 * 1024
 
 void VKInstance::CreateRenderInstance()
 {
+	char* data = new char[TEMPCACHESIZE + PERCAHCESIZE];
+	
+	instanceTempMemory = reinterpret_cast<uintptr_t>(data);
+	instancePerMemory = reinterpret_cast<uintptr_t>(data + TEMPCACHESIZE);
 
-	instanceTempMemory = reinterpret_cast<uintptr_t>(new char[TEMPCACHESIZE]);
 	instanceTempSize = TEMPCACHESIZE;
-	instanceTempBase = 0;
+	instancePerSize = PERCAHCESIZE;
+	
+	instancePerOffset = 0;
 	instanceTempOffset = 0;
+
+	
 
 	VkApplicationInfo appInfoStruct{};
 
@@ -210,7 +247,7 @@ void VKInstance::CreateRenderInstance()
 
 	createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
 
-	auto ret = allocator();
+	auto ret = (*allocator)();
 
 	VkResult result = vkCreateInstance(&createInfo, &ret, &instance);
 
@@ -386,7 +423,7 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 	return true;
 }
 
-VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
+VKDevice* VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
 	uintptr_t* devices = GetDeviceArray(gpuIndex);
 	
@@ -410,14 +447,14 @@ VKDevice& VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& de
 
 	deviceIndex = DeviceIndex(i);
 
-	return *device;
+	return device;
 }
 
-VKDevice& VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
+VKDevice* VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
 {
 	uintptr_t* devices = GetDeviceArray(gpuIndex);
 	VKDevice* dev = reinterpret_cast<VKDevice*>(devices[1]);
-	return *dev;
+	return dev;
 }
 
 VkPhysicalDevice VKInstance::GetPhysicalDevice(DeviceIndex& gpuIndex)
@@ -433,12 +470,12 @@ uintptr_t* VKInstance::GetDeviceArray(DeviceIndex& gpuIndex)
 
 void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
 {
-	allocator.instanceDataSize = totalDataSize-cacheSize;
-	allocator.instanceDataOffset = 0;
-	allocator.instanceData = new uint8_t[totalDataSize];
-	allocator.commandDataSize = cacheSize;
-	allocator.commandDataOffset = 0;
-	allocator.commandData = allocator.instanceData + allocator.instanceDataSize;
+	allocator->instanceDataSize = totalDataSize-cacheSize;
+	allocator->instanceDataOffset = 0;
+	allocator->instanceData = new uint8_t[totalDataSize];
+	allocator->commandDataSize = cacheSize;
+	allocator->commandDataOffset = 0;
+	allocator->commandData = allocator->instanceData + allocator->instanceDataSize;
 }
 
 
@@ -483,6 +520,7 @@ void* VKInstanceAllocator::RealAlloc(size_t size,
 		
 	if (allocationScope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)
 	{
+		std::scoped_lock lock(commandLock);
 		if (commandDataOffset + size >= commandDataSize)
 		{
 			commandDataOffset = 0;
@@ -495,6 +533,7 @@ void* VKInstanceAllocator::RealAlloc(size_t size,
 	}
 	else 
 	{
+		std::scoped_lock lock(instanceDataLock);
 		head = (uintptr_t)instanceData + instanceDataOffset;
 		size_t makeup = (head & (alignment - 1));
 		head += makeup;

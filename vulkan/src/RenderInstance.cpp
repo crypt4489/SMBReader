@@ -11,10 +11,12 @@
 
 #include "FileManager.h"
 #include "ThreadManager.h"
+#include "VKInstance.h"
 #include "VKDescriptorLayoutBuilder.h"
 #include "VKDescriptorSetBuilder.h"
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
+#include "VKRenderGraph.h"
 #include "VKPipelineCache.h"
 #include "WindowManager.h"
 
@@ -30,15 +32,15 @@ static void frameResizeCB(GLFWwindow* window, int width, int height)
 
 RenderInstance::RenderInstance()
 {
-
+	vkInstance = new VKInstance();
 };
 
 RenderInstance::~RenderInstance()
 {
-	auto& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	for (size_t i = 0; i < shaders.size(); i++)
 	{
-		dev.DestroyShader(shaders[i]);
+		dev->DestroyShader(shaders[i]);
 	}
 
 	for (size_t i = 0; i < threadedRecordBuffers.size(); i++)
@@ -46,60 +48,62 @@ RenderInstance::~RenderInstance()
 		auto& trb = threadedRecordBuffers[i];
 		for (size_t j = 0; j < trb.buffers.size(); j++)
 		{
-			dev.DestroyCommandBuffer(trb.buffers[j]);
+			dev->DestroyCommandBuffer(trb.buffers[j]);
 		}
 	}
 
 	for (auto& i : descriptorLayouts)
 	{
-		dev.DestroyDescriptorLayout(i.second);
+		dev->DestroyDescriptorLayout(i.second);
 	}
 
-	dev.DestroyDescriptorPool(descriptorPoolIndex);
+	dev->DestroyDescriptorPool(descriptorPoolIndex);
 
 	for (auto& i : pipelinesIdentifier)
 	{
-		dev.DestroyPipelineCacheObject(i.second);
+		dev->DestroyPipelineCacheObject(i.second);
 	}
 
-	dev.DestroyRenderPass(mainRenderPass);
+	dev->DestroyRenderPass(mainRenderPass);
 
 	DestroySwapChainAttachments();
 
-	dev.DestroyImagePool(attachmentsIndex);
+	dev->DestroyImagePool(attachmentsIndex);
 
-	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
 	swapChain->DestroySwapChain();
 
 	swapChain->DestroySyncObject();
 
-	dev.DestroyBuffer(stagingBufferIndex);
+	dev->DestroyBuffer(stagingBufferIndex);
 
-	dev.DestroyBuffer(globalIndex);
+	dev->DestroyBuffer(globalIndex);
 
-	dev.DestroyDevice();
+	dev->DestroyDevice();
+
+	delete vkInstance;
 };
 
 void RenderInstance::DestoryTexture(EntryHandle handle)
 {
-	auto& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.DestroyTexture(handle);
+	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	dev->DestroyTexture(handle);
 }
 
 void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	depthImage = dev.CreateImage(width, height,
+	depthImage = dev->CreateImage(width, height,
 		1, depthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		msaaSamples,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
 
-	depthView = dev.CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+	depthView = dev->CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-	dev.TransitionImageLayout(
+	dev->TransitionImageLayout(
 		depthImage, depthFormat,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1, 1
@@ -108,17 +112,17 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
 
 void RenderInstance::DestroySwapChainAttachments()
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.DestroyImage(depthImage);
-	dev.DestroyImageView(depthView);
-	dev.DestroyImage(colorImage);
-	dev.DestroyImageView(colorView);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	dev->DestroyImage(depthImage);
+	dev->DestroyImageView(depthView);
+	dev->DestroyImage(colorImage);
+	dev->DestroyImageView(colorView);
 }
 
 void RenderInstance::RecreateSwapChain() {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VkDevice logicalDevice = dev.device;
-	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VkDevice logicalDevice = dev->device;
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 	int width = 0, height = 0;
 	glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
 	while (width == 0 || height == 0) {
@@ -144,10 +148,10 @@ void RenderInstance::RecreateSwapChain() {
 
 void RenderInstance::CreateRenderPass()
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	VKRenderPassBuilder rpb = dev.CreateRenderPassBuilder(3, 1, 1);
+	VKRenderPassBuilder rpb = dev->CreateRenderPassBuilder(3, 1, 1);
 	VkFormat format = swapChain->GetSwapChainFormat();
 
 	rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, msaaSamples,
@@ -174,16 +178,16 @@ void RenderInstance::CreateRenderPass()
 
 	rpb.CreateInfo();
 
-	mainRenderPass = dev.CreateRenderPasses(rpb);
+	mainRenderPass = dev->CreateRenderPasses(rpb);
 }
 
 void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex)
 {
 
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	auto rbo = dev.GetRecordingBufferObject(cb);
+	auto rbo = dev->GetRecordingBufferObject(cb);
 
 	rbo.BeginRecordingCommand();
 	
@@ -199,9 +203,9 @@ void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageI
 
 void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	commandBufferIndex = dev.RequestWithPossibleBufferResetAndFenceReset(UINT64_MAX, commandBufferIndex, true, false);
+	commandBufferIndex = dev->RequestWithPossibleBufferResetAndFenceReset(UINT64_MAX, commandBufferIndex, true, false);
 
 	BeginCommandBufferRecording(commandBufferIndex, imageIndex);
 
@@ -213,9 +217,9 @@ void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint3
 void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
 {
 
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	auto rbo = dev.GetRecordingBufferObject(cb);
+	auto rbo = dev->GetRecordingBufferObject(cb);
 
 	rbo.EndRenderPassCommand();
 
@@ -224,7 +228,7 @@ void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
 
 uint32_t RenderInstance::BeginFrame()
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	auto& trb = threadedRecordBuffers[currentFrame];
 
@@ -237,13 +241,13 @@ uint32_t RenderInstance::BeginFrame()
 	int32_t res;
 
 	if (nextCbIndex != currentCBIndex[currentFrame])
-		res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false); //wait on previous, but don't reset
+		res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false); //wait on previous, but don't reset
 
 	currentCBIndex[currentFrame] = nextCbIndex;
 
-	res = dev.WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); // wait on current, could be updated queue
+	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true); // wait on current, could be updated queue
 
-	uint32_t imageIndex = dev.BeginFrameForSwapchain(swapChainIndex, currentFrame);
+	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
 	if (imageIndex == ~0ui32)
 	{
@@ -256,11 +260,11 @@ uint32_t RenderInstance::BeginFrame()
 
 void RenderInstance::SubmitFrame(uint32_t imageIndex)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t res = dev.SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
+	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	res = dev.PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
+	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
 	auto& trb = threadedRecordBuffers[currentFrame];
 
@@ -280,30 +284,30 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
 
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swapChain = dev.GetSwapChain(swapChainIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	colorImage = dev.CreateImage(width, height,
+	colorImage = dev->CreateImage(width, height,
 		1, swapChain->GetSwapChainFormat(), 1,
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		msaaSamples,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
 
-	colorView = dev.CreateImageView(colorImage, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
+	colorView = dev->CreateImageView(colorImage, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void RenderInstance::WaitOnRender()
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.WaitOnDevice();
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	dev->WaitOnDevice();
 }
 
 void RenderInstance::CreatePipelines()
 {
 	// Create Shaders
 
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	
 
@@ -321,7 +325,7 @@ void RenderInstance::CreatePipelines()
 			
 			auto ret = FileManager::ReadFileInFull(name, buffer);
 
-			shaders1Handles.push_back(dev.CreateShader(buffer.data(), buffer.size(), dev.ConvertShaderFlags(name)));
+			shaders1Handles.push_back(dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name)));
 		}
 		else
 		{
@@ -331,7 +335,7 @@ void RenderInstance::CreatePipelines()
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 
-			shaders1Handles.push_back(dev.CompileShader(buffer.data(), dev.ConvertShaderFlags(name)));
+			shaders1Handles.push_back(dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name)));
 		}
 
 		shaders[counter++] = shaders1Handles[i];
@@ -349,7 +353,7 @@ void RenderInstance::CreatePipelines()
 
 			auto ret = FileManager::ReadFileInFull(name, buffer);
 
-			shaders2Handles.push_back(dev.CreateShader(buffer.data(), buffer.size(), dev.ConvertShaderFlags(name)));
+			shaders2Handles.push_back(dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name)));
 		}
 		else
 		{
@@ -359,18 +363,18 @@ void RenderInstance::CreatePipelines()
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 
-			shaders2Handles.push_back(dev.CompileShader(buffer.data(), dev.ConvertShaderFlags(name)));
+			shaders2Handles.push_back(dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name)));
 		}
 
 		shaders[counter++] = shaders2Handles[i];
 	}
 
 
-	auto mainRenderPassCache = dev.GetPipelineCache(mainRenderPass);
+	auto mainRenderPassCache = dev->GetPipelineCache(mainRenderPass);
 
-	DescriptorSetLayoutBuilder* textDescriptor = dev.CreateDescriptorSetLayoutBuilder(1);
-	DescriptorSetLayoutBuilder* globalBufferBuilder = dev.CreateDescriptorSetLayoutBuilder(1); 
-	DescriptorSetLayoutBuilder* genericObjectBuilder = dev.CreateDescriptorSetLayoutBuilder(2);
+	DescriptorSetLayoutBuilder* textDescriptor = dev->CreateDescriptorSetLayoutBuilder(1);
+	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1); 
+	DescriptorSetLayoutBuilder* genericObjectBuilder = dev->CreateDescriptorSetLayoutBuilder(2);
 	std::array<std::string, 1> textDescriptorContainers = { "oneimage" };
 	std::array<std::string, 2> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
@@ -379,17 +383,17 @@ void RenderInstance::CreatePipelines()
 
 	textDescriptor->AddPixelImageSamplerLayout(0);
 
-	descriptorLayouts[textDescriptorContainers[0]] = tdsIDs[0] = dev.CreateDescriptorSetLayout(textDescriptor);
+	descriptorLayouts[textDescriptorContainers[0]] = tdsIDs[0] = dev->CreateDescriptorSetLayout(textDescriptor);
 
 	globalBufferBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
-	descriptorLayouts[regularMeshConatiners[0]] = rmcIDs[0] = dev.CreateDescriptorSetLayout(globalBufferBuilder);
+	descriptorLayouts[regularMeshConatiners[0]] = rmcIDs[0] = dev->CreateDescriptorSetLayout(globalBufferBuilder);
 
 	genericObjectBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_VERTEX_BIT);
 
 	genericObjectBuilder->AddPixelImageSamplerLayout(1);
 
-	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev.CreateDescriptorSetLayout(genericObjectBuilder);
+	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev->CreateDescriptorSetLayout(genericObjectBuilder);
 
 	pipelinesIdentifier["genericpipeline"] = mainRenderPassCache->CreatePipeline(rmcIDs.data(), 2, nullptr, 0, nullptr, 0,
 		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples()
@@ -410,8 +414,8 @@ void RenderInstance::CreatePipelines()
 
 void RenderInstance::CreateGlobalBuffer()
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	globalIndex = dev.CreateHostBuffer
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	globalIndex = dev->CreateHostBuffer
 	(
 		128'000'000, true, true,
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -426,28 +430,28 @@ void RenderInstance::CreateGlobalBuffer()
 
 void RenderInstance::UpdateDynamicGlobalBufferCurrent(void* data, size_t dataSize, size_t offset)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * this->currentFrame));
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	dev->WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * this->currentFrame));
 }
 
 void RenderInstance::UpdateDynamicGlobalBufferAbsolute(void* data, size_t dataSize, size_t offset)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	dev.WriteToHostBuffer(globalIndex, data, dataSize, offset);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	dev->WriteToHostBuffer(globalIndex, data, dataSize, offset);
 }
 
 void RenderInstance::UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	for (int i = 0; i<MAX_FRAMES_IN_FLIGHT; i++)
-		dev.WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * i));
+		dev->WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * i));
 }
 
 
 OffsetIndex RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return std::move(dev.GetOffsetIntoHostBuffer(globalIndex, size, alignment));
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return std::move(dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment));
 }
 
 EntryHandle RenderInstance::GetMainBufferIndex() const
@@ -457,7 +461,7 @@ EntryHandle RenderInstance::GetMainBufferIndex() const
 
 VkBuffer RenderInstance::GetDynamicUniformBuffer()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetHostBuffer(globalIndex);
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetHostBuffer(globalIndex);
 }
 
 EntryHandle RenderInstance::CreateVulkanImage(
@@ -466,8 +470,8 @@ EntryHandle RenderInstance::CreateVulkanImage(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat type)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.CreateSampledImage(
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return majorDevice->CreateSampledImage(
 		imageData, imageSizes,
 		width, height,
 		mipLevels, VK::API::ConvertSMBToVkFormat(type),
@@ -478,32 +482,32 @@ EntryHandle RenderInstance::CreateVulkanImage(
 EntryHandle RenderInstance::CreateVulkanImageView(EntryHandle& imageIndex, uint32_t mipLevels,
 	ImageFormat type, VkImageAspectFlags aspectMask)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return majorDevice->CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
 }
 
 EntryHandle RenderInstance::CreateVulkanSampler(uint32_t mipLevels)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.CreateSampler(mipLevels);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return majorDevice->CreateSampler(mipLevels);
 }
 
 void RenderInstance::DeleteVulkanImageView(EntryHandle& index)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	majorDevice.DestroyImage(index);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	majorDevice->DestroyImage(index);
 }
 
 void RenderInstance::DeleteVulkanImage(EntryHandle& index)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	majorDevice.DestroyImage(index);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	majorDevice->DestroyImage(index);
 }
 
 void RenderInstance::DeleteVulkanSampler(EntryHandle& index)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	majorDevice.DestorySampler(index);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	majorDevice->DestorySampler(index);
 }
 
 #define KB 1024
@@ -517,14 +521,14 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	windowMan->SetWindowResizeCallback(frameResizeCB);
 	glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 
-	vkInstance.SetInstanceDataAndSize(16 * MB, 256 * KB);
-	vkInstance.CreateRenderInstance();
-	vkInstance.CreateDrawingSurface(window->GetWindow());
+	vkInstance->SetInstanceDataAndSize(16 * MB, 256 * KB);
+	vkInstance->CreateRenderInstance();
+	vkInstance->CreateDrawingSurface(window->GetWindow());
 
-	physicalIndex = vkInstance.CreatePhysicalDevice(1);
-	VKDevice& majorDevice = vkInstance.CreateLogicalDevice(physicalIndex, deviceIndex);
+	physicalIndex = vkInstance->CreatePhysicalDevice(1);
+	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, deviceIndex);
 
-	msaaSamples = vkInstance.GetMaxMSAALevels(physicalIndex);
+	msaaSamples = vkInstance->GetMaxMSAALevels(physicalIndex);
 
 	VkPhysicalDeviceFeatures features{};
 	features.geometryShader = VK_TRUE;
@@ -533,12 +537,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	features.samplerAnisotropy = VK_TRUE;
 	features.multiDrawIndirect = VK_TRUE;
 
-	majorDevice.CreateLogicalDevice(vkInstance.instanceLayers,
-		vkInstance.instanceLayerCount,
-		vkInstance.deviceExtensions, 
-		vkInstance.deviceExtCount,
+	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
+		vkInstance->instanceLayerCount,
+		vkInstance->deviceExtensions, 
+		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
-		features, vkInstance.renderSurface, 
+		features, vkInstance->renderSurface, 
 		6 * MB, 
 		1 * MB);
 
@@ -546,31 +550,31 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	std::array<VkFormat, 3> formats = { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
 
-	depthFormat = VK::Utils::findSupportedFormat(majorDevice.gpu,
+	depthFormat = VK::Utils::findSupportedFormat(majorDevice->gpu,
 		formats.data(),
 		formats.size(),
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	stagingBufferIndex = majorDevice.CreateHostBuffer(64 * MB, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MB, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-	swapChainIndex = majorDevice.CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
+	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
 
-	VKSwapChain* swapChain = majorDevice.GetSwapChain(swapChainIndex);
+	VKSwapChain* swapChain = majorDevice->GetSwapChain(swapChainIndex);
 
 	VkFormat swcFormat = swapChain->GetSwapChainFormat();
 
-	auto swcPool = majorDevice.FindImageMemoryIndexForPool(1920, 1200,
+	auto swcPool = majorDevice->FindImageMemoryIndexForPool(1920, 1200,
 		1, swcFormat, 1,
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	auto depthPool = majorDevice.FindImageMemoryIndexForPool(1920, 1200,
+	auto depthPool = majorDevice->FindImageMemoryIndexForPool(1920, 1200,
 		1, depthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	attachmentsIndex = majorDevice.CreateImageMemoryPool(512 * MB, depthPool.first);
+	attachmentsIndex = majorDevice->CreateImageMemoryPool(512 * MB, depthPool.first);
 
 	CreateMSAAColorResources(800, 600);
 
@@ -582,11 +586,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews.data(), 2);
 
-	DescriptorPoolBuilder builder = majorDevice.CreateDescriptorPoolBuilder(2);
+	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(2);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 
-	descriptorPoolIndex = majorDevice.CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
+	descriptorPoolIndex = majorDevice->CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
 
 	CreateGlobalBuffer();
 
@@ -599,7 +603,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		EntryHandle* cbsIndices = majorDevice.CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
+		EntryHandle* cbsIndices = majorDevice->CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
 		auto& ref = threadedRecordBuffers[i];
 		int n = MAX_FRAMES_IN_FLIGHT;
 		currentCBIndex[i] = cbsIndices[0];
@@ -618,25 +622,25 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	DescriptorSetBuilder *dsb = CreateDescriptorSet(descriptorLayouts["mainrenderpass"], MAX_FRAMES_IN_FLIGHT);
 	dsb->AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
 	EntryHandle mrpDescId =  dsb->AddDescriptorsToCache();
 	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
 	std::vector<uint32_t> data(1, perRenderPassStuff);
-	majorDevice.UpdateRenderGraph(mainRenderPass, data.data(), data.size(), mrpDescId);
+	majorDevice->UpdateRenderGraph(mainRenderPass, data.data(), data.size(), mrpDescId);
 	return perRenderPassStuff;
 }
 
 VkImageView RenderInstance::GetImageView(EntryHandle viewIndex)
 {
-	VKDevice& majorDevice = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice.GetImageViewByTexture(viewIndex);
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return majorDevice->GetImageViewByTexture(viewIndex);
 }
 
 VkSampler RenderInstance::GetSampler(EntryHandle index)
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSamplerByTexture(index);
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSamplerByTexture(index);
 }
 
 void RenderInstance::SetResizeBool(bool set)
@@ -656,34 +660,34 @@ VkSampleCountFlagBits RenderInstance::GetMSAASamples() const
 
 uint32_t RenderInstance::GetSwapChainHeight()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex)->GetSwapChainHeight();
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainHeight();
 }
 
 uint32_t RenderInstance::GetSwapChainWidth()
 {
-	return vkInstance.GetLogicalDevice(physicalIndex, deviceIndex).GetSwapChain(swapChainIndex)->GetSwapChainWidth();
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainWidth();
 }
 
 DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname, uint32_t frames)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev.CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
 void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
-	auto graph = dev.GetRenderGraph(mainRenderPass);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	auto graph = dev->GetRenderGraph(mainRenderPass);
 	graph->AddObject(pipeline);
 }
 
 void RenderInstance::DrawScene(EntryHandle cbindex)
 {
-	VKDevice& dev = vkInstance.GetLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	auto graph = dev.GetRenderGraph(mainRenderPass);
+	auto graph = dev->GetRenderGraph(mainRenderPass);
 	//if (!graph.objects.size()) return;
-	auto rcb = dev.GetRecordingBufferObject(cbindex);
+	auto rcb = dev->GetRecordingBufferObject(cbindex);
 	graph->DrawScene(rcb, currentFrame);
 }
 

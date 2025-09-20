@@ -1,21 +1,14 @@
 #pragma once
-#include "vulkan/vulkan.h"
+#include "IndexTypes.h"
 #include "VKTypes.h"
-#include "VKDevice.h"
-
 #include "VKUtilities.h"
 #include "WindowManager.h"
 
-
-#include <iostream>
-#include <map>
-#include <set>
-#include <stdexcept>
-#include <vector>
-
+#include <mutex>
 
 struct VKInstanceAllocator
 {
+	VKInstanceAllocator() = default;
 
 	uint8_t* instanceData;
 	size_t instanceDataSize;
@@ -23,6 +16,7 @@ struct VKInstanceAllocator
 	uint8_t* commandData;
 	size_t commandDataSize;
 	size_t commandDataOffset;
+	std::mutex commandLock, instanceDataLock;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;
@@ -75,7 +69,7 @@ class VKInstance
 {
 public:
 
-	VKInstance() = default;
+	VKInstance();
 	~VKInstance();
 
 	VkPhysicalDevice GetPhysicalDevice(DeviceIndex& gpuIndex);
@@ -98,9 +92,9 @@ public:
 
 	bool isDeviceSuitable(VkPhysicalDevice device);
 
-	VKDevice& CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
+	VKDevice* CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
-	VKDevice& GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
+	VKDevice* GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
 
 	void SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize);
 
@@ -119,17 +113,20 @@ public:
 	uint32_t instanceLayerCount;
 	uint32_t deviceExtCount;
 
-
 	uintptr_t instanceTempMemory;
-	size_t instanceTempOffset;
-	size_t instanceTempBase;
+	uintptr_t instancePerMemory;
+	std::atomic<size_t> instanceTempOffset = 0;
+	std::atomic<size_t> instancePerOffset = 0;
+	size_t instancePerSize;
 	size_t instanceTempSize;
 
 	uintptr_t *gpusAndLogicalDevices;
 
 	uint32_t physicalDeviceCount = 0;
 	uint32_t physicalDeviceCounter = 0;
+
 	
-	VKInstanceAllocator allocator;
+	
+	VKInstanceAllocator *allocator;
 };
 

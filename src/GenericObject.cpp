@@ -3,6 +3,8 @@
 #include "AppTypes.h"
 #include "RenderInstance.h"
 #include "VertexTypes.h"
+#include "VKInstance.h"
+#include "VKDevice.h"
 #include "VKDescriptorSetBuilder.h"
 #include "VKPipelineObject.h"
 
@@ -55,11 +57,11 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		};
 
-		auto& ref = rendInst->vkInstance.GetLogicalDevice(rendInst->physicalIndex, rendInst->deviceIndex);
+		auto ref = rendInst->vkInstance->GetLogicalDevice(rendInst->physicalIndex, rendInst->deviceIndex);
 
-		pipelineIndex = ref.CreatePipelineObject(&create);
+		pipelineIndex = ref->CreatePipelineObject(&create);
 
-		VKPipelineObject* vkPipelineObject = ref.GetPipelineObject(pipelineIndex);
+		VKPipelineObject* vkPipelineObject = ref->GetPipelineObject(pipelineIndex);
 
 		vkPipelineObject->SetPerObjectData(offset);
 

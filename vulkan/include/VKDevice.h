@@ -7,12 +7,12 @@
 #include <forward_list>
 #include <numeric>
 #include <set>
+#include <mutex>
 
 #include "vulkan/vulkan.h"
+
 #include "IndexTypes.h"
 #include "ThreadManager.h"
-
-
 #include "VKTypes.h"
 
 
@@ -318,16 +318,6 @@ class VKDevice
 public:
 	
 	VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst);
-	~VKDevice();
-
-	VKDevice& operator=(const VKDevice& _dev) = delete;
-
-	VKDevice& operator=(VKDevice&& _dev) noexcept;
-
-	VKDevice(const VKDevice& _dev) = delete;
-
-	VKDevice(VKDevice&& _dev) noexcept;
-
 
 	//CREATORS
 
@@ -528,7 +518,7 @@ public:
 
 	EntryHandle AddVkTypeToEntry(void* handle);
 
-	void* AllocTypeFromEntry(size_t size);
+	void* AllocFromPerDeviceData(size_t size);
 
 	void* AllocFromDeviceCache(size_t size);
 
@@ -586,17 +576,18 @@ public:
 	size_t queueManagersSize;
 
 	SharedExclusiveFlag deviceLock;
+	std::mutex entriesLock;
 
 	uintptr_t* entries;
 	size_t indexForEntries = 0;
 	size_t numberOfEntries = 0;
 
 	void* perDeviceData;
-	size_t perDeviceOffset = 0;
+	std::atomic<size_t> perDeviceOffset;
 	size_t perDeviceSize;
 
-	void* deviceLocalCache;
-	size_t cacheWrite;
-	size_t deviceLocalCacheSize;
+	void* deviceCache;
+	std::atomic<size_t> deviceCacheWrite;
+	size_t deviceCacheSize;
 };
 

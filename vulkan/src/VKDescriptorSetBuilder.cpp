@@ -7,7 +7,7 @@ DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, size_t _ds)
 	device(_d),
 	counter(0),
 	descriptorSize(_ds),
-	descriptorSets(reinterpret_cast<VkDescriptorSet*>(_d->AllocTypeFromEntry(sizeof(VkDescriptorSet) * _ds)))
+	descriptorSets(reinterpret_cast<VkDescriptorSet*>(_d->AllocFromPerDeviceData(sizeof(VkDescriptorSet) * _ds)))
 {
 
 };

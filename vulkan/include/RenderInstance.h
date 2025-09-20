@@ -1,13 +1,12 @@
 #pragma once
-
+#include <array>
 #include <functional>
 #include <vulkan/vulkan.h>
 
 #include "AppTypes.h"
 #include "IndexTypes.h"
-#include "VKInstance.h"
-#include "VKRenderGraph.h"
-#include "VKPipelineCache.h"
+#include "VKTypes.h"
+#include "ThreadManager.h"
 #include "WindowManager.h"
 
 
@@ -176,7 +175,7 @@ public:
 
 	void DestoryTexture(EntryHandle handle);
 
-	VKInstance vkInstance;
+	VKInstance *vkInstance;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle descriptorPoolIndex;
