@@ -3,7 +3,7 @@
 #if defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
-
+#include "Camera.h"
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -17,6 +17,10 @@ static void Rotate(GenericObject* obj)
 	obj->mat = glm::rotate(glm::mat4(1.0f), time * glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 }
 
+static ApplicationLoop* loop;
+
+static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	queueSema(Semaphore()),
@@ -24,6 +28,7 @@ ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	running(true),
 	cleaned(false)
 {
+	loop = this;
 	Execute();
 }
 ApplicationLoop::~ApplicationLoop() { 
@@ -107,6 +112,8 @@ void ApplicationLoop::Execute()
 
 			if (mainWindow->ShouldCloseWindow()) break;
 
+			glfwPollEvents();
+
 			UpdateRenderables();
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
@@ -136,28 +143,24 @@ void ApplicationLoop::UpdateRenderables()
 	}
 }
 
-void ApplicationLoop::UpdateCameraMatrix()
+void ApplicationLoop::UpdateCameraMatrix(const glm::vec3& movestatement)
 {
-	proj = glm::perspective(glm::radians(45.0f), VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f);
+	c.MoveCamera(movestatement);
 
-	view = glm::lookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	c.UpdateCamera();
+
+	WriteCameraMatrix(RenderInstance::MAX_FRAMES_IN_FLIGHT);
 }
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	struct {
-		glm::mat4 view;
-		glm::mat4 proj;
-	} what = { view,  proj };
-	what.proj[1][1] *= -1;
-
 	if (frame >= RenderInstance::MAX_FRAMES_IN_FLIGHT)
 	{
-		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferForAllFrames(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferForAllFrames(&c.View, sizeof(glm::mat4) * 2, globalBufferLocation);
 	}
 	else
 	{
-		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(&what, sizeof(glm::mat4) * 2, globalBufferLocation);
+		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(&c.View, sizeof(glm::mat4) * 2, globalBufferLocation);
 	}
 }
 
@@ -174,6 +177,8 @@ void ApplicationLoop::InitializeRuntime()
 	mainWindow = new WindowManager();
 
 	mainWindow->CreateWindowInstance();
+
+	glfwSetKeyCallback(mainWindow->GetWindow(), key_callback);
 
 	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
@@ -193,12 +198,29 @@ void ApplicationLoop::InitializeRuntime()
 
 	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16);
 
-	UpdateCameraMatrix();
+	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+	c.UpdateCamera();
+
+	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
+
 
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 }
 
+
+static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
+		loop->UpdateCameraMatrix(glm::vec3(1, 0, 0));
+	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS)
+		loop->UpdateCameraMatrix(glm::vec3(-1, 0, 0));
+	if (key == GLFW_KEY_UP && action == GLFW_PRESS)
+		loop->UpdateCameraMatrix(glm::vec3(0, 0, 1));
+	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS)
+		loop->UpdateCameraMatrix(glm::vec3(0, 0, -1));
+}
 
 void ApplicationLoop::CleanupRuntime()
 {

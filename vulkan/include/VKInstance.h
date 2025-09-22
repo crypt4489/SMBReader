@@ -12,11 +12,10 @@ struct VKInstanceAllocator
 
 	uint8_t* instanceData;
 	size_t instanceDataSize;
-	size_t instanceDataOffset;
+	std::atomic<size_t> instanceDataOffset;
 	uint8_t* commandData;
 	size_t commandDataSize;
-	size_t commandDataOffset;
-	std::mutex commandLock, instanceDataLock;
+	std::atomic<size_t> commandDataOffset;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;

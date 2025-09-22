@@ -54,7 +54,6 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.descriptorsetid = descHandle,
 			.maxDynCap = 1,
 			.data = nullptr
-
 		};
 
 		auto ref = rendInst->vkInstance->GetLogicalDevice(rendInst->physicalIndex, rendInst->deviceIndex);

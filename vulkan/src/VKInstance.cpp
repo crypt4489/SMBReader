@@ -517,27 +517,39 @@ void* VKInstanceAllocator::RealAlloc(size_t size,
 	VkSystemAllocationScope allocationScope)
 {
 	uintptr_t head = 0;
-		
+	size_t val, desired, out;
+	size = (size + alignment - 1) & ~(alignment - 1);
 	if (allocationScope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)
 	{
-		std::scoped_lock lock(commandLock);
-		if (commandDataOffset + size >= commandDataSize)
-		{
-			commandDataOffset = 0;
-		}
+		head = (uintptr_t)commandData;
 
-		head = (uintptr_t)commandData + commandDataOffset;
-		size_t makeup = (head & (alignment - 1));
-		head += makeup;
-		commandDataOffset += (size + makeup);
+		val = commandDataOffset.load(std::memory_order_relaxed);
+
+		do {
+
+			desired = val + size;
+			out = val;
+			if (desired >= commandDataSize)
+			{
+				out = 0;
+				desired = out + size;
+			}
+		} while (!commandDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+		
+		head += out;
 	}
 	else 
 	{
-		std::scoped_lock lock(instanceDataLock);
-		head = (uintptr_t)instanceData + instanceDataOffset;
-		size_t makeup = (head & (alignment - 1));
-		head += makeup;
-		instanceDataOffset += (size + makeup);
+		head = (uintptr_t)instanceData;
+		
+		val = instanceDataOffset.load(std::memory_order_relaxed);
+
+		do {
+			desired = val + size;
+			out = val;
+		} while (!instanceDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+
+		head += out;
 	}
 	
 	return (void*)head;

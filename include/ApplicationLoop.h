@@ -12,6 +12,7 @@
 
 
 #include "AppTypes.h"
+#include "Camera.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
 #include "GenericObject.h"
@@ -51,7 +52,7 @@ public:
 
 	void UpdateRenderables();
 
-	void UpdateCameraMatrix();
+	void UpdateCameraMatrix(const glm::vec3& movestatement);
 
 	void WriteCameraMatrix(uint32_t frame);
 
@@ -62,9 +63,9 @@ public:
 	std::vector<GenericObject*> renderables;
 	bool running, cleaned;
 	WindowManager* mainWindow;
-	Text *text1, *text2;
-	glm::mat4 proj, view;
+	Text* text1, * text2;
 	OffsetIndex globalBufferLocation;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
+	Camera c;
 };
 
