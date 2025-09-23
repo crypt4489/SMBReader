@@ -1,6 +1,6 @@
 #pragma once
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+
+#include "LTM.h"
 struct Camera
 {
 
@@ -17,34 +17,25 @@ struct Camera
 
 		glm::vec3 camUp = cross(camLook, camRight);
 
-		LTM[3] = glm::vec4(pos, 1.0f);
-		LTM[2] = glm::vec4(camLook, 0.0f);
-		LTM[1] = glm::vec4(camUp, 0.0f);
-		LTM[0] = glm::vec4(camRight, 0.0f);
+		LTM.SetPos(glm::vec4(pos, 1.0f));
+		LTM.SetForward(camLook);
+		LTM.SetRight(camRight);
+		LTM.SetUp(camUp);
 	}
 
 	void UpdateCamera()
 	{
 		float x, y, z;
 
-		x = -glm::dot(LTM[0], LTM[3]);
-		y = -glm::dot(LTM[1], LTM[3]);
-		z = -glm::dot(LTM[2], LTM[3]);
+		glm::vec3 lPos = LTM.GetPos(), lRight = LTM.GetRight(), lUp = LTM.GetUp(), lForward = LTM.GetForward();
 
-		View[0][0] = LTM[0][0];
-		View[0][1] = LTM[0][1];
-		View[0][2] = LTM[0][2];
-		View[0][3] = 0.0f;
+		x = -glm::dot(lRight, lPos);
+		y = -glm::dot(lUp, lPos);
+		z = -glm::dot(lForward, lPos);
 
-		View[1][0] = LTM[1][0];
-		View[1][1] = LTM[1][1];
-		View[1][2] = LTM[1][2];
-		View[1][3] = 0.0f;
-
-		View[2][0] = LTM[2][0];
-		View[2][1] = LTM[2][1];
-		View[2][2] = LTM[2][2];
-		View[2][3] = 0.0f;
+		View[0] = glm::vec4(lRight, 0.0f);
+		View[1] = glm::vec4(lUp, 0.0f);
+		View[2] = glm::vec4(lForward, 0.0f);
 
 
 		View[3][0] = x;
@@ -72,14 +63,7 @@ struct Camera
 		Projection[3][3] = 0.0f;
 	}
 
-	void MoveCamera(const glm::vec3& delta)
-	{
-		LTM[3][0] += delta[0];
-		LTM[3][1] += delta[1];
-		LTM[3][2] += delta[2];
-	}
-
-	glm::mat4 LTM;
+	LTM LTM;
 	glm::mat4 View;
 	glm::mat4 Projection;
 	

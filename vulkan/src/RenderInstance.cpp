@@ -395,7 +395,13 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev->CreateDescriptorSetLayout(genericObjectBuilder);
 
-	pipelinesIdentifier["genericpipeline"] = mainRenderPassCache->CreatePipeline(rmcIDs.data(), 2, nullptr, 0, nullptr, 0,
+
+	std::array<VkVertexInputBindingDescription, 1> bindings1 = { BasicVertex::getBindingDescription() };
+
+	auto ref1 = BasicVertex::getAttributeDescriptions();
+
+
+	pipelinesIdentifier["genericpipeline"] = mainRenderPassCache->CreatePipeline(rmcIDs.data(), 2, bindings1.data(), 1, ref1.data(), ref1.size(),
 		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples()
 	);
 

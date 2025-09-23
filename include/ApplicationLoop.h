@@ -52,7 +52,7 @@ public:
 
 	void UpdateRenderables();
 
-	void UpdateCameraMatrix(const glm::vec3& movestatement);
+	void UpdateCameraMatrix();
 
 	void WriteCameraMatrix(uint32_t frame);
 

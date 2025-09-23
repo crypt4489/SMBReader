@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "AppTexture.h"
+#include "Mesh.h"
 #include "SMBFile.h"
 
 class GenericObject
@@ -23,12 +24,13 @@ public:
 
 
 	EntryHandle pipelineIndex;
-	size_t vertexCount;
 	std::vector<AppTexture> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
 	std::function<void(GenericObject*)> updateObject;
 	std::function<void(void*, size_t, size_t)> memoryCallback;
 	OffsetIndex memoryOffset;
+	OffsetIndex vertexBufferMemory, indexBufferMemory;
+	Mesh* m;
 };
 

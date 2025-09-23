@@ -14,7 +14,7 @@ static void Rotate(GenericObject* obj)
 
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-	obj->mat = glm::rotate(glm::mat4(1.0f), time * glm::radians(180.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+	obj->mat = glm::identity<glm::mat4>();
 }
 
 static ApplicationLoop* loop;
@@ -143,10 +143,8 @@ void ApplicationLoop::UpdateRenderables()
 	}
 }
 
-void ApplicationLoop::UpdateCameraMatrix(const glm::vec3& movestatement)
+void ApplicationLoop::UpdateCameraMatrix()
 {
-	c.MoveCamera(movestatement);
-
 	c.UpdateCamera();
 
 	WriteCameraMatrix(RenderInstance::MAX_FRAMES_IN_FLIGHT);
@@ -212,14 +210,22 @@ void ApplicationLoop::InitializeRuntime()
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS)
-		loop->UpdateCameraMatrix(glm::vec3(1, 0, 0));
-	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS)
-		loop->UpdateCameraMatrix(glm::vec3(-1, 0, 0));
-	if (key == GLFW_KEY_UP && action == GLFW_PRESS)
-		loop->UpdateCameraMatrix(glm::vec3(0, 0, 1));
-	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS)
-		loop->UpdateCameraMatrix(glm::vec3(0, 0, -1));
+	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS) {
+		loop->c.LTM.MoveRight(glm::vec3(1, 0, 0));
+		loop->UpdateCameraMatrix();
+	}
+	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS) {
+		loop->c.LTM.MoveRight(glm::vec3(-1, 0, 0));
+		loop->UpdateCameraMatrix();
+	}
+	if (key == GLFW_KEY_UP && action == GLFW_PRESS) {
+		loop->c.LTM.MoveForward(glm::vec3(0, 0, -1));
+		loop->UpdateCameraMatrix();
+	}
+	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS) {
+		loop->c.LTM.MoveForward(glm::vec3(0, 0, 1));
+		loop->UpdateCameraMatrix();
+	}
 }
 
 void ApplicationLoop::CleanupRuntime()

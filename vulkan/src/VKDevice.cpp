@@ -52,6 +52,11 @@ void RecordingBufferObject::BindingDrawCmd(uint32_t first, uint32_t drawSize)
 	vkCmdDraw(cbBufferHandler.buffer, drawSize, 1, first, 0);
 }
 
+void RecordingBufferObject::BindingDrawIndexedCmd(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
+{
+	vkCmdDrawIndexed(cbBufferHandler.buffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
 void RecordingBufferObject::BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset)
 {
 	VkBuffer buffer = vkDeviceHandle.GetHostBuffer(indirectBufferIndex);
@@ -84,6 +89,12 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 	renderPassInfo.pClearValues = clearValues.data();
 
 	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset)
+{
+	VkBuffer buffer = vkDeviceHandle.GetHostBuffer(bufferIndex);
+	vkCmdBindIndexBuffer(cbBufferHandler.buffer, buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 }
 
 

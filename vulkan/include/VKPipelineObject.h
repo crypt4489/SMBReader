@@ -18,6 +18,9 @@ struct VKPipelineObjectCreateInfo
 	EntryHandle descriptorsetid;
 	uint32_t maxDynCap;
 	uint32_t* data;
+	EntryHandle indexBufferHandle;
+	uint32_t indexBufferOffset;
+	uint32_t indexCount;
 };
 
 
@@ -46,10 +49,10 @@ public:
 	EntryHandle pipelineType;
 	EntryHandle descriptorSetId;
 
-	EntryHandle vertexBufferIndex, indirectBufferIndex;
+	EntryHandle vertexBufferIndex, indirectBufferIndex, indexBufferHandle;
 	uint32_t drawType;
 
-	std::size_t vertexBufferOffset, indirectBufferOffset;
-	std::size_t vertexCount;
+	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
+	std::size_t vertexCount, indexCount;
 };
 

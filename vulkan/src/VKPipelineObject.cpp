@@ -22,7 +22,10 @@ VKPipelineObject::VKPipelineObject(
 	drawType(createinfo->drawType),
 	objectData(createinfo->data),
 	maxObjectCapacity(createinfo->maxDynCap),
-	objectCount(0ui32)
+	objectCount(0ui32),
+	indexBufferHandle(createinfo->indexBufferHandle),
+	indexBufferOffset(createinfo->indexBufferOffset),
+	indexCount(createinfo->indexCount)
 {
 
 }
@@ -42,7 +45,14 @@ void VKPipelineObject::Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t
 		rbo.BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	rbo.BindingDrawCmd(0, drawSize);
+	if (indexBufferOffset != ~0ui64)
+	{
+		rbo.BindIndexBuffer(indexBufferHandle, indexBufferOffset);
+		rbo.BindingDrawIndexedCmd(indexCount, 1, 0, 0, 0);
+	}
+	else {
+		rbo.BindingDrawCmd(0, drawSize);
+	}
 }
 
 void VKPipelineObject::DrawIndirectOneBuffer(

@@ -228,12 +228,16 @@ public:
 
 	void BindingDrawCmd(uint32_t first, uint32_t drawSize);
 
+	void BindingDrawIndexedCmd(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+
 	void BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
 
 	void BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 		VkRect2D rect,
 		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
+
+	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset);
 
 	void EndRenderPassCommand();
 

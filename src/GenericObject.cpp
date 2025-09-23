@@ -10,7 +10,6 @@
 
 GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : objectIndex(_oi)
 {
-	vertexCount = 4;
 	for (const auto& chunk : file.chunks)
 	{
 		switch (chunk.chunkType)
@@ -30,6 +29,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		}
 	}
 
+	m = new Mesh();
+
 	if (be == RenderingBackend::VULKAN)
 	{
 		std::string genericpipeline = "genericpipeline";
@@ -43,18 +44,30 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		dsb->AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
 		EntryHandle descHandle = dsb->AddDescriptorsToCache();
 
+		uint32_t vertexOff = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
+
+		uint32_t indexOff = rendInst->GetPageFromUniformBuffer(m->indexSize, alignof(uint32_t));
+
 		VKPipelineObjectCreateInfo create = {
 			.drawType = 0,
-			.vertexBufferIndex{},
-			.vertexBufferOffset = ~0U,
-			.vertexCount = static_cast<uint32_t>(vertexCount),
+			.vertexBufferIndex = rendInst->GetMainBufferIndex(),
+			.vertexBufferOffset = vertexOff,
+			.vertexCount = m->vertexCount,
 			.indirectDrawBuffer{},
 			.indirectDrawOffset = ~0U,
 			.pipelinename = rendInst->pipelinesIdentifier[genericpipeline],
 			.descriptorsetid = descHandle,
 			.maxDynCap = 1,
-			.data = nullptr
+			.data = nullptr,
+			.indexBufferHandle = rendInst->GetMainBufferIndex(),
+			.indexBufferOffset = indexOff,
+			.indexCount = m->indexCount,
 		};
+
+
+		rendInst->UpdateDynamicGlobalBufferAbsolute(m->GetVertexData(), m->vertexSize, vertexOff);
+
+		rendInst->UpdateDynamicGlobalBufferAbsolute(m->GetIndexData(), m->indexSize, indexOff);
 
 		auto ref = rendInst->vkInstance->GetLogicalDevice(rendInst->physicalIndex, rendInst->deviceIndex);
 
