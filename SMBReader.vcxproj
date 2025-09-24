@@ -131,8 +131,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\VulkanSDK\1.3.290.0\Lib;$(SolutionDir)lib\windows\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>shaderc_combinedd.lib;glfw3.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);C:\VulkanSDK\1.3.290.0\Lib;$(SolutionDir)lib\windows\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>shaderc_combinedd.lib;glfw3.lib;vulkan-1.lib;vklib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
       <Command>XCOPY "$(SolutionDir)lib\windows\x64\*.DLL" "$(OutDir)" /D /K /Y
@@ -164,8 +164,8 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\Users\dflet\Documents\Visual Studio Projects\SMBReader\lib\windows\x64;C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>shaderc_combined.lib;glfw3.lib;vulkan-1.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);$(SolutionDir)lib\windows\x64;C:\VulkanSDK\1.3.290.0\Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>shaderc_combined.lib;glfw3.lib;vulkan-1.lib;vklib.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PreBuildEvent>
       <Command>shadercompile.bat</Command>
@@ -192,24 +192,12 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\Mesh.cpp" />
     <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\DXTCompression.cpp" />
+    <ClCompile Include="src\RenderInstance.cpp" />
     <ClCompile Include="src\SMBFile.cpp" />
     <ClCompile Include="src\SMBTexture.cpp" />
     <ClCompile Include="src\TextManager.cpp" />
     <ClCompile Include="src\ThreadManager.cpp" />
     <ClCompile Include="src\WindowManager.cpp" />
-    <ClCompile Include="vulkan\src\GlslangCompiler.cpp" />
-    <ClCompile Include="vulkan\src\RenderInstance.cpp" />
-    <ClCompile Include="vulkan\src\VKDescriptorLayoutBuilder.cpp" />
-    <ClCompile Include="vulkan\src\VKDescriptorSetBuilder.cpp" />
-    <ClCompile Include="vulkan\src\VKDevice.cpp" />
-    <ClCompile Include="vulkan\src\VKInstance.cpp" />
-    <ClCompile Include="vulkan\src\VKPipelineCache.cpp" />
-    <ClCompile Include="vulkan\src\VKPipelineObject.cpp" />
-    <ClCompile Include="vulkan\src\VKRenderGraph.cpp" />
-    <ClCompile Include="vulkan\src\VKRenderPassBuilder.cpp" />
-    <ClCompile Include="vulkan\src\VKSwapChain.cpp" />
-    <ClCompile Include="vulkan\src\VKTexture.cpp" />
-    <ClCompile Include="vulkan\src\VKUtilities.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\ApplicationLoop.h" />
@@ -225,6 +213,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\Mesh.h" />
     <ClInclude Include="include\ProgramArgs.h" />
     <ClInclude Include="include\DXTCompression.h" />
+    <ClInclude Include="include\RenderInstance.h" />
     <ClInclude Include="include\SMBFile.h" />
     <ClInclude Include="include\SMBTexture.h" />
     <ClInclude Include="include\TextManager.h" />
@@ -232,21 +221,6 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\ThreadManager.h" />
     <ClInclude Include="include\VertexTypes.h" />
     <ClInclude Include="include\WindowManager.h" />
-    <ClInclude Include="vulkan\include\GlslangCompiler.h" />
-    <ClInclude Include="vulkan\include\IndexTypes.h" />
-    <ClInclude Include="vulkan\include\RenderInstance.h" />
-    <ClInclude Include="vulkan\include\VKDescriptorLayoutBuilder.h" />
-    <ClInclude Include="vulkan\include\VKDescriptorSetBuilder.h" />
-    <ClInclude Include="vulkan\include\VKDevice.h" />
-    <ClInclude Include="vulkan\include\VKInstance.h" />
-    <ClInclude Include="vulkan\include\VKPipelineCache.h" />
-    <ClInclude Include="vulkan\include\VKPipelineObject.h" />
-    <ClInclude Include="vulkan\include\VKRenderGraph.h" />
-    <ClInclude Include="vulkan\include\VKRenderPassBuilder.h" />
-    <ClInclude Include="vulkan\include\VKSwapChain.h" />
-    <ClInclude Include="vulkan\include\VKTexture.h" />
-    <ClInclude Include="vulkan\include\VKTypes.h" />
-    <ClInclude Include="vulkan\include\VKUtilities.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="shaders\typicalfrag.frag" />

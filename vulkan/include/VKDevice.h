@@ -8,11 +8,11 @@
 #include <numeric>
 #include <set>
 #include <mutex>
+#include <shared_mutex>
 
 #include "vulkan/vulkan.h"
 
 #include "IndexTypes.h"
-#include "ThreadManager.h"
 #include "VKTypes.h"
 
 
@@ -308,8 +308,10 @@ public:
 	const uint32_t queueCapabilities;
 	EntryHandle* poolIndices;
 	VKDevice& device;
-	Semaphore queueSema;
-	Semaphore bitwiseMutex;
+	std::mutex queueSema;
+	std::condition_variable queueCV;
+	int queueCountCV;
+	std::mutex bitwiseMutex;
 };
 
 
@@ -576,8 +578,8 @@ public:
 	EntryHandle queueManagers;
 	size_t queueManagersSize;
 
-	SharedExclusiveFlag deviceLock;
-	std::mutex entriesLock;
+	mutable std::shared_mutex deviceLock;
+	mutable std::mutex entriesLock;
 
 	uintptr_t* entries;
 	size_t indexForEntries = 0;

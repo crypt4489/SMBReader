@@ -2,7 +2,6 @@
 
 #include "VKPipelineObject.h"
 #include "VKDevice.h"
-#include "ThreadManager.h"
 
 #include <vector>
 #include <string>
@@ -36,7 +35,7 @@ public:
 
 	uint32_t* dynamicOffsets;
 
-	SharedExclusiveFlag objectGuard;
+	std::mutex objectGuard;
 
 	VKPipelineObject** objects;
 

@@ -5,6 +5,8 @@ VisualStudioVersion = 17.8.34309.116
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SMBReader", "SMBReader.vcxproj", "{DFDB52B5-3F2E-4D34-83A1-C864074810E0}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "vklib", "vulkan\vklib\vklib.vcxproj", "{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,14 @@ Global
 		{DFDB52B5-3F2E-4D34-83A1-C864074810E0}.Release|x64.Build.0 = Release|x64
 		{DFDB52B5-3F2E-4D34-83A1-C864074810E0}.Release|x86.ActiveCfg = Release|Win32
 		{DFDB52B5-3F2E-4D34-83A1-C864074810E0}.Release|x86.Build.0 = Release|Win32
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Debug|x64.ActiveCfg = Debug|x64
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Debug|x64.Build.0 = Debug|x64
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Debug|x86.ActiveCfg = Debug|Win32
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Debug|x86.Build.0 = Debug|Win32
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Release|x64.ActiveCfg = Release|x64
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Release|x64.Build.0 = Release|x64
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Release|x86.ActiveCfg = Release|Win32
+		{915EE1CA-79D3-4E0D-A327-37B3E75B3BEE}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "VKRenderGraph.h"
 #include <mutex>
 VKRenderGraph::VKRenderGraph(EntryHandle _renderTargetIndex, void *data, size_t dCount, size_t pCount) 
@@ -14,7 +16,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject& rbo, uint32_t frameNum)
 {
 	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
 	
-	std::lock_guard lock(objectGuard);
+	std::unique_lock lock(objectGuard);
 	for (size_t i = 0; i<pipelineObjCount; i++)
 	{
 
@@ -37,12 +39,12 @@ void VKRenderGraph::DrawScene(RecordingBufferObject& rbo, uint32_t frameNum)
 
 void VKRenderGraph::AddObject(VKPipelineObject* obj)
 {
-	std::lock_guard lock(objectGuard);
+	std::unique_lock lock(objectGuard);
 	objects[pipelineObjCount++] = obj;
 }
 
 void VKRenderGraph::AddDynamicOffset(uint32_t offset)
 {
-	std::lock_guard lock(objectGuard);
+	std::unique_lock lock(objectGuard);
 	dynamicOffsets[dynamicOffsetCount++] = offset;
 }

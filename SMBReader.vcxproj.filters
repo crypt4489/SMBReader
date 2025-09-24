@@ -60,45 +60,6 @@
     <ClCompile Include="src\AppTextureImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="vulkan\src\GlslangCompiler.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\RenderInstance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKPipelineObject.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKRenderGraph.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKTexture.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKUtilities.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKPipelineCache.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKDescriptorLayoutBuilder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKDescriptorSetBuilder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKInstance.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKDevice.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKSwapChain.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vulkan\src\VKRenderPassBuilder.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\Camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -106,6 +67,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\LTM.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\RenderInstance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -158,52 +122,7 @@
     <ClInclude Include="include\TextureData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="vulkan\include\GlslangCompiler.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\RenderInstance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKPipelineObject.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKRenderGraph.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKTexture.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKPipelineCache.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKDescriptorLayoutBuilder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="include\MathTypes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKInstance.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKDevice.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKDescriptorSetBuilder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKUtilities.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKSwapChain.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKTypes.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\VKRenderPassBuilder.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vulkan\include\IndexTypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\Camera.h">
@@ -213,6 +132,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\LTM.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\RenderInstance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

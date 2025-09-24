@@ -18,11 +18,51 @@
 #include "VKSwapChain.h"
 #include "VKRenderGraph.h"
 #include "VKPipelineCache.h"
+#include "VertexTypes.h"
 #include "WindowManager.h"
 
 namespace VKRenderer {
 	RenderInstance* gRenderInstance = nullptr;
 }
+
+
+namespace API {
+
+	VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp)
+	{
+		VkCompareOp ret = VK_COMPARE_OP_LESS;
+		switch (testApp)
+		{
+		case DepthTest::ALLPASS:
+			ret = VK_COMPARE_OP_ALWAYS;
+			break;
+		default:
+			break;
+		}
+
+		return ret;
+	}
+
+	VkFormat ConvertSMBToVkFormat(ImageFormat format)
+	{
+		VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
+		switch (format)
+		{
+		case ImageFormat::DXT1:
+			vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+			break;
+		case ImageFormat::DXT3:
+			vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
+			break;
+		case ImageFormat::R8G8B8A8:
+			vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+			break;
+		}
+		return vkFormat;
+	}
+
+}
+
 
 static void frameResizeCB(GLFWwindow* window, int width, int height)
 {
@@ -480,7 +520,7 @@ EntryHandle RenderInstance::CreateVulkanImage(
 	return majorDevice->CreateSampledImage(
 		imageData, imageSizes,
 		width, height,
-		mipLevels, VK::API::ConvertSMBToVkFormat(type),
+		mipLevels, API::ConvertSMBToVkFormat(type),
 		attachmentsIndex, 
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -489,7 +529,7 @@ EntryHandle RenderInstance::CreateVulkanImageView(EntryHandle& imageIndex, uint3
 	ImageFormat type, VkImageAspectFlags aspectMask)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice->CreateImageView(imageIndex, mipLevels, VK::API::ConvertSMBToVkFormat(type), aspectMask);
+	return majorDevice->CreateImageView(imageIndex, mipLevels, API::ConvertSMBToVkFormat(type), aspectMask);
 }
 
 EntryHandle RenderInstance::CreateVulkanSampler(uint32_t mipLevels)

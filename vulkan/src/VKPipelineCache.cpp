@@ -1,5 +1,8 @@
+#include "pch.h"
+
 #include "VKPipelineCache.h"
 #include "VKDevice.h"
+#include <array>
 VKPipelineCache::VKPipelineCache(VkRenderPass _rp, VKDevice *d) : renderPass(_rp), majorDev(d)
 {
 

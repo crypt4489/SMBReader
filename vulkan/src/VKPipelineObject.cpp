@@ -1,11 +1,11 @@
+#include "pch.h"
+
 #include "VKPipelineObject.h"
 
 #include <array>
 #include <vector>
 #include <functional>
 
-#include "AppTypes.h"
-#include "RenderInstance.h"
 #include "VKDevice.h"
 #include "VKPipelineCache.h"
 

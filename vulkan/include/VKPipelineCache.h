@@ -2,7 +2,6 @@
 #include "IndexTypes.h"
 #include "VKUtilities.h"
 #include "VKTypes.h"
-#include "VertexTypes.h"
 #include <optional>
 #include <unordered_map>
 #include <vector>

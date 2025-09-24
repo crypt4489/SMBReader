@@ -1,3 +1,5 @@
+
+#include "pch.h"
 #include "VKDevice.h"
 
 #include "GlslangCompiler.h"
@@ -1603,7 +1605,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	imageInfo.mipLevels = mipLevels;
 	imageInfo.arrayLayers = layers;
 
-	imageInfo.format = type;//VK::API::ConvertSMBToVkFormat(type);
+	imageInfo.format = type;
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo.usage = flags;
@@ -1893,13 +1895,15 @@ QueueManager::QueueManager(
 	queueFamilyIndex(_qfi),
 	queueCapabilities(ConvertQueueProps(_queueCapabilities, present)),
 	device(_d),
-	queueSema(Semaphore(_mqc)),
-	bitwiseMutex(Semaphore())
+	queueSema(),
+	bitwiseMutex()
 {
 
 	assert(maxQueueCount <= 16);
 
 	poolIndices = reinterpret_cast<EntryHandle*>(data);
+
+	queueCountCV = _mqc;
 
 	QueueIndex index = QueueIndex{ _qfi };
 
@@ -1916,8 +1920,13 @@ QueueManager::QueueManager(
 
 uint32_t QueueManager::GetQueue()
 {
-	queueSema.Wait();
-	SemaphoreGuard lock(bitwiseMutex);
+	{
+		std::unique_lock guard(queueSema);
+		queueCV.wait(guard, [this]() { return queueCountCV > 0; });
+		queueCountCV--;
+	}
+
+	std::unique_lock lock(bitwiseMutex);
 	for (int32_t i = 0; i < maxQueueCount; i++)
 	{
 		if (!bitmap.test(i))
@@ -1932,10 +1941,15 @@ uint32_t QueueManager::GetQueue()
 void QueueManager::ReturnQueue(size_t queueNum)
 {
 	{
-		SemaphoreGuard lock(bitwiseMutex);
+		std::scoped_lock lock(bitwiseMutex);
 		bitmap.reset(queueNum);
 	}
-	queueSema.Notify();
+
+	{
+		std::scoped_lock guard(queueSema);
+		queueCountCV++;
+	}
+	queueCV.notify_one();
 }
 
 uint32_t QueueManager::ConvertQueueProps(uint32_t flags, bool present)

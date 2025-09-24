@@ -1,3 +1,5 @@
+#include "pch.h"
+
 #include "GlslangCompiler.h"
 
 #include "VKUtilities.h"

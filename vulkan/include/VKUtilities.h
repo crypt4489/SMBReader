@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vulkan/vulkan.h"
-#include "AppTypes.h"
 #include <iostream>
 #include <vector>
 
@@ -90,11 +89,5 @@ namespace VK {
 						
 
 	}
-	namespace API {
-
-		VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp);
-
-		VkFormat ConvertSMBToVkFormat(ImageFormat format);
-		
-	}
+	
 }

@@ -1,4 +1,4 @@
-
+#include "pch.h"
 #include "VKUtilities.h"
 
 
@@ -504,40 +504,5 @@ namespace VK {
 			}
 
 		}
-	namespace API {
-
-		VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp)
-		{
-				VkCompareOp ret = VK_COMPARE_OP_LESS;
-				switch (testApp)
-				{
-				case DepthTest::ALLPASS:
-					ret = VK_COMPARE_OP_ALWAYS;
-					break;
-				default:
-					break;
-				}
-
-				return ret;
-		}
-
-		VkFormat ConvertSMBToVkFormat(ImageFormat format)
-		{
-			VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
-			switch (format)
-			{
-			case ImageFormat::DXT1:
-				vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
-				break;
-			case ImageFormat::DXT3:
-				vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
-				break;
-			case ImageFormat::R8G8B8A8:
-				vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
-				break;
-			}
-			return vkFormat;
-		}
-
-	}
+	
 }

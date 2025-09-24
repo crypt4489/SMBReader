@@ -2,8 +2,9 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
-#include "WindowManager.h"
-
+#define VK_USE_PLATFORM_WIN32_KHR
+#define GLFW_INCLUDE_VULKAN
+#include "GLFW/include/GLFW/glfw3.h"
 #include <mutex>
 
 struct VKInstanceAllocator
