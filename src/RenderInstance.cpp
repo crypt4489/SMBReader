@@ -17,7 +17,7 @@
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
 #include "VKRenderGraph.h"
-#include "VKPipelineCache.h"
+#include "VKPipelineBuilder.h"
 #include "VertexTypes.h"
 #include "WindowManager.h"
 
@@ -59,6 +59,22 @@ namespace API {
 			break;
 		}
 		return vkFormat;
+	}
+
+	VkPrimitiveTopology ConvertTopology(PrimitiveType type)
+	{
+		VkPrimitiveTopology top = VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
+		switch (type)
+		{
+		case TRIANGLES:
+			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			break;
+		case TRISTRIPS:
+			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+			break;
+		}
+
+		return top;
 	}
 
 }
@@ -410,7 +426,8 @@ void RenderInstance::CreatePipelines()
 	}
 
 
-	auto mainRenderPassCache = dev->GetPipelineCache(mainRenderPass);
+	auto genericBuilder = dev->CreatePipelineBuilder(mainRenderPass, 1, 2, 2);
+	auto textBuilder = dev->CreatePipelineBuilder(mainRenderPass, 1, 1, 2);
 
 	DescriptorSetLayoutBuilder* textDescriptor = dev->CreateDescriptorSetLayoutBuilder(1);
 	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1); 
@@ -435,27 +452,55 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev->CreateDescriptorSetLayout(genericObjectBuilder);
 
+	UsePipelineBuilders(genericBuilder, textBuilder);
+
+	pipelinesIdentifier["genericpipeline"] = genericBuilder->CreateGraphicsPipeline(rmcIDs.data(), rmcIDs.size(), shaders1Handles.data(), shaders1Handles.size());
+
+	pipelinesIdentifier["text"] = textBuilder->CreateGraphicsPipeline(tdsIDs.data(), tdsIDs.size(), shaders2Handles.data(), shaders2Handles.size());
+
+}
+
+void RenderInstance::UsePipelineBuilders(VKPipelineBuilder* generic, VKPipelineBuilder* text)
+{
+	std::array<VkDynamicState, 2> dynamicStates = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
+	};
+
+	generic->CreateDynamicStateInfo(dynamicStates.data(), 2);
+	text->CreateDynamicStateInfo(dynamicStates.data(), 2);
 
 	std::array<VkVertexInputBindingDescription, 1> bindings1 = { BasicVertex::getBindingDescription() };
 
 	auto ref1 = BasicVertex::getAttributeDescriptions();
 
-
-	pipelinesIdentifier["genericpipeline"] = mainRenderPassCache->CreatePipeline(rmcIDs.data(), 2, bindings1.data(), 1, ref1.data(), ref1.size(),
-		shaders1Handles.data(), shaders1Handles.size(), VK_COMPARE_OP_LESS, GetMSAASamples()
-	);
-
 	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
-	pipelinesIdentifier["text"] = mainRenderPassCache->CreatePipeline(
-		tdsIDs.data(), 1,
-		bindings.data(), 1,
-		ref.data(), ref.size(), 
-		shaders2Handles.data(), shaders2Handles.size(),
-		VK_COMPARE_OP_ALWAYS, GetMSAASamples()
-	);
+	generic->CreateVertexInput(bindings1.data(), 1, ref1.data(), ref1.size());
+	text->CreateVertexInput(bindings.data(), 1, ref.data(), ref.size());
+
+	generic->CreateInputAssembly(API::ConvertTopology(TRIANGLES), false);
+	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
+
+	generic->CreateViewportState(1, 1);
+	text->CreateViewportState(1, 1);
+
+	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+
+	generic->CreateMultiSampling(GetMSAASamples());
+	text->CreateMultiSampling(GetMSAASamples());
+
+	generic->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+	text->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+
+	generic->CreateColorBlending(VK_LOGIC_OP_COPY);
+	text->CreateColorBlending(VK_LOGIC_OP_COPY);
+
+	generic->CreateDepthStencil(VK_COMPARE_OP_LESS);
+	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS);
 }
 
 void RenderInstance::CreateGlobalBuffer()
@@ -494,10 +539,10 @@ void RenderInstance::UpdateDynamicGlobalBufferForAllFrames(void* data, size_t da
 }
 
 
-OffsetIndex RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
+size_t RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	return std::move(dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment));
+	return dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment);
 }
 
 EntryHandle RenderInstance::GetMainBufferIndex() const
@@ -666,15 +711,15 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	}
 }
 
-OffsetIndex RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
+size_t RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	DescriptorSetBuilder *dsb = CreateDescriptorSet(descriptorLayouts["mainrenderpass"], MAX_FRAMES_IN_FLIGHT);
 	dsb->AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
 	EntryHandle mrpDescId =  dsb->AddDescriptorsToCache();
-	OffsetIndex perRenderPassStuff = GetPageFromUniformBuffer(datasize, alignment);
-	std::vector<uint32_t> data(1, perRenderPassStuff);
-	majorDevice->UpdateRenderGraph(mainRenderPass, data.data(), data.size(), mrpDescId);
+	size_t perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
+	std::vector<uint32_t> data(1, (uint32_t)perRenderPassStuff);
+	majorDevice->UpdateRenderGraph(mainRenderPass, data.data(), (uint32_t)data.size(), mrpDescId);
 	return perRenderPassStuff;
 }
 

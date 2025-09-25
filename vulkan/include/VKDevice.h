@@ -219,7 +219,7 @@ public:
 
 	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
 
-	void BindPipeline(EntryHandle renderTarget, EntryHandle pipelinename);
+	void BindPipeline(EntryHandle pipelinename);
 
 	void BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
@@ -374,9 +374,9 @@ public:
 		size_t perEntriesSize
 	);
 
-	void CreatePipelineCache(EntryHandle renderPassIndex);
+	VKPipelineBuilder* CreatePipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount);
 
-	EntryHandle CreatePipelineCacheObect(PipelineCacheObject* obj);
+	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
 	EntryHandle CreatePipelineObject(VKPipelineObjectCreateInfo* info);
 
@@ -441,8 +441,6 @@ public:
 	VkImageView GetImageViewByIndex(EntryHandle index);
 
 	VkImageView GetImageViewByTexture(EntryHandle index);
-
-	VKPipelineCache* GetPipelineCache(EntryHandle renderPassIndex);
 
 	PipelineCacheObject* GetPipelineCacheObject(EntryHandle index);
 
@@ -539,7 +537,7 @@ public:
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps);
 
-	OffsetIndex GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
+	size_t GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
 	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
 

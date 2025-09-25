@@ -29,8 +29,8 @@ public:
 	glm::mat4 mat;
 	std::function<void(GenericObject*)> updateObject;
 	std::function<void(void*, size_t, size_t)> memoryCallback;
-	OffsetIndex memoryOffset;
-	OffsetIndex vertexBufferMemory, indexBufferMemory;
+	size_t memoryOffset;
+	size_t vertexBufferMemory, indexBufferMemory;
 	Mesh* m;
 };
 

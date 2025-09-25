@@ -36,7 +36,7 @@
     <ClInclude Include="..\include\VKInstance.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\VKPipelineCache.h">
+    <ClInclude Include="..\include\VKPipelineBuilder.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\VKPipelineObject.h">
@@ -80,7 +80,7 @@
     <ClCompile Include="..\src\VKInstance.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\VKPipelineCache.cpp">
+    <ClCompile Include="..\src\VKPipelineBuilder.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\VKPipelineObject.cpp">

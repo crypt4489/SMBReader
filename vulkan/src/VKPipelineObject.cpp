@@ -2,12 +2,7 @@
 
 #include "VKPipelineObject.h"
 
-#include <array>
-#include <vector>
-#include <functional>
-
 #include "VKDevice.h"
-#include "VKPipelineCache.h"
 
 VKPipelineObject::VKPipelineObject(
 	VKPipelineObjectCreateInfo* createinfo)

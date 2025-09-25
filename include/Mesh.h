@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-
+#include "AppTypes.h"
 struct Mesh
 {
 	uint32_t vertexCount;
@@ -12,6 +12,7 @@ struct Mesh
 	size_t indexPosition;
 	size_t indexStride;
 	void* data;
+	PrimitiveType type;
 
 	Mesh(uint32_t count);
 

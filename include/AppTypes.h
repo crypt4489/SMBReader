@@ -1,23 +1,23 @@
 #pragma once
-enum class RenderingBackend
+enum RenderingBackend
 {
 	VULKAN = 1,
 	DXD12 = 2,
 };
 
-enum class DepthTest
+enum DepthTest
 {
 	ALLPASS = 0,
 	DEPTHLESS = 1,
 };
 
-enum class ShaderType
+enum ShaderType
 {
 	PIX_SHADER = 0,
 	VERT_SHADER = 1,
 };
 
-enum class ImageFormat : uint32_t
+enum ImageFormat : uint32_t
 {
 	X8L8U8V8 = 7,
 	DXT1 = 12,
@@ -27,7 +27,14 @@ enum class ImageFormat : uint32_t
 	IMAGE_UNKNOWN = 0x7fffffff
 };
 
-enum class TextureIOType
+enum TextureIOType
 {
 	BMP = 0,
+};
+
+enum PrimitiveType
+{
+	TRIANGLES = 0,
+	TRISTRIPS = 1,
+	WHAT = 2
 };

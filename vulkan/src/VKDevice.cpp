@@ -8,7 +8,7 @@
 #include "VKRenderPassBuilder.h"
 #include "VKDescriptorLayoutBuilder.h"
 #include "VKDescriptorSetBuilder.h"
-#include "VKPipelineCache.h"
+#include "VKPipelineBuilder.h"
 #include "VKSwapChain.h"
 #include "VKTexture.h"
 #include "VKUtilities.h"
@@ -22,10 +22,9 @@ RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& 
 
 }
 
-void RecordingBufferObject::BindPipeline(EntryHandle renderTarget, EntryHandle pipelinename)
+void RecordingBufferObject::BindPipeline(EntryHandle pipelinename)
 {
-	auto pbo = vkDeviceHandle.GetPipelineCache(renderTarget);
-	auto pco = (*pbo)[pipelinename];
+	auto pco = vkDeviceHandle.GetPipelineCacheObject(pipelinename);
 	currLayout = pco->pipelineLayout;
 	currPipeline = pco->pipeline;
 	vkCmdBindPipeline(cbBufferHandler.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currPipeline);
@@ -641,19 +640,18 @@ void VKDevice::CreateLogicalDevice(
 	size_t perEntriesSize
 )
 {
-#define CACHESIZE 2 * 1024
-	if (perDeviceDataSize)
-	{
+#define CACHESIZE 4 * 1024
+	
 		
-		deviceCacheSize = CACHESIZE;
-		deviceCache = (void*)new char[deviceCacheSize];
+	deviceCacheSize = CACHESIZE;
+	deviceCache = (void*)new char[deviceCacheSize];
 
-		perDeviceSize = perDeviceDataSize - perEntriesSize;
-		perDeviceData = (void*)new char[perDeviceSize];
+	perDeviceSize = perDeviceDataSize - perEntriesSize;
+	perDeviceData = (void*)new char[perDeviceSize];
 
-		numberOfEntries = perEntriesSize / sizeof(uintptr_t);
-		entries = new uintptr_t[numberOfEntries];
-	}
+	numberOfEntries = perEntriesSize / sizeof(uintptr_t);
+	entries = new uintptr_t[numberOfEntries];
+	
 
 	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
 	uint32_t familyCount;
@@ -737,15 +735,15 @@ void VKDevice::CreateLogicalDevice(
 }
 
 
-void VKDevice::CreatePipelineCache(EntryHandle renderPassIndex)
+VKPipelineBuilder* VKDevice::CreatePipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount)
 {
 	std::shared_lock lock(deviceLock);
 
-	auto renderPassData = GetPipelineCache(renderPassIndex);
-
 	auto renderPass = GetRenderPass(renderPassIndex);
 
-	std::construct_at(renderPassData, renderPass, this);
+	auto renderPassData = reinterpret_cast<VKPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKPipelineBuilder)));
+
+	return std::construct_at(renderPassData, renderPass, this, colorCount, descLayoutCount, dynamicStateCount);
 }
 
 EntryHandle VKDevice::CreatePipelineObject(VKPipelineObjectCreateInfo* info)
@@ -782,7 +780,7 @@ void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, ui
 		*this, queueManagerData);
 }
 
-EntryHandle VKDevice::CreatePipelineCacheObect(PipelineCacheObject* obj)
+EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -827,7 +825,7 @@ EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 		throw std::runtime_error("failed to create render pass!");
 	}
 
-	auto renderPassDataHandle = AllocFromPerDeviceData(sizeof(VKRenderGraph) + sizeof(VKPipelineCache));
+	auto renderPassDataHandle = AllocFromPerDeviceData(sizeof(VKRenderGraph));
 
 	EntryHandle ret;
 
@@ -838,8 +836,6 @@ EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 
 		AddVkTypeToEntry(renderPassDataHandle);
 	}
-
-	CreatePipelineCache(ret);
 
 	CreateRenderGraph(ret);
 
@@ -1421,12 +1417,6 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle index)
 	return GetImageViewByIndex(tex->viewIndex);
 }
 
-VKPipelineCache* VKDevice::GetPipelineCache(EntryHandle renderPassIndex)
-{
-	std::shared_lock lock(deviceLock);
-	return reinterpret_cast<VKPipelineCache*>((reinterpret_cast<uintptr_t>(GetRenderGraph(renderPassIndex)) + sizeof(VKRenderGraph)));
-}
-
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
@@ -1626,13 +1616,13 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	return std::make_pair(memoryTypeIndex, memRequirements.alignment);
 }
 
-OffsetIndex VKDevice::GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
+size_t VKDevice::GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
 {
 	std::shared_lock lock(deviceLock);
 
 	auto alloc = reinterpret_cast<VKAllocator*>(GetVkTypeFromEntry(hostIndex + 2));
 
-	return OffsetIndex(alloc->GetMemory(size, alignment));
+	return alloc->GetMemory(size, alignment);
 }
 
 uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex)

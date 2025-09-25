@@ -16,3 +16,4 @@ struct VKPipelineObjectCreateInfo;
 struct DescriptorSetLayoutBuilder;
 struct DescriptorSetBuilder;
 struct PipelineCacheObject;
+class VKPipelineBuilder;

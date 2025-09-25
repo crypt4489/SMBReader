@@ -5,13 +5,13 @@
 #include "VertexTypes.h"
 #include "VKPipelineObject.h"
 #include "VKDescriptorSetBuilder.h"
-OffsetIndex TextManager::bufferOffset = std::move(OffsetIndex(0UL));
+size_t TextManager::bufferOffset = ~0ui64;
 Font* TextManager::fonts;
 size_t TextManager::vertexCount = 0;
 size_t TextManager::commandCount = 0;
 VKPipelineObject* TextManager::obj;
 std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
-OffsetIndex TextManager::vertexBufferOffset = std::move(OffsetIndex(0UL)), TextManager::indirectCommandsOffset = std::move(OffsetIndex(0UL));
+size_t TextManager::vertexBufferOffset = ~0ui64, TextManager::indirectCommandsOffset = ~0ui64;
 EntryHandle TextManager::descHandle;
 
 void TextManager::CreateFontTextManager(const std::string& imageName, const std::string& dataName)
@@ -36,10 +36,10 @@ void TextManager::CreatePipelineObject()
 	VKPipelineObjectCreateInfo create = {
 		.drawType = 1,
 		.vertexBufferIndex = rendInst->GetMainBufferIndex(),
-		.vertexBufferOffset = vertexBufferOffset,
+		.vertexBufferOffset = static_cast<uint32_t>(vertexBufferOffset),
 		.vertexCount = ~0U,
 		.indirectDrawBuffer = rendInst->GetMainBufferIndex(),
-		.indirectDrawOffset = indirectCommandsOffset,
+		.indirectDrawOffset = static_cast<uint32_t>(indirectCommandsOffset),
 		.pipelinename = rendInst->pipelinesIdentifier[text],
 		.descriptorsetid = descHandle,
 		.maxDynCap = 0,

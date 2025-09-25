@@ -11,7 +11,7 @@ Mesh::Mesh() {
 
 Mesh::~Mesh()
 {
-    free(data);
+    _aligned_free(data);
 }
 
 void Mesh::GenerateCube(Mesh* m)
@@ -99,6 +99,8 @@ void Mesh::GenerateCube(Mesh* m)
     m->vertexStride = sizeof(glm::vec4) * 2;
 
     m->vertexPositon = 0;
+
+    m->type = TRIANGLES;
 
     glm::vec4* ptr = (glm::vec4*)m->data;
 

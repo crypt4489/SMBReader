@@ -27,7 +27,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject& rbo, uint32_t frameNum)
 		if (handle != currentPipeline)
 		{
 			currentPipeline = handle;
-			rbo.BindPipeline(renderTargetIndex, handle);
+			rbo.BindPipeline(handle);
 			rbo.BindDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
 		}
 

@@ -64,7 +64,7 @@ public:
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	Text* text1, * text2;
-	OffsetIndex globalBufferLocation;
+	size_t globalBufferLocation;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
 };

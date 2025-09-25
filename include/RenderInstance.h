@@ -10,6 +10,15 @@
 #include "WindowManager.h"
 
 
+namespace API {
+
+	VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp);
+
+	VkFormat ConvertSMBToVkFormat(ImageFormat format);
+
+	VkPrimitiveTopology ConvertTopology(PrimitiveType type);
+}
+
 template <int N>
 struct ThreadedRecordBuffer
 {
@@ -102,6 +111,8 @@ public:
 
 	void EndCommandBufferRecording(EntryHandle cb);
 
+	void UsePipelineBuilders(VKPipelineBuilder* generic, VKPipelineBuilder* text);
+
 	uint32_t BeginFrame();
 
 	void SubmitFrame(uint32_t imageIndex);
@@ -120,7 +131,7 @@ public:
 
 	void UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset);
 
-	OffsetIndex GetPageFromUniformBuffer(size_t size, uint32_t alignment);
+	size_t GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
 	EntryHandle GetMainBufferIndex() const;
 
@@ -163,7 +174,7 @@ public:
 
 	void CreateVulkanPipelineObject(VKPipelineObject* pipeline);
 
-	OffsetIndex CreateRenderGraph(size_t datasize, size_t alignment);
+	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
 	void DrawScene(EntryHandle cbindex);
 
@@ -175,7 +186,7 @@ public:
 
 	void DestoryTexture(EntryHandle handle);
 
-	VKInstance *vkInstance;
+	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle descriptorPoolIndex;
@@ -196,7 +207,7 @@ public:
 
 	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 
-	VkFormat depthFormat;
+	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
