@@ -33,9 +33,18 @@ struct Camera
 		y = -glm::dot(lUp, lPos);
 		z = -glm::dot(lForward, lPos);
 
-		View[0] = glm::vec4(lRight, 0.0f);
-		View[1] = glm::vec4(lUp, 0.0f);
-		View[2] = glm::vec4(lForward, 0.0f);
+
+		View[0][0] = lRight[0];
+		View[1][0] = lRight[1];
+		View[2][0] = lRight[2];
+		
+		View[0][1] = lUp[0];
+		View[1][1] = lUp[1];
+		View[2][1] = lUp[2];
+		
+		View[0][2] = lForward[0];
+		View[1][2] = lForward[1];
+		View[2][2] = lForward[2];
 
 
 		View[3][0] = x;

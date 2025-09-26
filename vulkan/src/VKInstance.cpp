@@ -425,7 +425,7 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 	return true;
 }
 
-VKDevice* VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
+VKDevice* VKInstance::CreateLogicalDevice(DeviceIndex gpuIndex, DeviceIndex* deviceIndex)
 {
 	uintptr_t* devices = GetDeviceArray(gpuIndex);
 	
@@ -447,12 +447,12 @@ VKDevice* VKInstance::CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& de
 
 	iter[0] = reinterpret_cast<uintptr_t>(device);
 
-	deviceIndex = DeviceIndex(i);
+	*deviceIndex = DeviceIndex(i);
 
 	return device;
 }
 
-VKDevice* VKInstance::GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex)
+VKDevice* VKInstance::GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceIndex)
 {
 	uintptr_t* devices = GetDeviceArray(gpuIndex);
 	VKDevice* dev = reinterpret_cast<VKDevice*>(devices[1]);

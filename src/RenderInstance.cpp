@@ -617,7 +617,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	vkInstance->CreateDrawingSurface(window->GetWindow());
 
 	physicalIndex = vkInstance->CreatePhysicalDevice(1);
-	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, deviceIndex);
+	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, &deviceIndex);
 
 	msaaSamples = vkInstance->GetMaxMSAALevels(physicalIndex);
 

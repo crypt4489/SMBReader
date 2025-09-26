@@ -81,6 +81,78 @@ struct LTM
 		SetPos(GetPos() + (GetUp() * _delta));
 	}
 
+	void MoveForward(const float _delta)
+	{
+		SetPos(GetPos() + (GetForward() * _delta));
+	}
+
+	void MoveRight(const float _delta)
+	{
+		SetPos(GetPos() + (GetRight() * _delta));
+	}
+
+	void MoveUp(const float _delta)
+	{
+		SetPos(GetPos() + (GetUp() * _delta));
+	}
+
+	void RotateAroundUp(double angle)
+	{
+		glm::mat3 rot = CreateRotationMatrix(glm::vec3(0.0, 1.0f, 0.0f), static_cast<float>(glm::radians(angle)));
+
+		LTM[0] = glm::vec4(glm::vec3(LTM[0]) * rot, LTM[0][3]);
+		LTM[1] = glm::vec4(glm::vec3(LTM[1]) * rot, LTM[1][3]);
+		LTM[2] = glm::vec4(glm::normalize(glm::vec3(LTM[2]) * rot), LTM[2][3]);
+
+	}
+
+	void PitchLTM(double angle)
+	{
+		glm::mat3 rot = CreateRotationMatrix(glm::vec3(LTM[0]), static_cast<float>(glm::radians(angle)));
+
+		LTM[1] = glm::vec4(glm::vec3(LTM[1] * rot), LTM[1][3]);
+		
+		auto temp = glm::normalize(glm::vec3(LTM[2]) * rot);
+
+		LTM[2] = glm::vec4(temp, LTM[2][3]);
+	}
+
+	glm::mat3 CreateRotationMatrix(const glm::vec3& up, float angle)
+	{
+		glm::mat3 ret = glm::identity<glm::mat3>();
+
+
+		float s = sinf(angle);
+		float c = cosf(angle);
+
+		glm::vec3 upLN = up;
+
+		float x = upLN[0];
+		float y = upLN[1];
+		float z = upLN[2];
+
+		float invC = 1 - c;
+
+		float xy = x * y;
+		float xz = x * z;
+		float xs = x * s;
+		float ys = y * s;
+		float zs = z * s;
+
+		ret[0][0] = c + (x * x) * invC;
+		ret[0][1] = xy * invC - zs;
+		ret[0][2] = xz * invC + ys;
+		ret[1][0] = xy * invC + zs;
+		ret[1][1] = c + (y * y) * invC;
+		ret[1][2] = xy * invC - xs;
+		ret[2][0] = xz * invC - ys;
+		ret[2][1] = xy * invC + xs;
+		ret[2][2] = c + (z * z) * invC;
+
+		return ret;
+
+	}
+
 
 	glm::mat4 LTM;
 };

@@ -77,7 +77,7 @@ void ApplicationLoop::Execute()
 		LARGE_INTEGER frequency;
 
 		uint64_t frameCounter = 0;
-		double FPS = 0.0f;
+		double FPS = 60.0f;
 
 		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS]()
 			{
@@ -114,6 +114,8 @@ void ApplicationLoop::Execute()
 
 			glfwPollEvents();
 
+			MoveCamera(FPS);
+
 			UpdateRenderables();
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
@@ -131,6 +133,65 @@ void ApplicationLoop::Execute()
 			frameCounter++;
 		}
 	}
+}
+
+void ApplicationLoop::MoveCamera(double fps)
+{
+	bool moved = false;
+
+	float stepfactor = 10.0 / fps;
+
+	double angleFactor = 10.0 / fps;
+
+	if (camMovements[RIGHT])
+	{
+		c.LTM.MoveRight(stepfactor);
+		moved = true;
+	}
+
+	if (camMovements[LEFT])
+	{
+		c.LTM.MoveRight(-stepfactor);
+		moved = true;
+	}
+
+	if (camMovements[FORWARD])
+	{
+		c.LTM.MoveForward(-stepfactor);
+		moved = true;
+	}
+
+	if (camMovements[BACK])
+	{
+		c.LTM.MoveForward(stepfactor);
+		moved = true;
+	}
+
+	if (camMovements[PITCHDOWN])
+	{
+		c.LTM.PitchLTM(-angleFactor);
+		moved = true;
+	}
+
+	if (camMovements[PITCHUP])
+	{
+		c.LTM.PitchLTM(angleFactor);
+		moved = true;
+	}
+
+	if (camMovements[ROTATEYLEFT])
+	{
+		c.LTM.RotateAroundUp(angleFactor);
+		moved = true;
+	}
+
+	if (camMovements[ROTATEYRIGHT])
+	{
+		c.LTM.RotateAroundUp(-angleFactor);
+		moved = true;
+	}
+
+	if (moved) UpdateCameraMatrix();
 }
 
 void ApplicationLoop::UpdateRenderables()
@@ -210,21 +271,77 @@ void ApplicationLoop::InitializeRuntime()
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (key == GLFW_KEY_RIGHT && action == GLFW_PRESS) {
-		loop->c.LTM.MoveRight(glm::vec3(1, 0, 0));
-		loop->UpdateCameraMatrix();
+	if (key == GLFW_KEY_D) {
+		if (action == GLFW_PRESS) {
+			
+			loop->camMovements[ApplicationLoop::RIGHT] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::RIGHT] = false;
+		}
 	}
-	if (key == GLFW_KEY_LEFT && action == GLFW_PRESS) {
-		loop->c.LTM.MoveRight(glm::vec3(-1, 0, 0));
-		loop->UpdateCameraMatrix();
+	if (key == GLFW_KEY_A) {
+		
+		if (action == GLFW_PRESS) {
+	
+			loop->camMovements[ApplicationLoop::LEFT] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::LEFT] = false;
+		}
 	}
-	if (key == GLFW_KEY_UP && action == GLFW_PRESS) {
-		loop->c.LTM.MoveForward(glm::vec3(0, 0, -1));
-		loop->UpdateCameraMatrix();
+	if (key == GLFW_KEY_W) {
+		
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::FORWARD] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::FORWARD] = false;
+		}
 	}
-	if (key == GLFW_KEY_DOWN && action == GLFW_PRESS) {
-		loop->c.LTM.MoveForward(glm::vec3(0, 0, 1));
-		loop->UpdateCameraMatrix();
+	if (key == GLFW_KEY_S) {
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::BACK] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::BACK] = false;
+		}
+	}
+
+	if (key == GLFW_KEY_UP) {
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::PITCHUP] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::PITCHUP] = false;
+		}
+	}
+
+	if (key == GLFW_KEY_DOWN) {
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::PITCHDOWN] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::PITCHDOWN] = false;
+		}
+	}
+
+	if (key == GLFW_KEY_RIGHT) {
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = false;
+		}
+	}
+
+	if (key == GLFW_KEY_LEFT) {
+		if (action == GLFW_PRESS) {
+			loop->camMovements[ApplicationLoop::ROTATEYLEFT] = true;
+		}
+		else if (action == GLFW_RELEASE) {
+			loop->camMovements[ApplicationLoop::ROTATEYLEFT] = false;
+		}
 	}
 }
 

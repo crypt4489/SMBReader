@@ -56,6 +56,8 @@ public:
 
 	void WriteCameraMatrix(uint32_t frame);
 
+	void MoveCamera(double fps);
+
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
 	std::queue<std::vector<std::any>> commands;
@@ -67,5 +69,19 @@ public:
 	size_t globalBufferLocation;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
+
+	enum DIRS {
+		RIGHT = 0,
+		LEFT = 1,
+		FORWARD = 2,
+		BACK = 3,
+		ROTATEYRIGHT = 4,
+		PITCHUP = 5,
+		ROTATEYLEFT = 6,
+		PITCHDOWN = 7,
+		MAXDIRS
+	};
+
+	std::array<bool, MAXDIRS> camMovements;
 };
 

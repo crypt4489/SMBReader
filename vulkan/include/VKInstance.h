@@ -92,9 +92,9 @@ public:
 
 	bool isDeviceSuitable(VkPhysicalDevice device);
 
-	VKDevice* CreateLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
+	VKDevice* CreateLogicalDevice(DeviceIndex gpuIndex, DeviceIndex* deviceIndex);
 
-	VKDevice* GetLogicalDevice(DeviceIndex& gpuIndex, DeviceIndex& deviceIndex);
+	VKDevice* GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceIndex);
 
 	void SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize);
 
