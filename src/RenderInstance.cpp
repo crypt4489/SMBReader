@@ -508,7 +508,7 @@ void RenderInstance::CreateGlobalBuffer()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	globalIndex = dev->CreateHostBuffer
 	(
-		128'000'000, true, true,
+		128'000'000, true,
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
@@ -632,8 +632,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
 		features, vkInstance->renderSurface, 
-		3 * MB, 
-		1 * MB,
+		8 * KB, 
+		2 * KB,
 		16 * KB,
 		8 * MB,
 		1 * KB);
@@ -648,7 +648,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MB, true, false, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
 

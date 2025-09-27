@@ -344,7 +344,7 @@ public:
 
 	EntryHandle CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D& extent);
 
-	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, bool createAllocator, VkBufferUsageFlags usage);
+	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage);
 
 	EntryHandle CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
@@ -580,10 +580,9 @@ public:
 	size_t queueManagersSize;
 
 	mutable std::shared_mutex deviceLock;
-	mutable std::mutex entriesLock;
 
 	uintptr_t* entries;
-	size_t indexForEntries = 0;
+	std::atomic<size_t> indexForEntries = 0;
 	size_t numberOfEntries = 0;
 
 	void* perDeviceData;
