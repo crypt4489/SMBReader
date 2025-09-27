@@ -7,16 +7,16 @@
 #include "GLFW/include/GLFW/glfw3.h"
 #include <mutex>
 
-struct VKInstanceAllocator
+struct VKDriverAllocator
 {
-	VKInstanceAllocator() = default;
+	VKDriverAllocator() = default;
 
-	uint8_t* instanceData;
-	size_t instanceDataSize;
-	std::atomic<size_t> instanceDataOffset;
-	uint8_t* commandData;
-	size_t commandDataSize;
-	std::atomic<size_t> commandDataOffset;
+	uint8_t* instanceData = nullptr;
+	size_t instanceDataSize = 0;
+	std::atomic<size_t> instanceDataOffset = 0;
+	uint8_t* commandData = nullptr;
+	size_t commandDataSize = 0;
+	std::atomic<size_t> commandDataOffset = 0;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;
@@ -31,6 +31,12 @@ struct VKInstanceAllocator
 		res.pfnInternalFree = nullptr;
 
 		return res;
+	}
+
+	void Delete()
+	{
+		if (instanceData) delete[] instanceData;
+		if (commandData) delete[] commandData;
 	}
 
 	static void* VKAPI_CALL Allocation(
@@ -61,6 +67,14 @@ struct VKInstanceAllocator
 		size_t alignment, VkSystemAllocationScope allocationScope);
 
 	void RealFree(void* memory);
+
+	void* RealAlloc(size_t size,
+		size_t alignment, bool cache);
+
+	void* RealRealloc(void* original, size_t size,
+		size_t alignment, bool cache);
+
+	//void RealFree(void* memory);
 
 
 };
@@ -127,6 +141,6 @@ public:
 
 	
 	
-	VKInstanceAllocator *allocator;
+	VKDriverAllocator *allocator;
 };
 

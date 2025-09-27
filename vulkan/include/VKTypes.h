@@ -17,3 +17,4 @@ struct DescriptorSetLayoutBuilder;
 struct DescriptorSetBuilder;
 struct PipelineCacheObject;
 class VKPipelineBuilder;
+struct VKDriverAllocator;

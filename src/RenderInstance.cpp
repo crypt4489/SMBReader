@@ -519,35 +519,33 @@ void RenderInstance::CreateGlobalBuffer()
 	);
 }
 
-void RenderInstance::UpdateDynamicGlobalBufferCurrent(void* data, size_t dataSize, size_t offset)
+void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	dev->WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * this->currentFrame));
-}
+	
+	size_t intSize = allocations[handle].size;
+	size_t intOffset = 0;
+	
+	if (offset)
+		intOffset = offset;
+	if (size)
+		intSize = size;
 
-void RenderInstance::UpdateDynamicGlobalBufferAbsolute(void* data, size_t dataSize, size_t offset)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	dev->WriteToHostBuffer(globalIndex, data, dataSize, offset);
+	dev->WriteToHostBuffer(allocations[handle].memIndex, data, intSize, allocations[handle].offset + offset);
 }
-
-void RenderInstance::UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	for (int i = 0; i<MAX_FRAMES_IN_FLIGHT; i++)
-		dev->WriteToHostBuffer(globalIndex, data, dataSize, offset + (dataSize * i));
-}
-
 
 size_t RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	return dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment);
-}
+	size_t location = dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment);
 
-EntryHandle RenderInstance::GetMainBufferIndex() const
-{
-	return globalIndex;
+	size_t index = allocationsIndex.fetch_add(1);
+	allocations.allocations[index].memIndex = globalIndex;
+	allocations.allocations[index].offset = location;
+	allocations.allocations[index].size = size;
+
+
+	return index;
 }
 
 VkBuffer RenderInstance::GetDynamicUniformBuffer()
@@ -612,7 +610,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	windowMan->SetWindowResizeCallback(frameResizeCB);
 	glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 
-	vkInstance->SetInstanceDataAndSize(16 * MB, 256 * KB);
+	vkInstance->SetInstanceDataAndSize(800 * KB, 256 * KB);
 	vkInstance->CreateRenderInstance();
 	vkInstance->CreateDrawingSurface(window->GetWindow());
 
@@ -634,8 +632,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
 		features, vkInstance->renderSurface, 
-		6 * MB, 
-		1 * MB);
+		3 * MB, 
+		1 * MB,
+		16 * KB,
+		8 * MB,
+		1 * KB);
 
 
 
@@ -718,7 +719,7 @@ size_t RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 	dsb->AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
 	EntryHandle mrpDescId =  dsb->AddDescriptorsToCache();
 	size_t perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
-	std::vector<uint32_t> data(1, (uint32_t)perRenderPassStuff);
+	std::vector<uint32_t> data(1, (uint32_t)allocations[perRenderPassStuff].offset);
 	majorDevice->UpdateRenderGraph(mainRenderPass, data.data(), (uint32_t)data.size(), mrpDescId);
 	return perRenderPassStuff;
 }
@@ -765,11 +766,42 @@ DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname
 	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
-void RenderInstance::CreateVulkanPipelineObject(VKPipelineObject *pipeline)
+EntryHandle RenderInstance::CreateVulkanPipelineObject(IntermediaryPipelineInfo* info, size_t* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+
+	VKPipelineObjectCreateInfo create = {
+			.drawType = info->drawType,
+			.vertexBufferIndex = allocations[info->vertexBufferIndex].memIndex,
+			.vertexBufferOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset),
+			.vertexCount = info->vertexCount,
+			.indirectDrawBuffer = allocations[info->indirectDrawBuffer].memIndex,
+			.indirectDrawOffset = static_cast<uint32_t>(allocations[info->indirectDrawBuffer].offset),
+			.pipelinename = info->pipelinename,
+			.descriptorsetid = info->descriptorsetid,
+			.maxDynCap = info->maxDynCap,
+			.data = nullptr,
+			.indexBufferHandle = allocations[info->indexBufferHandle].memIndex,
+			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
+			.indexCount = info->indexCount,
+	};
+
+
+	EntryHandle pipelineIndex = dev->CreatePipelineObject(&create);
+
+	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
+
+	for (uint32_t i = 0; i < info->maxDynCap; i++)
+	{
+		vkPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+	}
+
+
 	auto graph = dev->GetRenderGraph(mainRenderPass);
-	graph->AddObject(pipeline);
+	graph->AddObject(vkPipelineObject);
+
+	return pipelineIndex;
 }
 
 void RenderInstance::DrawScene(EntryHandle cbindex)

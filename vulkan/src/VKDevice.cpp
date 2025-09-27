@@ -190,6 +190,7 @@ EntryHandle VKDevice::AddVkTypeToEntry(void* handle)
 
 void* VKDevice::AllocFromPerDeviceData(size_t size)
 {
+	std::shared_lock lock(deviceLock);
 	size_t val, desired, out;
 	val = perDeviceOffset.load(std::memory_order_relaxed);
 	do {
@@ -217,10 +218,12 @@ void* VKDevice::AllocFromDeviceCache(size_t size)
 {
 	//std::lock_guard dataLock(deviceCacheLock);
 
+	std::shared_lock lock(deviceLock);
+
 	size_t val, desired, out;
 	val = deviceCacheWrite.load(std::memory_order_relaxed);
 	do {
-		
+
 		desired = val + size;
 		out = val;
 		if (desired >= deviceCacheSize)
@@ -637,13 +640,21 @@ void VKDevice::CreateLogicalDevice(
 	VkPhysicalDeviceFeatures& features,
 	VkSurfaceKHR renderSurface,
 	size_t perDeviceDataSize,
-	size_t perEntriesSize
+	size_t perEntriesSize,
+	size_t perCacheSize,
+	size_t driverPerSize,
+	size_t driverPerCache
 )
 {
-#define CACHESIZE 4 * 1024
-	
-		
-	deviceCacheSize = CACHESIZE;
+	deviceAllocator = new VKDriverAllocator();
+	deviceAllocator->commandDataSize = driverPerCache;
+	deviceAllocator->commandData = new unsigned char[driverPerCache];
+
+	deviceAllocator->instanceDataSize = driverPerSize;
+	deviceAllocator->instanceData = new unsigned char[driverPerSize];
+
+
+	deviceCacheSize = perCacheSize;
 	deviceCache = (void*)new char[deviceCacheSize];
 
 	perDeviceSize = perDeviceDataSize - perEntriesSize;
@@ -707,7 +718,9 @@ void VKDevice::CreateLogicalDevice(
 	logDeviceInfo.ppEnabledLayerNames = instanceLayers;
 	logDeviceInfo.pEnabledFeatures = &features;
 
-	VkResult res = vkCreateDevice(gpu, &logDeviceInfo, nullptr, &device);
+	auto callbacks = (*deviceAllocator)();
+
+	VkResult res = vkCreateDevice(gpu, &logDeviceInfo, &callbacks, &device);
 
 	if (res != VK_SUCCESS)
 	{
@@ -1187,6 +1200,10 @@ void VKDevice::DestroyDevice()
 	}
 
 	vkDestroyDevice(device, nullptr);
+
+	deviceAllocator->Delete();
+
+	delete deviceAllocator;
 
 	if (perDeviceData)
 	{

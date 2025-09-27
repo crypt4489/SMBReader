@@ -24,7 +24,7 @@ VKInstance::VKInstance()
 	instancePerSize(0),
 	instancePerMemory(0),
 	gpusAndLogicalDevices(nullptr),
-	allocator(new VKInstanceAllocator())
+	allocator(new VKDriverAllocator())
 {
 }
 
@@ -125,8 +125,6 @@ void VKInstance::CreateRenderInstance()
 	
 	instancePerOffset = 0;
 	instanceTempOffset = 0;
-
-	
 
 	VkApplicationInfo appInfoStruct{};
 
@@ -481,19 +479,19 @@ void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
 }
 
 
-void* VKAPI_CALL VKInstanceAllocator::Allocation(
+void* VKAPI_CALL VKDriverAllocator::Allocation(
 	void* userData,
 	size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope
 )
 {
-	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
 	return allocator->RealAlloc(size, alignment, allocationScope);
 }
 
 
-void* VKAPI_CALL VKInstanceAllocator::Reallocation(
+void* VKAPI_CALL VKDriverAllocator::Reallocation(
 	void* userData,
 	void* original,
 	size_t size,
@@ -501,20 +499,20 @@ void* VKAPI_CALL VKInstanceAllocator::Reallocation(
 	VkSystemAllocationScope allocationScope
 )
 {
-	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
 	return allocator->RealRealloc(original, size, alignment, allocationScope);
 }
 
-void VKAPI_CALL VKInstanceAllocator::Free(
+void VKAPI_CALL VKDriverAllocator::Free(
 	void* userData,
 	void* memory
 )
 {
-	VKInstanceAllocator* allocator = (VKInstanceAllocator*)userData;
+	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
 	allocator->RealFree(memory);
 }
 
-void* VKInstanceAllocator::RealAlloc(size_t size,
+void* VKDriverAllocator::RealAlloc(size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
@@ -557,7 +555,7 @@ void* VKInstanceAllocator::RealAlloc(size_t size,
 	return (void*)head;
 }
 
-void* VKInstanceAllocator::RealRealloc(void* original, size_t size,
+void* VKDriverAllocator::RealRealloc(void* original, size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
@@ -566,7 +564,58 @@ void* VKInstanceAllocator::RealRealloc(void* original, size_t size,
 	return newaddr;
 }
 
-void VKInstanceAllocator::RealFree(void* memory)
+void VKDriverAllocator::RealFree(void* memory)
 {
 
+}
+
+void* VKDriverAllocator::RealAlloc(size_t size,
+	size_t alignment,
+	bool cache)
+{
+	uintptr_t head = 0;
+	size_t val, desired, out;
+	size = (size + alignment - 1) & ~(alignment - 1);
+	if (cache)
+	{
+		head = (uintptr_t)commandData;
+
+		val = commandDataOffset.load(std::memory_order_relaxed);
+
+		do {
+			desired = val + size;
+			out = val;
+			if (desired >= commandDataSize)
+			{
+				out = 0;
+				desired = out + size;
+			}
+		} while (!commandDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+
+		head += out;
+	}
+	else
+	{
+		head = (uintptr_t)instanceData;
+
+		val = instanceDataOffset.load(std::memory_order_relaxed);
+
+		do {
+			desired = val + size;
+			out = val;
+		} while (!instanceDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+
+		head += out;
+	}
+
+	return (void*)head;
+}
+
+void* VKDriverAllocator::RealRealloc(void* original, size_t size,
+	size_t alignment,
+	bool cache)
+{
+	void* newaddr = RealAlloc(size, alignment, cache);
+	memcpy(newaddr, original, size);
+	return newaddr;
 }

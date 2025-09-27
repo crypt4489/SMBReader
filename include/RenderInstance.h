@@ -91,6 +91,45 @@ struct ThreadedRecordBuffer
 };
 
 
+struct IntermediaryPipelineInfo
+{
+	uint32_t drawType;
+	size_t vertexBufferIndex;
+	uint32_t vertexCount;
+	size_t indirectDrawBuffer;
+	EntryHandle pipelinename;
+	EntryHandle descriptorsetid;
+	uint32_t maxDynCap;
+	size_t indexBufferHandle;
+	uint32_t indexCount;
+};
+
+
+#define FULL_ALLOCATION_SIZE 0
+#define ABSOLUTE_ALLOCATION_OFFSET 0
+
+struct RenderAllocation
+{
+	EntryHandle memIndex;
+	size_t offset;
+	size_t size;
+};
+
+template <int N>
+struct RenderAllocationHolder
+{
+	std::array<RenderAllocation, N> allocations;
+	
+	RenderAllocation operator[](size_t index)
+	{
+		if (index >= N)
+			return { EntryHandle(), ~0ui64, ~0ui64 };
+
+		return allocations[index];
+	}
+
+};
+
 class RenderInstance
 {
 public:
@@ -125,15 +164,9 @@ public:
 
 	void CreateGlobalBuffer();
 
-	void UpdateDynamicGlobalBufferAbsolute(void* data, size_t dataSize, size_t offset);
-
-	void UpdateDynamicGlobalBufferCurrent(void* data, size_t dataSize, size_t offset);
-
-	void UpdateDynamicGlobalBufferForAllFrames(void* data, size_t dataSize, size_t offset);
+	void UpdateAllocation(void* data, size_t handle, size_t size, size_t offset);
 
 	size_t GetPageFromUniformBuffer(size_t size, uint32_t alignment);
-
-	EntryHandle GetMainBufferIndex() const;
 
 	VkBuffer GetDynamicUniformBuffer();
 
@@ -172,7 +205,7 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	void CreateVulkanPipelineObject(VKPipelineObject* pipeline);
+	EntryHandle CreateVulkanPipelineObject(IntermediaryPipelineInfo *info, size_t *offsets);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
@@ -215,6 +248,9 @@ public:
 
 	std::unordered_map<std::string, EntryHandle> pipelinesIdentifier;
 	std::unordered_map<std::string, EntryHandle> descriptorLayouts;
+
+	RenderAllocationHolder<50> allocations;
+	std::atomic<size_t> allocationsIndex;
 
 	
 };

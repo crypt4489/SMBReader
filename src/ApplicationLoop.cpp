@@ -88,7 +88,7 @@ void ApplicationLoop::Execute()
 
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
-					std::cout << FPS << std::endl;
+					std::cout << FPS << "\n";
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -213,13 +213,8 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	if (frame >= RenderInstance::MAX_FRAMES_IN_FLIGHT)
-	{
-		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferForAllFrames(&c.View, sizeof(glm::mat4) * 2, globalBufferLocation);
-	}
-	else
-	{
-		VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(&c.View, sizeof(glm::mat4) * 2, globalBufferLocation);
+	for (uint32_t i = 0; i<frame; i++) {
+		VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, sizeof(glm::mat4) * 2 * i);
 	}
 }
 
@@ -241,9 +236,10 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
-	gMemoryCallback = [this](void* _d, size_t _si, size_t _off)
+	gMemoryCallback = [this](void* _d, size_t _si, size_t _alloc)
 		{
-			VKRenderer::gRenderInstance->UpdateDynamicGlobalBufferCurrent(_d, _si, _off);
+			uint32_t frame = VKRenderer::gRenderInstance->currentFrame;
+			VKRenderer::gRenderInstance->UpdateAllocation(_d, _alloc, _si, frame * _si);
 		};
 
 	//TextManager::CreateFontTextManager("text.bmp", "text.dat");

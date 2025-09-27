@@ -371,7 +371,10 @@ public:
 		VkPhysicalDeviceFeatures& features,
 		VkSurfaceKHR renderSurface,
 		size_t perDeviceDataSize,
-		size_t perEntriesSize
+		size_t perEntriesSize,
+		size_t perCacheSize,
+		size_t driverPerSize,
+		size_t driverPerCache
 	);
 
 	VKPipelineBuilder* CreatePipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount);
@@ -590,5 +593,7 @@ public:
 	void* deviceCache;
 	std::atomic<size_t> deviceCacheWrite;
 	size_t deviceCacheSize;
+
+	VKDriverAllocator *deviceAllocator;
 };
 
