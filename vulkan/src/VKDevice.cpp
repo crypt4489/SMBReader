@@ -43,12 +43,20 @@ RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& 
 
 }
 
-void RecordingBufferObject::BindPipeline(EntryHandle pipelinename)
+void RecordingBufferObject::BindGraphicsPipeline(EntryHandle pipelinename)
 {
-	auto pco = vkDeviceHandle.GetPipelineCacheObject(pipelinename);
+	BindPipelineInternal(pipelinename, VK_PIPELINE_BIND_POINT_GRAPHICS);
+}
+
+void RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) {
+	BindPipelineInternal(pipelineId, VK_PIPELINE_BIND_POINT_COMPUTE);
+}
+
+void RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) {
+	auto pco = vkDeviceHandle.GetPipelineCacheObject(id);
 	currLayout = pco->pipelineLayout;
 	currPipeline = pco->pipeline;
-	vkCmdBindPipeline(cbBufferHandler.buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, currPipeline);
+	vkCmdBindPipeline(cbBufferHandler.buffer, bindPoint, currPipeline);
 }
 
 void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
@@ -88,6 +96,11 @@ void RecordingBufferObject::BindingIndirectDrawCmd(EntryHandle indirectBufferInd
 void RecordingBufferObject::EndRenderPassCommand()
 {
 	vkCmdEndRenderPass(cbBufferHandler.buffer);
+}
+
+void RecordingBufferObject::DispatchCommand(uint32_t x, uint32_t y, uint32_t z)
+{
+	vkCmdDispatch(cbBufferHandler.buffer, x, y, z);
 }
 
 void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
@@ -723,18 +736,27 @@ void VKDevice::CreateLogicalDevice(
 }
 
 
-VKPipelineBuilder* VKDevice::CreatePipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount)
+VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount)
 {
 	std::shared_lock lock(deviceLock);
 
 	auto renderPass = GetRenderPass(renderPassIndex);
 
-	auto renderPassData = reinterpret_cast<VKPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKPipelineBuilder)));
+	auto renderPassData = reinterpret_cast<VKGraphicsPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKGraphicsPipelineBuilder)));
 
 	return std::construct_at(renderPassData, renderPass, this, colorCount, descLayoutCount, dynamicStateCount);
 }
 
-EntryHandle VKDevice::CreatePipelineObject(VKPipelineObjectCreateInfo* info)
+VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numDesc)
+{
+	std::shared_lock lock(deviceLock);
+
+	auto computePB = reinterpret_cast<VKComputePipelineBuilder*>(AllocFromDeviceCache(sizeof(VKComputePipelineBuilder)));
+
+	return std::construct_at(computePB, this, numDesc);
+}
+
+EntryHandle VKDevice::CreatePipelineObject(VKGraphicsPipelineObjectCreateInfo* info)
 {
 	EntryHandle ret;
 
@@ -1557,6 +1579,10 @@ VkShaderStageFlagBits VKDevice::ConvertShaderFlags(const std::string& filename)
 	else if (filename.find(".vert") != std::string::npos)
 	{
 		return VK_SHADER_STAGE_VERTEX_BIT;
+	}
+	else if (filename.find(".comp") != std::string::npos)
+	{
+		return VK_SHADER_STAGE_COMPUTE_BIT;
 	}
 
 	return VK_SHADER_STAGE_ALL;

@@ -14,6 +14,18 @@ struct DescriptorSetBuilder
 
 	void AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
 
+	void AddStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+
+	void AddDynamicStorageBuffer(VkBuffer buffer, VkDeviceSize, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+
+	void AddStorageBufferDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+
+	void AddDynamicStorageBufferDirect(VkBuffer buffer, VkDeviceSize, uint32_t binding, uint32_t frames, VkDeviceSize offset);
+
+	void AddBufferTypePerFrame(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset, VkDescriptorType type);
+
+	void AddBufferTypeDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset, VkDescriptorType type);
+
 	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
 
 	EntryHandle AddDescriptorsToCache();

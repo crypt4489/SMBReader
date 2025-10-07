@@ -91,7 +91,7 @@ struct ThreadedRecordBuffer
 };
 
 
-struct IntermediaryPipelineInfo
+struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
 	size_t vertexBufferIndex;
@@ -150,7 +150,7 @@ public:
 
 	void EndCommandBufferRecording(EntryHandle cb);
 
-	void UsePipelineBuilders(VKPipelineBuilder* generic, VKPipelineBuilder* text);
+	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text);
 
 	uint32_t BeginFrame();
 
@@ -205,7 +205,7 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateVulkanPipelineObject(IntermediaryPipelineInfo *info, size_t *offsets);
+	EntryHandle CreateVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
@@ -244,7 +244,7 @@ public:
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
-	std::array<EntryHandle, 4> shaders;
+	std::array<EntryHandle, 5> shaders;
 
 	std::unordered_map<std::string, EntryHandle> pipelinesIdentifier;
 	std::unordered_map<std::string, EntryHandle> descriptorLayouts;

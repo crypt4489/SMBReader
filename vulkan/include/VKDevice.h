@@ -32,6 +32,11 @@ struct DescriptorPoolBuilder
 		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, size };
 	}
 
+	void AddStoragePoolSize(uint32_t size)
+	{
+		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, size };
+	}
+
 	void AddImageSampler(uint32_t size)
 	{
 		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size };
@@ -219,7 +224,11 @@ public:
 
 	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
 
-	void BindPipeline(EntryHandle pipelinename);
+	void BindGraphicsPipeline(EntryHandle pipelinename);
+
+	void BindComputePipeline(EntryHandle pipelineId);
+
+	void BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint);
 
 	void BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
@@ -238,6 +247,8 @@ public:
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
 
 	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset);
+
+	void DispatchCommand(uint32_t x, uint32_t y, uint32_t z);
 
 	void EndRenderPassCommand();
 
@@ -377,11 +388,13 @@ public:
 		size_t driverPerCache
 	);
 
-	VKPipelineBuilder* CreatePipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount);
+	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount);
+	
+	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numDesc);
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
-	EntryHandle CreatePipelineObject(VKPipelineObjectCreateInfo* info);
+	EntryHandle CreatePipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 

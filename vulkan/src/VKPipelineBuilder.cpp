@@ -3,9 +3,9 @@
 #include "VKPipelineBuilder.h"
 #include "VKDevice.h"
 #include <array>
-VKPipelineBuilder::VKPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount) 
+VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount) 
 {
-	memset(this, 0, sizeof(VKPipelineBuilder));
+	memset(this, 0, sizeof(VKGraphicsPipelineBuilder));
 	renderPass = _rp; 
 	majorDev = d;
 	colorBlendAttachmentsCount = colorsBlendAttchCount;
@@ -16,7 +16,7 @@ VKPipelineBuilder::VKPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t col
 	dynamicStates = reinterpret_cast<VkDynamicState*>(d->AllocFromDeviceCache(sizeof(VkDynamicState) * _dynamicStateCount));
 }
 
-void VKPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, uint32_t count)
+void VKGraphicsPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, uint32_t count)
 {
 	for (uint32_t i = 0; i < count; i++)
 	{
@@ -29,7 +29,7 @@ void VKPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, uint32_t 
 
 }
 
-void VKPipelineBuilder::CreateVertexInput(VkVertexInputBindingDescription* bindDescription,
+void VKGraphicsPipelineBuilder::CreateVertexInput(VkVertexInputBindingDescription* bindDescription,
 		uint32_t bindingCount,
 		VkVertexInputAttributeDescription* vertAttributes,
 		uint32_t vertAttributecount)
@@ -55,20 +55,20 @@ void VKPipelineBuilder::CreateVertexInput(VkVertexInputBindingDescription* bindD
 	vertexInputInfo.pVertexAttributeDescriptions = innerVertAttributes;
 }
 
-void VKPipelineBuilder::CreateInputAssembly(VkPrimitiveTopology topo, bool primitiveRestart)
+void VKGraphicsPipelineBuilder::CreateInputAssembly(VkPrimitiveTopology topo, bool primitiveRestart)
 {
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	inputAssembly.topology = topo;
 	inputAssembly.primitiveRestartEnable = primitiveRestart;
 }
 
-void VKPipelineBuilder::CreateViewportState(uint32_t viewportCount, uint32_t scissorCount)
+void VKGraphicsPipelineBuilder::CreateViewportState(uint32_t viewportCount, uint32_t scissorCount)
 {
 	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportState.viewportCount = viewportCount;
 	viewportState.scissorCount = scissorCount;
 }
-void VKPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace)
+void VKGraphicsPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace)
 {
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
@@ -82,7 +82,7 @@ void VKPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace 
 	rasterizer.depthBiasClamp = 0.0f;
 	rasterizer.depthBiasSlopeFactor = 0.0f;
 }
-void VKPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
+void VKGraphicsPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
 {
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.sampleShadingEnable = VK_FALSE;
@@ -92,7 +92,7 @@ void VKPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
 	multisampling.alphaToCoverageEnable = VK_FALSE;
 	multisampling.alphaToOneEnable = VK_FALSE;
 }
-void VKPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags)
+void VKGraphicsPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags)
 {
 	auto colorBlendAttachment = &colorBlendAttachments[attachmentNumber];
 	colorBlendAttachment->colorWriteMask = flags;
@@ -105,7 +105,7 @@ void VKPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, Vk
 	colorBlendAttachment->alphaBlendOp = VK_BLEND_OP_ADD;
 
 }
-void VKPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
+void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 {
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	colorBlending.logicOpEnable = VK_FALSE;
@@ -117,7 +117,7 @@ void VKPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 }
-void VKPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp)
+void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp)
 
 {
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -135,29 +135,7 @@ void VKPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp)
 	depthStencil.back = {}; // Optional
 }
 
-
-VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout *descriptorSetLayout, uint32_t count)
-{
-	VkPipelineLayout pipelineLayout;
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
-	
-	pipelineLayoutInfo.setLayoutCount = count;
-	pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
-	
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-	if (vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create pipeline layout!");
-	}
-
-	return pipelineLayout;
-}
-
-EntryHandle VKPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descriptorlaysids,
+EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descriptorlaysids,
 	size_t descriptorSetCount,
 	EntryHandle* shaderHandles,
 	size_t shaderCount)
@@ -220,9 +198,73 @@ EntryHandle VKPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descriptorlay
 	return ret;
 
 }
-
-VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags)
+VKComputePipelineBuilder::VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount) 
 {
+	memset(this, 0, sizeof(VKComputePipelineBuilder));
+	majorDev = d;
+	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
+}
+
+EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descriptorlaysids,
+	size_t descriptorSetCount,
+	EntryHandle shaderHandles
+)
+{
+	VkPipeline computePipeline;
+
+	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(majorDev->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * descriptorSetCount));
+
+	for (std::size_t i = 0; i < descriptorSetCount; i++)
+	{
+		co.descLayout[i] = descriptorlaysids[i];
+		layouts[i] = majorDev->GetDescriptorSetLayout(descriptorlaysids[i]);
+	}
+
+	VkPipelineLayout pipelineLayout = CreatePipelineLayout(layouts, descriptorSetCount);
+	
+	std::pair<VkShaderModule, VkShaderStageFlagBits> shader = majorDev->GetShader(shaderHandles);
+
+	
+	pipelineInfo.stage = AddShader(shader.first, shader.second);
+	
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipelineInfo.layout = pipelineLayout;
+
+
+	if (vkCreateComputePipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create compute pipeline!");
+	}
+
+	co.pipeline = computePipeline;
+	co.pipelineLayout = pipelineLayout;
+
+	EntryHandle ret = majorDev->CreatePipelineCacheObject(&co);
+
+	return ret;
+}
+
+
+VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count) {
+	VkPipelineLayout pipelineLayout;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+
+	pipelineLayoutInfo.setLayoutCount = count;
+	pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
+
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+	if (vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create pipeline layout!");
+	}
+
+	return pipelineLayout;
+}
+
+VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags) {
 	VkPipelineShaderStageCreateInfo shaderStageInfo{};
 	shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shaderStageInfo.stage = flags;

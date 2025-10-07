@@ -40,11 +40,25 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		dsb->AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
 		EntryHandle descHandle = dsb->AddDescriptorsToCache();
 
+
+		struct ubo
+		{
+			glm::mat4 mat; //need 64 bytes padding, will switch to pipeline speicialization constant
+		};
+
 		objSpecificMemIndex = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
-		objVertexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
+		size_t objMorphToVertexMemory = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
+		size_t objComputePerFrame = rendInst->GetPageFromUniformBuffer(sizeof(ubo), alignof(ubo));
+		objVertexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->vertexSize*frames, alignof(glm::vec4));
 		objIndexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->indexSize, alignof(uint32_t));
 
-		IntermediaryPipelineInfo create = {
+		DescriptorSetBuilder* cdsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["compute"], frames);
+		cdsb->AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(ubo), 0, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 1, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 2, frames, 0);
+		cdsb->AddDynamicStorageBuffer(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 3, frames, 0);
+
+		GraphicsIntermediaryPipelineInfo create = {
 			.drawType = 0,
 			.vertexBufferIndex = objVertexMemoryIndex,
 			.vertexCount = m->vertexCount,
@@ -56,7 +70,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.indexCount = m->indexCount,
 		};
 
-		rendInst->UpdateAllocation(m->GetVertexData(), objVertexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation(m->GetVertexData(), objVertexMemoryIndex, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
+
 
 		rendInst->UpdateAllocation(m->GetIndexData(), objIndexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 

@@ -57,6 +57,28 @@ void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStage
 	descSetBindings[counter++] = layoutBinding;
 }
 
+void DescriptorSetLayoutBuilder::AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	layoutBinding.descriptorCount = 1;
+	layoutBinding.stageFlags = flags;
+
+	descSetBindings[counter++] = layoutBinding;
+}
+
+void DescriptorSetLayoutBuilder::AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	layoutBinding.descriptorCount = 1;
+	layoutBinding.stageFlags = flags;
+
+	descSetBindings[counter++] = layoutBinding;
+}
+
 void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};

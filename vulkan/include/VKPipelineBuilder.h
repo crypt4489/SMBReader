@@ -18,19 +18,25 @@ struct PipelineCacheObject
 class VKPipelineBuilder
 {
 public:
-	VKPipelineBuilder() = default;
-	VKPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount);
-
+	VKDevice* majorDev;
+	PipelineCacheObject co;
 
 	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
+
+	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);
+};
+
+class VKGraphicsPipelineBuilder : public VKPipelineBuilder
+{
+public:
+	VKGraphicsPipelineBuilder() = default;
+	VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount);
+
 
 	EntryHandle CreateGraphicsPipeline(EntryHandle* descriptorlaysids,
 		size_t descriptorSetCount,
 		EntryHandle* shaderHandles,
 		size_t shaderCount);
-
-	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);
-
 
 	void CreateDynamicStateInfo(VkDynamicState* states, uint32_t count);
 
@@ -54,7 +60,7 @@ public:
 	void CreateDepthStencil(VkCompareOp depthOp);
 
 	VkRenderPass renderPass;
-	VKDevice *majorDev;
+	
 	uint32_t colorBlendAttachmentsCount;
 
 	VkDynamicState* dynamicStates;
@@ -71,6 +77,17 @@ public:
 	VkPipelineColorBlendStateCreateInfo colorBlending;
 	VkPipelineDepthStencilStateCreateInfo depthStencil;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
-	PipelineCacheObject co;
+	
 };
 
+class VKComputePipelineBuilder : public VKPipelineBuilder
+{
+public:
+	VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount);
+	VkComputePipelineCreateInfo pipelineInfo;
+
+	EntryHandle CreateComputePipeline(EntryHandle* descriptorlaysids,
+		size_t descriptorSetCount,
+		EntryHandle shaderHandles);
+
+};

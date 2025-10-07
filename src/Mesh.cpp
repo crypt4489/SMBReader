@@ -123,6 +123,21 @@ void Mesh::GenerateCube(Mesh* m)
         memcpy(intPtr, &BoxIndices[i], sizeof(uint32_t));
         intPtr++;
     }
+
+
+
+    ptr = (glm::vec4*)intPtr;
+
+    for (size_t i = 0; i < m->vertexCount; i++)
+    {
+        glm::vec4 scaledVec = glm::vec4(10.0f * glm::vec3(BoxVerts[i]), 1.0f);
+        
+        memcpy(ptr, &scaledVec, sizeof(glm::vec4));
+        ptr++;
+        memcpy(ptr, &BoxTex[i], sizeof(glm::vec4));
+        ptr++;
+    }
+
 	
 }
 

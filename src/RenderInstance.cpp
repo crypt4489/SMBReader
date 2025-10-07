@@ -363,13 +363,9 @@ void RenderInstance::CreatePipelines()
 {
 	// Create Shaders
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);	
 
 	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv" };
-
-	std::vector<EntryHandle> shaders1Handles;
 
 	size_t counter = 0;
 
@@ -378,10 +374,10 @@ void RenderInstance::CreatePipelines()
 		std::string name = shaders1[i];
 		std::vector<char> buffer;
 		if (FileManager::FileExists(name)) {
-			
+
 			auto ret = FileManager::ReadFileInFull(name, buffer);
 
-			shaders1Handles.push_back(dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name)));
+			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
 		}
 		else
 		{
@@ -391,15 +387,11 @@ void RenderInstance::CreatePipelines()
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 
-			shaders1Handles.push_back(dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name)));
+			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
 		}
-
-		shaders[counter++] = shaders1Handles[i];
 	}
 
 	std::vector<std::string> shaders2 = { "text.vert.spv" , "text.frag.spv" };
-
-	std::vector<EntryHandle> shaders2Handles;
 
 	for (size_t i = 0; i < shaders2.size(); i++)
 	{
@@ -409,7 +401,7 @@ void RenderInstance::CreatePipelines()
 
 			auto ret = FileManager::ReadFileInFull(name, buffer);
 
-			shaders2Handles.push_back(dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name)));
+			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
 		}
 		else
 		{
@@ -419,19 +411,44 @@ void RenderInstance::CreatePipelines()
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 
-			shaders2Handles.push_back(dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name)));
+			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
 		}
 
-		shaders[counter++] = shaders2Handles[i];
+	}
+
+	std::vector<std::string> shaders3 = { "mesh_interpolate.comp.spv" };
+
+	for (size_t i = 0; i < shaders3.size(); i++)
+	{
+		std::string name = shaders3[i];
+		std::vector<char> buffer;
+		if (FileManager::FileExists(name)) {
+
+			auto ret = FileManager::ReadFileInFull(name, buffer);
+
+			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
+		}
+		else
+		{
+			std::string uncompiled = name.substr(0, name.length() - 4);
+
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+
+			if (buffer.back() != '\0') buffer.push_back('\0');
+
+			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
+		}
 	}
 
 
-	auto genericBuilder = dev->CreatePipelineBuilder(mainRenderPass, 1, 2, 2);
-	auto textBuilder = dev->CreatePipelineBuilder(mainRenderPass, 1, 1, 2);
+	auto genericBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 2, 2);
+	auto textBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 1, 2);
+	auto computePipeline = dev->CreateComputePipelineBuilder(1);
 
 	DescriptorSetLayoutBuilder* textDescriptor = dev->CreateDescriptorSetLayoutBuilder(1);
 	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1); 
 	DescriptorSetLayoutBuilder* genericObjectBuilder = dev->CreateDescriptorSetLayoutBuilder(2);
+	DescriptorSetLayoutBuilder* computeBuilder = dev->CreateDescriptorSetLayoutBuilder(4);
 	std::array<std::string, 1> textDescriptorContainers = { "oneimage" };
 	std::array<std::string, 2> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
@@ -452,15 +469,29 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev->CreateDescriptorSetLayout(genericObjectBuilder);
 
+	computeBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_COMPUTE_BIT);
+
+	computeBuilder->AddDynamicStorageBufferLayout(1, VK_SHADER_STAGE_COMPUTE_BIT);
+
+	computeBuilder->AddDynamicStorageBufferLayout(2, VK_SHADER_STAGE_COMPUTE_BIT);
+
+	computeBuilder->AddDynamicStorageBufferLayout(3, VK_SHADER_STAGE_COMPUTE_BIT);
+
+	descriptorLayouts["compute"] = dev->CreateDescriptorSetLayout(computeBuilder);
+
 	UsePipelineBuilders(genericBuilder, textBuilder);
 
-	pipelinesIdentifier["genericpipeline"] = genericBuilder->CreateGraphicsPipeline(rmcIDs.data(), rmcIDs.size(), shaders1Handles.data(), shaders1Handles.size());
+	pipelinesIdentifier["genericpipeline"] = genericBuilder->CreateGraphicsPipeline(rmcIDs.data(), rmcIDs.size(), &shaders[0], 2);
 
-	pipelinesIdentifier["text"] = textBuilder->CreateGraphicsPipeline(tdsIDs.data(), tdsIDs.size(), shaders2Handles.data(), shaders2Handles.size());
+	pipelinesIdentifier["text"] = textBuilder->CreateGraphicsPipeline(tdsIDs.data(), tdsIDs.size(), &shaders[2], 2);
+
+	std::array compDescHandles = { descriptorLayouts["compute"] };
+
+	pipelinesIdentifier["compute"] = computePipeline->CreateComputePipeline(compDescHandles.data(), 1, shaders[4]);
 
 }
 
-void RenderInstance::UsePipelineBuilders(VKPipelineBuilder* generic, VKPipelineBuilder* text)
+void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text)
 {
 	std::array<VkDynamicState, 2> dynamicStates = {
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -678,9 +709,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews.data(), 2);
 
-	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(2);
+	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
+	builder.AddStoragePoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 
 	descriptorPoolIndex = majorDevice->CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
 
@@ -766,12 +798,12 @@ DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname
 	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
-EntryHandle RenderInstance::CreateVulkanPipelineObject(IntermediaryPipelineInfo* info, size_t* offsets)
+EntryHandle RenderInstance::CreateVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 
-	VKPipelineObjectCreateInfo create = {
+	VKGraphicsPipelineObjectCreateInfo create = {
 			.drawType = info->drawType,
 			.vertexBufferIndex = allocations[info->vertexBufferIndex].memIndex,
 			.vertexBufferOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset),

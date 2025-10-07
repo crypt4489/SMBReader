@@ -5,7 +5,7 @@
 #include "VKDevice.h"
 
 VKPipelineObject::VKPipelineObject(
-	VKPipelineObjectCreateInfo* createinfo)
+	VKGraphicsPipelineObjectCreateInfo* createinfo)
 	:
 	pipelineType(createinfo->pipelinename),
 	descriptorSetId(createinfo->descriptorsetid),

@@ -1,0 +1,33 @@
+#version 450
+
+struct VertexTex
+{
+	vec4 pos;
+	vec4 tex;
+};
+
+layout(binding = 0) uniform GlobalContext {
+    float interpolate;
+} gs;
+
+layout(std140, binding = 1) readonly buffer InputVertices {
+	VertexTex inBase[];
+};
+
+layout(std140, binding = 2) readonly buffer InputVerticesMorph {
+	VertexTex inMorph[];
+};
+
+layout(std140, binding = 3) buffer OutputVerticesMorph {
+	VertexTex OutMorphed[];
+};
+
+layout (local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint index = gl_GlobalInvocationID.x;
+
+	OutMorphed[index].pos = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+	OutMorphed[index].tex = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+}

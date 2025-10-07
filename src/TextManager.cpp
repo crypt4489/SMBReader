@@ -33,7 +33,7 @@ void TextManager::CreatePipelineObject()
 	dsb->AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
 	descHandle = dsb->AddDescriptorsToCache();
 
-	VKPipelineObjectCreateInfo create = {
+	VKGraphicsPipelineObjectCreateInfo create = {
 		.drawType = 1,
 		.vertexBufferIndex = rendInst->allocations[vertexBufferIndex].memIndex,
 		.vertexBufferOffset = static_cast<uint32_t>(rendInst->allocations[vertexBufferIndex].offset),

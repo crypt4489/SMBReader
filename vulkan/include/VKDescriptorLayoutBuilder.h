@@ -13,6 +13,10 @@ struct DescriptorSetLayoutBuilder
 
 	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
 
+	void AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+
+	void AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+
 	VkDescriptorSetLayoutBinding* descSetBindings;
 
 	VKDevice *device;

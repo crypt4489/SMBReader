@@ -6,7 +6,18 @@
 #include <string>
 #include <vector>
 
-struct VKPipelineObjectCreateInfo
+struct VKComputePipelineObjectCreateInfo
+{
+	uint32_t x;
+	uint32_t y;
+	uint32_t z;
+	EntryHandle descriptorId;
+	EntryHandle pipelineId;
+	uint32_t maxDynCap;
+	uint32_t* data;
+};
+
+struct VKGraphicsPipelineObjectCreateInfo
 {
 	uint32_t drawType;
 	EntryHandle vertexBufferIndex;
@@ -29,7 +40,7 @@ class VKPipelineObject
 public:
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(VKPipelineObjectCreateInfo *createinfo);
+	VKPipelineObject(VKGraphicsPipelineObjectCreateInfo *createinfo);
 
 	~VKPipelineObject() = default;
 
