@@ -104,6 +104,17 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t indexCount;
 };
 
+struct ComputeIntermediaryPipelineInfo
+{
+	uint32_t x;
+	uint32_t y;
+	uint32_t z;
+	uint32_t maxDynCap;
+	EntryHandle pipelinename;
+	EntryHandle descriptorsetid;
+	uint32_t barrierCount;
+};
+
 
 #define FULL_ALLOCATION_SIZE 0
 #define ABSOLUTE_ALLOCATION_OFFSET 0
@@ -205,11 +216,13 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets);
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets);
+
+	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
-	void DrawScene(EntryHandle cbindex);
+	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 
 	void InvalidateRecordBuffer(uint32_t i);
 
@@ -218,6 +231,8 @@ public:
 	void MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex);
 
 	void DestoryTexture(EntryHandle handle);
+
+	void CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
@@ -230,6 +245,8 @@ public:
 	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex;
 	EntryHandle mainRenderPass;
+	EntryHandle mainRenderTarget;
+	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, 3> currentCBIndex;
 
 	WindowManager *windowMan = nullptr;

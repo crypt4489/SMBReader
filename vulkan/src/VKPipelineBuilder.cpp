@@ -214,6 +214,7 @@ EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descrip
 
 	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(majorDev->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * descriptorSetCount));
 
+
 	for (std::size_t i = 0; i < descriptorSetCount; i++)
 	{
 		co.descLayout[i] = descriptorlaysids[i];

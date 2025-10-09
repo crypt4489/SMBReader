@@ -92,7 +92,7 @@ void Mesh::GenerateCube(Mesh* m)
     m->vertexCount = BOXVERTSCOUNT;
     m->indexCount = 36;
 
-    m->data = _aligned_malloc(sizeof(BoxVerts) + sizeof(BoxIndices) + sizeof(BoxTex), alignof(glm::vec4));
+    m->data = _aligned_malloc((sizeof(BoxVerts) * 2) + sizeof(BoxIndices) + (sizeof(BoxTex)*2) , alignof(glm::vec4));
 
     
     m->vertexSize = sizeof(BoxVerts) + sizeof(BoxTex);

@@ -201,9 +201,8 @@ public:
 	}
 };
 
-class VKCommandBuffer
+struct VKCommandBuffer
 {
-public:
 	VKCommandBuffer() :
 		buffer(VK_NULL_HANDLE), fenceIdx(~0U), poolIndex(~0U), queueIndex(~0U), queueFamilyIndex(~0U) {};
 	VKCommandBuffer(VkCommandBuffer _b, EntryHandle i, uint32_t pi, uint32_t qi, uint32_t qfi)
@@ -218,11 +217,24 @@ public:
 	uint32_t queueFamilyIndex;
 };
 
+struct RBOPipelineBarrierArgs
+{
+	VkPipelineStageFlags srcStageMask;
+	VkPipelineStageFlags dstStageMask;
+	VkDependencyFlags dependencyFlags;
+	uint32_t memoryBarrierCount;
+	VkMemoryBarrier* pMemoryBarriers;
+	uint32_t bufferMemoryBarrierCount;
+	VkBufferMemoryBarrier* pBufferMemoryBarriers;
+	uint32_t imageMemoryBarrierCount;
+	VkImageMemoryBarrier* pImageMemoryBarriers;
+};
+
 class RecordingBufferObject
 {
 public:
 
-	RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer);
+	RecordingBufferObject(VKDevice* device, VKCommandBuffer buffer);
 
 	void BindGraphicsPipeline(EntryHandle pipelinename);
 
@@ -231,6 +243,9 @@ public:
 	void BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint);
 
 	void BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+		uint32_t dynamicOffsetCount, uint32_t* offsets);
+
+	void BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
 	void BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
@@ -248,6 +263,8 @@ public:
 
 	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset);
 
+	void BindPipelineBarrierCommand(RBOPipelineBarrierArgs* args);
+
 	void DispatchCommand(uint32_t x, uint32_t y, uint32_t z);
 
 	void EndRenderPassCommand();
@@ -261,8 +278,8 @@ public:
 
 	void EndRecordingCommand();
 
-	VKCommandBuffer& cbBufferHandler;
-	VKDevice& vkDeviceHandle;
+	VKCommandBuffer cbBufferHandler;
+	VKDevice* vkDeviceHandle;
 	VkPipelineLayout currLayout;
 	VkPipeline currPipeline;
 };
@@ -339,6 +356,8 @@ public:
 
 	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
+	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount);
+
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize);
@@ -394,7 +413,15 @@ public:
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
-	EntryHandle CreatePipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
+	EntryHandle CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
+
+	EntryHandle CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
+
+	EntryHandle CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst);
+
+	EntryHandle CreateBufferMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, EntryHandle bufferIndex, size_t offset, size_t size);
+
+	EntryHandle CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, VkImageLayout oldLayout, VkImageLayout newLayout, EntryHandle imageIndex, VkImageSubresourceRange subresourceRange);
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
@@ -436,6 +463,8 @@ public:
 
 	VkCommandPool GetCommandPool(EntryHandle poolIndex);
 
+	VKComputeGraph* GetComputeGraph(EntryHandle graphIndex);
+
 	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
 
 	VkDescriptorSet GetDescriptorSet(EntryHandle handle, uint32_t index);
@@ -458,9 +487,17 @@ public:
 
 	VkImageView GetImageViewByTexture(EntryHandle index);
 
+	VkMemoryBarrier* GetMemoryBarrier(EntryHandle barrierIndex);
+
+	VkBufferMemoryBarrier* GetBufferMemoryBarrier(EntryHandle barrierIndex);
+
+	VkImageMemoryBarrier* GetImageMemoryBarrier(EntryHandle barrierIndex);
+
 	PipelineCacheObject* GetPipelineCacheObject(EntryHandle index);
 
 	VKPipelineObject* GetPipelineObject(EntryHandle index);
+
+	VKComputePipelineObject* GetComputePipelineObject(EntryHandle index);
 
 	int32_t GetPresentQueue(QueueIndex& queueIdx,
 		QueueIndex& maxQueueCount,

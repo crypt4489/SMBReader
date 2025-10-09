@@ -6,19 +6,19 @@ struct VertexTex
 	vec4 tex;
 };
 
-layout(binding = 0) uniform GlobalContext {
-    float interpolate;
+layout(set = 0, binding = 0) uniform GlobalContext {
+    mat4 interpolate;
 } gs;
 
-layout(std140, binding = 1) readonly buffer InputVertices {
+layout(set = 0, binding = 1) readonly buffer InputVertices {
 	VertexTex inBase[];
 };
 
-layout(std140, binding = 2) readonly buffer InputVerticesMorph {
+layout(set = 0, binding = 2) readonly buffer InputVerticesMorph {
 	VertexTex inMorph[];
 };
 
-layout(std140, binding = 3) buffer OutputVerticesMorph {
+layout(set = 0, binding = 3) buffer OutputVerticesMorph {
 	VertexTex OutMorphed[];
 };
 
@@ -28,6 +28,11 @@ void main()
 {
 	uint index = gl_GlobalInvocationID.x;
 
-	OutMorphed[index].pos = vec4(1.0f, 1.0f, 1.0f, 1.0f);
-	OutMorphed[index].tex = vec4(1.0f, 1.0f, 1.0f, 1.0f);
+
+
+	OutMorphed[index].pos.x = inBase[index].pos.x * gs.interpolate[0][0];
+	OutMorphed[index].pos.y = inBase[index].pos.y * gs.interpolate[0][0];
+	OutMorphed[index].pos.z = inBase[index].pos.z * gs.interpolate[0][0];
+	OutMorphed[index].pos.w = 1.0f;
+	OutMorphed[index].tex = inBase[index].tex;
 }

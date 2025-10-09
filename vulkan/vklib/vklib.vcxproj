@@ -151,7 +151,7 @@
     <ClInclude Include="..\include\VKInstance.h" />
     <ClInclude Include="..\include\VKPipelineBuilder.h" />
     <ClInclude Include="..\include\VKPipelineObject.h" />
-    <ClInclude Include="..\include\VKRenderGraph.h" />
+    <ClInclude Include="..\include\VKGraph.h" />
     <ClInclude Include="..\include\VKRenderPassBuilder.h" />
     <ClInclude Include="..\include\VKSwapChain.h" />
     <ClInclude Include="..\include\VKTexture.h" />
@@ -167,7 +167,7 @@
     <ClCompile Include="..\src\VKInstance.cpp" />
     <ClCompile Include="..\src\VKPipelineBuilder.cpp" />
     <ClCompile Include="..\src\VKPipelineObject.cpp" />
-    <ClCompile Include="..\src\VKRenderGraph.cpp" />
+    <ClCompile Include="..\src\VKGraph.cpp" />
     <ClCompile Include="..\src\VKRenderPassBuilder.cpp" />
     <ClCompile Include="..\src\VKSwapChain.cpp" />
     <ClCompile Include="..\src\VKTexture.cpp" />

@@ -12,12 +12,14 @@
 #include "FileManager.h"
 #include "ThreadManager.h"
 #include "VKInstance.h"
+#include "VKDevice.h"
 #include "VKDescriptorLayoutBuilder.h"
 #include "VKDescriptorSetBuilder.h"
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
-#include "VKRenderGraph.h"
+#include "VKGraph.h"
 #include "VKPipelineBuilder.h"
+#include "VKPipelineObject.h"
 #include "VertexTypes.h"
 #include "WindowManager.h"
 
@@ -239,22 +241,11 @@ void RenderInstance::CreateRenderPass()
 
 void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex)
 {
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
 	auto rbo = dev->GetRecordingBufferObject(cb);
 
 	rbo.BeginRecordingCommand();
-	
-	rbo.BeginRenderPassCommand(swapChain->renderTargetIndex, imageIndex, { {0, 0}, swapChain->swapChainExtent });
-
-	uint32_t x = swapChain->GetSwapChainWidth(), y = swapChain->GetSwapChainHeight();
-
-	rbo.SetViewportCommand(0, 0, x, y, 0.0f, 1.0f);
-
-	rbo.SetScissorCommand(0, 0, x, y);
-
 }
 
 void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex)
@@ -265,7 +256,7 @@ void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint3
 
 	BeginCommandBufferRecording(commandBufferIndex, imageIndex);
 
-	DrawScene(commandBufferIndex);
+	DrawScene(commandBufferIndex, imageIndex);
 
 	EndCommandBufferRecording(commandBufferIndex);
 }
@@ -276,8 +267,6 @@ void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	auto rbo = dev->GetRecordingBufferObject(cb);
-
-	rbo.EndRenderPassCommand();
 
 	rbo.EndRecordingCommand();
 }
@@ -709,6 +698,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews.data(), 2);
 
+	mainRenderTarget = swapChain->renderTargetIndex;
+
 	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
@@ -719,6 +710,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	CreateGlobalBuffer();
 
 	CreatePipelines();
+
+	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5);
 
 	auto drawingCallback = [this](EntryHandle cbIndex, uint32_t iIndex)
 		{
@@ -747,12 +740,17 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 size_t RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
 	DescriptorSetBuilder *dsb = CreateDescriptorSet(descriptorLayouts["mainrenderpass"], MAX_FRAMES_IN_FLIGHT);
 	dsb->AddDynamicUniformBuffer(GetDynamicUniformBuffer(), sizeof(glm::mat4) * 2, 0, MAX_FRAMES_IN_FLIGHT, 0);
 	EntryHandle mrpDescId =  dsb->AddDescriptorsToCache();
+
 	size_t perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
-	std::vector<uint32_t> data(1, (uint32_t)allocations[perRenderPassStuff].offset);
-	majorDevice->UpdateRenderGraph(mainRenderPass, data.data(), (uint32_t)data.size(), mrpDescId);
+	std::array<uint32_t, 1> data = { (uint32_t)allocations[perRenderPassStuff].offset };
+
+	majorDevice->UpdateRenderGraph(mainRenderTarget, data.data(), (uint32_t)data.size(), mrpDescId);
+
+
 	return perRenderPassStuff;
 }
 
@@ -798,7 +796,7 @@ DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname
 	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
-EntryHandle RenderInstance::CreateVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets)
+EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -820,30 +818,79 @@ EntryHandle RenderInstance::CreateVulkanPipelineObject(GraphicsIntermediaryPipel
 	};
 
 
-	EntryHandle pipelineIndex = dev->CreatePipelineObject(&create);
+	EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
 
-	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
+	VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
 	for (uint32_t i = 0; i < info->maxDynCap; i++)
 	{
-		vkPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
 	}
 
 
-	auto graph = dev->GetRenderGraph(mainRenderPass);
-	graph->AddObject(vkPipelineObject);
+	auto graph = dev->GetRenderGraph(mainRenderTarget);
+	graph->AddObject(pipelineIndex);
 
 	return pipelineIndex;
 }
 
-void RenderInstance::DrawScene(EntryHandle cbindex)
+void RenderInstance::CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	auto graph = dev->GetRenderGraph(mainRenderPass);
+	VKComputePipelineObject* obj = dev->GetComputePipelineObject(computHandle);
+
+	obj->AddBufferMemoryBarrier(dev, allocations[allocation].memIndex, size, allocations[allocation].offset, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT);
+}
+
+
+EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+
+	VKComputePipelineObjectCreateInfo create = {
+		.x = info->x,
+		.y = info->y,
+		.z = info->z,
+		.descriptorId = info->descriptorsetid,
+		.pipelineId = info->pipelinename,
+		.maxDynCap = info->maxDynCap,
+		.data = nullptr,
+		.barrierCount = info->barrierCount
+	};
+
+
+	EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
+
+	VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
+
+	for (uint32_t i = 0; i < info->maxDynCap; i++)
+	{
+		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+	}
+
+
+	auto graph = dev->GetComputeGraph(computeGraphIndex);
+	graph->AddObject(pipelineIndex);
+
+	return pipelineIndex;
+}
+
+
+void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+
+	auto graph = dev->GetRenderGraph(mainRenderTarget);
+	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
 	//if (!graph.objects.size()) return;
 	auto rcb = dev->GetRecordingBufferObject(cbindex);
-	graph->DrawScene(rcb, currentFrame);
+
+	cGraph->DispatchWork(&rcb, imageIndex);
+
+	graph->DrawScene(&rcb, imageIndex, &swc->swapChainExtent);
 }
 
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)

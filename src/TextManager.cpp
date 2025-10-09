@@ -9,7 +9,7 @@ size_t TextManager::bufferOffset = ~0ui64;
 Font* TextManager::fonts;
 size_t TextManager::vertexCount = 0;
 size_t TextManager::commandCount = 0;
-VKPipelineObject* TextManager::obj;
+VKGraphicsPipelineObject* TextManager::obj;
 std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
 size_t TextManager::vertexBufferIndex = ~0ui64, TextManager::indirectCommandsIndex = ~0ui64;
 EntryHandle TextManager::descHandle;
@@ -46,7 +46,7 @@ void TextManager::CreatePipelineObject()
 		.data = nullptr
 	};
 	
-	obj = new VKPipelineObject(&create);
+	obj = new VKGraphicsPipelineObject(&create);
 }
 
 void TextManager::CreateTextBuffer()
@@ -123,7 +123,7 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
 {
-	obj->DrawIndirectOneBuffer(cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
+	obj->DrawIndirectOneBuffer(&cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
 }
 
 void TextManager::DestroyTextManager()

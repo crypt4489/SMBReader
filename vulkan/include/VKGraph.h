@@ -1,0 +1,77 @@
+#pragma once
+#include "IndexTypes.h"
+#include "VKTypes.h"
+#include "VKUtilities.h"
+#include <mutex>
+
+
+struct VKGraph {
+
+	VKGraph() = default;
+	VKGraph(VKGraph&& other) = delete;
+	  
+	VKGraph(const VKGraph& other) = delete;
+	VKGraph& operator=(const VKGraph& other) = delete;
+	
+	VKGraph& operator=(VKGraph&& other) = delete;
+
+	VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d);
+
+	void AddObject(EntryHandle obj);
+
+	void AddDynamicOffset(uint32_t offset);
+
+	EntryHandle currentPipeline;
+
+	EntryHandle descriptorId;
+
+	uint32_t* dynamicOffsets;
+
+	std::mutex objectGuard;
+
+	EntryHandle* objects;
+
+	VKDevice* dev;
+
+	size_t dynamicOffsetCount, dynamicOffsetSize;
+	size_t pipelineObjCount, pipelineObjSize;
+};
+
+class VKRenderGraph : public VKGraph
+{
+public:
+
+	VKRenderGraph() = default;
+	VKRenderGraph(VKRenderGraph&& other) = delete;
+	
+	VKRenderGraph(const VKRenderGraph& other) = delete;
+	VKRenderGraph& operator=(const VKRenderGraph& other) = delete;
+
+	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
+
+	VKRenderGraph(EntryHandle _renderTargetIndex, void* data, size_t dCount, size_t pCount, VKDevice* _d);
+
+	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkExtent2D* rect);
+	
+	EntryHandle renderTargetIndex;
+
+};
+
+
+struct VKComputeGraph : public VKGraph
+{
+
+	VKComputeGraph() = default;
+	VKComputeGraph(VKComputeGraph&& other) = delete;
+
+	VKComputeGraph(const VKComputeGraph& other) = delete;
+	VKComputeGraph& operator=(const VKComputeGraph& other) = delete;
+
+	VKComputeGraph& operator=(VKComputeGraph&& other) = delete;
+
+	VKComputeGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d);
+
+	void DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum);
+
+};
+

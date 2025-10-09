@@ -43,20 +43,23 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		struct ubo
 		{
-			glm::mat4 mat; //need 64 bytes padding, will switch to pipeline speicialization constant
+			glm::mat4 mat; //need 64 bytes padding, will switch to pipeline push constant
 		};
 
-		objSpecificMemIndex = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+		objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+		size_t objMorphFromVertexMemory = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
 		size_t objMorphToVertexMemory = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
-		size_t objComputePerFrame = rendInst->GetPageFromUniformBuffer(sizeof(ubo), alignof(ubo));
-		objVertexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->vertexSize*frames, alignof(glm::vec4));
+		objSpecificMemIndex[1] = rendInst->GetPageFromUniformBuffer(sizeof(ubo), alignof(ubo));
+		objVertexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
 		objIndexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->indexSize, alignof(uint32_t));
 
 		DescriptorSetBuilder* cdsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["compute"], frames);
-		cdsb->AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(ubo), 0, frames, 0);
+		cdsb->AddDynamicUniformBufferDirect(rendInst->GetDynamicUniformBuffer(), sizeof(ubo), 0, frames, 0);
 		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 1, frames, 0);
 		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 2, frames, 0);
-		cdsb->AddDynamicStorageBuffer(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 3, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 3, frames, 0);
+
+		EntryHandle computeID = cdsb->AddDescriptorsToCache();
 
 		GraphicsIntermediaryPipelineInfo create = {
 			.drawType = 0,
@@ -70,14 +73,38 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.indexCount = m->indexCount,
 		};
 
-		rendInst->UpdateAllocation(m->GetVertexData(), objVertexMemoryIndex, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation((void*)((uintptr_t)m->GetIndexData() + m->indexSize), objMorphToVertexMemory, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
 
+		
+
+
+		
+		//rendInst->UpdateAllocation(m->GetVertexData(), objVertexMemoryIndex, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
+
+		rendInst->UpdateAllocation(m->GetVertexData(), objMorphFromVertexMemory, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
 
 		rendInst->UpdateAllocation(m->GetIndexData(), objIndexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
-		std::array dynamicOffsets = { objSpecificMemIndex };
 
-		pipelineIndex = rendInst->CreateVulkanPipelineObject(&create, dynamicOffsets.data());
+		std::array compDynamicOffsets = { objSpecificMemIndex[1], objMorphFromVertexMemory, objMorphToVertexMemory, objVertexMemoryIndex };
+
+		ComputeIntermediaryPipelineInfo create2 = {
+			.x = m->vertexCount / 8,
+			.y = 1,
+			.z = 1,
+			.maxDynCap = 4,
+			.pipelinename = rendInst->pipelinesIdentifier["compute"],
+			.descriptorsetid = computeID,
+			.barrierCount = 1
+		};
+
+		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data());
+
+		rendInst->CreateBufferMemBarrier(handle, objVertexMemoryIndex, m->vertexSize);
+
+		std::array dynamicOffsets = { objSpecificMemIndex[0] };
+
+		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data());
 	}
 }
 
@@ -105,5 +132,10 @@ void GenericObject::SetPerObjectMemoryCallback(std::function<void(void*, size_t,
 void GenericObject::CallUpdate()
 {
 	updateObject(this);
-	memoryCallback(&mat, sizeof(glm::mat4), objSpecificMemIndex);
+	memoryCallback(&mat, sizeof(glm::mat4), objSpecificMemIndex[0]);
+	memoryCallback(&interpolate, sizeof(float), objSpecificMemIndex[1]);
+
+
+
+
 }

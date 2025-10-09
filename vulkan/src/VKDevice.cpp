@@ -3,7 +3,8 @@
 #include "VKDevice.h"
 
 #include "GlslangCompiler.h"
-#include "VKRenderGraph.h"
+#include "VKGraph.h"
+#include "VKPipelineObject.h"
 #include "VKInstance.h"
 #include "VKRenderPassBuilder.h"
 #include "VKDescriptorLayoutBuilder.h"
@@ -33,11 +34,11 @@ struct ImageMemoryPool
 
 struct RenderPassData
 {
-	VkRenderPass rp;
+	RenderTarget* target;
 	VKRenderGraph graph;
 };
 
-RecordingBufferObject::RecordingBufferObject(VKDevice& device, VKCommandBuffer& buffer) :
+RecordingBufferObject::RecordingBufferObject(VKDevice* device, VKCommandBuffer buffer) :
 	cbBufferHandler(buffer), vkDeviceHandle(device), currLayout(VK_NULL_HANDLE), currPipeline(VK_NULL_HANDLE)
 {
 
@@ -53,7 +54,7 @@ void RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) {
 }
 
 void RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) {
-	auto pco = vkDeviceHandle.GetPipelineCacheObject(id);
+	auto pco = vkDeviceHandle->GetPipelineCacheObject(id);
 	currLayout = pco->pipelineLayout;
 	currPipeline = pco->pipeline;
 	vkCmdBindPipeline(cbBufferHandler.buffer, bindPoint, currPipeline);
@@ -62,7 +63,7 @@ void RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindP
 void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
 	uint32_t dynamicOffsetCount, uint32_t* offsets)
 {
-	auto descset = vkDeviceHandle.GetDescriptorSet(descriptorname, descriptorNumber);
+	auto descset = vkDeviceHandle->GetDescriptorSet(descriptorname, descriptorNumber);
 	vkCmdBindDescriptorSets(
 		cbBufferHandler.buffer, 
 		VK_PIPELINE_BIND_POINT_GRAPHICS, currLayout, 
@@ -71,9 +72,21 @@ void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint3
 		offsets);
 }
 
+void RecordingBufferObject::BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+	uint32_t dynamicOffsetCount, uint32_t* offsets)
+{
+	auto descset = vkDeviceHandle->GetDescriptorSet(descriptorname, descriptorNumber);
+	vkCmdBindDescriptorSets(
+		cbBufferHandler.buffer,
+		VK_PIPELINE_BIND_POINT_COMPUTE, currLayout,
+		firstDescriptorSet, descriptorCount,
+		&descset, dynamicOffsetCount,
+		offsets);
+}
+
 void RecordingBufferObject::BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets)
 {
-	VkBuffer buffer = vkDeviceHandle.GetHostBuffer(bufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(bufferIndex);
 	vkCmdBindVertexBuffers(cbBufferHandler.buffer, firstBindingCount, bindingCount, &buffer, offsets);
 }
 
@@ -89,7 +102,7 @@ void RecordingBufferObject::BindingDrawIndexedCmd(uint32_t indexCount, uint32_t 
 
 void RecordingBufferObject::BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset)
 {
-	VkBuffer buffer = vkDeviceHandle.GetHostBuffer(indirectBufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(indirectBufferIndex);
 	vkCmdDrawIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
@@ -110,10 +123,10 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 {
 
 	VkRenderPassBeginInfo renderPassInfo{};
-	auto ref = vkDeviceHandle.GetRenderTarget(renderTargetIndex);
+	auto ref = vkDeviceHandle->GetRenderTarget(renderTargetIndex);
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	renderPassInfo.renderPass = vkDeviceHandle.GetRenderPass(ref->renderPassIndex);
-	renderPassInfo.framebuffer = vkDeviceHandle.GetFrameBuffer(ref->framebufferIndices[imageIndex]);
+	renderPassInfo.renderPass = vkDeviceHandle->GetRenderPass(ref->renderPassIndex);
+	renderPassInfo.framebuffer = vkDeviceHandle->GetFrameBuffer(ref->framebufferIndices[imageIndex]);
 	renderPassInfo.renderArea = rect;
 
 	std::array<VkClearValue, 2> clearValues{};
@@ -128,8 +141,21 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 
 void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset)
 {
-	VkBuffer buffer = vkDeviceHandle.GetHostBuffer(bufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(bufferIndex);
 	vkCmdBindIndexBuffer(cbBufferHandler.buffer, buffer, indexOffset, VK_INDEX_TYPE_UINT32);
+}
+
+void RecordingBufferObject::BindPipelineBarrierCommand(RBOPipelineBarrierArgs* args)
+{
+	vkCmdPipelineBarrier(cbBufferHandler.buffer,
+		args->srcStageMask, args->dstStageMask,
+		args->dependencyFlags,
+		args->memoryBarrierCount,
+		args->pMemoryBarriers, args->bufferMemoryBarrierCount,
+		args->pBufferMemoryBarriers, args->imageMemoryBarrierCount,
+		args->pImageMemoryBarriers);
+
+
 }
 
 
@@ -316,6 +342,19 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 	EntryHandle poolIndex = AddVkTypeToEntry(pool);
 
 	return poolIndex;
+}
+
+EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount)
+{
+	std::shared_lock lock(deviceLock);
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * dynamicCount) + (sizeof(EntryHandle) * maxPipelineCount));
+	auto graph = reinterpret_cast<VKComputeGraph*>(AllocFromPerDeviceData(sizeof(VKComputeGraph)));
+
+	graph = std::construct_at(graph, alloc, dynamicCount, maxPipelineCount, this);
+
+	EntryHandle ret = AddVkTypeToEntry(graph);
+
+	return ret;
 }
 
 EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets)
@@ -735,6 +774,71 @@ void VKDevice::CreateLogicalDevice(
 	}
 }
 
+EntryHandle VKDevice::CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst)
+{
+	std::shared_lock lock(deviceLock);
+	VkMemoryBarrier* barrier = reinterpret_cast<VkMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkMemoryBarrier)));
+
+	barrier->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	barrier->pNext = nullptr;
+	barrier->srcAccessMask = src;
+	barrier->dstAccessMask = dst;
+	
+
+	EntryHandle ret = AddVkTypeToEntry(barrier);
+
+	return ret;
+}
+
+EntryHandle VKDevice::CreateBufferMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, EntryHandle bufferIndex, size_t offset, size_t size)
+{
+	std::shared_lock lock(deviceLock);
+	VkBufferMemoryBarrier* barrier = reinterpret_cast<VkBufferMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkBufferMemoryBarrier)));
+	VkBuffer buffer = GetHostBuffer(bufferIndex);
+
+	barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	barrier->pNext = nullptr;
+	barrier->srcAccessMask = src;
+	barrier->dstAccessMask = dst;
+	barrier->srcQueueFamilyIndex = srcQFI;
+	barrier->dstQueueFamilyIndex = dstQFI;
+	barrier->buffer = buffer;
+	barrier->offset = offset;
+	barrier->size = size;
+
+	EntryHandle ret = AddVkTypeToEntry(barrier);
+
+	return ret;
+}
+
+EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, VkImageLayout oldLayout, VkImageLayout newLayout, EntryHandle imageIndex, VkImageSubresourceRange subresourceRange)
+{
+	std::shared_lock lock(deviceLock);
+	VkImageMemoryBarrier* barrier = reinterpret_cast<VkImageMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkImageMemoryBarrier)));
+	VkImage image = GetImageByIndex(imageIndex);
+
+	barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier->pNext = nullptr;
+	barrier->srcAccessMask = src;
+	barrier->dstAccessMask = dst;
+	barrier->srcQueueFamilyIndex = srcQFI;
+	barrier->dstQueueFamilyIndex = dstQFI;
+	barrier->oldLayout = oldLayout;
+	barrier->newLayout = newLayout;
+	barrier->image = image;
+	barrier->subresourceRange.aspectMask = subresourceRange.aspectMask;
+	barrier->subresourceRange.baseArrayLayer = subresourceRange.baseArrayLayer;
+	barrier->subresourceRange.baseMipLevel = subresourceRange.baseMipLevel;
+	barrier->subresourceRange.layerCount = subresourceRange.layerCount;
+	barrier->subresourceRange.levelCount = subresourceRange.levelCount;
+	
+
+	EntryHandle ret = AddVkTypeToEntry(barrier);
+
+	return ret;
+}
+
+
 
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount)
 {
@@ -756,11 +860,11 @@ VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numDesc)
 	return std::construct_at(computePB, this, numDesc);
 }
 
-EntryHandle VKDevice::CreatePipelineObject(VKGraphicsPipelineObjectCreateInfo* info)
+EntryHandle VKDevice::CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info)
 {
 	EntryHandle ret;
 
-	VKPipelineObject* objLoc = reinterpret_cast<VKPipelineObject*>(AllocFromPerDeviceData(sizeof(VKPipelineObject)));
+	VKGraphicsPipelineObject* objLoc = reinterpret_cast<VKGraphicsPipelineObject*>(AllocFromPerDeviceData(sizeof(VKGraphicsPipelineObject)));
 
 	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData(sizeof(uint32_t) * info->maxDynCap));
 
@@ -770,6 +874,24 @@ EntryHandle VKDevice::CreatePipelineObject(VKGraphicsPipelineObjectCreateInfo* i
 
 	ret = AddVkTypeToEntry(objLoc);
 	
+
+	return ret;
+}
+
+
+EntryHandle VKDevice::CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
+{
+	EntryHandle ret;
+
+	VKComputePipelineObject* objLoc = reinterpret_cast<VKComputePipelineObject*>(AllocFromPerDeviceData(sizeof(VKComputePipelineObject)));
+
+	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + ((sizeof(VkBarrierInfo) + sizeof(EntryHandle)) * info->barrierCount)));
+
+	info->data = dynData;
+
+	objLoc = std::construct_at(objLoc, info);
+
+	ret = AddVkTypeToEntry(objLoc);
 
 	return ret;
 }
@@ -813,9 +935,9 @@ void VKDevice::CreateRenderGraph(EntryHandle renderPass)
 
 	auto renderPassData = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(renderPass));
 
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(VKPipelineObject*) * MAX_PIPELINE_OBJECTS));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
 
-	auto graph = std::construct_at(&renderPassData->graph, renderPass, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS);
+	auto graph = std::construct_at(&renderPassData->graph, renderPass, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 }
 
 EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
@@ -828,17 +950,16 @@ EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 		throw std::runtime_error("failed to create render pass!");
 	}
 
-	auto renderPassDataHandle = reinterpret_cast<RenderPassData*>(AllocFromPerDeviceData(sizeof(RenderPassData)));
+
+
 
 	EntryHandle ret;
 
-	renderPassDataHandle->rp = ref;
+	ret = AddVkTypeToEntry(ref);
 
-	ret = AddVkTypeToEntry(renderPassDataHandle);
+	//auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
 
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(VKPipelineObject*) * MAX_PIPELINE_OBJECTS));
-
-	auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS);
+	//auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 
 	return ret;
 }
@@ -856,12 +977,22 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 
 	EntryHandle ret;
 
+	auto renderPassDataHandle = reinterpret_cast<RenderPassData*>(AllocFromPerDeviceData(sizeof(RenderPassData)));
+
+	//auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
+
+	//auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
+
+	renderPassDataHandle->target = renderTarget;
 	
-	ret = AddVkTypeToEntry(renderTarget);
+	ret = AddVkTypeToEntry(renderPassDataHandle);
 
 	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount * 2);
 	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
 	
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
+
+	auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 
 	return ret;
 }
@@ -1333,6 +1464,12 @@ VkCommandPool VKDevice::GetCommandPool(EntryHandle poolIndex)
 	return reinterpret_cast<VkCommandPool>(GetVkTypeFromEntry(poolIndex));
 }
 
+VKComputeGraph* VKDevice::GetComputeGraph(EntryHandle graphIndex) 
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VKComputeGraph*>(GetVkTypeFromEntry(graphIndex));
+}
+
 VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle poolIndex)
 {
 	std::shared_lock lock(deviceLock);
@@ -1422,6 +1559,28 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle index)
 	return GetImageViewByIndex(tex->viewIndex);
 }
 
+
+VkMemoryBarrier* VKDevice::GetMemoryBarrier(EntryHandle barrierIndex)
+{
+	std::shared_lock lock(deviceLock);
+	VkMemoryBarrier* barrier = reinterpret_cast<VkMemoryBarrier*>(GetVkTypeFromEntry(barrierIndex));
+	return barrier;
+}
+
+VkBufferMemoryBarrier* VKDevice::GetBufferMemoryBarrier(EntryHandle barrierIndex)
+{
+	std::shared_lock lock(deviceLock);
+	VkBufferMemoryBarrier* barrier = reinterpret_cast<VkBufferMemoryBarrier*>(GetVkTypeFromEntry(barrierIndex));
+	return barrier;
+}
+
+VkImageMemoryBarrier* VKDevice::GetImageMemoryBarrier(EntryHandle barrierIndex)
+{
+	std::shared_lock lock(deviceLock);
+	VkImageMemoryBarrier* barrier = reinterpret_cast<VkImageMemoryBarrier*>(GetVkTypeFromEntry(barrierIndex));
+	return barrier;
+}
+
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
@@ -1434,7 +1593,11 @@ VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle index)
 	return reinterpret_cast<VKPipelineObject*>(GetVkTypeFromEntry(index));
 }
 
-
+VKComputePipelineObject* VKDevice::GetComputePipelineObject(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VKComputePipelineObject*>(GetVkTypeFromEntry(index));
+}
 
 int32_t VKDevice::GetPresentQueue(QueueIndex& queueIdx,
 	QueueIndex& maxQueueCount,
@@ -1492,7 +1655,7 @@ std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> VKDevice::GetQueueHandle(u
 RecordingBufferObject VKDevice::GetRecordingBufferObject(EntryHandle commandBufferIndex)
 {
 	std::shared_lock lock(deviceLock);
-	return { *this, *GetCommandBuffer(commandBufferIndex) };
+	return { this, *GetCommandBuffer(commandBufferIndex) };
 }
 
 VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle renderPassIndex)
@@ -1505,14 +1668,15 @@ VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle renderPassIndex)
 VkRenderPass VKDevice::GetRenderPass(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
-	auto renderPassData = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(index));
-	return renderPassData->rp;
+	auto renderPassData = reinterpret_cast<VkRenderPass>(GetVkTypeFromEntry(index));
+	return renderPassData;
 }
 
 RenderTarget* VKDevice::GetRenderTarget(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
-	return reinterpret_cast<RenderTarget*>(GetVkTypeFromEntry(index));
+	auto data = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(index));
+	return data->target;
 }
 
 

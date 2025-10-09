@@ -51,6 +51,16 @@ void DescriptorSetBuilder::AddDynamicUniformBuffer(VkBuffer buffer, VkDeviceSize
 	AddBufferTypePerFrame(buffer, size, binding, frames, offset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 }
 
+void DescriptorSetBuilder::AddUniformBufferDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
+{
+	AddBufferTypeDirect(buffer, size, binding, frames, offset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+}
+
+void DescriptorSetBuilder::AddDynamicUniformBufferDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
+{
+	AddBufferTypeDirect(buffer, size, binding, frames, offset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+}
+
 void DescriptorSetBuilder::AddStorageBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
 	AddBufferTypePerFrame(buffer, size, binding, frames, offset, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);

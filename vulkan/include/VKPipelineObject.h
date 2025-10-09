@@ -15,6 +15,7 @@ struct VKComputePipelineObjectCreateInfo
 	EntryHandle pipelineId;
 	uint32_t maxDynCap;
 	uint32_t* data;
+	uint32_t barrierCount;
 };
 
 struct VKGraphicsPipelineObjectCreateInfo
@@ -35,35 +36,85 @@ struct VKGraphicsPipelineObjectCreateInfo
 };
 
 
-class VKPipelineObject
+enum PipelineObjectType
 {
-public:
+	GRAPHICSPO = 0,
+	COMPUTEPO = 1
+};
+
+struct VKPipelineObject
+{
+	uint32_t type;
+	uint32_t* objectData;
+	uint32_t maxObjectCapacity, objectCount;
+
+	EntryHandle pipelineID;
+	EntryHandle descriptorSetId;
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(VKGraphicsPipelineObjectCreateInfo *createinfo);
+	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type);
 
 	~VKPipelineObject() = default;
 
-	void Draw(RecordingBufferObject& rbo, uint32_t frame, uint32_t firstSet);
+	void SetPerObjectData(uint32_t objectlocation);
+};
+
+
+struct VKGraphicsPipelineObject : public VKPipelineObject
+{
+	VKGraphicsPipelineObject() = delete;
+	VKGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo *createinfo);
+
+	~VKGraphicsPipelineObject() = default;
+
+	void Draw(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 
 	void DrawIndirectOneBuffer(
-		RecordingBufferObject& rbo,
+		RecordingBufferObject* rbo,
 		uint32_t drawCount,
 		uint32_t frame,
 		uint32_t firstSet);
-
-	void SetPerObjectData(uint32_t objectlocation);
-
-	uint32_t *objectData;
-	uint32_t maxObjectCapacity, objectCount;
-
-	EntryHandle pipelineType;
-	EntryHandle descriptorSetId;
 
 	EntryHandle vertexBufferIndex, indirectBufferIndex, indexBufferHandle;
 	uint32_t drawType;
 
 	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
 	std::size_t vertexCount, indexCount;
+};
+
+enum VKBarrierType
+{
+	MEMBARRIER = 0,
+	BUFFBARRIER = 1,
+	IMAGEBARRIER = 2
+};
+struct VkBarrierInfo
+{
+	uint32_t type;
+	VkPipelineStageFlags srcStageMask;
+	VkPipelineStageFlags dstStageMask;
+	VkDependencyFlags depenencyFlags;
+};
+
+struct VKComputePipelineObject : public VKPipelineObject
+{
+	uint32_t x, y, z;
+	
+	uint32_t barrierInfoCount;
+	VkBarrierInfo* infos;
+
+	uint32_t membarriersCount;
+	EntryHandle* memBarriers;
+
+	uint32_t counter;
+
+	VKComputePipelineObject() = delete;
+	~VKComputePipelineObject() = default;
+	VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
+
+	void Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
+
+	void AddBufferMemoryBarrier(VKDevice* d, EntryHandle bufferIndex, size_t size, size_t offset, uint32_t bindPoint);
+
 };
 

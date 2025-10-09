@@ -15,6 +15,12 @@ static void Rotate(GenericObject* obj)
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 	obj->mat = glm::identity<glm::mat4>();
+	obj->interpolate += 0.000001f;
+	if (obj->interpolate >= 15.0f)
+	{
+		obj->interpolate = 0.0f;
+	}
+	//std::cout << obj->interpolate << std::endl;
 }
 
 static ApplicationLoop* loop;

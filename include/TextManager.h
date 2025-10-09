@@ -69,7 +69,7 @@ public:
 	static size_t vertexCount, commandCount;
 	static size_t vertexBufferIndex, indirectCommandsIndex;
 	static Font* fonts;
-	static VKPipelineObject* obj;
+	static VKGraphicsPipelineObject* obj;
 	static std::vector<std::tuple<Text*, size_t, size_t>> textsCommand;
 	static EntryHandle descHandle;
 };
