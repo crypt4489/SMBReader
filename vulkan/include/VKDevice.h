@@ -269,6 +269,7 @@ public:
 
 	void EndRenderPassCommand();
 
+	void PushConstantsCommand(uint32_t offset, uint32_t size, VkShaderStageFlags flag, void *data);
 
 	void SetViewportCommand(float xs, float ys, float width, float height, float minDepth, float maxDepth);
 
@@ -407,9 +408,9 @@ public:
 		size_t driverPerCache
 	);
 
-	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount);
+	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pcrCount);
 	
-	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numDesc);
+	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numDesc, uint32_t pcrCount);
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 

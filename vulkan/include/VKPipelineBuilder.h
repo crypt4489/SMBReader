@@ -20,17 +20,21 @@ class VKPipelineBuilder
 public:
 	VKDevice* majorDev;
 	PipelineCacheObject co;
+	uint32_t pushConstantsCount;
+	VkPushConstantRange* ranges;
 
 	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
 
 	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);
+
+	void AddPushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stage, uint32_t rangeLocation);
 };
 
 class VKGraphicsPipelineBuilder : public VKPipelineBuilder
 {
 public:
-	VKGraphicsPipelineBuilder() = default;
-	VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount);
+	VKGraphicsPipelineBuilder() = delete;
+	VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount);
 
 
 	EntryHandle CreateGraphicsPipeline(EntryHandle* descriptorlaysids,
@@ -83,7 +87,7 @@ public:
 class VKComputePipelineBuilder : public VKPipelineBuilder
 {
 public:
-	VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount);
+	VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount, uint32_t pushConstantCount);
 	VkComputePipelineCreateInfo pipelineInfo;
 
 	EntryHandle CreateComputePipeline(EntryHandle* descriptorlaysids,

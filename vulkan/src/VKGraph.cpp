@@ -47,7 +47,11 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 			rbo->BindDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
 		}
 
-		
+		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
+		{
+			PushConstantArguments* args = &objHeader->pushArgs[i];
+			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
+		}
 
 		VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
 		obj->Draw(rbo, frameNum, 1);
@@ -91,6 +95,12 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 			if (descriptorId != EntryHandle())
 
 				rbo->BindComputeDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
+		}
+
+		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
+		{
+			PushConstantArguments* args = &objHeader->pushArgs[i];
+			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
 		}
 
 

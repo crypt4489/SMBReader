@@ -16,6 +16,7 @@ struct VKComputePipelineObjectCreateInfo
 	uint32_t maxDynCap;
 	uint32_t* data;
 	uint32_t barrierCount;
+	uint32_t pushRangeCount;
 };
 
 struct VKGraphicsPipelineObjectCreateInfo
@@ -33,8 +34,16 @@ struct VKGraphicsPipelineObjectCreateInfo
 	EntryHandle indexBufferHandle;
 	uint32_t indexBufferOffset;
 	uint32_t indexCount;
+	uint32_t pushRangeCount;
 };
 
+struct PushConstantArguments
+{
+	VkShaderStageFlags stage;
+	uint32_t offset;
+	uint32_t size;
+	void* data;
+};
 
 enum PipelineObjectType
 {
@@ -51,12 +60,17 @@ struct VKPipelineObject
 	EntryHandle pipelineID;
 	EntryHandle descriptorSetId;
 
+	uint32_t pushConstantCount;
+	PushConstantArguments* pushArgs;
+
 	VKPipelineObject() = delete;
-	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type);
+	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount);
 
 	~VKPipelineObject() = default;
 
 	void SetPerObjectData(uint32_t objectlocation);
+
+	void AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags);
 };
 
 

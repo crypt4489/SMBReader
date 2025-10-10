@@ -6,17 +6,17 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type)
-	: pipelineID(_pid), descriptorSetId(_dsid), objectData(data), maxObjectCapacity(moc), objectCount(0U), type(_type)
+VKPipelineObject::VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount)
+	: pipelineID(_pid), descriptorSetId(_dsid), objectData(data), maxObjectCapacity(moc), objectCount(0U), type(_type), pushConstantCount(pcrCount)
 {
-
+	pushArgs = reinterpret_cast<PushConstantArguments*>(objectData + moc);
 }
 
 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	VKGraphicsPipelineObjectCreateInfo* createinfo)
 	:
-	VKPipelineObject(createinfo->pipelinename, createinfo->descriptorsetid, createinfo->data, createinfo->maxDynCap, GRAPHICSPO),
+	VKPipelineObject(createinfo->pipelinename, createinfo->descriptorsetid, createinfo->data, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
@@ -86,7 +86,7 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 
 VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
 	: 
-	VKPipelineObject(info->pipelineId, info->descriptorId, info->data,info->maxDynCap, COMPUTEPO),
+	VKPipelineObject(info->pipelineId, info->descriptorId, info->data,info->maxDynCap, COMPUTEPO, info->pushRangeCount),
 	x(info->x),
 	y(info->y),
 	z(info->z),
@@ -94,7 +94,7 @@ VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateIn
 	barrierInfoCount(info->barrierCount),
 	counter(0)
 {
-	infos = reinterpret_cast<VkBarrierInfo*>(info->data + info->maxDynCap);
+	infos = reinterpret_cast<VkBarrierInfo*>(pushArgs + info->pushRangeCount);
 	memBarriers = reinterpret_cast<EntryHandle*>(infos + info->barrierCount);
 }
 
@@ -131,13 +131,10 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 		default:
 			break;
 		}
-	
-	}
 
-
-	RBOPipelineBarrierArgs args = {
-		.srcStageMask = infos[0].srcStageMask,
-		.dstStageMask = infos[0].dstStageMask,
+		RBOPipelineBarrierArgs args = {
+		.srcStageMask = infos[i].srcStageMask,
+		.dstStageMask = infos[i].dstStageMask,
 		.dependencyFlags = infos[0].depenencyFlags,
 		.memoryBarrierCount = mbC,
 		.pMemoryBarriers = lmemBarriers.data(),
@@ -145,9 +142,15 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 		.pBufferMemoryBarriers = lbuffMemBarriers.data(),
 		.imageMemoryBarrierCount = imbC,
 		.pImageMemoryBarriers = limageMemBarriers.data()
-	};
+		};
 
-	rbo->BindPipelineBarrierCommand(&args);
+		rbo->BindPipelineBarrierCommand(&args);
+	
+		bmbC = 0;
+	}
+
+
+
 
 
 }
@@ -162,4 +165,13 @@ void VKComputePipelineObject::AddBufferMemoryBarrier(VKDevice* d, EntryHandle bu
 	info->type = BUFFBARRIER;
 	memBarriers[counter] = barrierIndex;
 	counter++;
+}
+
+void VKPipelineObject::AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags)
+{
+	PushConstantArguments* args = &pushArgs[bindLocation];
+	args->data = _data;
+	args->size = size;
+	args->offset = offset;
+	args->stage = flags;
 }

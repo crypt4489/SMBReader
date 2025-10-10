@@ -111,6 +111,11 @@ void RecordingBufferObject::EndRenderPassCommand()
 	vkCmdEndRenderPass(cbBufferHandler.buffer);
 }
 
+void RecordingBufferObject::PushConstantsCommand(uint32_t offset, uint32_t size, VkShaderStageFlags flag, void* data)
+{
+	vkCmdPushConstants(cbBufferHandler.buffer, currLayout, flag, offset, size, data);
+}
+
 void RecordingBufferObject::DispatchCommand(uint32_t x, uint32_t y, uint32_t z)
 {
 	vkCmdDispatch(cbBufferHandler.buffer, x, y, z);
@@ -840,7 +845,7 @@ EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags 
 
 
 
-VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount)
+VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pcrCount)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -848,16 +853,16 @@ VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle r
 
 	auto renderPassData = reinterpret_cast<VKGraphicsPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKGraphicsPipelineBuilder)));
 
-	return std::construct_at(renderPassData, renderPass, this, colorCount, descLayoutCount, dynamicStateCount);
+	return std::construct_at(renderPassData, renderPass, this, colorCount, descLayoutCount, dynamicStateCount, pcrCount);
 }
 
-VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numDesc)
+VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numDesc, uint32_t pcrCount)
 {
 	std::shared_lock lock(deviceLock);
 
 	auto computePB = reinterpret_cast<VKComputePipelineBuilder*>(AllocFromDeviceCache(sizeof(VKComputePipelineBuilder)));
 
-	return std::construct_at(computePB, this, numDesc);
+	return std::construct_at(computePB, this, numDesc, pcrCount);
 }
 
 EntryHandle VKDevice::CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info)
@@ -866,7 +871,7 @@ EntryHandle VKDevice::CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreat
 
 	VKGraphicsPipelineObject* objLoc = reinterpret_cast<VKGraphicsPipelineObject*>(AllocFromPerDeviceData(sizeof(VKGraphicsPipelineObject)));
 
-	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData(sizeof(uint32_t) * info->maxDynCap));
+	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + (sizeof(PushConstantArguments) * info->pushRangeCount)));
 
 	info->data = dynData;
 
@@ -885,7 +890,7 @@ EntryHandle VKDevice::CreateComputePipelineObject(VKComputePipelineObjectCreateI
 
 	VKComputePipelineObject* objLoc = reinterpret_cast<VKComputePipelineObject*>(AllocFromPerDeviceData(sizeof(VKComputePipelineObject)));
 
-	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + ((sizeof(VkBarrierInfo) + sizeof(EntryHandle)) * info->barrierCount)));
+	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + (sizeof(PushConstantArguments) * info->pushRangeCount) + ((sizeof(VkBarrierInfo) + sizeof(EntryHandle)) * info->barrierCount)));
 
 	info->data = dynData;
 

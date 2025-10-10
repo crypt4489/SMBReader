@@ -3,7 +3,7 @@
 #include "VKPipelineBuilder.h"
 #include "VKDevice.h"
 #include <array>
-VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount) 
+VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount)
 {
 	memset(this, 0, sizeof(VKGraphicsPipelineBuilder));
 	renderPass = _rp; 
@@ -14,6 +14,8 @@ VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice 
 	colorBlendAttachments = reinterpret_cast<VkPipelineColorBlendAttachmentState*>(d->AllocFromDeviceCache(sizeof(VkPipelineColorBlendAttachmentState) * colorsBlendAttchCount));
 	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
 	dynamicStates = reinterpret_cast<VkDynamicState*>(d->AllocFromDeviceCache(sizeof(VkDynamicState) * _dynamicStateCount));
+	pushConstantsCount = pushConstantCount;
+	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromPerDeviceData(sizeof(VkPushConstantRange) * pushConstantCount));
 }
 
 void VKGraphicsPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, uint32_t count)
@@ -198,11 +200,13 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 	return ret;
 
 }
-VKComputePipelineBuilder::VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount) 
+VKComputePipelineBuilder::VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount, uint32_t pushConstantCount) 
 {
 	memset(this, 0, sizeof(VKComputePipelineBuilder));
 	majorDev = d;
 	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
+	pushConstantsCount = pushConstantCount;
+	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromPerDeviceData(sizeof(VkPushConstantRange) * pushConstantCount));
 }
 
 EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descriptorlaysids,
@@ -255,8 +259,8 @@ VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* 
 	pipelineLayoutInfo.setLayoutCount = count;
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
 
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = pushConstantsCount;
+	pipelineLayoutInfo.pPushConstantRanges = ranges;
 
 	if (vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create pipeline layout!");
@@ -272,4 +276,13 @@ VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod
 	shaderStageInfo.module = mod;
 	shaderStageInfo.pName = "main";
 	return shaderStageInfo;
+}
+
+void VKPipelineBuilder::AddPushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stage, uint32_t rangeLocation)
+{
+	VkPushConstantRange* range = &ranges[rangeLocation];
+	range->offset = offset;
+	range->size = size;
+	range->stageFlags = stage;
+
 }

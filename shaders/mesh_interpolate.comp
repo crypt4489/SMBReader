@@ -6,19 +6,19 @@ struct VertexTex
 	vec4 tex;
 };
 
-layout(set = 0, binding = 0) uniform GlobalContext {
-    mat4 interpolate;
+layout(push_constant) uniform GlobalContext {
+    float interpolate;
 } gs;
 
-layout(set = 0, binding = 1) readonly buffer InputVertices {
+layout(set = 0, binding = 0) readonly buffer InputVertices {
 	VertexTex inBase[];
 };
 
-layout(set = 0, binding = 2) readonly buffer InputVerticesMorph {
+layout(set = 0, binding = 1) readonly buffer InputVerticesMorph {
 	VertexTex inMorph[];
 };
 
-layout(set = 0, binding = 3) buffer OutputVerticesMorph {
+layout(set = 0, binding = 2) buffer OutputVerticesMorph {
 	VertexTex OutMorphed[];
 };
 
@@ -30,9 +30,9 @@ void main()
 
 
 
-	OutMorphed[index].pos.x = inBase[index].pos.x * gs.interpolate[0][0];
-	OutMorphed[index].pos.y = inBase[index].pos.y * gs.interpolate[0][0];
-	OutMorphed[index].pos.z = inBase[index].pos.z * gs.interpolate[0][0];
+	OutMorphed[index].pos.x = inBase[index].pos.x * gs.interpolate;
+	OutMorphed[index].pos.y = inBase[index].pos.y * gs.interpolate;
+	OutMorphed[index].pos.z = inBase[index].pos.z * gs.interpolate;
 	OutMorphed[index].pos.w = 1.0f;
 	OutMorphed[index].tex = inBase[index].tex;
 }

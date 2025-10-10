@@ -430,14 +430,14 @@ void RenderInstance::CreatePipelines()
 	}
 
 
-	auto genericBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 2, 2);
-	auto textBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 1, 2);
-	auto computePipeline = dev->CreateComputePipelineBuilder(1);
+	auto genericBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 2, 2, 0);
+	auto textBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 1, 2, 0);
+	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);
 
 	DescriptorSetLayoutBuilder* textDescriptor = dev->CreateDescriptorSetLayoutBuilder(1);
 	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1); 
 	DescriptorSetLayoutBuilder* genericObjectBuilder = dev->CreateDescriptorSetLayoutBuilder(2);
-	DescriptorSetLayoutBuilder* computeBuilder = dev->CreateDescriptorSetLayoutBuilder(4);
+	DescriptorSetLayoutBuilder* computeBuilder = dev->CreateDescriptorSetLayoutBuilder(3);
 	std::array<std::string, 1> textDescriptorContainers = { "oneimage" };
 	std::array<std::string, 2> regularMeshConatiners = { "mainrenderpass", "genericobject" };
 
@@ -458,13 +458,11 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayouts[regularMeshConatiners[1]] = rmcIDs[1] = dev->CreateDescriptorSetLayout(genericObjectBuilder);
 
-	computeBuilder->AddDynamicBufferLayout(0, VK_SHADER_STAGE_COMPUTE_BIT);
+	computeBuilder->AddDynamicStorageBufferLayout(0, VK_SHADER_STAGE_COMPUTE_BIT);
 
 	computeBuilder->AddDynamicStorageBufferLayout(1, VK_SHADER_STAGE_COMPUTE_BIT);
 
 	computeBuilder->AddDynamicStorageBufferLayout(2, VK_SHADER_STAGE_COMPUTE_BIT);
-
-	computeBuilder->AddDynamicStorageBufferLayout(3, VK_SHADER_STAGE_COMPUTE_BIT);
 
 	descriptorLayouts["compute"] = dev->CreateDescriptorSetLayout(computeBuilder);
 
@@ -476,7 +474,14 @@ void RenderInstance::CreatePipelines()
 
 	std::array compDescHandles = { descriptorLayouts["compute"] };
 
+	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
 	pipelinesIdentifier["compute"] = computePipeline->CreateComputePipeline(compDescHandles.data(), 1, shaders[4]);
+
+
+
+
+
 
 }
 
@@ -796,7 +801,7 @@ DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname
 	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
-EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets)
+EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -815,6 +820,7 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.indexBufferHandle = allocations[info->indexBufferHandle].memIndex,
 			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
 			.indexCount = info->indexCount,
+			.pushRangeCount = info->pushRangeCount
 	};
 
 
@@ -827,6 +833,10 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
 	}
 
+	for (uint32_t i = 0; i < info->pushRangeCount; i++)
+	{
+		VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
+	}
 
 	auto graph = dev->GetRenderGraph(mainRenderTarget);
 	graph->AddObject(pipelineIndex);
@@ -844,7 +854,7 @@ void RenderInstance::CreateBufferMemBarrier(EntryHandle computHandle, size_t all
 }
 
 
-EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets)
+EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -857,7 +867,8 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 		.pipelineId = info->pipelinename,
 		.maxDynCap = info->maxDynCap,
 		.data = nullptr,
-		.barrierCount = info->barrierCount
+		.barrierCount = info->barrierCount,
+		.pushRangeCount = info->pushRangeCount
 	};
 
 
@@ -868,6 +879,11 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 	for (uint32_t i = 0; i < info->maxDynCap; i++)
 	{
 		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+	}
+
+	for (uint32_t i = 0; i < info->pushRangeCount; i++)
+	{
+		VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
 	}
 
 
