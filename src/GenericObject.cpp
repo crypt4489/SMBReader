@@ -41,22 +41,18 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		EntryHandle descHandle = dsb->AddDescriptorsToCache();
 
 
-		struct ubo
-		{
-			glm::mat4 mat; //need 64 bytes padding, will switch to pipeline push constant
-		};
 
 		objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
-		size_t objMorphFromVertexMemory = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
-		size_t objMorphToVertexMemory = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
+		size_t objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
+		size_t objMorphToVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
 		
-		objVertexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->vertexSize, alignof(glm::vec4));
-		objIndexMemoryIndex = rendInst->GetPageFromUniformBuffer(m->indexSize, alignof(uint32_t));
+		objVertexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
+		objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
 		DescriptorSetBuilder* cdsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["compute"], frames);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 0, frames, 0);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 1, frames, 0);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDynamicUniformBuffer(), m->vertexSize, 2, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 0, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 1, frames, 0);
+		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 2, frames, 0);
 
 		EntryHandle computeID = cdsb->AddDescriptorsToCache();
 

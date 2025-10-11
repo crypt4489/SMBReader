@@ -86,7 +86,7 @@ void RecordingBufferObject::BindComputeDescriptorSets(EntryHandle descriptorname
 
 void RecordingBufferObject::BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets)
 {
-	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(bufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferIndex);
 	vkCmdBindVertexBuffers(cbBufferHandler.buffer, firstBindingCount, bindingCount, &buffer, offsets);
 }
 
@@ -102,7 +102,7 @@ void RecordingBufferObject::BindingDrawIndexedCmd(uint32_t indexCount, uint32_t 
 
 void RecordingBufferObject::BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset)
 {
-	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(indirectBufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(indirectBufferIndex);
 	vkCmdDrawIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
@@ -146,7 +146,7 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 
 void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset)
 {
-	VkBuffer buffer = vkDeviceHandle->GetHostBuffer(bufferIndex);
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferIndex);
 	vkCmdBindIndexBuffer(cbBufferHandler.buffer, buffer, indexOffset, VK_INDEX_TYPE_UINT32);
 }
 
@@ -526,6 +526,33 @@ EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, Vk
 	return ret;
 }
 
+
+EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage)
+{
+	std::shared_lock lock(deviceLock);
+
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+
+	std::tie(buffer, memory) = VK::Utils::createBuffer(device, gpu, allocSize,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_SHARING_MODE_EXCLUSIVE, usage);
+
+
+	BufferAlloc* alloc = nullptr;
+
+	alloc = reinterpret_cast<BufferAlloc*>(AllocFromPerDeviceData(sizeof(BufferAlloc)));
+
+	alloc->buffer = buffer;
+	alloc->memory = memory;
+
+	std::construct_at(&alloc->alloc, allocSize);
+
+
+	EntryHandle ret = AddVkTypeToEntry(alloc);
+
+	return ret;
+}
+
 EntryHandle VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
@@ -799,7 +826,7 @@ EntryHandle VKDevice::CreateBufferMemoryBarrier(VkAccessFlags src, VkAccessFlags
 {
 	std::shared_lock lock(deviceLock);
 	VkBufferMemoryBarrier* barrier = reinterpret_cast<VkBufferMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkBufferMemoryBarrier)));
-	VkBuffer buffer = GetHostBuffer(bufferIndex);
+	VkBuffer buffer = GetBufferHandle(bufferIndex);
 
 	barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 	barrier->pNext = nullptr;
@@ -1529,7 +1556,7 @@ VkFramebuffer VKDevice::GetFrameBuffer(EntryHandle index)
 	return reinterpret_cast<VkFramebuffer>(GetVkTypeFromEntry(index));
 }
 
-VkBuffer VKDevice::GetHostBuffer(EntryHandle index)
+VkBuffer VKDevice::GetBufferHandle(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -1795,7 +1822,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	return std::make_pair(memoryTypeIndex, memRequirements.alignment);
 }
 
-size_t VKDevice::GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
+size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -2050,6 +2077,54 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 	vkMapMemory(device, deviceMem->memory, offset, size, 0, reinterpret_cast<void**>(&datalocal));
 	std::memcpy(datalocal, data, size);
 	vkUnmapMemory(device, deviceMem->memory);
+}
+
+void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset)
+{
+	std::shared_lock lock(deviceLock);
+	auto queueDetails = GetQueueHandle(TRANSFER);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	EntryHandle poolIndex = std::get<3>(queueDetails);
+
+	VkQueue queue;
+	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
+
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(GetVkTypeFromEntry(stagingBufferIndex));
+
+	stagingBuffer = alloc->buffer;
+	stagingMemory = alloc->memory;
+	VkDeviceSize allocOffset = alloc->alloc.GetMemory(size, 64);
+
+	void* ldata;
+	
+	vkMapMemory(device, stagingMemory, allocOffset, size, 0, &ldata);
+	
+	std::memcpy(ldata, data, size);
+		
+	vkUnmapMemory(device, stagingMemory);
+
+	VkCommandPool pool = GetCommandPool(poolIndex);
+
+	VkBuffer outBuffer = GetBufferHandle(deviceIndex);
+
+	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
+
+	VK::Utils::CopyBuffer(device, pool, queue, stagingBuffer, outBuffer, size, allocOffset, offset);
+
+	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
+
+	ReturnQueueToManager(managerIndex, queueIndex);
+
+	alloc->alloc.FreeMemory(allocOffset);
+
 }
 
 /*---------------------------------------------------------*/

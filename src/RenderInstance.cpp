@@ -138,6 +138,8 @@ RenderInstance::~RenderInstance()
 
 	dev->DestroyBuffer(globalIndex);
 
+	dev->DestroyBuffer(globalDeviceBufIndex);
+
 	dev->DestroyDevice();
 
 	delete vkInstance;
@@ -542,6 +544,15 @@ void RenderInstance::CreateGlobalBuffer()
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	);
+
+	globalDeviceBufIndex = dev->CreateDeviceBuffer(32'000'000,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 }
 
 void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset)
@@ -549,20 +560,23 @@ void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, si
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	
 	size_t intSize = allocations[handle].size;
-	size_t intOffset = 0;
+	size_t intOffset = allocations[handle].offset + offset;
 	
-	if (offset)
-		intOffset = offset;
 	if (size)
 		intSize = size;
 
-	dev->WriteToHostBuffer(allocations[handle].memIndex, data, intSize, allocations[handle].offset + offset);
+	EntryHandle index = allocations[handle].memIndex;
+
+	if (index == globalIndex)
+		dev->WriteToHostBuffer(index, data, intSize, intOffset);
+	else if (index == globalDeviceBufIndex)
+		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset);
 }
 
 size_t RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	size_t location = dev->GetOffsetIntoHostBuffer(globalIndex, size, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalIndex, size, alignment);
 
 	size_t index = allocationsIndex.fetch_add(1);
 	allocations.allocations[index].memIndex = globalIndex;
@@ -573,9 +587,28 @@ size_t RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
 	return index;
 }
 
+size_t RenderInstance::GetPageFromDeviceBuffer(size_t size, uint32_t alignment)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
+
+	size_t index = allocationsIndex.fetch_add(1);
+	allocations.allocations[index].memIndex = globalDeviceBufIndex;
+	allocations.allocations[index].offset = location;
+	allocations.allocations[index].size = size;
+
+
+	return index;
+}
+
 VkBuffer RenderInstance::GetDynamicUniformBuffer()
 {
-	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetHostBuffer(globalIndex);
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetBufferHandle(globalIndex);
+}
+
+VkBuffer RenderInstance::GetDeviceBufferHandle()
+{
+	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetBufferHandle(globalDeviceBufIndex);
 }
 
 EntryHandle RenderInstance::CreateVulkanImage(

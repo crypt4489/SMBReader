@@ -181,7 +181,11 @@ public:
 
 	size_t GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
+	size_t GetPageFromDeviceBuffer(size_t size, uint32_t alignment);
+
 	VkBuffer GetDynamicUniformBuffer();
+
+	VkBuffer GetDeviceBufferHandle();
 
 	EntryHandle CreateVulkanImage(
 		char* imageData,
@@ -245,7 +249,7 @@ public:
 	EntryHandle depthView, depthImage;
 	EntryHandle colorView, colorImage;
 	EntryHandle stagingBufferIndex;
-	EntryHandle globalIndex;
+	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle mainRenderPass;
 	EntryHandle mainRenderTarget;
 	EntryHandle computeGraphIndex;

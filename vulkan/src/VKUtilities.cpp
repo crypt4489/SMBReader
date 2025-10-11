@@ -253,10 +253,12 @@ namespace VK {
 				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 			}
 
-			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size) {
+			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset) {
 				VkCommandBuffer commandBuffer = BeginOneTimeCommands(device, pool);
 
 				VkBufferCopy copyRegion{};
+				copyRegion.srcOffset = srcOffset;
+				copyRegion.dstOffset = dstOffset;
 				copyRegion.size = size;
 				vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 

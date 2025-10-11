@@ -377,6 +377,8 @@ public:
 
 	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage);
 
+	EntryHandle CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage);
+
 	EntryHandle CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
@@ -478,7 +480,7 @@ public:
 
 	VkFramebuffer GetFrameBuffer(EntryHandle index);
 	
-	VkBuffer GetHostBuffer(EntryHandle index);
+	VkBuffer GetBufferHandle(EntryHandle index);
 
 	VkImage GetImageByIndex(EntryHandle index);
 
@@ -591,7 +593,7 @@ public:
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps);
 
-	size_t GetOffsetIntoHostBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
+	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
 	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
 
@@ -623,6 +625,8 @@ public:
 	void WaitOnDevice();
 
 	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset);
+
+	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
