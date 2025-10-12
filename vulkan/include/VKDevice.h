@@ -456,7 +456,7 @@ public:
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
-	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages);
+	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages, uint32_t renderTargetCount);
 
 	//GETTERS
 
@@ -568,6 +568,8 @@ public:
 	void DestroyShader(EntryHandle shaderHandle);
 
 	void DestroyTexture(EntryHandle textureHandle);
+
+	void ResetRenderTarget(EntryHandle handle);
 
 	//Allocation
 

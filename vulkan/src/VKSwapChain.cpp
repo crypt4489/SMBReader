@@ -66,9 +66,8 @@ static uintptr_t GetDependencies(VKSwapChain* swc)
 {
 	return 
 		swc->headofperdata +
-		SWCATTACHMENTSOFFSET(swc->imageCount) +
-		SWCQFCOFFSET(swc->imageCount, swc->attachmentCount) +
-		SWCDEPENDSOFFSET(swc->queueFamiliesCacheCount);
+		SWCQFCOFFSET(swc->imageCount) +
+		SWCDEPENDSOFFSET(2);
 }
 
 static uintptr_t* GetDependenciesPtr(VKSwapChain* swc)
@@ -83,56 +82,32 @@ static VkImage* GetSwapChainImages(VKSwapChain* swc)
 }
 
 
-static uintptr_t GetHeadOfAttachments(VKSwapChain* swc)
-{
-	uintptr_t headofattachments = swc->headofperdata + SWCATTACHMENTSOFFSET(swc->imageCount);
-
-	return headofattachments;
-}
-
-static uintptr_t* GetHeadOfAttachmentsPtr(VKSwapChain* swc)
-{
-	return reinterpret_cast<uintptr_t*>(GetHeadOfAttachments(swc));
-}
-
 static uint32_t* GetQueueFamilyCache(VKSwapChain* swc)
 {
-	return reinterpret_cast<uint32_t*>(swc->headofperdata + SWCATTACHMENTSOFFSET(swc->imageCount) + SWCQFCOFFSET(swc->imageCount, swc->attachmentCount));
+	return reinterpret_cast<uint32_t*>(swc->headofperdata + SWCQFCOFFSET(swc->imageCount));
+}
+
+static EntryHandle* GetRenderTargetPointer(VKSwapChain* swc)
+{
+	return reinterpret_cast<EntryHandle*>(swc->headofperdata +
+		SWCQFCOFFSET(swc->imageCount) +
+		SWCDEPENDSOFFSET(2) +
+		SWCRENDERTARGETSOFFSET(swc->imageCount, swc->semaphorePerStage, swc->numberOfStages));
+}
+
+void VKSwapChain::SetSwapChainData(void* data)
+{
+	headofperdata = reinterpret_cast<uintptr_t>(data);
+	renderTargetIndex = GetRenderTargetPointer(this);
 }
 
 size_t VKSwapChain::CalculateSwapChainMemoryUsage()
 {
 	return 
-		sizeof(uintptr_t)* imageCount * (1 + attachmentCount) +
-		sizeof(VkImage) * imageCount +
-		sizeof(uint32_t) * 2 +
-		sizeof(uintptr_t) * (imageCount * ((semaphorePerStage * numberOfStages) + 1));
-}
-
-void VKSwapChain::AddFramebufferAttachments(EntryHandle** attachmentIndices, uint32_t attachIndicesSize)
-{
-	uint32_t i = 0;
-
-	uintptr_t headofattachments = GetHeadOfAttachments(this);
-
-	uintptr_t* attaches = reinterpret_cast<uintptr_t*>(headofattachments);
-
-	uintptr_t outputaddr = headofattachments + sizeof(size_t) * imageCount;
-
-	while (i < imageCount)
-	{
-		attaches[i] = outputaddr;
-
-		EntryHandle** output = reinterpret_cast<EntryHandle**>(outputaddr);
-
-		for (uint32_t j = 0; j < attachIndicesSize; j++)
-		{
-			output[j] = attachmentIndices[j];
-		}
-		outputaddr += sizeof(size_t) * attachmentCount;
-		i++;
-
-	}
+		(sizeof(VkImage) * imageCount) + //images first
+		(sizeof(uint32_t) * 2) + //queue families
+		(sizeof(EntryHandle) * (imageCount * ((semaphorePerStage * numberOfStages) + 1))) +
+		(sizeof(EntryHandle) * renderTargetCount);
 }
 
 void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount)
@@ -158,8 +133,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 
 
 void VKSwapChain::CreateSwapChain( 
-	uint32_t width, uint32_t height, 
-	EntryHandle _renderPassIndex, EntryHandle** attachmentIndices, uint32_t numattaches)
+	uint32_t width, uint32_t height)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
 	
@@ -187,7 +161,10 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-	if (vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
+	VkResult result = VK_SUCCESS;
+
+	if ((result = vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain)) != VK_SUCCESS) {
+		std::cerr <<  result << std::endl;
 		throw std::runtime_error("failed to create swap chain!");
 	}
 	
@@ -195,22 +172,12 @@ void VKSwapChain::CreateSwapChain(
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 
-	renderTargetIndex = device->CreateRenderTarget(_renderPassIndex, imageCount);
-
-	auto ref = device->GetRenderTarget(renderTargetIndex);
-
-	AddFramebufferAttachments(attachmentIndices, numattaches);
-
-	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
-
-	for (uint32_t i = 0; i < imageCount; i++)
-	{
-		auto fbref = reinterpret_cast<EntryHandle**>(attaches[i]);
-		fbref[attachmentCount-1] = &ref->imageViews[i];
-	}
-
-	CreateSwapChainElements();
 	CreateSyncObject();
+}
+
+void VKSwapChain::CreateRenderTarget(uint32_t index, EntryHandle renderPassIndex)
+{
+	renderTargetIndex[index] = device->CreateRenderTarget(renderPassIndex, imageCount);
 }
 
 void VKSwapChain::CreateSyncObject()
@@ -283,34 +250,49 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 	VkImage* swcImages = GetSwapChainImages(this);
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
-
-	CreateSwapChainElements();
 }
 
-void VKSwapChain::CreateSwapChainElements()
+EntryHandle* VKSwapChain::CreateSwapchainViews()
 {
-
-	EntryHandle* indices = reinterpret_cast<EntryHandle*>(device->AllocFromDeviceCache(sizeof(EntryHandle) * attachmentCount));
-
-	auto renderTarget = device->GetRenderTarget(renderTargetIndex);
-
-	uintptr_t* attaches = GetHeadOfAttachmentsPtr(this);
+	EntryHandle* imageViews = reinterpret_cast<EntryHandle*>(device->AllocFromDeviceCache(sizeof(EntryHandle) * imageCount));
 
 	VkImage* swcImages = reinterpret_cast<VkImage*>(headofperdata);
 
 	for (size_t i = 0; i < imageCount; i++) {
-		auto ref2 = reinterpret_cast<EntryHandle**>(attaches[i]);
+		imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
+	}
 
-		renderTarget->imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
+	return imageViews;
+}
 
-		for (size_t j = 0; j < attachmentCount; j++) {
-			indices[j] = *ref2[j];
+void VKSwapChain::CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCount, EntryHandle *attachments, EntryHandle *imageViews)
+{
+	auto renderTarget = device->GetRenderTarget(renderTargetIndex[index]);
+
+	for (size_t i = 0; i < imageCount; i++) {
+
+		renderTarget->imageViews[i] = imageViews[i];
+
+		for (size_t j = 0; j < aAttachmentCount; j++) {
+			if (attachments[j] == EntryHandle() || (i && attachments[j] == imageViews[i-1]))
+				attachments[j] = imageViews[i];
 		}
 
-		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(indices, attachmentCount, renderTarget->renderPassIndex, swapChainExtent);
+		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(attachments, aAttachmentCount, renderTarget->renderPassIndex, swapChainExtent);
 	}
 }
 
+void VKSwapChain::ResetSwapChain()
+{
+	if (swapChain) {
+		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
+		swapChain = VK_NULL_HANDLE;
+	}
+
+	for (uint32_t i = 0; i < renderTargetCount; i++)
+		device->ResetRenderTarget(renderTargetIndex[i]);
+
+}
 
 void VKSwapChain::DestroySwapChain()
 {
@@ -318,8 +300,8 @@ void VKSwapChain::DestroySwapChain()
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
 		swapChain = VK_NULL_HANDLE;
 	}
-
-	device->DestroyRenderTarget(renderTargetIndex);
+	for (uint32_t i = 0; i<renderTargetCount; i++)
+		device->DestroyRenderTarget(renderTargetIndex[i]);
 }
 
 void VKSwapChain::DestroySyncObject()

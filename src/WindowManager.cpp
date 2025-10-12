@@ -35,3 +35,12 @@ bool WindowManager::ShouldCloseWindow()
 	glfwPollEvents();
 	return false;
 }
+
+void WindowManager::GetWindowSize(int* width, int* height)
+{
+	glfwGetFramebufferSize(window, width, height);
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(window, width, height);
+		glfwWaitEvents();
+	}
+}

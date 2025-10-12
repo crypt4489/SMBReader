@@ -61,7 +61,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.vertexBufferIndex = objVertexMemoryIndex,
 			.vertexCount = m->vertexCount,
 			.indirectDrawBuffer{},
-			.pipelinename = rendInst->pipelinesIdentifier[genericpipeline],
+			.pipelinename = GENERIC,
 			.descriptorsetid = descHandle,
 			.maxDynCap = 1,
 			.indexBufferHandle = objIndexMemoryIndex,
@@ -83,7 +83,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.y = 1,
 			.z = 1,
 			.maxDynCap = 3,
-			.pipelinename = rendInst->pipelinesIdentifier["compute"],
+			.pipelinename = MESH_INTERPOLATE,
 			.descriptorsetid = computeID,
 			.barrierCount = 1,
 			.pushRangeCount = 1

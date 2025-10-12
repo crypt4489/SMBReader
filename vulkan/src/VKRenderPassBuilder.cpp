@@ -77,7 +77,10 @@ void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint
 	subpass.pipelineBindPoint = bindPoint;
 	subpass.colorAttachmentCount = numberOfColorAttachments;
 	subpass.pColorAttachments = &references[firstColorAttachment];
-	subpass.pResolveAttachments = &references[colorResolveIndex];
+	if (colorResolveIndex != ~0ui32)
+		subpass.pResolveAttachments = &references[colorResolveIndex];
+	else
+		subpass.pResolveAttachments = nullptr;
 	subpass.pDepthStencilAttachment = &references[depthAttachmentIndex];
 	subpassDescription[subpassdesccounter++] = subpass;
 }

@@ -275,6 +275,7 @@ void* VKDevice::GetVkTypeFromEntry(EntryHandle index)
 		throw std::runtime_error("Entry Index Overflow");
 	}
 	void* ret = reinterpret_cast<void*>(entries[index()]);
+
 	return ret;
 }
 
@@ -1274,7 +1275,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages)
+EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages, uint32_t renderTargetCount)
 {
 
 	std::shared_lock lock(deviceLock);
@@ -1283,9 +1284,9 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t request
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, attachmentCount, requestedImageCount, swcsupport, stages, maxSemaphorePerStage);
+	swc = std::construct_at(swc, this, parentInstance->renderSurface, attachmentCount, requestedImageCount, swcsupport, stages, maxSemaphorePerStage, renderTargetCount);
 
-	swc->SetSWCLocalData(AllocFromPerDeviceData(swc->CalculateSwapChainMemoryUsage()));
+	swc->SetSwapChainData(AllocFromPerDeviceData(swc->CalculateSwapChainMemoryUsage()));
 
 	EntryHandle index;
 
@@ -1304,31 +1305,39 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 	std::shared_lock lock(deviceLock);
 
 	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(GetVkTypeFromEntry(handle));
+	if (!alloc) return;
 	VkBuffer ret = alloc->buffer;
 	auto deviceMem = alloc->memory;
 	vkDestroyBuffer(device, ret, nullptr);
 	vkFreeMemory(device, deviceMem, nullptr);
+	entries[handle()] = 0;
 }
 void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 	VKCommandBuffer* buff = GetCommandBuffer(handle);
+	if (!buff) return;
 	VkFence fence = GetFence(buff->fenceIdx);
 	vkDestroyFence(device, fence, nullptr);
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 	VkDescriptorPool pool = GetDescriptorPool(handle);
+	if (!pool) return;
 	vkDestroyDescriptorPool(device, pool, nullptr);
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 	VkDescriptorSetLayout lay = GetDescriptorSetLayout(handle);
+	if (!lay) return;
 	vkDestroyDescriptorSetLayout(device, lay, nullptr);
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyDevice()
@@ -1344,6 +1353,7 @@ void VKDevice::DestroyDevice()
 		{
 			VkCommandPool pool = GetCommandPool(handles[i]);
 			vkDestroyCommandPool(device, pool, nullptr);
+			entries[handles[i]()] = 0;
 		}
 	}
 
@@ -1375,6 +1385,8 @@ void VKDevice::DestroyImage(EntryHandle imageIndex)
 
 	auto image = reinterpret_cast<VkImage*>(GetVkTypeFromEntry(imageIndex));
 
+	if (!image) return;
+
 	uintptr_t ptr = (uintptr_t)image;
 	auto addr = *reinterpret_cast<VkDeviceSize*>(ptr + sizeof(VkImage));
 	auto memIndex = *reinterpret_cast<EntryHandle*>(ptr + sizeof(VkImage) + sizeof(VkDeviceSize));
@@ -1384,14 +1396,16 @@ void VKDevice::DestroyImage(EntryHandle imageIndex)
 	auto alloc = reinterpret_cast<ImageMemoryPool*>(GetVkTypeFromEntry(memIndex));
 
 	alloc->alloc.FreeMemory(addr);
+	entries[imageIndex()] = 0;
 }
 
 void VKDevice::DestroyImagePool(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
 	auto iter = reinterpret_cast<ImageMemoryPool*>(GetVkTypeFromEntry(handle));
-
+	if (!iter) return;
 	vkFreeMemory(device, iter->memory, nullptr);
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyRenderPass(EntryHandle handle)
@@ -1400,7 +1414,11 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 
 	VkRenderPass pass = GetRenderPass(handle);
 
+	if (!pass) return;
+
 	vkDestroyRenderPass(device, pass, nullptr);
+
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyRenderTarget(EntryHandle handle)
@@ -1410,10 +1428,24 @@ void VKDevice::DestroyRenderTarget(EntryHandle handle)
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j<i; j++)
 	{
-		VkImageView view = GetImageViewByIndex(target->imageViews[j]);
+		DestroyImageView(target->imageViews[j]);
 		VkFramebuffer fb = GetFrameBuffer(target->framebufferIndices[j]);
 		vkDestroyFramebuffer(device, fb, nullptr);
-		vkDestroyImageView(device, view, nullptr);
+	}
+
+	entries[handle()] = 0;
+}
+
+void VKDevice::ResetRenderTarget(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	RenderTarget* target = GetRenderTarget(handle);
+	uint32_t i = target->count;
+	for (uint32_t j = 0; j < i; j++)
+	{
+		DestroyImageView(target->imageViews[j]);
+		VkFramebuffer fb = GetFrameBuffer(target->framebufferIndices[j]);
+		vkDestroyFramebuffer(device, fb, nullptr);
 	}
 }
 
@@ -1423,7 +1455,11 @@ void VKDevice::DestroyImageView(EntryHandle imageViewIndex)
 
 	VkImageView view = reinterpret_cast<VkImageView>(GetVkTypeFromEntry(imageViewIndex));
 
+	if (!view) return;
+
 	vkDestroyImageView(device, view, nullptr);
+
+	entries[imageViewIndex()] = 0;
 }
 
 void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
@@ -1432,11 +1468,13 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 
 	PipelineCacheObject* obj = GetPipelineCacheObject(handle);
 
+	if (!obj) return;
+
 	vkDestroyPipeline(device, obj->pipeline, nullptr);
 
 	vkDestroyPipelineLayout(device, obj->pipelineLayout, nullptr);
 
-	
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestorySampler(EntryHandle samplerIndex)
@@ -1445,7 +1483,11 @@ void VKDevice::DestorySampler(EntryHandle samplerIndex)
 
 	VkSampler sampler = reinterpret_cast<VkSampler>(GetVkTypeFromEntry(samplerIndex));
 
+	if (!sampler) return;
+
 	vkDestroySampler(device, sampler, nullptr);
+
+	entries[samplerIndex()] = 0;
 }
 
 void VKDevice::DestroySemaphore(EntryHandle handle)
@@ -1454,7 +1496,11 @@ void VKDevice::DestroySemaphore(EntryHandle handle)
 
 	VkSemaphore sema = GetSemaphore(handle);
 
+	if (!sema) return;
+
 	vkDestroySemaphore(device, sema, nullptr);
+
+	entries[handle()] = 0;
 }
 
 void VKDevice::DestroyShader(EntryHandle shaderHandle)
@@ -1465,7 +1511,11 @@ void VKDevice::DestroyShader(EntryHandle shaderHandle)
 		
 	std::tie(shader, std::ignore) = GetShader(shaderHandle);
 
+	if (!shader) return;
+
 	vkDestroyShaderModule(device, shader, nullptr);
+
+	entries[shaderHandle()] = 0;
 }
 
 void VKDevice::DestroyTexture(EntryHandle textureHandle)
@@ -1475,6 +1525,7 @@ void VKDevice::DestroyTexture(EntryHandle textureHandle)
 	DestorySampler(tex->samplerIndex);
 	DestroyImageView(tex->viewIndex);
 	DestroyImage(tex->imageIndex);
+	entries[textureHandle()] = 0;
 }
 
 
@@ -1487,7 +1538,9 @@ VKCommandBuffer* VKDevice::GetCommandBuffer(EntryHandle index)
 
 VkCommandBuffer VKDevice::GetCommandBufferHandle(EntryHandle index)
 {
-	return GetCommandBuffer(index)->buffer;
+	auto ref = GetCommandBuffer(index);
+	if (!ref) return VK_NULL_HANDLE;
+	return ref->buffer;
 }
 
 VkCommandPool VKDevice::GetCommandPool(EntryHandle poolIndex)
@@ -1513,6 +1566,7 @@ VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 	std::shared_lock lock(deviceLock);
 	using LocalType = std::pair<uint32_t, VkDescriptorSet*>;
 	LocalType* set = reinterpret_cast<LocalType*>(GetVkTypeFromEntry(handle));
+	if (!set) return VK_NULL_HANDLE;
 	if (set->first <= index) throw std::runtime_error("Come on!");
 	return set->second[index];
 
@@ -1562,6 +1616,8 @@ VkBuffer VKDevice::GetBufferHandle(EntryHandle index)
 
 	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(GetVkTypeFromEntry(index));
 
+	if (!alloc) return VK_NULL_HANDLE;
+
 	return alloc->buffer;
 }
 
@@ -1575,6 +1631,7 @@ VkImage VKDevice::GetImageByTexture(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(index);
+	if (!tex) return VK_NULL_HANDLE;
 	return GetImageByIndex(tex->imageIndex);
 }
 
@@ -1588,6 +1645,7 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(index);
+	if (!tex) return VK_NULL_HANDLE;
 	return GetImageViewByIndex(tex->viewIndex);
 }
 
@@ -1694,6 +1752,7 @@ VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle renderPassIndex)
 {
 	std::shared_lock lock(deviceLock);
 	auto renderPassData = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(renderPassIndex));
+	if (!renderPassData) return nullptr;
 	return &renderPassData->graph;
 }
 
@@ -1708,6 +1767,7 @@ RenderTarget* VKDevice::GetRenderTarget(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	auto data = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(index));
+	if (!data) return nullptr;
 	return data->target;
 }
 
@@ -1721,6 +1781,7 @@ VkSampler VKDevice::GetSamplerByTexture(EntryHandle index)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(index);
+	if (!tex) return VK_NULL_HANDLE;
 	return GetSamplerByIndex(tex->samplerIndex);
 }
 
@@ -1734,6 +1795,8 @@ std::pair<VkShaderModule, VkShaderStageFlagBits> VKDevice::GetShader(EntryHandle
 {
 	std::shared_lock lock(deviceLock);
 	void* data = GetVkTypeFromEntry(shaderHandle);
+	if (!data) return { nullptr, (VkShaderStageFlagBits)-1 };
+
 	uintptr_t intPtr = (uintptr_t)data;
 	VkShaderModule mod = ((VkShaderModule*)intPtr)[0];
 	VkShaderStageFlagBits flags = ((VkShaderStageFlagBits*)(intPtr + sizeof(VkShaderModule)))[0];
@@ -2029,7 +2092,7 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 
 void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle perGraphDescriptor)
 {
-	std::shared_lock lock(deviceLock);
+//	std::shared_lock lock(deviceLock);
 
 	auto graph = GetRenderGraph(renderPass);
 

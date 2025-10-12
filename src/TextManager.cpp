@@ -40,13 +40,13 @@ void TextManager::CreatePipelineObject()
 		.vertexCount = ~0U,
 		.indirectDrawBuffer = rendInst->allocations[indirectCommandsIndex].memIndex,
 		.indirectDrawOffset = static_cast<uint32_t>(rendInst->allocations[indirectCommandsIndex].offset),
-		.pipelinename = rendInst->pipelinesIdentifier[text],
+		//.pipelinename = TEXT,
 		.descriptorsetid = descHandle,
 		.maxDynCap = 0,
 		.data = nullptr
 	};
 	
-	obj = new VKGraphicsPipelineObject(&create);
+	//obj = new VKGraphicsPipelineObject(&create);
 }
 
 void TextManager::CreateTextBuffer()

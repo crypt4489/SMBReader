@@ -13,9 +13,9 @@
 
 
 
-#define SWCATTACHMENTSOFFSET(x) sizeof(VkImage) * x
-#define SWCQFCOFFSET(x, y) sizeof(size_t) * x * (1 + y)
-#define SWCDEPENDSOFFSET(x) sizeof(uint32_t) * x
+#define SWCQFCOFFSET(x) (sizeof(VkImage) * x)
+#define SWCDEPENDSOFFSET(x) (sizeof(uint32_t) * x)
+#define SWCRENDERTARGETSOFFSET(x, y, z) (sizeof(EntryHandle) * (x * ((y * z) + 1)))
 
 class VKSwapChain
 {
@@ -24,17 +24,14 @@ public:
 
 	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, 
 		uint32_t _attachmentCount, uint32_t requestImages, 
-		VK::Utils::SwapChainSupportDetails& swapChainSupport, size_t stages, size_t semaphoreperstage)
+		VK::Utils::SwapChainSupportDetails& swapChainSupport, size_t stages, size_t semaphoreperstage, uint32_t _renderTargetCount)
 		: 
 		device(_d), surface(_surface), attachmentCount(_attachmentCount), 
-		semaphorePerStage(semaphoreperstage), numberOfStages(stages) {
+		semaphorePerStage(semaphoreperstage), numberOfStages(stages), renderTargetCount(_renderTargetCount) {
 		SetSwapChainProperties(swapChainSupport, requestImages);
 	}
 
-	void SetSWCLocalData(void* data)
-	{
-		headofperdata = reinterpret_cast<uintptr_t>(data);
-	}
+	void SetSwapChainData(void* data);
 
 	size_t CalculateSwapChainMemoryUsage();
 
@@ -44,21 +41,26 @@ public:
 
 	void RecreateSwapChain(uint32_t width, uint32_t height);
 
-	void CreateSwapChainElements();
+	void CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCount, EntryHandle* attachments, EntryHandle* imageViews);
+
+	void CreateRenderTarget(uint32_t index, EntryHandle renderPassIndex);
+
+	
 
 	void CreateSwapChain(
-		uint32_t width, uint32_t height,
-		EntryHandle _renderPassIndex, EntryHandle** attachmentIndices, uint32_t numattaches);
+		uint32_t width, uint32_t height);
 
 	void CreateSyncObject();
+
+	EntryHandle* CreateSwapchainViews();
+
+	void ResetSwapChain();
 
 	void DestroySwapChain();
 
 	void DestroySyncObject();
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
-
-	void CreateSwapChainDependency(uint32_t imageIndex, EntryHandle beforeDrawing, EntryHandle present);
 
 	void AddFramebufferAttachments(EntryHandle** attachmentIndices, uint32_t attachIndicesSize);
 
@@ -78,7 +80,8 @@ public:
 	}
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-	EntryHandle renderTargetIndex;
+	EntryHandle *renderTargetIndex;
+	uint32_t renderTargetCount;
 
 	VkSurfaceFormatKHR swapChainImageFormat;
 	VkPresentModeKHR presentMode;

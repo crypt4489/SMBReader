@@ -135,6 +135,11 @@ public:
 		return EntryHandle(other + ID);
 	}
 
+	EntryHandle operator+(const uint32_t other)
+	{
+		return EntryHandle(other + ID);
+	}
+
 	constexpr bool operator==(const EntryHandle& other) const {
 		return this->ID == other.ID;
 	}

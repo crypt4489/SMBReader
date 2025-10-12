@@ -15,7 +15,7 @@ static void Rotate(GenericObject* obj)
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 	obj->mat = glm::identity<glm::mat4>();
-	obj->interpolate += 0.000001f;
+	//obj->interpolate += 0.000001f;
 	if (obj->interpolate >= 15.0f)
 	{
 		obj->interpolate = 0.0f;
@@ -343,6 +343,20 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 		}
 		else if (action == GLFW_RELEASE) {
 			loop->camMovements[ApplicationLoop::ROTATEYLEFT] = false;
+		}
+	}
+
+	if (key == GLFW_KEY_2)
+	{
+		if (action == GLFW_PRESS) {
+			VKRenderer::gRenderInstance->IncreaseMSAA();
+		}
+	}
+
+	if (key == GLFW_KEY_1)
+	{
+		if (action == GLFW_PRESS) {
+			VKRenderer::gRenderInstance->DecreaseMSAA();
 		}
 	}
 }

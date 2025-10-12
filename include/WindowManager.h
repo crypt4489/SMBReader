@@ -21,7 +21,8 @@ public:
 
 	bool ShouldCloseWindow();
 
-private:
+	void GetWindowSize(int* width, int* height);
+
 	GLFWwindow* window = nullptr;
 };
 

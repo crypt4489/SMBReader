@@ -48,6 +48,12 @@ struct ThreadedRecordBuffer
 		invalidate.Notify();
 	}
 
+	void Reset()
+	{
+		ready.store(false);
+		invalidate.Notify();
+	}
+
 	void DrawLoop(std::stop_token stoken)
 	{
 		while (true)
@@ -97,7 +103,7 @@ struct GraphicsIntermediaryPipelineInfo
 	size_t vertexBufferIndex;
 	uint32_t vertexCount;
 	size_t indirectDrawBuffer;
-	EntryHandle pipelinename;
+	uint32_t pipelinename;
 	EntryHandle descriptorsetid;
 	uint32_t maxDynCap;
 	size_t indexBufferHandle;
@@ -111,7 +117,7 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t y;
 	uint32_t z;
 	uint32_t maxDynCap;
-	EntryHandle pipelinename;
+	uint32_t pipelinename;
 	EntryHandle descriptorsetid;
 	uint32_t barrierCount;
 	uint32_t pushRangeCount;
@@ -143,6 +149,13 @@ struct RenderAllocationHolder
 
 };
 
+enum PipelineLabels
+{
+	MESH_INTERPOLATE = 0,
+	TEXT = 1,
+	GENERIC = 2
+};
+
 class RenderInstance
 {
 public:
@@ -151,29 +164,31 @@ public:
 
 	~RenderInstance();
 
-	void CreateDepthImage(uint32_t width, uint32_t height);
+	void CreateDepthImage( uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 
 	void DestroySwapChainAttachments();
 
 	void RecreateSwapChain();
 
-	void CreateRenderPass();
+	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
 
 	void BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex);
 
 	void EndCommandBufferRecording(EntryHandle cb);
 
-	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text);
+	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits sampleCount);
 
 	uint32_t BeginFrame();
 
 	void SubmitFrame(uint32_t imageIndex);
 
-	void CreateMSAAColorResources(uint32_t width, uint32_t height);
+	void CreateMSAAColorResources(uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 
 	void WaitOnRender();
 
 	void CreatePipelines();
+
+	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
 	void CreateGlobalBuffer();
 
@@ -216,8 +231,6 @@ public:
 	
 	uint32_t GetCurrentFrame() const;
 
-	VkSampleCountFlagBits GetMSAASamples() const;
-
 	uint32_t GetSwapChainHeight();
 
 	uint32_t GetSwapChainWidth();
@@ -240,20 +253,32 @@ public:
 
 	void CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size);
 
+	void AllocateVectorsForMSAA();
+
+	void IncreaseMSAA();
+
+	void DecreaseMSAA();
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
-	EntryHandle descriptorPoolIndex;
 	EntryHandle swapChainIndex;
+	EntryHandle descriptorPoolIndex;
 	EntryHandle attachmentsIndex;
-	EntryHandle depthView, depthImage;
-	EntryHandle colorView, colorImage;
 	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
-	EntryHandle mainRenderPass;
-	EntryHandle mainRenderTarget;
 	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, 3> currentCBIndex;
+
+	uint32_t currentMSAALevel = 0;
+	uint32_t maxMSAALevels = 0;
+
+	std::vector<EntryHandle> swapchainRenderTargets{};
+	std::vector<EntryHandle> depthViews{};
+	std::vector<EntryHandle> colorViews{};
+	std::vector<EntryHandle> depthImages{};
+	std::vector<EntryHandle> colorImages{};
+	std::vector<EntryHandle> renderPasses{};
 
 	WindowManager *windowMan = nullptr;
 
@@ -261,15 +286,13 @@ public:
 
 	bool resizeWindow = false;
 
-	VkSampleCountFlagBits msaaSamples = VK_SAMPLE_COUNT_1_BIT;
-
 	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	std::array<EntryHandle, 5> shaders;
 
-	std::unordered_map<std::string, EntryHandle> pipelinesIdentifier;
+	std::array<std::vector<EntryHandle>, 3> pipelinesIdentifier;
 	std::unordered_map<std::string, EntryHandle> descriptorLayouts;
 
 	RenderAllocationHolder<50> allocations;

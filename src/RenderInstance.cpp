@@ -119,20 +119,23 @@ RenderInstance::~RenderInstance()
 
 	for (auto& i : pipelinesIdentifier)
 	{
-		dev->DestroyPipelineCacheObject(i.second);
+		for (auto &j : i)
+			dev->DestroyPipelineCacheObject(j);
 	}
 
-	dev->DestroyRenderPass(mainRenderPass);
+	for (uint32_t i = 0; i<maxMSAALevels; i++)
+		dev->DestroyRenderPass(renderPasses[i]);
 
 	DestroySwapChainAttachments();
 
 	dev->DestroyImagePool(attachmentsIndex);
-
+	
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
 	swapChain->DestroySwapChain();
 
 	swapChain->DestroySyncObject();
+	
 
 	dev->DestroyBuffer(stagingBufferIndex);
 
@@ -151,20 +154,20 @@ void RenderInstance::DestoryTexture(EntryHandle handle)
 	dev->DestroyTexture(handle);
 }
 
-void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
+void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	depthImage = dev->CreateImage(width, height,
+	depthImages[index] = dev->CreateImage(width, height,
 		1, depthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-		msaaSamples,
+		sampleCount,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
 
-	depthView = dev->CreateImageView(depthImage, 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+	depthViews[index] = dev->CreateImageView(depthImages[index], 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	dev->TransitionImageLayout(
-		depthImage, depthFormat,
+		depthImages[index], depthFormat,
 		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 		1, 1
 	);
@@ -173,72 +176,103 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height)
 void RenderInstance::DestroySwapChainAttachments()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	dev->DestroyImage(depthImage);
-	dev->DestroyImageView(depthView);
-	dev->DestroyImage(colorImage);
-	dev->DestroyImageView(colorView);
+
+	for (uint32_t i = 0; i < maxMSAALevels; i++) {
+		dev->DestroyImage(depthImages[i]);
+		dev->DestroyImageView(depthViews[i]);	
+	}
+
+	for (uint32_t i = 0; i < maxMSAALevels-1; i++) {
+		dev->DestroyImage(colorImages[i]);
+		dev->DestroyImageView(colorViews[i]);
+	}
+
+	
 }
 
 void RenderInstance::RecreateSwapChain() {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	VkDevice logicalDevice = dev->device;
-	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
+	
 	int width = 0, height = 0;
-	glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
-	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(windowMan->GetWindow(), &width, &height);
-		glfwWaitEvents();
-	}
+	
+	windowMan->GetWindowSize(&width, &height);
 
-	vkDeviceWaitIdle(logicalDevice);
+	dev->WaitOnDevice();
 
 	DestroySwapChainAttachments();
-	swapChain->DestroySwapChain();
-
-	CreateMSAAColorResources(width, height);
-	CreateDepthImage(width, height);
-
-	swapChain->RecreateSwapChain(width, height);
+	
+	CreateSwapChain(width, height, true);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		InvalidateRecordBuffer(i);
+		threadedRecordBuffers[i].Reset();
 	}
 }
 
-void RenderInstance::CreateRenderPass()
+void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	VKRenderPassBuilder rpb = dev->CreateRenderPassBuilder(3, 1, 1);
 	VkFormat format = swapChain->GetSwapChainFormat();
 
-	rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, msaaSamples,
-		VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
-		VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0);
+	if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
+	{
+
+		VKRenderPassBuilder rpb = dev->CreateRenderPassBuilder(3, 1, 1);
 
 
-	rpb.CreateAttachment(VKRenderPassBuilder::COLORRESOLVEATTACH, format, VK_SAMPLE_COUNT_1_BIT,
-		VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE
-		, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 2);
+		rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, sampleCount,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 0);
 
-	rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, depthFormat, msaaSamples,
-		VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
-	rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 2, 1);
+		rpb.CreateAttachment(VKRenderPassBuilder::COLORRESOLVEATTACH, format, VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE
+			, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 2);
 
-	rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+		rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, depthFormat, sampleCount,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
-	rpb.CreateInfo();
+		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 2, 1);
 
-	mainRenderPass = dev->CreateRenderPasses(rpb);
+		rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+
+		rpb.CreateInfo();
+
+		renderPasses[index] = dev->CreateRenderPasses(rpb);
+	}
+	else {
+		VKRenderPassBuilder rpb = dev->CreateRenderPassBuilder(2, 1, 1);
+
+
+		rpb.CreateAttachment(VKRenderPassBuilder::COLORATTACH, format, sampleCount,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0);
+
+		rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, depthFormat, sampleCount,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
+
+		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, ~0ui32, 1);
+
+		rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+
+		rpb.CreateInfo();
+
+		renderPasses[index] = dev->CreateRenderPasses(rpb);
+	}
 }
 
 void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex)
@@ -329,19 +363,19 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 
 
-void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height) {
+void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount) {
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	colorImage = dev->CreateImage(width, height,
+	colorImages[index] = dev->CreateImage(width, height,
 		1, swapChain->GetSwapChainFormat(), 1,
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-		msaaSamples,
+		sampleCount,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
 
-	colorView = dev->CreateImageView(colorImage, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
+	colorViews[index] = dev->CreateImageView(colorImages[index], 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void RenderInstance::WaitOnRender()
@@ -350,94 +384,70 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
+void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recreate)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
+
+	if (recreate)
+	{
+		swapChain->ResetSwapChain();
+		swapChain->RecreateSwapChain(width, height);
+	}
+	else
+	{
+		swapChain->CreateSwapChain(width, height);
+		for (uint32_t i = 0; i < maxMSAALevels; i++)
+		{
+			swapChain->CreateRenderTarget(i, renderPasses[i]);
+			swapchainRenderTargets[i] = swapChain->renderTargetIndex[i];
+		}
+	}
+	
+
+	EntryHandle* views = swapChain->CreateSwapchainViews();
+
+	for (uint32_t i = 0; i < maxMSAALevels; i++)
+	{
+
+		
+
+		CreateDepthImage(width, height, i, 1 << i);
+
+		std::array<EntryHandle, 3> attachmentViews;
+
+		uint32_t count = 0;
+
+		if (0 < i)
+		{
+			CreateMSAAColorResources(width, height, i - 1, 1 << i);
+
+			attachmentViews[0] = colorViews[i - 1];
+			attachmentViews[1] = depthViews[i];
+			attachmentViews[2] = EntryHandle();
+			count = 3;
+		}
+		else 
+		{
+			attachmentViews[0] = EntryHandle();
+			attachmentViews[1] = depthViews[i];
+			count = 2;
+		}
+			
+		swapChain->CreateSwapChainElements(i, count, attachmentViews.data(), views);
+	}
+}
+
 void RenderInstance::CreatePipelines()
 {
 	// Create Shaders
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);	
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv" };
-
-	size_t counter = 0;
-
-	for (size_t i = 0; i < shaders1.size(); i++)
-	{
-		std::string name = shaders1[i];
-		std::vector<char> buffer;
-		if (FileManager::FileExists(name)) {
-
-			auto ret = FileManager::ReadFileInFull(name, buffer);
-
-			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
-		}
-		else
-		{
-			std::string uncompiled = name.substr(0, name.length() - 4);
-
-			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
-
-			if (buffer.back() != '\0') buffer.push_back('\0');
-
-			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
-		}
-	}
-
-	std::vector<std::string> shaders2 = { "text.vert.spv" , "text.frag.spv" };
-
-	for (size_t i = 0; i < shaders2.size(); i++)
-	{
-		std::string name = shaders2[i];
-		std::vector<char> buffer;
-		if (FileManager::FileExists(name)) {
-
-			auto ret = FileManager::ReadFileInFull(name, buffer);
-
-			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
-		}
-		else
-		{
-			std::string uncompiled = name.substr(0, name.length() - 4);
-
-			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
-
-			if (buffer.back() != '\0') buffer.push_back('\0');
-
-			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
-		}
-
-	}
-
-	std::vector<std::string> shaders3 = { "mesh_interpolate.comp.spv" };
-
-	for (size_t i = 0; i < shaders3.size(); i++)
-	{
-		std::string name = shaders3[i];
-		std::vector<char> buffer;
-		if (FileManager::FileExists(name)) {
-
-			auto ret = FileManager::ReadFileInFull(name, buffer);
-
-			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
-		}
-		else
-		{
-			std::string uncompiled = name.substr(0, name.length() - 4);
-
-			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
-
-			if (buffer.back() != '\0') buffer.push_back('\0');
-
-			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
-		}
-	}
-
-
-	auto genericBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 2, 2, 0);
-	auto textBuilder = dev->CreateGraphicsPipelineBuilder(mainRenderPass, 1, 1, 2, 0);
-	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);
 
 	DescriptorSetLayoutBuilder* textDescriptor = dev->CreateDescriptorSetLayoutBuilder(1);
-	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1); 
+	DescriptorSetLayoutBuilder* globalBufferBuilder = dev->CreateDescriptorSetLayoutBuilder(1);
 	DescriptorSetLayoutBuilder* genericObjectBuilder = dev->CreateDescriptorSetLayoutBuilder(2);
 	DescriptorSetLayoutBuilder* computeBuilder = dev->CreateDescriptorSetLayoutBuilder(3);
 	std::array<std::string, 1> textDescriptorContainers = { "oneimage" };
@@ -468,26 +478,67 @@ void RenderInstance::CreatePipelines()
 
 	descriptorLayouts["compute"] = dev->CreateDescriptorSetLayout(computeBuilder);
 
-	UsePipelineBuilders(genericBuilder, textBuilder);
 
-	pipelinesIdentifier["genericpipeline"] = genericBuilder->CreateGraphicsPipeline(rmcIDs.data(), rmcIDs.size(), &shaders[0], 2);
 
-	pipelinesIdentifier["text"] = textBuilder->CreateGraphicsPipeline(tdsIDs.data(), tdsIDs.size(), &shaders[2], 2);
+	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv" };
+
+	size_t counter = 0;
+
+	for (size_t i = 0; i < shaders1.size(); i++)
+	{
+		std::string name = shaders1[i];
+		std::vector<char> buffer;
+		if (FileManager::FileExists(name)) {
+
+			auto ret = FileManager::ReadFileInFull(name, buffer);
+
+			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
+		}
+		else
+		{
+			std::string uncompiled = name.substr(0, name.length() - 4);
+
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+
+			if (buffer.back() != '\0') buffer.push_back('\0');
+
+			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
+		}
+	}
+
+	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);
 
 	std::array compDescHandles = { descriptorLayouts["compute"] };
 
 	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
-	pipelinesIdentifier["compute"] = computePipeline->CreateComputePipeline(compDescHandles.data(), 1, shaders[4]);
+	pipelinesIdentifier[MESH_INTERPOLATE] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(compDescHandles.data(), 1, shaders[4]));
 
+	std::vector<EntryHandle> l(maxMSAALevels);
+	std::vector<EntryHandle> r(maxMSAALevels);
 
+	for (uint32_t i = 0; i < maxMSAALevels; i++)
+	{
+		auto genericBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 2, 2, 0);
+		auto textBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 1, 2, 0);
 
+		UsePipelineBuilders(genericBuilder, textBuilder, (VkSampleCountFlagBits)(1<<i));
+
+		r[i] = genericBuilder->CreateGraphicsPipeline(rmcIDs.data(), rmcIDs.size(), &shaders[0], 2);
+
+		l[i] = textBuilder->CreateGraphicsPipeline(tdsIDs.data(), tdsIDs.size(), &shaders[2], 2);
+
+	}
+
+	pipelinesIdentifier[GENERIC] = r;
+	
+	pipelinesIdentifier[TEXT] = l;
 
 
 
 }
 
-void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text)
+void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits flags)
 {
 	std::array<VkDynamicState, 2> dynamicStates = {
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -517,8 +568,8 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 
-	generic->CreateMultiSampling(GetMSAASamples());
-	text->CreateMultiSampling(GetMSAASamples());
+	generic->CreateMultiSampling(flags);
+	text->CreateMultiSampling(flags);
 
 	generic->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 	text->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
@@ -546,7 +597,6 @@ void RenderInstance::CreateGlobalBuffer()
 	);
 
 	globalDeviceBufIndex = dev->CreateDeviceBuffer(32'000'000,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
 		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
@@ -657,6 +707,19 @@ void RenderInstance::DeleteVulkanSampler(EntryHandle& index)
 	majorDevice->DestorySampler(index);
 }
 
+
+
+void RenderInstance::AllocateVectorsForMSAA()
+{
+	swapchainRenderTargets.resize(maxMSAALevels);
+	depthViews.resize(maxMSAALevels);
+	colorViews.resize(maxMSAALevels-1);
+	depthImages.resize(maxMSAALevels);
+	colorImages.resize(maxMSAALevels-1);
+	renderPasses.resize(maxMSAALevels);
+}
+
+
 #define KB 1024
 #define MB 1024 * KB
 #define GB 1024 * MB
@@ -675,7 +738,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	physicalIndex = vkInstance->CreatePhysicalDevice(1);
 	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, &deviceIndex);
 
-	msaaSamples = vkInstance->GetMaxMSAALevels(physicalIndex);
+	maxMSAALevels = (uint32_t)log2((float)vkInstance->GetMaxMSAALevels(physicalIndex));
+	maxMSAALevels += 1;
+	currentMSAALevel = maxMSAALevels-1;
+
+	AllocateVectorsForMSAA();
 
 	VkPhysicalDeviceFeatures features{};
 	features.geometryShader = VK_TRUE;
@@ -690,11 +757,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
 		features, vkInstance->renderSurface, 
-		8 * KB, 
+		12 * KB, 
 		2 * KB,
 		16 * KB,
 		8 * MB,
-		1 * KB);
+		10 * KB);
 
 
 
@@ -708,11 +775,16 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2);
+
+	
+	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2, maxMSAALevels);
+	
 
 	VKSwapChain* swapChain = majorDevice->GetSwapChain(swapChainIndex);
 
 	VkFormat swcFormat = swapChain->GetSwapChainFormat();
+
+	
 
 	auto swcPool = majorDevice->FindImageMemoryIndexForPool(1920, 1200,
 		1, swcFormat, 1,
@@ -725,18 +797,15 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	attachmentsIndex = majorDevice->CreateImageMemoryPool(512 * MB, depthPool.first);
+	
+	for (uint32_t i = 0; i < maxMSAALevels; i++)
+	{
+		CreateRenderPass(i, (VkSampleCountFlagBits)(1 << i));
+	}
 
-	CreateMSAAColorResources(800, 600);
+	CreateSwapChain(800, 600, false);
+	
 
-	CreateDepthImage(800, 600);
-
-	CreateRenderPass();
-
-	std::array attachmentViews = { &colorView, &depthView };
-
-	swapChain->CreateSwapChain(800, 600, mainRenderPass, attachmentViews.data(), 2);
-
-	mainRenderTarget = swapChain->renderTargetIndex;
 
 	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3);
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
@@ -786,7 +855,10 @@ size_t RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 	size_t perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
 	std::array<uint32_t, 1> data = { (uint32_t)allocations[perRenderPassStuff].offset };
 
-	majorDevice->UpdateRenderGraph(mainRenderTarget, data.data(), (uint32_t)data.size(), mrpDescId);
+	for (uint32_t i = 0; i<maxMSAALevels; i++)
+
+		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), (uint32_t)data.size(), mrpDescId);
+	
 
 
 	return perRenderPassStuff;
@@ -811,11 +883,6 @@ void RenderInstance::SetResizeBool(bool set)
 uint32_t RenderInstance::GetCurrentFrame() const
 {
 	return currentFrame;
-}
-
-VkSampleCountFlagBits RenderInstance::GetMSAASamples() const
-{
-	return msaaSamples;
 }
 
 uint32_t RenderInstance::GetSwapChainHeight()
@@ -846,7 +913,7 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.vertexCount = info->vertexCount,
 			.indirectDrawBuffer = allocations[info->indirectDrawBuffer].memIndex,
 			.indirectDrawOffset = static_cast<uint32_t>(allocations[info->indirectDrawBuffer].offset),
-			.pipelinename = info->pipelinename,
+			.pipelinename = EntryHandle(),
 			.descriptorsetid = info->descriptorsetid,
 			.maxDynCap = info->maxDynCap,
 			.data = nullptr,
@@ -856,25 +923,31 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.pushRangeCount = info->pushRangeCount
 	};
 
+	auto& ref = pipelinesIdentifier[info->pipelinename];
 
-	EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
+	for (uint32_t i = 0; i < maxMSAALevels; i++) {
 
-	VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
+		create.pipelinename = ref[i];
 
-	for (uint32_t i = 0; i < info->maxDynCap; i++)
-	{
-		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+		EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
+
+		VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
+
+		for (uint32_t j = 0; j < info->maxDynCap; j++)
+		{
+			VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[j]].offset));
+		}
+
+		for (uint32_t j = 0; j < info->pushRangeCount; j++)
+		{
+			VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[j]), std::get<1>(pushArgs[j]), std::get<2>(pushArgs[j]), j, std::get<3>(pushArgs[j]));
+		}
+
+		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
+		graph->AddObject(pipelineIndex);
 	}
 
-	for (uint32_t i = 0; i < info->pushRangeCount; i++)
-	{
-		VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
-	}
-
-	auto graph = dev->GetRenderGraph(mainRenderTarget);
-	graph->AddObject(pipelineIndex);
-
-	return pipelineIndex;
+	return EntryHandle();
 }
 
 void RenderInstance::CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size)
@@ -897,7 +970,7 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 		.y = info->y,
 		.z = info->z,
 		.descriptorId = info->descriptorsetid,
-		.pipelineId = info->pipelinename,
+		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
 		.maxDynCap = info->maxDynCap,
 		.data = nullptr,
 		.barrierCount = info->barrierCount,
@@ -932,7 +1005,7 @@ void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 
-	auto graph = dev->GetRenderGraph(mainRenderTarget);
+	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
 	//if (!graph.objects.size()) return;
 	auto rcb = dev->GetRecordingBufferObject(cbindex);
@@ -948,3 +1021,28 @@ void RenderInstance::InvalidateRecordBuffer(uint32_t i)
 	//threadedRecordBuffers[i].DrawLoop();
 }
 
+
+void RenderInstance::IncreaseMSAA()
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+	uint32_t next = currentMSAALevel + 1;
+	if (next >= maxMSAALevels)
+		return;
+	currentMSAALevel = next;
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		threadedRecordBuffers[i].Reset();
+}
+
+void RenderInstance::DecreaseMSAA()
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+	int32_t next = currentMSAALevel - 1;
+	if (next < 0)
+		return;
+	currentMSAALevel = next;
+
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		threadedRecordBuffers[i].Reset();
+}
