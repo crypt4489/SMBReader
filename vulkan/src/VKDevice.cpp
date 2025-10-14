@@ -918,7 +918,7 @@ EntryHandle VKDevice::CreateComputePipelineObject(VKComputePipelineObjectCreateI
 
 	VKComputePipelineObject* objLoc = reinterpret_cast<VKComputePipelineObject*>(AllocFromPerDeviceData(sizeof(VKComputePipelineObject)));
 
-	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + (sizeof(PushConstantArguments) * info->pushRangeCount) + ((sizeof(VkBarrierInfo) + sizeof(EntryHandle)) * info->barrierCount)));
+	uint32_t* dynData = reinterpret_cast<uint32_t*>(AllocFromPerDeviceData((sizeof(uint32_t) * info->maxDynCap) + (sizeof(PushConstantArguments) * info->pushRangeCount) + ((sizeof(VkBarrierInfo)) * info->barrierCount)));
 
 	info->data = dynData;
 

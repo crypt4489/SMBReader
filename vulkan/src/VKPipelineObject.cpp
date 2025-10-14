@@ -6,17 +6,24 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount)
-	: pipelineID(_pid), descriptorSetId(_dsid), objectData(data), maxObjectCapacity(moc), objectCount(0U), type(_type), pushConstantCount(pcrCount)
+VKPipelineObject::VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount)
+	: 
+	pipelineID(_pid), descriptorSetId(_dsid), 
+	objectData(data), maxObjectCapacity(moc), 
+	objectCount(0U), type(_type), 
+	pushConstantCount(pcrCount), memBarrierCapacity(memBarrierCount),
+	memBarrierCounter(0)
+
 {
 	pushArgs = reinterpret_cast<PushConstantArguments*>(objectData + moc);
+	infos = reinterpret_cast<VkBarrierInfo*>(pushArgs + pushConstantCount);
 }
 
 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	VKGraphicsPipelineObjectCreateInfo* createinfo)
 	:
-	VKPipelineObject(createinfo->pipelinename, createinfo->descriptorsetid, createinfo->data, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount),
+	VKPipelineObject(createinfo->pipelinename, createinfo->descriptorsetid, createinfo->data, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount, 0),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
@@ -86,16 +93,12 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 
 VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
 	: 
-	VKPipelineObject(info->pipelineId, info->descriptorId, info->data,info->maxDynCap, COMPUTEPO, info->pushRangeCount),
+	VKPipelineObject(info->pipelineId, info->descriptorId, info->data,info->maxDynCap, COMPUTEPO, info->pushRangeCount, info->barrierCount),
 	x(info->x),
 	y(info->y),
-	z(info->z),
-	membarriersCount(info->barrierCount),
-	barrierInfoCount(info->barrierCount),
-	counter(0)
+	z(info->z)
 {
-	infos = reinterpret_cast<VkBarrierInfo*>(pushArgs + info->pushRangeCount);
-	memBarriers = reinterpret_cast<EntryHandle*>(infos + info->barrierCount);
+
 }
 
 void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)
@@ -110,32 +113,41 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 	std::array<VkBufferMemoryBarrier, 5> lbuffMemBarriers{};
 	std::array<VkMemoryBarrier, 5> lmemBarriers{};
 	std::array<VkImageMemoryBarrier, 5> limageMemBarriers{};
-	uint32_t bmbC = 0, mbC = 0, imbC = 0;
-	for (uint32_t i = 0; i < membarriersCount; i++)
+	uint32_t bmbC = 0, mbC = 0, imbC = 0, i = 0;
+	while (i < memBarrierCapacity)
 	{
 		VkBarrierInfo* info = &infos[i];
-		switch (info->type)
+		uint32_t j = 0;
+		while (info)
 		{
-		case MEMBARRIER:
+			j++;
+			switch (info->type)
+			{
+			case MEMBARRIER:
 
-			break;
-		case BUFFBARRIER:
-			lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(memBarriers[i]);
-			lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bmbC++;
-			break;
-		case IMAGEBARRIER:
+				break;
+			case BUFFBARRIER:
+				lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
+				lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bmbC++;
+				break;
+			case IMAGEBARRIER:
 
-			break;
-		default:
-			break;
+				break;
+			default:
+				break;
+			}
+
+			info = info->next;
 		}
+
+		
 
 		RBOPipelineBarrierArgs args = {
 		.srcStageMask = infos[i].srcStageMask,
 		.dstStageMask = infos[i].dstStageMask,
-		.dependencyFlags = infos[0].depenencyFlags,
+		.dependencyFlags = infos[i].dependencyFlags,
 		.memoryBarrierCount = mbC,
 		.pMemoryBarriers = lmemBarriers.data(),
 		.bufferMemoryBarrierCount = bmbC,
@@ -145,26 +157,48 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 		};
 
 		rbo->BindPipelineBarrierCommand(&args);
-	
+
 		bmbC = 0;
+
+
+		i += j;
+
 	}
-
-
-
 
 
 }
 
-void VKComputePipelineObject::AddBufferMemoryBarrier(VKDevice* d, EntryHandle bufferIndex, size_t size, size_t offset, uint32_t bindPoint)
+void VKPipelineObject::AddBufferMemoryBarrier(
+	VKDevice* d, EntryHandle bufferIndex, 
+	size_t size, size_t offset, 
+	VkAccessFlags srcPoint, VkAccessFlags dstPoint,
+	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
+	)
 {
-	EntryHandle barrierIndex = d->CreateBufferMemoryBarrier(VK_ACCESS_SHADER_WRITE_BIT, bindPoint, 0, 0, bufferIndex, offset, size);
-	VkBarrierInfo* info = &infos[counter];
-	info->srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
-	info->dstStageMask = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-	info->depenencyFlags = 0;
+	EntryHandle barrierIndex = d->CreateBufferMemoryBarrier(srcPoint, dstPoint, 0, 0, bufferIndex, offset, size);
+	VkBarrierInfo* info = &infos[memBarrierCounter];
+	VkPipelineStageFlags stages = srcStage | dstStage;
+	for (uint32_t i = 0; i < memBarrierCapacity; i++)
+	{
+		VkBarrierInfo* cand = &infos[i];
+		if ((cand->srcStageMask | cand->dstStageMask) == stages)
+		{
+			VkBarrierInfo** next = &cand->next;
+			while (*next)
+			{
+				next = &(*next)->next;
+			}
+			*next = info;
+			break;
+		}
+	}
+	info->srcStageMask = srcStage;
+	info->dstStageMask = dstStage;
+	info->dependencyFlags = 0;
 	info->type = BUFFBARRIER;
-	memBarriers[counter] = barrierIndex;
-	counter++;
+	info->barrierIndex = barrierIndex;
+	info->next = nullptr;
+	memBarrierCounter++;
 }
 
 void VKPipelineObject::AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags)

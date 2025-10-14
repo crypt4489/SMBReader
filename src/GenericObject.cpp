@@ -95,13 +95,15 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>{&interpolate, 4, 0, VK_SHADER_STAGE_COMPUTE_BIT}
 		};
 
-		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data(), pushArgs.data());
+		ResourceGraphNode computeGraphNode(1, 0);
 
-		rendInst->CreateBufferMemBarrier(handle, objVertexMemoryIndex, m->vertexSize);
+		computeGraphNode.AddBufferBarrier(COMPUTE_STAGE, VERTEX_INPUT_STAGE, WRITE_SHADER_RESOURCE, READ_VERTEX_INPUT, EntryHandle(objVertexMemoryIndex), m->vertexSize);
+
+		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data(), pushArgs.data(), &computeGraphNode);
 
 		std::array dynamicOffsets = { objSpecificMemIndex[0] };
 
-		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data(), nullptr);
+		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data(), nullptr, nullptr);
 	}
 }
 

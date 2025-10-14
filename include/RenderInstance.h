@@ -6,6 +6,7 @@
 #include "AppTypes.h"
 #include "IndexTypes.h"
 #include "VKTypes.h"
+#include "ResourceDependencies.h"
 #include "ThreadManager.h"
 #include "WindowManager.h"
 
@@ -235,9 +236,11 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs);
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets, 
+		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
 
-	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs);
+	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, 
+		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
@@ -250,8 +253,6 @@ public:
 	void MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex);
 
 	void DestoryTexture(EntryHandle handle);
-
-	void CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size);
 
 	void AllocateVectorsForMSAA();
 

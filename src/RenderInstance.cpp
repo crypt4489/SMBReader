@@ -901,7 +901,7 @@ DescriptorSetBuilder* RenderInstance::CreateDescriptorSet(EntryHandle layoutname
 	return dev->CreateDescriptorSetBuilder(descriptorPoolIndex, layoutname, frames);
 }
 
-EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs)
+EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -950,17 +950,7 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 	return EntryHandle();
 }
 
-void RenderInstance::CreateBufferMemBarrier(EntryHandle computHandle, size_t allocation, size_t size)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	VKComputePipelineObject* obj = dev->GetComputePipelineObject(computHandle);
-
-	obj->AddBufferMemoryBarrier(dev, allocations[allocation].memIndex, size, allocations[allocation].offset, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT);
-}
-
-
-EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs)
+EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -980,17 +970,53 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 
 	EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
 
-	VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
+	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
 	for (uint32_t i = 0; i < info->maxDynCap; i++)
 	{
-		VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+		vkPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
 	}
 
 	for (uint32_t i = 0; i < info->pushRangeCount; i++)
 	{
-		VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
+		vkPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
 	}
+
+	if (node)
+	{
+		uint32_t traverse = 0;
+
+		BarrierHeader* header = node->GetBarrierInfo(&traverse);
+
+		VKComputePipelineObject* obj = (VKComputePipelineObject*)vkPipelineObject;
+		while (header)
+		{
+			switch (header->type)
+			{
+			case BUFFER_BARRIER:
+			{
+				BufferBarrier* bb = (BufferBarrier*)header;
+				obj->AddBufferMemoryBarrier(dev, allocations[bb->allocationIndex].memIndex, bb->size, allocations[bb->allocationIndex].offset, 
+					
+					ConvertResourceActionToVulkan(bb->srcActions),
+					ConvertResourceActionToVulkan(bb->dstActions),
+					ConvertResourceStageToVulkan(bb->sourceStage),
+					ConvertResourceStageToVulkan(bb->destinationStage)
+				);
+				break;
+			}
+			case IMAGE_BARRIER:
+			{
+				
+				break;
+			} 
+			}
+
+			header = node->GetBarrierInfo(&traverse);
+		}
+	}
+
+	
 
 
 	auto graph = dev->GetComputeGraph(computeGraphIndex);

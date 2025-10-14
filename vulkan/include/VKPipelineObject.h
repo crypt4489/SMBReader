@@ -51,6 +51,23 @@ enum PipelineObjectType
 	COMPUTEPO = 1
 };
 
+enum VKBarrierType
+{
+	MEMBARRIER = 0,
+	BUFFBARRIER = 1,
+	IMAGEBARRIER = 2
+};
+
+struct VkBarrierInfo
+{
+	uint32_t type;
+	VkPipelineStageFlags srcStageMask;
+	VkPipelineStageFlags dstStageMask;
+	VkDependencyFlags dependencyFlags;
+	EntryHandle barrierIndex;
+	struct VkBarrierInfo* next;
+};
+
 struct VKPipelineObject
 {
 	uint32_t type;
@@ -63,14 +80,25 @@ struct VKPipelineObject
 	uint32_t pushConstantCount;
 	PushConstantArguments* pushArgs;
 
+	VkBarrierInfo* infos;
+	uint32_t memBarrierCapacity;
+	uint32_t memBarrierCounter;
+
 	VKPipelineObject() = delete;
-	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount);
+	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount);
 
 	~VKPipelineObject() = default;
 
 	void SetPerObjectData(uint32_t objectlocation);
 
 	void AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags);
+
+	void AddBufferMemoryBarrier(
+		VKDevice* d, EntryHandle bufferIndex,
+		size_t size, size_t offset,
+		VkAccessFlags srcPoint, VkAccessFlags dstPoint,
+		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
+	);
 };
 
 
@@ -96,39 +124,17 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 	std::size_t vertexCount, indexCount;
 };
 
-enum VKBarrierType
-{
-	MEMBARRIER = 0,
-	BUFFBARRIER = 1,
-	IMAGEBARRIER = 2
-};
-struct VkBarrierInfo
-{
-	uint32_t type;
-	VkPipelineStageFlags srcStageMask;
-	VkPipelineStageFlags dstStageMask;
-	VkDependencyFlags depenencyFlags;
-};
+
 
 struct VKComputePipelineObject : public VKPipelineObject
 {
 	uint32_t x, y, z;
-	
-	uint32_t barrierInfoCount;
-	VkBarrierInfo* infos;
-
-	uint32_t membarriersCount;
-	EntryHandle* memBarriers;
-
-	uint32_t counter;
 
 	VKComputePipelineObject() = delete;
 	~VKComputePipelineObject() = default;
 	VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
 
 	void Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
-
-	void AddBufferMemoryBarrier(VKDevice* d, EntryHandle bufferIndex, size_t size, size_t offset, uint32_t bindPoint);
 
 };
 
