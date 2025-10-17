@@ -67,13 +67,6 @@ struct BufferBarrier : public BarrierHeader
 	size_t size;
 };
 
-struct ShaderResource {
-	MemoryBarrierType type;
-	BarrierStage sourceStage;
-	BarrierAction srcActions;
-};
-
-
 struct ResourceGraphNode
 {
 	char* data;
@@ -138,5 +131,104 @@ struct ResourceGraphNode
 
 
 	
+};
+
+
+
+enum ShaderResourceType
+{
+	SAMPLER = 1,
+	STORAGE_BUFFER = 2,
+	UNIFORM_BUFFER = 4,
+};
+
+enum ShaderResourceAction
+{
+	SHADERREAD = 1,
+	SHADERWRITE = 2,
+	SHADERREADWRITE = 3
+};
+
+enum ShaderStageType
+{
+	VERTEXSTAGE = 1,
+	FRAGMENTSTAGE = 2,
+	COMPUTESTAGE = 3,
+};
+
+struct ShaderResource
+{
+	ShaderResourceAction action;
+	ShaderResourceType type;
+	int set;
+	int binding;
+};
+
+struct ShaderMap
+{
+	ShaderStageType type;
+	int shaderReference;
+	int resourceCount; //array of contigous ShaderResources 
+
+	uintptr_t GetResource(int resourceIndex)
+	{
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderMap);
+		for (int i = 0; i < resourceIndex; i++)
+		{
+			head += sizeof(ShaderResource);
+		}
+		return head;
+	}
+
+	int GetMapSize() const
+	{
+		return sizeof(ShaderMap) + (resourceCount * sizeof(ShaderResource));
+	}
+};
+
+struct ShaderGraph
+{
+	int shaderMapCount;
+
+	uintptr_t GetMap(int mapIndex)
+	{
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph);
+		for (int i = 0; i < mapIndex; i++)
+		{
+			ShaderMap* map = (ShaderMap*)head;
+			head += map->GetMapSize();
+		}
+		return head;
+	}
+
+	int GetGraphSize() const
+	{
+		int size = sizeof(ShaderGraph);
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph);
+		for (int i = 0; i < shaderMapCount; i++)
+		{
+			ShaderMap* map = (ShaderMap*)head;
+			int size2 = map->GetMapSize();
+			head += size2;
+			size += size2;
+		}
+		return size;
+	}
+};
+
+struct ShaderGraphsHolder
+{
+	int graphCount;
+
+	uintptr_t GetGraph(int graphIndex)
+	{
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraphsHolder);
+		for (int i = 0; i < graphIndex; i++)
+		{
+			ShaderGraph* map = (ShaderGraph*)head;
+			head += map->GetGraphSize();
+		}
+		return head;
+	}
 };
 

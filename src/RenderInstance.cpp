@@ -11,6 +11,7 @@
 
 #include "FileManager.h"
 #include "ThreadManager.h"
+
 #include "VKInstance.h"
 #include "VKDevice.h"
 #include "VKDescriptorLayoutBuilder.h"
@@ -88,13 +89,41 @@ static void frameResizeCB(GLFWwindow* window, int width, int height)
 	renderInst->SetResizeBool(true);
 }
 
+#define KB 1024
+#define MB 1024 * KB
+#define GB 1024 * MB
+
 RenderInstance::RenderInstance()
 {
 	vkInstance = new VKInstance();
+	shaderGraphs = (uintptr_t)malloc(1 * KB);
+	shaderGraphOffset = sizeof(ShaderGraphsHolder);
+
+	ShaderGraphsHolder* holder = (ShaderGraphsHolder*)shaderGraphs;
+	holder->graphCount = 3;
 };
+
+uintptr_t RenderInstance::AllocateShaderGraph(uint32_t shaderMapCount, uint32_t *shaderResourceCount,  ShaderStageType *types, uint32_t *shaderReferences)
+{
+	uintptr_t ret = (shaderGraphs + shaderGraphOffset);
+	ShaderGraph* graph = (ShaderGraph*)(ret);
+	graph->shaderMapCount = shaderMapCount;
+	shaderGraphOffset += sizeof(ShaderGraph);
+	for (int i = 0; i < shaderMapCount; i++)
+	{
+		ShaderMap* map = (ShaderMap*)(shaderGraphs + shaderGraphOffset);
+		map->type = types[i];
+		map->shaderReference = shaderReferences[i];
+		map->resourceCount = shaderResourceCount[i];
+		shaderGraphOffset += sizeof(ShaderMap) + (map->resourceCount * sizeof(ShaderResource));
+	}
+	return ret;
+}
 
 RenderInstance::~RenderInstance()
 {
+	free((void*)shaderGraphs);
+
 	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	for (size_t i = 0; i < shaders.size(); i++)
 	{
@@ -410,9 +439,6 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{
-
-		
-
 		CreateDepthImage(width, height, i, 1 << i);
 
 		std::array<EntryHandle, 3> attachmentViews;
@@ -479,8 +505,46 @@ void RenderInstance::CreatePipelines()
 	descriptorLayouts["compute"] = dev->CreateDescriptorSetLayout(computeBuilder);
 
 
+	std::array<ShaderResource, 7> resourcesArr = { {
+		{ SHADERREAD, UNIFORM_BUFFER, 0, 0 },
+		{ SHADERREAD, UNIFORM_BUFFER, 1, 0 },
+		{ SHADERREAD, SAMPLER, 1, 1 },
+		{ SHADERREAD, SAMPLER, 0, 0},
+		{ SHADERREAD, STORAGE_BUFFER, 0, 0 },
+		{ SHADERREAD, STORAGE_BUFFER, 0, 1 },
+		{ SHADERWRITE, STORAGE_BUFFER, 0, 2 },
+	} };
 
 	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv" };
+
+	std::array shaderReferences = { 0U, 1U, 2U, 3U, 4U };
+	std::array shaderTypes = { ShaderStageType::VERTEXSTAGE, ShaderStageType::FRAGMENTSTAGE, ShaderStageType::VERTEXSTAGE, ShaderStageType::FRAGMENTSTAGE, ShaderStageType::COMPUTESTAGE };
+	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 3U };
+
+	std::array<ShaderGraph*, 3> maps;
+	maps[0] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[0], &shaderTypes[0], &shaderReferences[0]);
+	maps[1] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[2], &shaderTypes[2], &shaderReferences[2]);
+	maps[2] = (ShaderGraph*)AllocateShaderGraph(1, &shaderResourceCounts[4], &shaderTypes[4], &shaderReferences[4]);
+
+	uint32_t resourceCount = 0;
+
+	for (int i = 0; i < 3; i++)
+	{
+		for (int j = 0; j < maps[i]->shaderMapCount; j++)
+		{
+			ShaderMap* map = (ShaderMap*)maps[i]->GetMap(j);
+			for (int h = 0; h < map->resourceCount; h++)
+			{
+				ShaderResource* resource = (ShaderResource*)map->GetResource(h);
+				resource->action = resourcesArr[resourceCount].action;
+				resource->type = resourcesArr[resourceCount].type;
+				resource->binding = resourcesArr[resourceCount].binding;
+				resource->set = resourcesArr[resourceCount].set;
+				resourceCount++;
+			}
+		}
+		
+	}
 
 	size_t counter = 0;
 
@@ -491,8 +555,6 @@ void RenderInstance::CreatePipelines()
 		if (FileManager::FileExists(name)) {
 
 			auto ret = FileManager::ReadFileInFull(name, buffer);
-
-			shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
 		}
 		else
 		{
@@ -501,9 +563,9 @@ void RenderInstance::CreatePipelines()
 			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
-
-			shaders[counter++] = dev->CompileShader(buffer.data(), dev->ConvertShaderFlags(name));
 		}
+
+		shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
 	}
 
 	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);

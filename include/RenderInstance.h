@@ -260,6 +260,8 @@ public:
 
 	void DecreaseMSAA();
 
+	uintptr_t AllocateShaderGraph(uint32_t shaderMapCount, uint32_t* shaderResourceCount, ShaderStageType* types, uint32_t* shaderReferences);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -292,6 +294,8 @@ public:
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	std::array<EntryHandle, 5> shaders;
+	uintptr_t shaderGraphs;
+	uint32_t shaderGraphOffset;
 
 	std::array<std::vector<EntryHandle>, 3> pipelinesIdentifier;
 	std::unordered_map<std::string, EntryHandle> descriptorLayouts;

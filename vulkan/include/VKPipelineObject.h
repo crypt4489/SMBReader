@@ -66,6 +66,7 @@ struct VkBarrierInfo
 	VkDependencyFlags dependencyFlags;
 	EntryHandle barrierIndex;
 	struct VkBarrierInfo* next;
+	struct VkBarrierInfo* child;
 };
 
 struct VKPipelineObject

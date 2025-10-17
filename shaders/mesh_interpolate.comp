@@ -18,7 +18,7 @@ layout(set = 0, binding = 1) readonly buffer InputVerticesMorph {
 	VertexTex inMorph[];
 };
 
-layout(set = 0, binding = 2) buffer OutputVerticesMorph {
+layout(set = 0, binding = 2) writeonly buffer OutputVerticesMorph {
 	VertexTex OutMorphed[];
 };
 

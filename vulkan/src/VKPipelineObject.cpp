@@ -114,9 +114,10 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 	std::array<VkMemoryBarrier, 5> lmemBarriers{};
 	std::array<VkImageMemoryBarrier, 5> limageMemBarriers{};
 	uint32_t bmbC = 0, mbC = 0, imbC = 0, i = 0;
+	VkBarrierInfo* info = &infos[0];
 	while (i < memBarrierCapacity)
 	{
-		VkBarrierInfo* info = &infos[i];
+		VkBarrierInfo* next = info;
 		uint32_t j = 0;
 		while (info)
 		{
@@ -139,30 +140,30 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 				break;
 			}
 
-			info = info->next;
+			info = info->child;
 		}
 
 		
 
 		RBOPipelineBarrierArgs args = {
-		.srcStageMask = infos[i].srcStageMask,
-		.dstStageMask = infos[i].dstStageMask,
-		.dependencyFlags = infos[i].dependencyFlags,
-		.memoryBarrierCount = mbC,
-		.pMemoryBarriers = lmemBarriers.data(),
-		.bufferMemoryBarrierCount = bmbC,
-		.pBufferMemoryBarriers = lbuffMemBarriers.data(),
-		.imageMemoryBarrierCount = imbC,
-		.pImageMemoryBarriers = limageMemBarriers.data()
+			.srcStageMask = next->srcStageMask,
+			.dstStageMask = next->dstStageMask,
+			.dependencyFlags = next->dependencyFlags,
+			.memoryBarrierCount = mbC,
+			.pMemoryBarriers = lmemBarriers.data(),
+			.bufferMemoryBarrierCount = bmbC,
+			.pBufferMemoryBarriers = lbuffMemBarriers.data(),
+			.imageMemoryBarrierCount = imbC,
+			.pImageMemoryBarriers = limageMemBarriers.data()
 		};
 
 		rbo->BindPipelineBarrierCommand(&args);
 
 		bmbC = 0;
 
-
 		i += j;
 
+		info = next->next;
 	}
 
 
@@ -177,27 +178,36 @@ void VKPipelineObject::AddBufferMemoryBarrier(
 {
 	EntryHandle barrierIndex = d->CreateBufferMemoryBarrier(srcPoint, dstPoint, 0, 0, bufferIndex, offset, size);
 	VkBarrierInfo* info = &infos[memBarrierCounter];
+	VkBarrierInfo* nextPtr = nullptr;
 	VkPipelineStageFlags stages = srcStage | dstStage;
 	for (uint32_t i = 0; i < memBarrierCapacity; i++)
 	{
 		VkBarrierInfo* cand = &infos[i];
 		if ((cand->srcStageMask | cand->dstStageMask) == stages)
 		{
-			VkBarrierInfo** next = &cand->next;
+			VkBarrierInfo** next = &cand->child;
 			while (*next)
 			{
-				next = &(*next)->next;
+				next = &(*next)->child;
 			}
 			*next = info;
 			break;
 		}
+		nextPtr = &infos[i];
 	}
+
+	if (nextPtr)
+	{
+		nextPtr->next = info;
+	}
+
 	info->srcStageMask = srcStage;
 	info->dstStageMask = dstStage;
 	info->dependencyFlags = 0;
 	info->type = BUFFBARRIER;
 	info->barrierIndex = barrierIndex;
 	info->next = nullptr;
+	info->child = nullptr;
 	memBarrierCounter++;
 }
 
