@@ -11,7 +11,7 @@ size_t TextManager::vertexCount = 0;
 size_t TextManager::commandCount = 0;
 VKGraphicsPipelineObject* TextManager::obj;
 std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
-size_t TextManager::vertexBufferIndex = ~0ui64, TextManager::indirectCommandsIndex = ~0ui64;
+int TextManager::vertexBufferIndex = ~0i32, TextManager::indirectCommandsIndex = ~0i32;
 EntryHandle TextManager::descHandle;
 
 void TextManager::CreateFontTextManager(const std::string& imageName, const std::string& dataName)
@@ -29,9 +29,9 @@ void TextManager::CreatePipelineObject()
 
 
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-	DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["oneimage"], frames);
-	dsb->AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
-	descHandle = dsb->AddDescriptorsToCache();
+	//DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts[2], frames);
+	//dsb->AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
+	//descHandle = dsb->AddDescriptorsToCache();
 
 	VKGraphicsPipelineObjectCreateInfo create = {
 		.drawType = 1,

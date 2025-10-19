@@ -422,11 +422,11 @@ void ApplicationLoop::LoadObject(const std::string& file)
 
 	glm::mat4 identity = glm::identity<glm::mat4>();
 
-	obj->SetMatrix(identity);
+	obj->mat = identity;
 
-	obj->SetPerObjectCallback(Rotate);
+	obj->updateObject = Rotate;
 
-	obj->SetPerObjectMemoryCallback(gMemoryCallback);
+	obj->memoryCallback = (gMemoryCallback);
 
 	SemaphoreGuard lock(objsSema);
 

@@ -149,11 +149,28 @@ enum ShaderResourceAction
 	SHADERREADWRITE = 3
 };
 
-enum ShaderStageType
+enum ShaderStageTypeBits
 {
-	VERTEXSTAGE = 1,
-	FRAGMENTSTAGE = 2,
-	COMPUTESTAGE = 3,
+	VERTEXSHADERSTAGE = 1,
+	FRAGMENTSHADERSTAGE = 2,
+	COMPUTESHADERSTAGE = 4,
+};
+
+typedef int ShaderStageType;
+
+
+inline VkShaderStageFlags ConvertToVKShaderStageFlags(ShaderStageType type)
+{
+	VkShaderStageFlags flags = 0;
+	flags |= (VK_SHADER_STAGE_VERTEX_BIT) * ((type & VERTEXSHADERSTAGE) != 0);
+	flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
+	flags |= (VK_SHADER_STAGE_COMPUTE_BIT) * ((type & COMPUTESHADERSTAGE) != 0);
+	return flags;
+}
+
+struct ShaderResourceSet
+{
+	int bindingCount;
 };
 
 struct ShaderResource
@@ -173,10 +190,9 @@ struct ShaderMap
 	uintptr_t GetResource(int resourceIndex)
 	{
 		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderMap);
-		for (int i = 0; i < resourceIndex; i++)
-		{
-			head += sizeof(ShaderResource);
-		}
+		
+		head += (sizeof(ShaderResource) * resourceIndex);
+		
 		return head;
 	}
 
@@ -189,10 +205,17 @@ struct ShaderMap
 struct ShaderGraph
 {
 	int shaderMapCount;
+	int resourceSetCount;
+
+	uintptr_t GetSet(int setIndex)
+	{
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (setIndex * sizeof(ShaderResourceSet));
+		return head;
+	}
 
 	uintptr_t GetMap(int mapIndex)
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph);
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (2 * sizeof(ShaderResourceSet));
 		for (int i = 0; i < mapIndex; i++)
 		{
 			ShaderMap* map = (ShaderMap*)head;
@@ -203,8 +226,8 @@ struct ShaderGraph
 
 	int GetGraphSize() const
 	{
-		int size = sizeof(ShaderGraph);
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph);
+		int size = sizeof(ShaderGraph) + (2 * sizeof(ShaderResourceSet));
+		uintptr_t head = (uintptr_t)(this) + size;
 		for (int i = 0; i < shaderMapCount; i++)
 		{
 			ShaderMap* map = (ShaderMap*)head;

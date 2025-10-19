@@ -28,33 +28,36 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 	m = new Mesh();
 
+	auto rendInst = VKRenderer::gRenderInstance;
+	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+
+	int graphicDesc = rendInst->AllocateDescriptorSet(0, 1, 1, frames);
+
+	objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+	int objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
+	int objMorphToVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
+
+	objVertexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
+	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
+
+	rendInst->BindBufferToDescriptor(graphicDesc, objSpecificMemIndex[0], false, 0);
+	rendInst->BindImageToDescriptor(graphicDesc, textures[0].vkImpl, 1);
+
+	int computeDesc = rendInst->AllocateDescriptorSet(2, 0, 3, frames);
+
+	rendInst->BindBufferToDescriptor(computeDesc, objMorphFromVertexMemory, true, 0);
+	rendInst->BindBufferToDescriptor(computeDesc, objMorphToVertexMemory, true, 1);
+	rendInst->BindBufferToDescriptor(computeDesc, objVertexMemoryIndex, true, 2);
+
+	rendInst->UpdateAllocation((void*)((uintptr_t)m->GetIndexData() + m->indexSize), objMorphToVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+	rendInst->UpdateAllocation(m->GetVertexData(), objMorphFromVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+	rendInst->UpdateAllocation(m->GetIndexData(), objIndexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+
 	if (be == RenderingBackend::VULKAN)
 	{
-		std::string genericpipeline = "genericpipeline";
-
-		auto rendInst = VKRenderer::gRenderInstance;
-		uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-
-		DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["genericobject"], frames);
-		dsb->AddDynamicUniformBuffer(rendInst->GetDynamicUniformBuffer(), sizeof(glm::mat4), 0, frames, 0);
-		dsb->AddPixelShaderImageDescription(rendInst->GetImageView(textures[0].vkImpl), rendInst->GetSampler(textures[0].vkImpl), 1, frames);
-		EntryHandle descHandle = dsb->AddDescriptorsToCache();
-
-
-
-		objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
-		size_t objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
-		size_t objMorphToVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
-		
-		objVertexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
-		objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
-
-		DescriptorSetBuilder* cdsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts["compute"], frames);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 0, frames, 0);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 1, frames, 0);
-		cdsb->AddDynamicStorageBufferDirect(rendInst->GetDeviceBufferHandle(), m->vertexSize, 2, frames, 0);
-
-		EntryHandle computeID = cdsb->AddDescriptorsToCache();
 
 		GraphicsIntermediaryPipelineInfo create = {
 			.drawType = 0,
@@ -62,18 +65,12 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.vertexCount = m->vertexCount,
 			.indirectDrawBuffer{},
 			.pipelinename = GENERIC,
-			.descriptorsetid = descHandle,
+			.descriptorsetid = graphicDesc,
 			.maxDynCap = 1,
 			.indexBufferHandle = objIndexMemoryIndex,
 			.indexCount = m->indexCount,
 			.pushRangeCount = 0
 		};
-
-		rendInst->UpdateAllocation((void*)((uintptr_t)m->GetIndexData() + m->indexSize), objMorphToVertexMemory, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
-
-		rendInst->UpdateAllocation(m->GetVertexData(), objMorphFromVertexMemory, m->vertexSize, ABSOLUTE_ALLOCATION_OFFSET);
-
-		rendInst->UpdateAllocation(m->GetIndexData(), objIndexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
 
 		std::array compDynamicOffsets = { objMorphFromVertexMemory, objMorphToVertexMemory, objVertexMemoryIndex };
@@ -84,7 +81,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.z = 1,
 			.maxDynCap = 3,
 			.pipelinename = MESH_INTERPOLATE,
-			.descriptorsetid = computeID,
+			.descriptorsetid = computeDesc,
 			.barrierCount = 1,
 			.pushRangeCount = 1
 		};
@@ -113,20 +110,6 @@ GenericObject::~GenericObject()
 	delete m;
 }
 
-void GenericObject::SetMatrix(glm::mat4& f)
-{
-	mat = f;
-}
-
-void GenericObject::SetPerObjectCallback(std::function<void(GenericObject*)> f)
-{
-	updateObject = f;
-}
-
-void GenericObject::SetPerObjectMemoryCallback(std::function<void(void*, size_t, size_t)> ptr)
-{
-	memoryCallback = ptr;
-}
 
 void GenericObject::CallUpdate()
 {

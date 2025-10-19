@@ -35,13 +35,13 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 	return descriptorSetLayout;
 }
 
-void DescriptorSetLayoutBuilder::AddPixelImageSamplerLayout(uint32_t binding)
+void DescriptorSetLayoutBuilder::AddPixelImageSamplerLayout(uint32_t binding, VkShaderStageFlags flags)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	layoutBinding.descriptorCount = 1;
-	layoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	layoutBinding.stageFlags = flags;
 
 	descSetBindings[counter++] = layoutBinding;
 }

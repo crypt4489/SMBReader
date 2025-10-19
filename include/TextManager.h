@@ -67,7 +67,7 @@ public:
 	static constexpr uint32_t BUFFERSIZE = 1048576;
 	static size_t bufferOffset;
 	static size_t vertexCount, commandCount;
-	static size_t vertexBufferIndex, indirectCommandsIndex;
+	static int vertexBufferIndex, indirectCommandsIndex;
 	static Font* fonts;
 	static VKGraphicsPipelineObject* obj;
 	static std::vector<std::tuple<Text*, size_t, size_t>> textsCommand;

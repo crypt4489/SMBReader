@@ -3,12 +3,12 @@
 AppTexture::AppTexture(const SMBFile& smb, const SMBChunk& chunk) :
 	smbTex(new SMBTexture(smb, chunk)), vkImpl(), texImpl(nullptr)
 {
-	vkImpl = VKRenderer::gRenderInstance->CreateVulkanImage((char*)smbTex->data, smbTex->imageSizes, smbTex->width, smbTex->height, smbTex->miplevels, smbTex->type);
+	vkImpl = VKRenderer::gRenderInstance->CreateImage((char*)smbTex->data, smbTex->imageSizes, smbTex->width, smbTex->height, smbTex->miplevels, smbTex->type);
 }
 
 AppTexture::AppTexture(std::vector<char>& data, TextureIOType type) : smbTex(nullptr), texImpl(new AppTextureImpl(data, type))
 {
-	vkImpl = VKRenderer::gRenderInstance->CreateVulkanImage((char*)texImpl->data, &texImpl->dataSize, texImpl->width, texImpl->height, texImpl->miplevels, texImpl->type);
+	vkImpl = VKRenderer::gRenderInstance->CreateImage((char*)texImpl->data, &texImpl->dataSize, texImpl->width, texImpl->height, texImpl->miplevels, texImpl->type);
 }
 
 AppTexture::~AppTexture()

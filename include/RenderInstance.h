@@ -101,13 +101,13 @@ struct ThreadedRecordBuffer
 struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
-	size_t vertexBufferIndex;
+	int vertexBufferIndex;
 	uint32_t vertexCount;
 	size_t indirectDrawBuffer;
 	uint32_t pipelinename;
-	EntryHandle descriptorsetid;
+	int descriptorsetid;
 	uint32_t maxDynCap;
-	size_t indexBufferHandle;
+	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
 };
@@ -119,7 +119,7 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t z;
 	uint32_t maxDynCap;
 	uint32_t pipelinename;
-	EntryHandle descriptorsetid;
+	int descriptorsetid;
 	uint32_t barrierCount;
 	uint32_t pushRangeCount;
 };
@@ -147,6 +147,21 @@ struct RenderAllocationHolder
 
 		return allocations[index];
 	}
+
+	RenderAllocation operator[](int index)
+	{
+		if (index >= N)
+			return { EntryHandle(), ~0ui64, ~0ui64 };
+
+		return allocations[index];
+	}
+
+	int Allocate()
+	{
+		return allocationsIndex.fetch_add(1);
+	}
+
+	std::atomic<int> allocationsIndex;
 
 };
 
@@ -195,40 +210,19 @@ public:
 
 	void UpdateAllocation(void* data, size_t handle, size_t size, size_t offset);
 
-	size_t GetPageFromUniformBuffer(size_t size, uint32_t alignment);
+	int GetPageFromUniformBuffer(size_t size, uint32_t alignment);
 
-	size_t GetPageFromDeviceBuffer(size_t size, uint32_t alignment);
+	int GetPageFromDeviceBuffer(size_t size, uint32_t alignment);
 
-	VkBuffer GetDynamicUniformBuffer();
-
-	VkBuffer GetDeviceBufferHandle();
-
-	EntryHandle CreateVulkanImage(
+	EntryHandle CreateImage(
 		char* imageData,
 		uint32_t* imageSizes,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type);
 
-	EntryHandle CreateVulkanImageView(EntryHandle& imageIndex, uint32_t mipLevels,
-		ImageFormat type, VkImageAspectFlags aspectMask);
-
-	EntryHandle CreateVulkanSampler(uint32_t mipLevels);
-
-	void DeleteVulkanImageView(EntryHandle& index);
-
-	void DeleteVulkanImage(EntryHandle& index);
-
-	void DeleteVulkanSampler(EntryHandle& index);
-
 	void CreateVulkanRenderer(WindowManager* window);
 
-	VkImageView GetImageView(EntryHandle viewIndex);
-
-	VkSampler GetSampler(EntryHandle index);
-
 	void SetResizeBool(bool set);
-
-	DescriptorSetBuilder* CreateDescriptorSet(EntryHandle layoutname, uint32_t frames);
 	
 	uint32_t GetCurrentFrame() const;
 
@@ -236,10 +230,10 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, size_t *offsets, 
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets, 
 		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
 
-	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, size_t* offsets, 
+	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, 
 		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
@@ -260,7 +254,17 @@ public:
 
 	void DecreaseMSAA();
 
+	void CreateShaderResourceMap(ShaderGraph *graph);
+
 	uintptr_t AllocateShaderGraph(uint32_t shaderMapCount, uint32_t* shaderResourceCount, ShaderStageType* types, uint32_t* shaderReferences);
+
+	int AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t targetSet, int index, int setCount);
+
+	void BindBufferToDescriptor(int descriptorSet, int allocationIndex, bool direct, int bindingIndex);
+
+	void BindImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex);
+
+	EntryHandle CreateDescriptorSet(int descriptorSet);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
@@ -294,16 +298,20 @@ public:
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	std::array<EntryHandle, 5> shaders;
+	
 	uintptr_t shaderGraphs;
 	uint32_t shaderGraphOffset;
 
+	uintptr_t descriptorResourceSet;
+	uint32_t descriptorResourceOffset;
+
 	std::array<std::vector<EntryHandle>, 3> pipelinesIdentifier;
-	std::unordered_map<std::string, EntryHandle> descriptorLayouts;
+	std::array<EntryHandle, 4> descriptorLayouts;
+	std::array<ShaderGraph*, 3> shaderGraphPtrs;
+	std::array<uintptr_t, 50> descriptorSets;
+	std::atomic<int> descriptorSetIndex;
 
 	RenderAllocationHolder<50> allocations;
-	std::atomic<size_t> allocationsIndex;
-
-	
 };
 
 namespace VKRenderer {

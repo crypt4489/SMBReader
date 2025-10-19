@@ -7,7 +7,7 @@ struct DescriptorSetLayoutBuilder
 {
 	DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc);
 	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout();
-	void AddPixelImageSamplerLayout(uint32_t binding);
+	void AddPixelImageSamplerLayout(uint32_t binding, VkShaderStageFlags flags);
 
 	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
 
