@@ -48,6 +48,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	rendInst->BindBufferToDescriptor(computeDesc, objMorphFromVertexMemory, true, 0);
 	rendInst->BindBufferToDescriptor(computeDesc, objMorphToVertexMemory, true, 1);
 	rendInst->BindBufferToDescriptor(computeDesc, objVertexMemoryIndex, true, 2);
+	rendInst->BindBarrier(computeDesc, 2, VERTEX_INPUT_BARRIER, READ_VERTEX_INPUT);
+	rendInst->UploadConstant(computeDesc, &interpolate, 0);
 
 	rendInst->UpdateAllocation((void*)((uintptr_t)m->GetIndexData() + m->indexSize), objMorphToVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
@@ -88,19 +90,11 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		interpolate = 0.5f;
 
-		std::array<std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>, 1> pushArgs = {
-			std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>{&interpolate, 4, 0, VK_SHADER_STAGE_COMPUTE_BIT}
-		};
-
-		ResourceGraphNode computeGraphNode(1, 0);
-
-		computeGraphNode.AddBufferBarrier(COMPUTE_STAGE, VERTEX_INPUT_STAGE, WRITE_SHADER_RESOURCE, READ_VERTEX_INPUT, EntryHandle(objVertexMemoryIndex), m->vertexSize);
-
-		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data(), pushArgs.data(), &computeGraphNode);
+		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data());
 
 		std::array dynamicOffsets = { objSpecificMemIndex[0] };
 
-		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data(), nullptr, nullptr);
+		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data());
 	}
 }
 

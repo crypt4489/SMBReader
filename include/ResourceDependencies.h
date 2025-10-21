@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <variant>
 
-enum BarrierAction
+enum BarrierActionBits
 {
 	WRITE_SHADER_RESOURCE = 1,
 	READ_SHADER_RESOURCE = 2,
@@ -13,12 +13,16 @@ enum BarrierAction
 	READ_VERTEX_INPUT = 8,
 };
 
-enum BarrierStage
+enum BarrierStageBits
 {
-	VERTEX_SHADER_STAGE = 1,
-	VERTEX_INPUT_STAGE = 2,
-	COMPUTE_STAGE = 4,
+	VERTEX_SHADER_BARRIER = 1,
+	VERTEX_INPUT_BARRIER = 2,
+	COMPUTE_BARRIER = 4,
 };
+
+typedef int BarrierAction;
+
+typedef int BarrierStage;
 
 enum MemoryBarrierType
 {
@@ -40,106 +44,18 @@ inline VkAccessFlags ConvertResourceActionToVulkan(BarrierAction action)
 inline VkPipelineStageFlags ConvertResourceStageToVulkan(BarrierStage sourceStage)
 {
 	VkPipelineStageFlags flags = 0;
-	flags |= (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT) * ((sourceStage & VERTEX_SHADER_STAGE) != 0);
-	flags |= (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT) * ((sourceStage & VERTEX_INPUT_STAGE) != 0);
-	flags |= (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT) * ((sourceStage & COMPUTE_STAGE) != 0);
+	flags |= (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT) * ((sourceStage & VERTEX_SHADER_BARRIER) != 0);
+	flags |= (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT) * ((sourceStage & VERTEX_INPUT_BARRIER) != 0);
+	flags |= (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT) * ((sourceStage & COMPUTE_BARRIER) != 0);
 	return flags;
 }
-
-struct BarrierHeader
-{
-	MemoryBarrierType type;
-	BarrierStage sourceStage;
-	BarrierStage destinationStage;
-	BarrierAction srcActions;
-	BarrierAction dstActions;
-};
-
-
-struct ImageBarrier : public BarrierHeader
-{
-	EntryHandle imageId;
-};
-
-struct BufferBarrier : public BarrierHeader
-{
-	EntryHandle allocationIndex;
-	size_t size;
-};
-
-struct ResourceGraphNode
-{
-	char* data;
-	uint32_t pointer;
-
-	ResourceGraphNode(uint32_t barrierCount, uint32_t imageCount)
-		: 
-		data((char*)malloc((sizeof(ImageBarrier) * imageCount) + (sizeof(BufferBarrier) * barrierCount))), 
-		pointer(0)
-	{
-
-	}
-
-	~ResourceGraphNode()
-	{
-		free(data);
-	}
-
-	void AddBufferBarrier(BarrierStage sourceStage, BarrierStage desinationStage, BarrierAction srcActions, BarrierAction dstActions, EntryHandle allocationIndex, size_t size) {
-		BufferBarrier* bBarrier = (BufferBarrier*)(data + pointer);
-		bBarrier->type = BUFFER_BARRIER;
-		bBarrier->sourceStage = sourceStage;
-		bBarrier->destinationStage = desinationStage;
-		bBarrier->srcActions = srcActions;
-		bBarrier->dstActions = dstActions;
-		bBarrier->allocationIndex = allocationIndex;
-		bBarrier->size = size;
-		pointer += sizeof(BufferBarrier);
-	}
-
-	void AddImageBarrier(BarrierStage sourceStage, BarrierStage desinationStage, BarrierAction srcActions, BarrierAction dstActions, EntryHandle imageIndex) {
-		ImageBarrier* bBarrier = (ImageBarrier*)(data + pointer);
-		bBarrier->type = IMAGE_BARRIER;
-		bBarrier->sourceStage = sourceStage;
-		bBarrier->destinationStage = desinationStage;
-		bBarrier->srcActions = srcActions;
-		bBarrier->dstActions = dstActions;
-		bBarrier->imageId = imageIndex;
-		pointer += sizeof(ImageBarrier);
-	}
-
-
-	BarrierHeader* GetBarrierInfo(uint32_t* dataOffset)
-	{
-		if (*dataOffset >= pointer) return nullptr;
-		BarrierHeader* header = (BarrierHeader*)data + *dataOffset;
-		switch (header->type)
-		{
-		case BUFFER_BARRIER:
-		{
-			*dataOffset += sizeof(BufferBarrier);
-			break;
-		}
-		case IMAGE_BARRIER:
-		{
-			*dataOffset += sizeof(ImageBarrier);
-			break;
-		}
-		}
-		return header;
-	}
-
-
-	
-};
-
-
 
 enum ShaderResourceType
 {
 	SAMPLER = 1,
 	STORAGE_BUFFER = 2,
 	UNIFORM_BUFFER = 4,
+	CONSTANT_BUFFER = 8,
 };
 
 enum ShaderResourceAction
@@ -159,7 +75,16 @@ enum ShaderStageTypeBits
 typedef int ShaderStageType;
 
 
-inline VkShaderStageFlags ConvertToVKShaderStageFlags(ShaderStageType type)
+inline BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
+{
+	BarrierStage flags = 0;
+	flags |= (VERTEX_SHADER_BARRIER) * ((type & VERTEXSHADERSTAGE) != 0);
+//	flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
+	flags |= (COMPUTE_BARRIER) * ((type & COMPUTESHADERSTAGE) != 0);
+	return flags;
+}
+
+inline VkShaderStageFlags ConvertShaderStageToVKShaderStageFlags(ShaderStageType type)
 {
 	VkShaderStageFlags flags = 0;
 	flags |= (VK_SHADER_STAGE_VERTEX_BIT) * ((type & VERTEXSHADERSTAGE) != 0);

@@ -172,6 +172,9 @@ enum PipelineLabels
 	GENERIC = 2
 };
 
+struct DescriptorSet;
+struct DescriptorHeader;
+
 class RenderInstance
 {
 public:
@@ -230,11 +233,9 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets, 
-		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets);
 
-	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, 
-		std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node);
+	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
@@ -264,7 +265,15 @@ public:
 
 	void BindImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex);
 
+	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action);
+
+	void UploadConstant(int descriptorset, void* data, int bufferLocation);
+
 	EntryHandle CreateDescriptorSet(int descriptorSet);
+
+	DescriptorHeader* PopDescriptorBarrier(int descriptorSet, int* counter);
+
+	DescriptorHeader* GetConstantBuffer(int descriptorSet, int constantBuffer);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;

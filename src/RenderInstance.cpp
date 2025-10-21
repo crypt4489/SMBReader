@@ -24,8 +24,6 @@
 #include "VertexTypes.h"
 #include "WindowManager.h"
 
-
-
 struct DescriptorSet
 {
 	int bindingCount;
@@ -49,6 +47,23 @@ struct DescriptorBuffer : public DescriptorHeader
 {
 	size_t allocation;
 	bool direct;
+};
+
+struct DescriptorConstantBuffer : public DescriptorHeader
+{
+	ShaderStageType stage;
+	int size;
+	int offset;
+	void* data;
+};
+
+struct DescriptorBarrier
+{
+	MemoryBarrierType type;
+	BarrierStage srcStage;
+	BarrierStage dstStage;
+	BarrierAction srcAction;
+	BarrierAction dstAction;
 };
 
 
@@ -522,15 +537,22 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		descriptorBuilders[j] = dev->CreateDescriptorSetLayoutBuilder(set->bindingCount);
 	}
 
+	int count = graph->resourceSetCount;
+
 	for (int j = 0; j < graph->shaderMapCount; j++)
 	{
 		ShaderMap* map = (ShaderMap*)graph->GetMap(j);
 
-		VkShaderStageFlags stageFlags = ConvertToVKShaderStageFlags(map->type);
+		VkShaderStageFlags stageFlags = ConvertShaderStageToVKShaderStageFlags(map->type);
 
 		for (int h = 0; h < map->resourceCount; h++)
 		{
 			ShaderResource* resource = (ShaderResource*)map->GetResource(h);
+
+			if (resource->type & CONSTANT_BUFFER) {
+				descriptorBuilders[resource->set]->bindingCounts--;
+				continue;
+			}
 			
 			DescriptorSetLayoutBuilder* descriptorBuilder = descriptorBuilders[resource->set];
 
@@ -550,7 +572,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 	}
 
 
-	for (int j = 0; j < graph->resourceSetCount; j++)
+	for (int j = 0; j < count; j++)
 	{
 		descriptorLayouts[index++] = dev->CreateDescriptorSetLayout(descriptorBuilders[j]);
 	}
@@ -563,27 +585,28 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<ShaderResource, 7> resourcesArr = { {
+	std::array<ShaderResource, 8> resourcesArr = { {
 		{ SHADERREAD, UNIFORM_BUFFER, 0, 0 },
 		{ SHADERREAD, UNIFORM_BUFFER, 1, 0 },
 		{ SHADERREAD, SAMPLER, 1, 1 },
 		{ SHADERREAD, SAMPLER, 0, 0},
+		{ SHADERREAD, CONSTANT_BUFFER, 0, ~0},
 		{ SHADERREAD, STORAGE_BUFFER, 0, 0 },
 		{ SHADERREAD, STORAGE_BUFFER, 0, 1 },
 		{ SHADERWRITE, STORAGE_BUFFER, 0, 2 },
 	} };
 
-	std::vector<std::string> shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv" };
+	std::array shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv" };
 
 	std::array shaderReferences = { 0U, 1U, 2U, 3U, 4U };
 	std::array<ShaderStageType, 5> shaderTypes = { ShaderStageTypeBits::VERTEXSHADERSTAGE, ShaderStageTypeBits::FRAGMENTSHADERSTAGE, ShaderStageTypeBits::VERTEXSHADERSTAGE, ShaderStageTypeBits::FRAGMENTSHADERSTAGE, ShaderStageTypeBits::COMPUTESHADERSTAGE };
-	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 3U };
+	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 4U };
 
 	std::array setSizes = { 2, 1, 1 };
 
 	std::array bindingIndex = { 0, 2, 3 };
 
-	std::array bindingCount = { 1, 2, 1, 3 };
+	std::array bindingCount = { 1, 2, 1, 4 };
 
 	shaderGraphPtrs[0] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[0], &shaderTypes[0], &shaderReferences[0]);
 	shaderGraphPtrs[1] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[2], &shaderTypes[2], &shaderReferences[2]);
@@ -830,23 +853,32 @@ int RenderInstance::AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t ta
 	set->descriptorLayoutHandle = index;
 	set->setCount = setCount;
 
+	
+
 	uintptr_t* offset = (uintptr_t*)ptr;
 
-	ptr += sizeof(uintptr_t) * set->bindingCount;
+	ptr += sizeof(uintptr_t) * (set->bindingCount);
 
 	for (int j = 0; j < shaderGraphPtrs[shaderGraphIndex]->shaderMapCount; j++)
 	{
 
 		ShaderMap* map = (ShaderMap*)shaderGraphPtrs[shaderGraphIndex]->GetMap(j);
+		int constantCount = map->resourceCount-1;
 		for (int h = 0; h < map->resourceCount; h++)
 		{
+			MemoryBarrierType memBarrierType = MEMORY_BARRIER;
+
 			ShaderResource* resource = (ShaderResource*)map->GetResource(h);
 
 			if (resource->set != targetSet) continue;
 
 			DescriptorHeader* desc = (DescriptorHeader*)ptr;
 
-			desc->binding = resource->binding;
+			if (resource->binding != ~0)
+				desc->binding = resource->binding;
+			else
+				desc->binding = constantCount--;
+
 			desc->type = resource->type;
 			desc->action = resource->action;
 
@@ -857,14 +889,37 @@ int RenderInstance::AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t ta
 			
 			case SAMPLER:
 				ptr += sizeof(DescriptorImage);
+				memBarrierType = IMAGE_BARRIER;
 				break;
+			case CONSTANT_BUFFER:
+			{
+				DescriptorConstantBuffer* constants = (DescriptorConstantBuffer*)ptr;
+				constants->size = 4;
+				constants->offset = 0;
+				constants->stage = map->type;
+				ptr += sizeof(DescriptorConstantBuffer);
+				break;
+			}
 			case STORAGE_BUFFER:
 			case UNIFORM_BUFFER:
+				memBarrierType = BUFFER_BARRIER;
 				ptr += sizeof(DescriptorBuffer);
 				break;
 			}
+
+			if (resource->action & SHADERWRITE)
+			{
+				DescriptorBarrier* barriers = (DescriptorBarrier*)ptr;
+				barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
+				barriers->srcAction = WRITE_SHADER_RESOURCE;
+				barriers->type = memBarrierType;
+				ptr += (sizeof(DescriptorBarrier));
+			}
 		}
 	}
+
+
+	
 
 	int indexRet = descriptorSetIndex.fetch_add(1);
 
@@ -884,9 +939,7 @@ void RenderInstance::BindBufferToDescriptor(int descriptorSet, int allocationInd
 	DescriptorBuffer* header = (DescriptorBuffer*)offsets[bindingIndex];
 
 	if (header->type != UNIFORM_BUFFER && header->type != STORAGE_BUFFER)
-	{
 		return;
-	}
 
 	header->direct = direct;
 	header->allocation = allocationIndex;
@@ -901,11 +954,47 @@ void RenderInstance::BindImageToDescriptor(int descriptorSet, EntryHandle index,
 	DescriptorImage* header = (DescriptorImage*)offsets[bindingIndex];
 
 	if (header->type != SAMPLER)
-	{
 		return;
-	}
 
 	header->textureHandle = index;
+}
+
+void RenderInstance::BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
+{
+	uintptr_t head = descriptorSets[descriptorSet];
+	DescriptorSet* set = (DescriptorSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(DescriptorSet));
+
+
+	head = offsets[binding];
+	DescriptorHeader* desc = (DescriptorHeader*)offsets[binding];
+
+
+	switch (desc->type)
+	{
+
+	case SAMPLER:
+		head += sizeof(DescriptorImage);
+		
+		break;
+	case STORAGE_BUFFER:
+	case UNIFORM_BUFFER:
+	
+		head += sizeof(DescriptorBuffer);
+		break;
+	}
+
+	DescriptorBarrier* barrier = (DescriptorBarrier*)head;
+
+	barrier->dstAction = action;
+	barrier->dstStage = stage;
+}
+
+void RenderInstance::UploadConstant(int descriptorset, void* data, int bufferLocation)
+{
+	DescriptorConstantBuffer* header = (DescriptorConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
+	if (!header) return;
+	header->data = data;
 }
 
 
@@ -1090,8 +1179,8 @@ EntryHandle RenderInstance::CreateDescriptorSet(int descriptorSet)
 		{
 			case SAMPLER:
 			{
-				DescriptorImage* buffer = (DescriptorImage*)offsets[i];
-				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(buffer->textureHandle), dev->GetSamplerByTexture(buffer->textureHandle), i, frames);
+				DescriptorImage* image = (DescriptorImage*)offsets[i];
+				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle), dev->GetSamplerByTexture(image->textureHandle), i, frames);
 				break;
 			}
 			case STORAGE_BUFFER:
@@ -1121,7 +1210,7 @@ EntryHandle RenderInstance::CreateDescriptorSet(int descriptorSet)
 }
 
 
-EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, int* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node)
+EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, int* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1159,9 +1248,13 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[j]].offset));
 		}
 
-		for (uint32_t j = 0; j < info->pushRangeCount; j++)
+		for (uint32_t i = 0; i < info->pushRangeCount; i++)
 		{
-			VKGraphicsPipelineObject->AddPushConstant(std::get<0>(pushArgs[j]), std::get<1>(pushArgs[j]), std::get<2>(pushArgs[j]), j, std::get<3>(pushArgs[j]));
+			DescriptorConstantBuffer* pushArgs = (DescriptorConstantBuffer*)GetConstantBuffer(info->descriptorsetid, i);
+
+			if (pushArgs) {
+				VKGraphicsPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+			}
 		}
 
 		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
@@ -1171,7 +1264,7 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 	return EntryHandle();
 }
 
-EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, std::tuple<void*, uint32_t, uint32_t, VkShaderStageFlags>* pushArgs, ResourceGraphNode* node)
+EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1201,43 +1294,49 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 
 	for (uint32_t i = 0; i < info->pushRangeCount; i++)
 	{
-		vkPipelineObject->AddPushConstant(std::get<0>(pushArgs[i]), std::get<1>(pushArgs[i]), std::get<2>(pushArgs[i]), i, std::get<3>(pushArgs[i]));
-	}
+		DescriptorConstantBuffer* pushArgs = (DescriptorConstantBuffer*)GetConstantBuffer(info->descriptorsetid, i);
 
-	if (node)
-	{
-		uint32_t traverse = 0;
-
-		BarrierHeader* header = node->GetBarrierInfo(&traverse);
-
-		VKComputePipelineObject* obj = (VKComputePipelineObject*)vkPipelineObject;
-		while (header)
-		{
-			switch (header->type)
-			{
-			case BUFFER_BARRIER:
-			{
-				BufferBarrier* bb = (BufferBarrier*)header;
-				obj->AddBufferMemoryBarrier(dev, allocations[bb->allocationIndex].memIndex, bb->size, allocations[bb->allocationIndex].offset, 
-					
-					ConvertResourceActionToVulkan(bb->srcActions),
-					ConvertResourceActionToVulkan(bb->dstActions),
-					ConvertResourceStageToVulkan(bb->sourceStage),
-					ConvertResourceStageToVulkan(bb->destinationStage)
-				);
-				break;
-			}
-			case IMAGE_BARRIER:
-			{
-				
-				break;
-			} 
-			}
-
-			header = node->GetBarrierInfo(&traverse);
+		if (pushArgs) {
+			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
 		}
 	}
 
+	
+		
+	int popCounter = 0;
+	DescriptorHeader* header = PopDescriptorBarrier(info->descriptorsetid, &popCounter);
+	while (header)
+	{
+		switch (header->type)
+		{
+
+		case SAMPLER:
+		{
+			DescriptorImage* imageBarrier = (DescriptorImage*)header;
+			DescriptorBarrier* barrier = (DescriptorBarrier*)imageBarrier+1;
+			break;
+		}
+		case STORAGE_BUFFER:
+		case UNIFORM_BUFFER:
+		{
+			DescriptorBuffer* bufferBarrier = (DescriptorBuffer*)header;
+			DescriptorBarrier* barrier = (DescriptorBarrier*)(bufferBarrier + 1);
+			vkPipelineObject->AddBufferMemoryBarrier(
+				dev, 
+				allocations[bufferBarrier->allocation].memIndex, 
+				allocations[bufferBarrier->allocation].size, 
+				allocations[bufferBarrier->allocation].offset,
+				ConvertResourceActionToVulkan(barrier->srcAction),
+				ConvertResourceActionToVulkan(barrier->dstAction),
+				ConvertResourceStageToVulkan(barrier->srcStage),
+				ConvertResourceStageToVulkan(barrier->dstStage)
+			);
+			break;
+		}
+		}
+
+		header = PopDescriptorBarrier(info->descriptorsetid, &popCounter);
+	}
 	
 
 
@@ -1245,6 +1344,39 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 	graph->AddObject(pipelineIndex);
 
 	return pipelineIndex;
+}
+
+
+DescriptorHeader* RenderInstance::PopDescriptorBarrier(int descriptorSet, int* counter)
+{
+	int i = *counter;
+	uintptr_t head = descriptorSets[descriptorSet];
+	DescriptorSet* set = (DescriptorSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(DescriptorSet));
+	while (i < set->bindingCount)
+	{
+		DescriptorHeader* header = (DescriptorHeader*)offsets[i];
+		*counter = ++i;
+		if (header->action & SHADERWRITE)
+		{
+			return (DescriptorHeader*)header;
+		}
+	}
+
+	return nullptr;
+}
+
+DescriptorHeader* RenderInstance::GetConstantBuffer(int descriptorSet, int constantBuffer)
+{
+	uintptr_t head = descriptorSets[descriptorSet];
+	DescriptorSet* set = (DescriptorSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(DescriptorSet));
+
+	DescriptorHeader* ret = (DescriptorHeader*)(offsets[set->bindingCount - (constantBuffer+1)]);
+
+	if (ret->type != CONSTANT_BUFFER) return nullptr;
+
+	return ret;
 }
 
 
