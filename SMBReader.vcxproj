@@ -234,6 +234,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <None Include="shaders\3dtextured.frag" />
     <None Include="shaders\3dtextured.vert" />
     <None Include="shaders\mesh_interpolate.comp" />
+    <None Include="shaders\polynomialimage.comp" />
     <None Include="shaders\text.frag" />
     <None Include="shaders\text.vert" />
     <None Include="shaders\typicaltextured.frag" />

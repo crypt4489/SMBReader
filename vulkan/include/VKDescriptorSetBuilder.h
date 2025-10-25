@@ -32,6 +32,8 @@ struct DescriptorSetBuilder
 
 	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
 
+	void AddStorageImageDescription(VkImageView view, uint32_t binding, uint32_t frames);
+
 	EntryHandle AddDescriptorsToCache();
 
 	VkDescriptorSet* descriptorSets;

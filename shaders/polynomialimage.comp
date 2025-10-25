@@ -1,0 +1,91 @@
+#version 450
+
+layout(set = 0, binding = 0) uniform GlobalContext {
+    float xResolution;
+    float yResolution;
+    float u_time;
+} gs;
+
+layout(set = 0, binding = 1, RGBA8) uniform image2D outputImage;
+
+
+layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+
+const float slices = 7.0; 
+
+const float heightDivision = 17.0;
+
+float customFunction(float x)
+{
+	return 6.*(x*x*x);    
+}
+
+float levelDetermination(float base, float applied, int level)
+{
+    int x = level/2;
+    int b = x*2;
+    int c = level - b;   
+    
+    if (c==1)
+    {
+        return base + applied; 
+    }
+    
+	return base - applied;
+}
+
+
+void main() {
+    
+    vec3 color = vec3(0.);
+    
+    float ySize = (gs.yResolution/heightDivision);
+    
+    float xSize = (gs.xResolution/slices);
+    
+    float slice = floor(float(gl_GlobalInvocationID.x)/xSize);
+    
+    float offsetX = slice * xSize;
+    
+    float sliceH = floor(float(gl_GlobalInvocationID.y)/ySize);
+    
+    float offsetY = sliceH * ySize;
+    
+    float universalX = mod(xSize * 1.0 * gs.u_time, xSize);
+        
+    vec2 coords = vec2(levelDetermination((gl_GlobalInvocationID.x-offsetX), universalX, int(sliceH)), gl_GlobalInvocationID.y-offsetY);
+    
+    vec2 st = vec2(0, coords.y/ySize);
+    
+    float rightHalf = 0.;
+    
+    if (coords.x > 0.0 && coords.x < xSize)
+    {
+        st.x = coords.x/xSize;
+        
+        rightHalf = ((xSize-coords.x)/xSize);
+    } 
+    else if (coords.x < 0.0)
+    {
+       st.x = (xSize+coords.x)/xSize;
+       
+       rightHalf = (xSize-(xSize+coords.x))/xSize;
+    } 
+    else 
+    {
+       st.x = (coords.x-xSize)/xSize;
+       
+       rightHalf = ((xSize-(coords.x-xSize))/xSize);
+    } 
+    
+    if (st.x <= 0.5 && customFunction(st.x*2.0) >= st.y)
+    {
+    	color = vec3(st.x, st.y, 0.);
+    }
+    else if (st.x >= 0.5 && -customFunction(-1.0+((st.x-.5)*2.0)) >= st.y)
+    {    
+        color = vec3(rightHalf, st.y, 0.);
+    } 
+
+    imageStore(outputImage, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y), vec4(color, 1.0));
+}

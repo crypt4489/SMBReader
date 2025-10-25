@@ -561,6 +561,9 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			case UNIFORM_BUFFER:
 				descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags);
 				break;
+			case IMAGESTORE2D:
+				descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
+				break;
 			case SAMPLER:
 				descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
 				break;
@@ -585,7 +588,7 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<ShaderResource, 8> resourcesArr = { {
+	std::array<ShaderResource, 10> resourcesArr = { {
 		{ SHADERREAD, UNIFORM_BUFFER, 0, 0 },
 		{ SHADERREAD, UNIFORM_BUFFER, 1, 0 },
 		{ SHADERREAD, SAMPLER, 1, 1 },
@@ -594,27 +597,37 @@ void RenderInstance::CreatePipelines()
 		{ SHADERREAD, STORAGE_BUFFER, 0, 0 },
 		{ SHADERREAD, STORAGE_BUFFER, 0, 1 },
 		{ SHADERWRITE, STORAGE_BUFFER, 0, 2 },
+		{ SHADERREAD, UNIFORM_BUFFER, 0, 0},
+		{ SHADERWRITE, IMAGESTORE2D, 0, 1}
 	} };
 
-	std::array shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv" };
+	std::array shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv", "polynomialimage.comp.spv"};
 
-	std::array shaderReferences = { 0U, 1U, 2U, 3U, 4U };
-	std::array<ShaderStageType, 5> shaderTypes = { ShaderStageTypeBits::VERTEXSHADERSTAGE, ShaderStageTypeBits::FRAGMENTSHADERSTAGE, ShaderStageTypeBits::VERTEXSHADERSTAGE, ShaderStageTypeBits::FRAGMENTSHADERSTAGE, ShaderStageTypeBits::COMPUTESHADERSTAGE };
-	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 4U };
+	std::array shaderReferences = { 0U, 1U, 2U, 3U, 4U, 5U };
+	std::array<ShaderStageType, 6> shaderTypes  = {
+		ShaderStageTypeBits::VERTEXSHADERSTAGE, 
+		ShaderStageTypeBits::FRAGMENTSHADERSTAGE, 
+		ShaderStageTypeBits::VERTEXSHADERSTAGE, 
+		ShaderStageTypeBits::FRAGMENTSHADERSTAGE, 
+		ShaderStageTypeBits::COMPUTESHADERSTAGE,
+		ShaderStageTypeBits::COMPUTESHADERSTAGE
+	};
+	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 4U, 2U };
 
-	std::array setSizes = { 2, 1, 1 };
+	std::array setSizes = { 2, 1, 1, 1 };
 
-	std::array bindingIndex = { 0, 2, 3 };
+	std::array bindingIndex = { 0, 2, 3, 4 };
 
-	std::array bindingCount = { 1, 2, 1, 4 };
+	std::array bindingCount = { 1, 2, 1, 4, 2 };
 
 	shaderGraphPtrs[0] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[0], &shaderTypes[0], &shaderReferences[0]);
 	shaderGraphPtrs[1] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[2], &shaderTypes[2], &shaderReferences[2]);
 	shaderGraphPtrs[2] = (ShaderGraph*)AllocateShaderGraph(1, &shaderResourceCounts[4], &shaderTypes[4], &shaderReferences[4]);
+	shaderGraphPtrs[3] = (ShaderGraph*)AllocateShaderGraph(1, &shaderResourceCounts[5], &shaderTypes[5], &shaderReferences[5]);
 
 	uint32_t resourceCount = 0;
 
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; i < 4; i++)
 	{
 		
 
@@ -673,6 +686,10 @@ void RenderInstance::CreatePipelines()
 	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[MESH_INTERPOLATE] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&descriptorLayouts[3], 1, shaders[4]));
+
+	auto polyPipeline = dev->CreateComputePipelineBuilder(1, 0);
+
+	pipelinesIdentifier[POLY] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&descriptorLayouts[4], 1, shaders[5]));
 
 	std::vector<EntryHandle> l(maxMSAALevels);
 	std::vector<EntryHandle> r(maxMSAALevels);
@@ -886,7 +903,7 @@ int RenderInstance::AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t ta
 
 			switch (resource->type)
 			{
-			
+			case IMAGESTORE2D:
 			case SAMPLER:
 				ptr += sizeof(DescriptorImage);
 				memBarrierType = IMAGE_BARRIER;
@@ -953,7 +970,7 @@ void RenderInstance::BindImageToDescriptor(int descriptorSet, EntryHandle index,
 
 	DescriptorImage* header = (DescriptorImage*)offsets[bindingIndex];
 
-	if (header->type != SAMPLER)
+	if (header->type != SAMPLER && header->type != IMAGESTORE2D)
 		return;
 
 	header->textureHandle = index;
@@ -972,7 +989,7 @@ void RenderInstance::BindBarrier(int descriptorSet, int binding, BarrierStage st
 
 	switch (desc->type)
 	{
-
+	case IMAGESTORE2D:
 	case SAMPLER:
 		head += sizeof(DescriptorImage);
 		
@@ -1177,6 +1194,12 @@ EntryHandle RenderInstance::CreateDescriptorSet(int descriptorSet)
 
 		switch (header->type)
 		{
+			case IMAGESTORE2D:
+			{
+				DescriptorImage* image = (DescriptorImage*)offsets[i];
+				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle), i, frames);
+				break;
+			}
 			case SAMPLER:
 			{
 				DescriptorImage* image = (DescriptorImage*)offsets[i];
@@ -1309,11 +1332,12 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 	{
 		switch (header->type)
 		{
-
+		case IMAGESTORE2D:
 		case SAMPLER:
 		{
 			DescriptorImage* imageBarrier = (DescriptorImage*)header;
-			DescriptorBarrier* barrier = (DescriptorBarrier*)imageBarrier+1;
+			DescriptorBarrier* barrier = (DescriptorBarrier*)(imageBarrier+1);
+			
 			break;
 		}
 		case STORAGE_BUFFER:

@@ -169,7 +169,8 @@ enum PipelineLabels
 {
 	MESH_INTERPOLATE = 0,
 	TEXT = 1,
-	GENERIC = 2
+	GENERIC = 2,
+	POLY = 3,
 };
 
 struct DescriptorSet;
@@ -306,7 +307,7 @@ public:
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
-	std::array<EntryHandle, 5> shaders;
+	std::array<EntryHandle, 6> shaders;
 	
 	uintptr_t shaderGraphs;
 	uint32_t shaderGraphOffset;
@@ -314,9 +315,9 @@ public:
 	uintptr_t descriptorResourceSet;
 	uint32_t descriptorResourceOffset;
 
-	std::array<std::vector<EntryHandle>, 3> pipelinesIdentifier;
-	std::array<EntryHandle, 4> descriptorLayouts;
-	std::array<ShaderGraph*, 3> shaderGraphPtrs;
+	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier;
+	std::array<EntryHandle, 5> descriptorLayouts;
+	std::array<ShaderGraph*, 4> shaderGraphPtrs;
 	std::array<uintptr_t, 50> descriptorSets;
 	std::atomic<int> descriptorSetIndex;
 

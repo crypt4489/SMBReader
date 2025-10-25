@@ -176,5 +176,8 @@
     <None Include="shaders\mesh_interpolate.comp">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="shaders\polynomialimage.comp">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

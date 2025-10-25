@@ -56,6 +56,8 @@ enum ShaderResourceType
 	STORAGE_BUFFER = 2,
 	UNIFORM_BUFFER = 4,
 	CONSTANT_BUFFER = 8,
+	IMAGESTORE2D = 16,
+	IMAGESTORE3D = 32,
 };
 
 enum ShaderResourceAction

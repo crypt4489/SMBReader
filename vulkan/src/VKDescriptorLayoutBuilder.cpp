@@ -46,6 +46,17 @@ void DescriptorSetLayoutBuilder::AddPixelImageSamplerLayout(uint32_t binding, Vk
 	descSetBindings[counter++] = layoutBinding;
 }
 
+void DescriptorSetLayoutBuilder::AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	layoutBinding.descriptorCount = 1;
+	layoutBinding.stageFlags = flags;
+
+	descSetBindings[counter++] = layoutBinding;
+}
+
 void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStageFlags flags)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
