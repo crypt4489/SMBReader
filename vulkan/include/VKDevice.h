@@ -383,7 +383,13 @@ public:
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,
-		VkMemoryPropertyFlags memProps, EntryHandle memIndex);
+		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, EntryHandle memIndex);
+
+	EntryHandle CreateStorageImage(
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, VkFormat type,
+		EntryHandle memIndex,
+		EntryHandle hostIndex, VkImageAspectFlags flags, VkImageLayout layout, bool createSampler);
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
@@ -488,7 +494,7 @@ public:
 
 	VkImageView GetImageViewByIndex(EntryHandle index);
 
-	VkImageView GetImageViewByTexture(EntryHandle index);
+	VkImageView GetImageViewByTexture(EntryHandle index, int imageViewIndex);
 
 	VkMemoryBarrier* GetMemoryBarrier(EntryHandle barrierIndex);
 
@@ -526,7 +532,7 @@ public:
 
 	VkSampler GetSamplerByIndex(EntryHandle index);
 
-	VkSampler GetSamplerByTexture(EntryHandle index);
+	VkSampler GetSamplerByTexture(EntryHandle index, int samplerIndex);
 
 	VkSemaphore GetSemaphore(EntryHandle index);
 

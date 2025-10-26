@@ -4,7 +4,7 @@ class VKTexture
 {
 public:
 
-	VKTexture(EntryHandle piIndex, EntryHandle pvIndex, EntryHandle psIndex);
+	VKTexture(EntryHandle piIndex, EntryHandle *pvIndex, int numViews, EntryHandle* psIndex, int numSamplers);
 
 	VKTexture(VKTexture&& other) noexcept;
 
@@ -13,8 +13,8 @@ public:
 	~VKTexture();
 
 	EntryHandle imageIndex;
-	EntryHandle viewIndex;
-	EntryHandle samplerIndex;
+	EntryHandle viewIndex[4];
+	EntryHandle samplerIndex[4];
 
 #if 0
 	void TransitionMips(VkDevice& device, VkPhysicalDevice &gpu, VkCommandPool &pool, VkQueue &queue, uint32_t width, uint32_t height, uint32_t mips)

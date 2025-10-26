@@ -45,7 +45,7 @@ struct DescriptorImage : public DescriptorHeader
 
 struct DescriptorBuffer : public DescriptorHeader
 {
-	size_t allocation;
+	int allocation;
 	bool direct;
 };
 
@@ -64,6 +64,13 @@ struct DescriptorBarrier
 	BarrierStage dstStage;
 	BarrierAction srcAction;
 	BarrierAction dstAction;
+};
+
+struct ImageDescriptorBarrier : public DescriptorBarrier
+{
+	VkImageLayout srcResourceLayout;
+	VkImageLayout dstResourceLayout;
+	VkImageAspectFlags imageType;
 };
 
 
@@ -102,6 +109,9 @@ namespace API {
 			break;
 		case ImageFormat::R8G8B8A8:
 			vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+			break;
+		case ImageFormat::R8G8B8A8_UNORM:
+			vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
 			break;
 		}
 		return vkFormat;
@@ -250,7 +260,7 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t 
 		1, depthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, attachmentsIndex);
 
 	depthViews[index] = dev->CreateImageView(depthImages[index], 1, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
@@ -461,7 +471,7 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height, u
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, attachmentsIndex);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, attachmentsIndex);
 
 	colorViews[index] = dev->CreateImageView(colorImages[index], 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -844,6 +854,18 @@ EntryHandle RenderInstance::CreateImage(
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
+EntryHandle RenderInstance::CreateStorageImage(
+	uint32_t width, uint32_t height,
+	uint32_t mipLevels, ImageFormat type)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	return majorDevice->CreateStorageImage(
+		width, height,
+		mipLevels, API::ConvertSMBToVkFormat(type),
+		attachmentsIndex,
+		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+}
+
 
 
 void RenderInstance::AllocateVectorsForMSAA()
@@ -904,10 +926,39 @@ int RenderInstance::AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t ta
 			switch (resource->type)
 			{
 			case IMAGESTORE2D:
-			case SAMPLER:
+			{
 				ptr += sizeof(DescriptorImage);
 				memBarrierType = IMAGE_BARRIER;
+				if (resource->action & SHADERWRITE)
+				{
+					ImageDescriptorBarrier* barriers = (ImageDescriptorBarrier*)ptr;
+					barriers->dstStage = ConvertShaderStageToBarrierStage(map->type);
+					barriers->dstAction = WRITE_SHADER_RESOURCE;
+					barriers->type = memBarrierType;
+					ptr += (sizeof(ImageDescriptorBarrier));
+
+					ImageDescriptorBarrier* barriers2 = (ImageDescriptorBarrier*)ptr;
+					barriers2->srcStage = ConvertShaderStageToBarrierStage(map->type);
+					barriers2->srcAction = WRITE_SHADER_RESOURCE;
+					barriers2->type = memBarrierType;
+					ptr += (sizeof(ImageDescriptorBarrier));
+				}
 				break;
+			}
+			case SAMPLER:
+			{
+				ptr += sizeof(DescriptorImage);
+				memBarrierType = IMAGE_BARRIER;
+				if (resource->action & SHADERWRITE)
+				{
+					ImageDescriptorBarrier* barriers = (ImageDescriptorBarrier*)ptr;
+					barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
+					barriers->srcAction = WRITE_SHADER_RESOURCE;
+					barriers->type = memBarrierType;
+					ptr += (sizeof(ImageDescriptorBarrier));
+				}
+				break;
+			}
 			case CONSTANT_BUFFER:
 			{
 				DescriptorConstantBuffer* constants = (DescriptorConstantBuffer*)ptr;
@@ -919,19 +970,22 @@ int RenderInstance::AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t ta
 			}
 			case STORAGE_BUFFER:
 			case UNIFORM_BUFFER:
+			{
 				memBarrierType = BUFFER_BARRIER;
 				ptr += sizeof(DescriptorBuffer);
+				if (resource->action & SHADERWRITE)
+				{
+					DescriptorBarrier* barriers = (DescriptorBarrier*)ptr;
+					barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
+					barriers->srcAction = WRITE_SHADER_RESOURCE;
+					barriers->type = memBarrierType;
+					ptr += (sizeof(DescriptorBarrier));
+				}
 				break;
 			}
-
-			if (resource->action & SHADERWRITE)
-			{
-				DescriptorBarrier* barriers = (DescriptorBarrier*)ptr;
-				barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
-				barriers->srcAction = WRITE_SHADER_RESOURCE;
-				barriers->type = memBarrierType;
-				ptr += (sizeof(DescriptorBarrier));
 			}
+
+			
 		}
 	}
 
@@ -962,7 +1016,7 @@ void RenderInstance::BindBufferToDescriptor(int descriptorSet, int allocationInd
 	header->allocation = allocationIndex;
 }
 
-void RenderInstance::BindImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex)
+void RenderInstance::BindSampledImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex)
 {
 	uintptr_t head = descriptorSets[descriptorSet];
 	DescriptorSet* set = (DescriptorSet*)head;
@@ -987,6 +1041,7 @@ void RenderInstance::BindBarrier(int descriptorSet, int binding, BarrierStage st
 	DescriptorHeader* desc = (DescriptorHeader*)offsets[binding];
 
 
+
 	switch (desc->type)
 	{
 	case IMAGESTORE2D:
@@ -1005,6 +1060,52 @@ void RenderInstance::BindBarrier(int descriptorSet, int binding, BarrierStage st
 
 	barrier->dstAction = action;
 	barrier->dstStage = stage;
+}
+
+void RenderInstance::BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, VkImageLayout oldLayout, VkImageLayout dstLayout, bool location)
+{
+	uintptr_t head = descriptorSets[descriptorSet];
+	DescriptorSet* set = (DescriptorSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(DescriptorSet));
+
+
+	head = offsets[binding];
+	DescriptorHeader* desc = (DescriptorHeader*)offsets[binding];
+
+	if (desc->type != SAMPLER && desc->type != IMAGESTORE2D)
+		return;
+
+	switch (desc->type)
+	{
+	case IMAGESTORE2D:
+	case SAMPLER:
+		head += sizeof(DescriptorImage);
+
+		break;
+	case STORAGE_BUFFER:
+	case UNIFORM_BUFFER:
+
+		head += sizeof(DescriptorBuffer);
+		break;
+	}
+
+
+	ImageDescriptorBarrier* imageBarrier = (ImageDescriptorBarrier*)head;
+
+
+	imageBarrier[barrierIndex].imageType = VK_IMAGE_ASPECT_COLOR_BIT;
+	imageBarrier[barrierIndex].dstResourceLayout = dstLayout;
+	imageBarrier[barrierIndex].srcResourceLayout = oldLayout;
+
+	if (location)
+	{
+		imageBarrier[barrierIndex].dstAction = action;
+		imageBarrier[barrierIndex].dstStage = stage;
+	}
+	else {
+		imageBarrier[barrierIndex].srcAction = action;
+		imageBarrier[barrierIndex].srcStage = stage;
+	}
 }
 
 void RenderInstance::UploadConstant(int descriptorset, void* data, int bufferLocation)
@@ -1197,13 +1298,13 @@ EntryHandle RenderInstance::CreateDescriptorSet(int descriptorSet)
 			case IMAGESTORE2D:
 			{
 				DescriptorImage* image = (DescriptorImage*)offsets[i];
-				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle), i, frames);
+				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
 			case SAMPLER:
 			{
 				DescriptorImage* image = (DescriptorImage*)offsets[i];
-				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle), dev->GetSamplerByTexture(image->textureHandle), i, frames);
+				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), dev->GetSamplerByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
 			case STORAGE_BUFFER:
@@ -1333,11 +1434,73 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 		switch (header->type)
 		{
 		case IMAGESTORE2D:
+		{
+			DescriptorImage* imageBarrier = (DescriptorImage*)header;
+			ImageDescriptorBarrier* barrier = (ImageDescriptorBarrier*)(imageBarrier+1);
+			ImageDescriptorBarrier* barrier2 = &barrier[1];
+			
+			VkImageSubresourceRange range{};
+			range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			range.levelCount = 1;
+			range.layerCount = 1;
+
+			if (barrier->dstResourceLayout != barrier->srcResourceLayout)
+			{
+
+
+				vkPipelineObject->AddImageMemoryBarrier(dev,
+					BEFORE,
+					imageBarrier->textureHandle,
+					ConvertResourceActionToVulkan(barrier->srcAction),
+					ConvertResourceActionToVulkan(barrier->dstAction),
+					ConvertResourceStageToVulkan(barrier->srcStage),
+					ConvertResourceStageToVulkan(barrier->dstStage),
+					barrier->srcResourceLayout,
+					barrier->dstResourceLayout,
+					range
+				);
+			}
+
+
+			if (barrier2->dstResourceLayout != barrier2->srcResourceLayout)
+			{
+
+
+				vkPipelineObject->AddImageMemoryBarrier(dev,
+					AFTER,
+					imageBarrier->textureHandle,
+					ConvertResourceActionToVulkan(barrier2->srcAction),
+					ConvertResourceActionToVulkan(barrier2->dstAction),
+					ConvertResourceStageToVulkan(barrier2->srcStage),
+					ConvertResourceStageToVulkan(barrier2->dstStage),
+					barrier2->srcResourceLayout,
+					barrier2->dstResourceLayout,
+					range
+				);
+			}
+
+			break;
+		}
 		case SAMPLER:
 		{
 			DescriptorImage* imageBarrier = (DescriptorImage*)header;
-			DescriptorBarrier* barrier = (DescriptorBarrier*)(imageBarrier+1);
-			
+			ImageDescriptorBarrier* barrier = (ImageDescriptorBarrier*)(imageBarrier+1);
+			VkImageSubresourceRange range{};
+			range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			range.levelCount = 1;
+			range.layerCount = 1;
+			vkPipelineObject->AddImageMemoryBarrier(dev,
+				BEFORE,
+				imageBarrier->textureHandle,
+				ConvertResourceActionToVulkan(barrier->srcAction),
+				ConvertResourceActionToVulkan(barrier->dstAction),
+				ConvertResourceStageToVulkan(barrier->srcStage),
+				ConvertResourceStageToVulkan(barrier->dstStage),
+				barrier->srcResourceLayout,
+				barrier->dstResourceLayout,
+				range
+			);
+
 			break;
 		}
 		case STORAGE_BUFFER:
@@ -1347,6 +1510,7 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 			DescriptorBarrier* barrier = (DescriptorBarrier*)(bufferBarrier + 1);
 			vkPipelineObject->AddBufferMemoryBarrier(
 				dev, 
+				AFTER,
 				allocations[bufferBarrier->allocation].memIndex, 
 				allocations[bufferBarrier->allocation].size, 
 				allocations[bufferBarrier->allocation].offset,

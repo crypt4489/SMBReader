@@ -23,6 +23,7 @@ enum ImageFormat : uint32_t
 	DXT1 = 12,
 	DXT3 = 14,
 	R8G8B8A8 = 18,
+	R8G8B8A8_UNORM = 0x7ffffffd,
 	R8G8B8 = 0x7ffffffe,
 	IMAGE_UNKNOWN = 0x7fffffff
 };
@@ -36,5 +37,5 @@ enum PrimitiveType
 {
 	TRIANGLES = 0,
 	TRISTRIPS = 1,
-	WHAT = 2
+	MAXPRIM
 };

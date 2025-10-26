@@ -18,6 +18,8 @@ enum BarrierStageBits
 	VERTEX_SHADER_BARRIER = 1,
 	VERTEX_INPUT_BARRIER = 2,
 	COMPUTE_BARRIER = 4,
+	FRAGMENT_BARRIER = 8,
+	BEGINNING_OF_PIPE = 16
 };
 
 typedef int BarrierAction;
@@ -47,6 +49,8 @@ inline VkPipelineStageFlags ConvertResourceStageToVulkan(BarrierStage sourceStag
 	flags |= (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT) * ((sourceStage & VERTEX_SHADER_BARRIER) != 0);
 	flags |= (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT) * ((sourceStage & VERTEX_INPUT_BARRIER) != 0);
 	flags |= (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT) * ((sourceStage & COMPUTE_BARRIER) != 0);
+	flags |= (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) * ((sourceStage & BEGINNING_OF_PIPE) != 0);
+	flags |= (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT) * ((sourceStage & FRAGMENT_BARRIER) != 0);
 	return flags;
 }
 

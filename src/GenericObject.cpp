@@ -1,6 +1,7 @@
 #include "GenericObject.h"
 
 #include "AppTypes.h"
+#include "ApplicationLoop.h"
 #include "RenderInstance.h"
 #include "VertexTypes.h"
 #include "VKDescriptorSetBuilder.h"
@@ -41,7 +42,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
 	rendInst->BindBufferToDescriptor(graphicDesc, objSpecificMemIndex[0], false, 0);
-	rendInst->BindImageToDescriptor(graphicDesc, textures[0].vkImpl, 1);
+	rendInst->BindSampledImageToDescriptor(graphicDesc, loop->storageBuffer, 1);
 
 	int computeDesc = rendInst->AllocateDescriptorSet(2, 0, 3, frames);
 

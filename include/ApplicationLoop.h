@@ -58,6 +58,8 @@ public:
 
 	void MoveCamera(double fps);
 
+	void CreateGlobalStorageImage();
+
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
 	std::queue<std::vector<std::any>> commands;
@@ -69,6 +71,7 @@ public:
 	size_t globalBufferLocation;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
+	EntryHandle storageBuffer;
 
 	enum DIRS {
 		RIGHT = 0,
@@ -85,3 +88,4 @@ public:
 	std::array<bool, MAXDIRS> camMovements;
 };
 
+extern ApplicationLoop* loop;

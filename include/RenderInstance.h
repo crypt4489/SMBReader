@@ -224,6 +224,10 @@ public:
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type);
 
+	EntryHandle CreateStorageImage(
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, ImageFormat type);
+
 	void CreateVulkanRenderer(WindowManager* window);
 
 	void SetResizeBool(bool set);
@@ -264,9 +268,11 @@ public:
 
 	void BindBufferToDescriptor(int descriptorSet, int allocationIndex, bool direct, int bindingIndex);
 
-	void BindImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex);
+	void BindSampledImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex);
 
 	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action);
+
+	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, VkImageLayout oldLayout, VkImageLayout dstLayout, bool location);
 
 	void UploadConstant(int descriptorset, void* data, int bufferLocation);
 

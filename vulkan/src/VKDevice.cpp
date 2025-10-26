@@ -558,7 +558,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount,
-	VkMemoryPropertyFlags memProps, EntryHandle memIndex)
+	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, EntryHandle memIndex)
 {
 	std::shared_lock lock(deviceLock);
 	VkImage image;
@@ -572,12 +572,12 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	imageInfo.arrayLayers = layers;
 
 	imageInfo.format = type;
-	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageInfo.tiling = tiling;
+	imageInfo.initialLayout = layout;
 	imageInfo.usage = flags;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
-	imageInfo.flags = 0;
+	imageInfo.flags = cflags;
 
 	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create image!");
@@ -602,6 +602,65 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 
 	ret = AddVkTypeToEntry(ptr);
 	
+	return ret;
+}
+
+
+EntryHandle VKDevice::CreateStorageImage(
+	uint32_t width, uint32_t height,
+	uint32_t mipLevels, VkFormat type,
+	EntryHandle memIndex,
+	EntryHandle hostIndex, VkImageAspectFlags flags, VkImageLayout layout, bool createSampler)
+{
+	std::shared_lock lock(deviceLock);
+	
+
+	EntryHandle imageIndex = CreateImage(
+		width, height, mipLevels, type, 1,
+		VK_IMAGE_USAGE_STORAGE_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex
+	);
+
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+
+	
+
+	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+
+	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
+
+	if (createSampler)
+	{
+		EntryHandle samplerIndex = CreateSampler(mipLevels);
+		tex->samplerIndex[0] = samplerIndex;
+	}
+
+	EntryHandle ret = AddVkTypeToEntry(tex);
+
+	auto queueDetails = GetQueueHandle(GRAPHICS | TRANSFER);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	EntryHandle poolIndex = std::get<3>(queueDetails);
+
+	VkQueue queue;
+	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
+
+	VkImage image = GetImageByIndex(imageIndex);
+
+	VkCommandPool pool = GetCommandPool(poolIndex);
+
+	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
+
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, type, VK_IMAGE_LAYOUT_UNDEFINED, layout, mipLevels, 1);
+
+	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
+
+	ReturnQueueToManager(managerIndex, queueIndex);
+
 	return ret;
 }
 
@@ -848,7 +907,7 @@ EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags 
 {
 	std::shared_lock lock(deviceLock);
 	VkImageMemoryBarrier* barrier = reinterpret_cast<VkImageMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkImageMemoryBarrier)));
-	VkImage image = GetImageByIndex(imageIndex);
+	VkImage image = GetImageByTexture(imageIndex);
 
 	barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier->pNext = nullptr;
@@ -1136,7 +1195,7 @@ EntryHandle VKDevice::CreateSampledImage(
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memIndex);
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex);
 
 
 	VkImage image = GetImageByIndex(imageIndex);
@@ -1168,7 +1227,7 @@ EntryHandle VKDevice::CreateSampledImage(
 
 	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
 
-	tex = std::construct_at(tex, imageIndex, viewIndex, samplerIndex);
+	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, &samplerIndex, 1);
 
 	EntryHandle ret;
 
@@ -1522,8 +1581,12 @@ void VKDevice::DestroyTexture(EntryHandle textureHandle)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(textureHandle);
-	DestorySampler(tex->samplerIndex);
-	DestroyImageView(tex->viewIndex);
+
+	for (int i = 0; tex->samplerIndex[i] != EntryHandle(); i++)
+		DestorySampler(tex->samplerIndex[i]);
+
+	for (int i = 0; tex->viewIndex[i] != EntryHandle(); i++)
+		DestroyImageView(tex->viewIndex[i]);
 	DestroyImage(tex->imageIndex);
 	entries[textureHandle()] = 0;
 }
@@ -1641,12 +1704,12 @@ VkImageView VKDevice::GetImageViewByIndex(EntryHandle index)
 	return reinterpret_cast<VkImageView>(GetVkTypeFromEntry(index));
 }
 
-VkImageView VKDevice::GetImageViewByTexture(EntryHandle index)
+VkImageView VKDevice::GetImageViewByTexture(EntryHandle index, int imageViewIndex)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(index);
 	if (!tex) return VK_NULL_HANDLE;
-	return GetImageViewByIndex(tex->viewIndex);
+	return GetImageViewByIndex(tex->viewIndex[imageViewIndex]);
 }
 
 
@@ -1777,12 +1840,12 @@ VkSampler VKDevice::GetSamplerByIndex(EntryHandle index)
 	return reinterpret_cast<VkSampler>(GetVkTypeFromEntry(index));
 }
 
-VkSampler VKDevice::GetSamplerByTexture(EntryHandle index)
+VkSampler VKDevice::GetSamplerByTexture(EntryHandle index, int samplerIndex)
 {
 	std::shared_lock lock(deviceLock);
 	VKTexture* tex = GetTexture(index);
 	if (!tex) return VK_NULL_HANDLE;
-	return GetSamplerByIndex(tex->samplerIndex);
+	return GetSamplerByIndex(tex->samplerIndex[samplerIndex]);
 }
 
 VkSemaphore VKDevice::GetSemaphore(EntryHandle index)

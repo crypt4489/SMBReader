@@ -9,7 +9,7 @@ layout(set = 0, binding = 0) uniform GlobalContext {
 layout(set = 0, binding = 1, RGBA8) uniform image2D outputImage;
 
 
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 const float slices = 7.0; 
 
@@ -17,7 +17,7 @@ const float heightDivision = 17.0;
 
 float customFunction(float x)
 {
-	return 6.*(x*x*x);    
+	return (x*x*x);    
 }
 
 float levelDetermination(float base, float applied, int level)

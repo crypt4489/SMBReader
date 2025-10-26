@@ -23,7 +23,8 @@ static void Rotate(GenericObject* obj)
 	//std::cout << obj->interpolate << std::endl;
 }
 
-static ApplicationLoop* loop;
+
+ApplicationLoop* loop;
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
@@ -141,6 +142,51 @@ void ApplicationLoop::Execute()
 	}
 }
 
+void ApplicationLoop::CreateGlobalStorageImage()
+{
+
+	auto rendInst = VKRenderer::gRenderInstance;
+	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);
+
+	int computeDesc = rendInst->AllocateDescriptorSet(3, 0, 4, rendInst->MAX_FRAMES_IN_FLIGHT);
+
+	int computeMemory = rendInst->GetPageFromUniformBuffer(64, 64);
+
+	rendInst->BindBufferToDescriptor(computeDesc, computeMemory, true, 0);
+	rendInst->BindSampledImageToDescriptor(computeDesc, loop->storageBuffer, 1);
+	rendInst->BindImageBarrier(computeDesc, 1, 0, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
+	rendInst->BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+	struct Data
+	{
+		float x;
+		float y;
+		float z;
+	};
+
+	Data data = {
+		.x = 512.0f,
+		.y = 512.0f,
+		.z = 0.0f
+	};
+
+	rendInst->UpdateAllocation(&data, computeMemory, 12, ABSOLUTE_ALLOCATION_OFFSET);
+
+	ComputeIntermediaryPipelineInfo create2 = {
+			.x = 512 / 8,
+			.y = 512 / 8,
+			.z = 1,
+			.maxDynCap = 1,
+			.pipelinename = POLY,
+			.descriptorsetid = computeDesc,
+			.barrierCount = 2,
+			.pushRangeCount = 0
+	};
+
+	std::array arr = { computeMemory };
+
+	EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data());
+}
+
 void ApplicationLoop::MoveCamera(double fps)
 {
 	bool moved = false;
@@ -203,6 +249,8 @@ void ApplicationLoop::MoveCamera(double fps)
 void ApplicationLoop::UpdateRenderables()
 {
 	SemaphoreGuard guard(objsSema);
+
+	
 
 	for (auto& ref : renderables)
 	{
@@ -267,6 +315,8 @@ void ApplicationLoop::InitializeRuntime()
 
 
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	CreateGlobalStorageImage();
 
 }
 
@@ -364,6 +414,8 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 void ApplicationLoop::CleanupRuntime()
 {
 	VKRenderer::gRenderInstance->WaitOnRender();
+
+	VKRenderer::gRenderInstance->DestoryTexture(storageBuffer);
 
 	for (auto renderable : renderables)
 	{

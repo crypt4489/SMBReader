@@ -58,9 +58,16 @@ enum VKBarrierType
 	IMAGEBARRIER = 2
 };
 
+enum VKBarrierLocation
+{
+	BEFORE = 0,
+	AFTER = 1
+};
+
 struct VkBarrierInfo
 {
-	uint32_t type;
+	uint16_t type;
+	uint16_t location;
 	VkPipelineStageFlags srcStageMask;
 	VkPipelineStageFlags dstStageMask;
 	VkDependencyFlags dependencyFlags;
@@ -95,11 +102,21 @@ struct VKPipelineObject
 	void AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags);
 
 	void AddBufferMemoryBarrier(
-		VKDevice* d, EntryHandle bufferIndex,
+		VKDevice* d, VKBarrierLocation location, EntryHandle bufferIndex,
 		size_t size, size_t offset,
 		VkAccessFlags srcPoint, VkAccessFlags dstPoint,
 		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
 	);
+
+	void AddImageMemoryBarrier(
+		VKDevice* d, VKBarrierLocation location, EntryHandle imageIndex,
+		VkAccessFlags srcPoint, VkAccessFlags dstPoint,
+		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+		VkImageLayout oldLayout, VkImageLayout newLayout,
+		VkImageSubresourceRange subresourceRange
+	);
+
+	VkBarrierInfo* GetNextBarrierInfo(VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
 };
 
 
