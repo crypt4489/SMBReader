@@ -1586,7 +1586,6 @@ void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)
 {
 	threadedRecordBuffers[i].Invalidate();
-	//threadedRecordBuffers[i].DrawLoop();
 }
 
 

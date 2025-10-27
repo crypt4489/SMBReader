@@ -69,7 +69,34 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		std::byte* bgra = ptr;
 
-		TexUtils::BGRATexture((char*)bgra, tex.width >> i, tex.width >> i, 4);
+		std::vector<char> input;
+
+		int compressedSize = 0;
+		input.resize(writeWidth * writeHeight * 4);;
+		switch (tex.type)
+		{
+		case 7:
+			std::cerr << "X8L8U8V8 format is not exportable\n";
+			return;
+		case 12:
+			//compressedSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
+			
+			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input.data());
+			break;
+		case 14:
+			//compressedSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
+			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input.data());
+			break;
+		case 18:
+			std::memcpy(input.data(), ptr, writeWidth * writeHeight * 4);
+			break;
+		default:
+			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
+			return;
+		}
+
+		TexUtils::BGRATexture(input.data(), tex.height >> i, tex.width >> i, 4);
+
 
 		uint32_t bpr = writeWidth * 4;
 
@@ -77,7 +104,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			outputFile.write((char*)bgra + offset, bpr);
+			outputFile.write(input.data() + offset, bpr);
 			offset -= bpr;
 		}
 

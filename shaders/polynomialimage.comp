@@ -13,7 +13,7 @@ layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 const float slices = 7.0; 
 
-const float heightDivision = 17.0;
+const float heightDivision = 8.0;
 
 float customFunction(float x)
 {
@@ -42,18 +42,21 @@ void main() {
     float ySize = (gs.yResolution/heightDivision);
     
     float xSize = (gs.xResolution/slices);
+
+    float locationX = float(gl_GlobalInvocationID.x);
+    float locationY = float(gl_GlobalInvocationID.y);
     
-    float slice = floor(float(gl_GlobalInvocationID.x)/xSize);
+    float slice = floor(locationX/xSize);
     
     float offsetX = slice * xSize;
     
-    float sliceH = floor(float(gl_GlobalInvocationID.y)/ySize);
+    float sliceH = floor(locationY/ySize);
     
     float offsetY = sliceH * ySize;
     
-    float universalX = mod(xSize * 1.0 * gs.u_time, xSize);
+    float universalX = mod(xSize * 1.0 * 0.5, xSize);
         
-    vec2 coords = vec2(levelDetermination((gl_GlobalInvocationID.x-offsetX), universalX, int(sliceH)), gl_GlobalInvocationID.y-offsetY);
+    vec2 coords = vec2(levelDetermination((locationX-offsetX), universalX, int(sliceH)), locationY-offsetY);
     
     vec2 st = vec2(0, coords.y/ySize);
     
@@ -87,5 +90,8 @@ void main() {
         color = vec3(rightHalf, st.y, 0.);
     } 
 
-    imageStore(outputImage, ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y), vec4(color, 1.0));
+    uint yFlipCorrection = uint(gs.yResolution)-gl_GlobalInvocationID.y;
+
+    imageStore(outputImage, ivec2(gl_GlobalInvocationID.x, yFlipCorrection), vec4(color, 1.0));
+
 }
