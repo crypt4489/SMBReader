@@ -75,19 +75,19 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 		input.resize(writeWidth * writeHeight * 4);;
 		switch (tex.type)
 		{
-		case 7:
+		case X8L8U8V8:
 			std::cerr << "X8L8U8V8 format is not exportable\n";
 			return;
-		case 12:
+		case DXT1:
 			//compressedSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			
 			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input.data());
 			break;
-		case 14:
+		case DXT3:
 			//compressedSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input.data());
 			break;
-		case 18:
+		case R8G8B8A8:
 			std::memcpy(input.data(), ptr, writeWidth * writeHeight * 4);
 			break;
 		default:
