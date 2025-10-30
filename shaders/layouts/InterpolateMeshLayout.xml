@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="compute">
+		mesh_interpolate.comp
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem index="constant" type="uniform" used="c">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ComputeLayout x="8" y="1" z="1">
+	</ComputeLayout>
+</ShaderGraph>

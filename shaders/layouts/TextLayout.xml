@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="vert" consumed="0">
+		text.vert
+	</GLSLShader>
+	<GLSLShader type ="fragment" consumed="1">
+		text.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem index="0" type="sampler" used ="f">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

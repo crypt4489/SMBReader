@@ -101,14 +101,8 @@ VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateIn
 
 }
 
-void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)
+void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location)
 {
-	if (EntryHandle() != descriptorSetId) {
-
-		rbo->BindComputeDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
-	}
-
-	
 
 	std::array<VkBufferMemoryBarrier, 5> lbuffMemBarriers{};
 	std::array<VkMemoryBarrier, 5> lmemBarriers{};
@@ -125,12 +119,13 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 		{
 
 			j++;
-			if (info->location == BEFORE)
+			if (info->location == location)
 			{
 				switch (info->type)
 				{
 				case MEMBARRIER:
-
+					lmemBarriers[mbC] = *rbo->vkDeviceHandle->GetMemoryBarrier(info->barrierIndex);
+					mbC++;
 					break;
 				case BUFFBARRIER:
 					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
@@ -147,90 +142,15 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 				default:
 					break;
 				}
-			}
-			else 
-			{
-				next = nullptr;
-				info = info->next;
-				break;
-			}
-
-			info = info->child;
-		}
-
-		if (next) {
-
-			RBOPipelineBarrierArgs args = {
-				.srcStageMask = next->srcStageMask,
-				.dstStageMask = next->dstStageMask,
-				.dependencyFlags = next->dependencyFlags,
-				.memoryBarrierCount = mbC,
-				.pMemoryBarriers = lmemBarriers.data(),
-				.bufferMemoryBarrierCount = bmbC,
-				.pBufferMemoryBarriers = lbuffMemBarriers.data(),
-				.imageMemoryBarrierCount = imbC,
-				.pImageMemoryBarriers = limageMemBarriers.data()
-			};
-
-			rbo->BindPipelineBarrierCommand(&args);
-
-			bmbC = 0;
-			imbC = 0;
-
-			i += j;
-
-			info = next->next;
-		}
-		else {
-			i++;
-		}
-	}
-
-	rbo->DispatchCommand(x, y, z);
-
-
-	bmbC = 0, mbC = 0, imbC = 0, i = 0;
-	info = &infos[0];
-
-	while (i < memBarrierCapacity)
-	{
-		VkBarrierInfo* next = info;
-		uint32_t j = 0;
-		while (info)
-		{
-
-			j++;
-			if (info->location == AFTER)
-			{
-				switch (info->type)
-				{
-				case MEMBARRIER:
-
-					break;
-				case BUFFBARRIER:
-					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
-					lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					bmbC++;
-					break;
-				case IMAGEBARRIER:
-					limageMemBarriers[imbC] = *rbo->vkDeviceHandle->GetImageMemoryBarrier(info->barrierIndex);
-					limageMemBarriers[imbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					limageMemBarriers[imbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					imbC++;
-					break;
-				default:
-					break;
-				}
+				info = info->child;
 			}
 			else
 			{
-				next = nullptr;
+				i++;
+				j = 0;
 				info = info->next;
-				break;
+				next = info;
 			}
-
-			info = info->child;
 		}
 
 		if (next) {
@@ -251,38 +171,52 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 
 			bmbC = 0;
 			imbC = 0;
-
-			i += j;
+			mbC = 0;
 
 			info = next->next;
 		}
-		else {
-			i++;
-		}
+
+		i += j;
 	}
-
-
 }
 
-void VKPipelineObject::AddBufferMemoryBarrier(
-	VKDevice* d, VKBarrierLocation location, EntryHandle bufferIndex,
-	size_t size, size_t offset, 
-	VkAccessFlags srcPoint, VkAccessFlags dstPoint,
-	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
-	)
+void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)
 {
-	EntryHandle barrierIndex = d->CreateBufferMemoryBarrier(srcPoint, dstPoint, 0, 0, bufferIndex, offset, size);
-	VkBarrierInfo* info = GetNextBarrierInfo(srcStage, dstStage);
+	if (EntryHandle() != descriptorSetId) {
 
+		rbo->BindComputeDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
+	}
+
+	
+	CreatePipelineBarriers(rbo, BEFORE);
+
+	rbo->DispatchCommand(x, y, z);
+
+	CreatePipelineBarriers(rbo, AFTER);
+}
+
+
+void VKPipelineObject::AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, 
+									  EntryHandle barrierIndex, VKBarrierLocation location, uint16_t barrierType)
+{
 	info->srcStageMask = srcStage;
 	info->dstStageMask = dstStage;
 	info->dependencyFlags = 0;
-	info->type = BUFFBARRIER;
+	info->type = barrierType;
 	info->barrierIndex = barrierIndex;
 	info->next = nullptr;
 	info->child = nullptr;
 	info->location = location;
 	memBarrierCounter++;
+}
+
+
+void VKPipelineObject::AddBufferMemoryBarrier(
+	EntryHandle index, VKBarrierLocation location,
+	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
+)
+{
+	AddInfoBarrier(GetNextBarrierInfo(srcStage, dstStage), srcStage, dstStage, index, location, BUFFBARRIER);
 }
 
 VkBarrierInfo* VKPipelineObject::GetNextBarrierInfo(VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
@@ -314,25 +248,10 @@ VkBarrierInfo* VKPipelineObject::GetNextBarrierInfo(VkPipelineStageFlags srcStag
 }
 
 void VKPipelineObject::AddImageMemoryBarrier(
-	VKDevice* d, VKBarrierLocation location, EntryHandle imageIndex,
-	VkAccessFlags srcPoint, VkAccessFlags dstPoint,
-	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
-	VkImageLayout oldLayout, VkImageLayout newLayout,
-	VkImageSubresourceRange subresourceRange
+	EntryHandle index, VKBarrierLocation location, VkShaderStageFlags srcStage, VkShaderStageFlags dstStage
 )
 {
-	EntryHandle barrierIndex = d->CreateImageMemoryBarrier(srcPoint, dstPoint, 0, 0, oldLayout, newLayout, imageIndex, subresourceRange);
-	VkBarrierInfo* info = GetNextBarrierInfo(srcStage, dstStage);
-
-	info->srcStageMask = srcStage;
-	info->dstStageMask = dstStage;
-	info->dependencyFlags = 0;
-	info->type = IMAGEBARRIER;
-	info->barrierIndex = barrierIndex;
-	info->next = nullptr;
-	info->child = nullptr;
-	info->location = location;
-	memBarrierCounter++;
+	AddInfoBarrier(GetNextBarrierInfo(srcStage, dstStage), srcStage, dstStage, index, location, IMAGEBARRIER);
 }
 
 void VKPipelineObject::AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags)

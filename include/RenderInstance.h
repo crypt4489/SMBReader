@@ -7,6 +7,7 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "ResourceDependencies.h"
+#include "ShaderResourceSet.h"
 #include "ThreadManager.h"
 #include "WindowManager.h"
 
@@ -173,9 +174,6 @@ enum PipelineLabels
 	POLY = 3,
 };
 
-struct DescriptorSet;
-struct DescriptorHeader;
-
 class RenderInstance
 {
 public:
@@ -230,10 +228,6 @@ public:
 
 	void CreateVulkanRenderer(WindowManager* window);
 
-	void SetResizeBool(bool set);
-	
-	uint32_t GetCurrentFrame() const;
-
 	uint32_t GetSwapChainHeight();
 
 	uint32_t GetSwapChainWidth();
@@ -254,8 +248,6 @@ public:
 
 	void DestoryTexture(EntryHandle handle);
 
-	void AllocateVectorsForMSAA();
-
 	void IncreaseMSAA();
 
 	void DecreaseMSAA();
@@ -264,29 +256,18 @@ public:
 
 	uintptr_t AllocateShaderGraph(uint32_t shaderMapCount, uint32_t* shaderResourceCount, ShaderStageType* types, uint32_t* shaderReferences);
 
-	int AllocateDescriptorSet(uint32_t shaderGraphIndex, uint32_t targetSet, int index, int setCount);
+	int AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount);
 
-	void BindBufferToDescriptor(int descriptorSet, int allocationIndex, bool direct, int bindingIndex);
+	EntryHandle CreateShaderResourceSet(int descriptorSet);
 
-	void BindSampledImageToDescriptor(int descriptorSet, EntryHandle index, int bindingIndex);
+	ShaderResourceHeader* PopShaderResourceBarrier(int descriptorSet, int* counter);
 
-	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action);
-
-	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, VkImageLayout oldLayout, VkImageLayout dstLayout, bool location);
-
-	void UploadConstant(int descriptorset, void* data, int bufferLocation);
-
-	EntryHandle CreateDescriptorSet(int descriptorSet);
-
-	DescriptorHeader* PopDescriptorBarrier(int descriptorSet, int* counter);
-
-	DescriptorHeader* GetConstantBuffer(int descriptorSet, int constantBuffer);
+	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int descriptorid);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle swapChainIndex;
-	EntryHandle descriptorPoolIndex;
 	EntryHandle attachmentsIndex;
 	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
@@ -296,12 +277,12 @@ public:
 	uint32_t currentMSAALevel = 0;
 	uint32_t maxMSAALevels = 0;
 
-	std::vector<EntryHandle> swapchainRenderTargets{};
-	std::vector<EntryHandle> depthViews{};
-	std::vector<EntryHandle> colorViews{};
-	std::vector<EntryHandle> depthImages{};
-	std::vector<EntryHandle> colorImages{};
-	std::vector<EntryHandle> renderPasses{};
+	std::array<EntryHandle, 5> swapchainRenderTargets{};
+	std::array<EntryHandle, 5> depthViews{};
+	std::array<EntryHandle, 5> colorViews{};
+	std::array<EntryHandle, 5> depthImages{};
+	std::array<EntryHandle, 5> colorImages{};
+	std::array<EntryHandle, 5> renderPasses{};
 
 	WindowManager *windowMan = nullptr;
 
@@ -309,23 +290,16 @@ public:
 
 	bool resizeWindow = false;
 
-	VkFormat depthFormat = VK_FORMAT_UNDEFINED;
+	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
-	std::array<EntryHandle, 6> shaders;
+	ShaderGraphsHolder<4, 6> vulkanShaderGraphs;
 	
-	uintptr_t shaderGraphs;
-	uint32_t shaderGraphOffset;
-
-	uintptr_t descriptorResourceSet;
-	uint32_t descriptorResourceOffset;
+	ShaderResourceManager<50> descriptorManager;
 
 	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier;
-	std::array<EntryHandle, 5> descriptorLayouts;
-	std::array<ShaderGraph*, 4> shaderGraphPtrs;
-	std::array<uintptr_t, 50> descriptorSets;
-	std::atomic<int> descriptorSetIndex;
+	std::array<EntryHandle, 5> vulkanDescriptorLayouts;
 
 	RenderAllocationHolder<50> allocations;
 };

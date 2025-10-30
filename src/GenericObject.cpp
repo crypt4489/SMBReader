@@ -32,7 +32,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	auto rendInst = VKRenderer::gRenderInstance;
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 
-	int graphicDesc = rendInst->AllocateDescriptorSet(0, 1, 1, frames);
+	int graphicDesc = rendInst->AllocateShaderResourceSet(0, 1, frames);
 
 	objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
 	int objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
@@ -41,16 +41,16 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	objVertexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
 	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
-	rendInst->BindBufferToDescriptor(graphicDesc, objSpecificMemIndex[0], false, 0);
-	rendInst->BindSampledImageToDescriptor(graphicDesc, loop->storageBuffer, 1);
+	rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objSpecificMemIndex[0], REPEAT, 0);
+	rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->storageBuffer, 1);
 
-	int computeDesc = rendInst->AllocateDescriptorSet(2, 0, 3, frames);
+	int computeDesc = rendInst->AllocateShaderResourceSet(2, 0, frames);
 
-	rendInst->BindBufferToDescriptor(computeDesc, objMorphFromVertexMemory, true, 0);
-	rendInst->BindBufferToDescriptor(computeDesc, objMorphToVertexMemory, true, 1);
-	rendInst->BindBufferToDescriptor(computeDesc, objVertexMemoryIndex, true, 2);
-	rendInst->BindBarrier(computeDesc, 2, VERTEX_INPUT_BARRIER, READ_VERTEX_INPUT);
-	rendInst->UploadConstant(computeDesc, &interpolate, 0);
+	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, objMorphFromVertexMemory, DIRECT, 0);
+	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, objMorphToVertexMemory, DIRECT, 1);
+	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, objVertexMemoryIndex, DIRECT, 2);
+	rendInst->descriptorManager.BindBarrier(computeDesc, 2, VERTEX_INPUT_BARRIER, READ_VERTEX_INPUT);
+	rendInst->descriptorManager.UploadConstant(computeDesc, &interpolate, 0);
 
 	rendInst->UpdateAllocation((void*)((uintptr_t)m->GetIndexData() + m->indexSize), objMorphToVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 

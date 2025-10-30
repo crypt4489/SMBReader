@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="vert" consumed="2">
+		3dtextured.vert
+	</GLSLShader>
+	<GLSLShader type ="fragment" consumed="1">
+		3dtextured.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem index="0" type="uniform" used="v">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem index="0" type="uniform" used="v">
+		</ShaderResourceItem>
+		<ShaderResourceItem index="1" type="sampler" used ="f">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>
+

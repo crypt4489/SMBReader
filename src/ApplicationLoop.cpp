@@ -26,6 +26,10 @@ static void Rotate(GenericObject* obj)
 
 ApplicationLoop* loop;
 
+static int computeMemory;
+
+static float x = 0.0f;
+
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
@@ -148,28 +152,17 @@ void ApplicationLoop::CreateGlobalStorageImage()
 	auto rendInst = VKRenderer::gRenderInstance;
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);
 
-	int computeDesc = rendInst->AllocateDescriptorSet(3, 0, 4, rendInst->MAX_FRAMES_IN_FLIGHT);
+	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
-	int computeMemory = rendInst->GetPageFromUniformBuffer(64, 64);
+	computeMemory = rendInst->GetPageFromUniformBuffer(64, 64);
 
-	rendInst->BindBufferToDescriptor(computeDesc, computeMemory, true, 0);
-	rendInst->BindSampledImageToDescriptor(computeDesc, loop->storageBuffer, 1);
-	rendInst->BindImageBarrier(computeDesc, 1, 0, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
-	rendInst->BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
-	struct Data
-	{
-		float x;
-		float y;
-		float z;
-	};
+	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, DIRECT, 0);
+	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, loop->storageBuffer, 1);
+	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 0, BEGINNING_OF_PIPE, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
+	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+	
 
-	Data data = {
-		.x = 512.0f,
-		.y = 512.0f,
-		.z = 0.0f
-	};
-
-	rendInst->UpdateAllocation(&data, computeMemory, 12, ABSOLUTE_ALLOCATION_OFFSET);
+	//rendInst->UpdateAllocation(&data, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
 
 	ComputeIntermediaryPipelineInfo create2 = {
 			.x = 512 / 8,
@@ -256,6 +249,15 @@ void ApplicationLoop::UpdateRenderables()
 	{
 		ref->CallUpdate();
 	}
+
+
+	x += 0.0001f;
+
+
+	auto rendInst = VKRenderer::gRenderInstance;
+
+
+	rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
 }
 
 void ApplicationLoop::UpdateCameraMatrix()

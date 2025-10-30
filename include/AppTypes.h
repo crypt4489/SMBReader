@@ -11,18 +11,15 @@ enum DepthTest
 	DEPTHLESS = 1,
 };
 
-enum ShaderType
-{
-	PIX_SHADER = 0,
-	VERT_SHADER = 1,
-};
-
 enum ImageFormat : uint32_t
 {
 	X8L8U8V8 = 7,
 	DXT1 = 12,
 	DXT3 = 14,
 	R8G8B8A8 = 18,
+	D24UNORMS8STENCIL = 0x7ffffffa,
+	D32FLOATS8STENCIL = 0x7ffffffb,
+	D32FLOAT = 0x7ffffffc,
 	R8G8B8A8_UNORM = 0x7ffffffd,
 	R8G8B8 = 0x7ffffffe,
 	IMAGE_UNKNOWN = 0x7fffffff

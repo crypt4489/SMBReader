@@ -99,8 +99,9 @@ inline VkShaderStageFlags ConvertShaderStageToVKShaderStageFlags(ShaderStageType
 	return flags;
 }
 
-struct ShaderResourceSet
+struct ShaderSetLayout
 {
+	int vkDescriptorLayout;
 	int bindingCount;
 };
 
@@ -140,13 +141,13 @@ struct ShaderGraph
 
 	uintptr_t GetSet(int setIndex)
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (setIndex * sizeof(ShaderResourceSet));
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (setIndex * sizeof(ShaderSetLayout));
 		return head;
 	}
 
 	uintptr_t GetMap(int mapIndex)
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (2 * sizeof(ShaderResourceSet));
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (2 * sizeof(ShaderSetLayout));
 		for (int i = 0; i < mapIndex; i++)
 		{
 			ShaderMap* map = (ShaderMap*)head;
@@ -157,7 +158,7 @@ struct ShaderGraph
 
 	int GetGraphSize() const
 	{
-		int size = sizeof(ShaderGraph) + (2 * sizeof(ShaderResourceSet));
+		int size = sizeof(ShaderGraph) + (2 * sizeof(ShaderSetLayout));
 		uintptr_t head = (uintptr_t)(this) + size;
 		for (int i = 0; i < shaderMapCount; i++)
 		{
@@ -170,9 +171,15 @@ struct ShaderGraph
 	}
 };
 
+template <int N, int M>
 struct ShaderGraphsHolder
 {
 	int graphCount;
+
+	uintptr_t shaderGraphs;
+	uint32_t shaderGraphOffset;
+	std::array<ShaderGraph*, N> shaderGraphPtrs;
+	std::array<EntryHandle, M> shaders;
 
 	uintptr_t GetGraph(int graphIndex)
 	{

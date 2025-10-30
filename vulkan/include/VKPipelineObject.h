@@ -102,21 +102,20 @@ struct VKPipelineObject
 	void AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags);
 
 	void AddBufferMemoryBarrier(
-		VKDevice* d, VKBarrierLocation location, EntryHandle bufferIndex,
-		size_t size, size_t offset,
-		VkAccessFlags srcPoint, VkAccessFlags dstPoint,
+		EntryHandle index, VKBarrierLocation location,
 		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
 	);
 
 	void AddImageMemoryBarrier(
-		VKDevice* d, VKBarrierLocation location, EntryHandle imageIndex,
-		VkAccessFlags srcPoint, VkAccessFlags dstPoint,
-		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
-		VkImageLayout oldLayout, VkImageLayout newLayout,
-		VkImageSubresourceRange subresourceRange
+		EntryHandle index, VKBarrierLocation location, VkShaderStageFlags srcStage, VkShaderStageFlags dstStage
 	);
 
 	VkBarrierInfo* GetNextBarrierInfo(VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
+
+	void CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location);
+	
+	void AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, 
+		EntryHandle barrierIndex, VKBarrierLocation location, uint16_t barrierType);
 };
 
 
