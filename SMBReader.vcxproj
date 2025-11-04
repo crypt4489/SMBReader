@@ -302,6 +302,12 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup>
+    <Xml Include="shaders\layouts\3DTexturedLayout.xml" />
+    <Xml Include="shaders\layouts\InterpolateMeshLayout.xml" />
+    <Xml Include="shaders\layouts\PolynomialLayout.xml" />
+    <Xml Include="shaders\layouts\TextLayout.xml" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

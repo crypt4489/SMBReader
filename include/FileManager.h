@@ -57,7 +57,7 @@ public:
 
 	static std::optional<FileID> OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle*& outHandle);
 
-	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer);
+	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer, std::ios::openmode flags);
 
 	static FileHandle* GetFile(const FileID& id);
 

@@ -19,11 +19,11 @@ std::optional<FileID> FileManager::OpenFile(const std::filesystem::path name, st
 	return HandleOpening(name.string(), flags, outHandle);
 }
 
-int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buffer)
+int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buffer, std::ios::openmode flags)
 {
 	std::fstream stream;
 
-	stream.open(name, std::ios::binary | std::ios::in | std::ios::ate);
+	stream.open(name, flags | std::ios::in | std::ios::ate);
 
 	if (!stream.is_open())
 	{

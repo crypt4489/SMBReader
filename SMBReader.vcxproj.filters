@@ -188,4 +188,18 @@
       <Filter>Shaders</Filter>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup>
+    <Xml Include="shaders\layouts\3DTexturedLayout.xml">
+      <Filter>Shaders</Filter>
+    </Xml>
+    <Xml Include="shaders\layouts\TextLayout.xml">
+      <Filter>Shaders</Filter>
+    </Xml>
+    <Xml Include="shaders\layouts\PolynomialLayout.xml">
+      <Filter>Shaders</Filter>
+    </Xml>
+    <Xml Include="shaders\layouts\InterpolateMeshLayout.xml">
+      <Filter>Shaders</Filter>
+    </Xml>
+  </ItemGroup>
 </Project>

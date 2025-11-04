@@ -4,6 +4,7 @@
 #include <atomic>
 #include <functional>
 
+#include "FileManager.h"
 #include "ResourceDependencies.h"
 
 enum ShaderBufferLocation
@@ -209,4 +210,73 @@ struct ShaderResourceManager
 
 };
 
+#define KB 1024
+#define MB 1024 * KB
+#define GB 1024 * MB
+
+struct ShaderGraphReader
+{
+	static char readerMemBuffer[16 * MB];
+	static int readerMemBufferAllocate;
+	static char strings[4 * KB];
+	static int stringAllocate;
+
+
+	struct ShaderXMLTag
+	{
+		unsigned long hashCode;
+	};
+
+	struct ShaderGLSLShaderXMLTag : ShaderXMLTag //followed by shaderNameLen Bytes
+	{
+		ShaderStageType type;
+		int shaderNameLen;
+	}; 
+
+	struct ShaderComputeLayoutXMLTag : ShaderXMLTag
+	{
+		int x;
+		int y;
+		int z;
+	};
+
+	struct ShaderResourceItemXMLTag : ShaderXMLTag
+	{
+		ShaderStageType shaderstage;
+		ShaderResourceType resourceType;
+		ShaderResourceAction resourceAction;
+	};
+
+
+
+
+
+	static constexpr unsigned long
+		hash(char* str);
+
+	static constexpr unsigned long
+		hash(const std::string& string);
+
+
+	static ShaderGraph* CreateShaderGraph(const std::string& filename, void* graphmemory);
+
+	static int ProcessTag(std::vector<char>& fileData, int currentLocation);
+
+	static int SkipLine(std::vector<char>& fileData, int currentLocation);
+	static int ReadValue(std::vector<char>& fileData, int currentLocation, int* len);
+
+	static int ReadAttributeName(std::vector<char>& fileData, int currentLocation);
+
+	static int ReadAttributeValue(std::vector<char>& fileData, int currentLocation);
+
+
+	static int ReadAttributes(std::vector<char>& fileData, int currentLocation, uintptr_t* offsets, int* stackSize);
+	static int HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
+
+	static int HandleShaderResourceItem(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
+
+	static constexpr int ASCIIToInt(char* str);
+
+	static int HandleComputeLayout(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
+};
 

@@ -4,7 +4,7 @@
 		mesh_interpolate.comp
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem index="constant" type="uniform" used="c">
+		<ShaderResourceItem type="constantbuffer" used="c">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>

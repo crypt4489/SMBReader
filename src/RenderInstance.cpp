@@ -669,7 +669,7 @@ void RenderInstance::CreatePipelines()
 		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
 	}
 
-	
+	ShaderGraph* ret = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml", nullptr);
 
 	size_t counter = 0;
 
@@ -679,13 +679,13 @@ void RenderInstance::CreatePipelines()
 		std::vector<char> buffer;
 		if (FileManager::FileExists(name)) {
 
-			auto ret = FileManager::ReadFileInFull(name, buffer);
+			auto ret = FileManager::ReadFileInFull(name, buffer, std::ios::binary);
 		}
 		else
 		{
 			std::string uncompiled = name.substr(0, name.length() - 4);
 
-			auto ret = FileManager::ReadFileInFull(uncompiled, buffer);
+			auto ret = FileManager::ReadFileInFull(uncompiled, buffer, std::ios::binary);
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 		}
