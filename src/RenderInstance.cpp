@@ -162,27 +162,6 @@ RenderInstance::RenderInstance()
 
 };
 
-uintptr_t RenderInstance::AllocateShaderGraph(uint32_t shaderMapCount, uint32_t *shaderResourceCount,  ShaderStageType *types, uint32_t *shaderReferences)
-{
-	uintptr_t ret = (vulkanShaderGraphs.shaderGraphs + vulkanShaderGraphs.shaderGraphOffset);
-	ShaderGraph* graph = (ShaderGraph*)(ret);
-
-	graph->shaderMapCount = shaderMapCount;
-	graph->resourceSetCount = 2;
-	vulkanShaderGraphs.shaderGraphOffset += sizeof(ShaderGraph) + (graph->resourceSetCount * sizeof(ShaderSetLayout));
-
-	for (uint32_t i = 0; i < shaderMapCount; i++)
-	{
-		ShaderMap* map = (ShaderMap*)(vulkanShaderGraphs.shaderGraphs + vulkanShaderGraphs.shaderGraphOffset);
-		map->type = types[i];
-		map->shaderReference = shaderReferences[i];
-		map->resourceCount = shaderResourceCount[i];
-		vulkanShaderGraphs.shaderGraphOffset += sizeof(ShaderMap) + (map->resourceCount * sizeof(ShaderResource));
-	}
-
-	return ret;
-}
-
 RenderInstance::~RenderInstance()
 {
 	free((void*)vulkanShaderGraphs.shaderGraphs);
@@ -600,76 +579,25 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<ShaderResource, 10> resourcesArr = { {
-		{ SHADERREAD, UNIFORM_BUFFER, 0, 0 },
-		{ SHADERREAD, UNIFORM_BUFFER, 1, 0 },
-		{ SHADERREAD, SAMPLER, 1, 1 },
-		{ SHADERREAD, SAMPLER, 0, 0},
-		{ SHADERREAD, CONSTANT_BUFFER, 0, ~0},
-		{ SHADERREAD, STORAGE_BUFFER, 0, 0 },
-		{ SHADERREAD, STORAGE_BUFFER, 0, 1 },
-		{ SHADERWRITE, STORAGE_BUFFER, 0, 2 },
-		{ SHADERREAD, UNIFORM_BUFFER, 0, 0},
-		{ SHADERWRITE, IMAGESTORE2D, 0, 1}
-	} };
+	
 
 	std::array shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv", "polynomialimage.comp.spv"};
 
-	std::array shaderReferences = { 0U, 1U, 2U, 3U, 4U, 5U };
-	std::array<ShaderStageType, 6> shaderTypes  = {
-		ShaderStageTypeBits::VERTEXSHADERSTAGE, 
-		ShaderStageTypeBits::FRAGMENTSHADERSTAGE, 
-		ShaderStageTypeBits::VERTEXSHADERSTAGE, 
-		ShaderStageTypeBits::FRAGMENTSHADERSTAGE, 
-		ShaderStageTypeBits::COMPUTESHADERSTAGE,
-		ShaderStageTypeBits::COMPUTESHADERSTAGE
-	};
-	std::array shaderResourceCounts = { 2U, 1U, 0U, 1U, 4U, 2U };
+	vulkanShaderGraphs.shaderGraphPtrs[0] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
 
-	std::array setSizes = { 2, 1, 1, 1 };
+	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[0]);
 
-	std::array bindingIndex = { 0, 2, 3, 4 };
+	vulkanShaderGraphs.shaderGraphPtrs[1] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
 
-	std::array bindingCount = { 1, 2, 1, 4, 2 };
+	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[1]);
 
-	vulkanShaderGraphs.shaderGraphPtrs[0] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[0], &shaderTypes[0], &shaderReferences[0]);
-	vulkanShaderGraphs.shaderGraphPtrs[1] = (ShaderGraph*)AllocateShaderGraph(2, &shaderResourceCounts[2], &shaderTypes[2], &shaderReferences[2]);
-	vulkanShaderGraphs.shaderGraphPtrs[2] = (ShaderGraph*)AllocateShaderGraph(1, &shaderResourceCounts[4], &shaderTypes[4], &shaderReferences[4]);
-	vulkanShaderGraphs.shaderGraphPtrs[3] = (ShaderGraph*)AllocateShaderGraph(1, &shaderResourceCounts[5], &shaderTypes[5], &shaderReferences[5]);
+	vulkanShaderGraphs.shaderGraphPtrs[2] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
 
-	uint32_t resourceCount = 0;
+	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[2]);
 
-	for (int i = 0; i < 4; i++)
-	{
-		
+	vulkanShaderGraphs.shaderGraphPtrs[3] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
 
-		for (int z = 0; z < setSizes[i]; z++)
-		{
-			ShaderSetLayout* set = (ShaderSetLayout*)vulkanShaderGraphs.shaderGraphPtrs[i]->GetSet(z);
-			set->bindingCount = bindingCount[bindingIndex[i]+z];
-		}
-
-		for (int j = 0; j < vulkanShaderGraphs.shaderGraphPtrs[i]->shaderMapCount; j++)
-		{
-			
-			ShaderMap* map = (ShaderMap*)vulkanShaderGraphs.shaderGraphPtrs[i]->GetMap(j);
-			for (int h = 0; h < map->resourceCount; h++)
-			{
-				ShaderResource* resource = (ShaderResource*)map->GetResource(h);
-				resource->action = resourcesArr[resourceCount].action;
-				resource->type = resourcesArr[resourceCount].type;
-				resource->binding = resourcesArr[resourceCount].binding;
-				resource->set = resourcesArr[resourceCount].set;
-				resourceCount++;
-			}
-		}
-
-		vulkanShaderGraphs.shaderGraphPtrs[i]->resourceSetCount = setSizes[i];
-
-		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
-	}
-
-	ShaderGraph* ret = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml", nullptr);
+	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[3]);
 
 	size_t counter = 0;
 

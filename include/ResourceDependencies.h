@@ -31,6 +31,7 @@ enum MemoryBarrierType
 	MEMORY_BARRIER = 0,
 	IMAGE_BARRIER = 1,
 	BUFFER_BARRIER = 2,
+	BARRIER_MAX_ENUM
 };
 
 inline VkAccessFlags ConvertResourceActionToVulkan(BarrierAction action)
@@ -111,6 +112,7 @@ struct ShaderResource
 	ShaderResourceType type;
 	int set;
 	int binding;
+	MemoryBarrierType barrier;
 };
 
 struct ShaderMap
@@ -147,7 +149,7 @@ struct ShaderGraph
 
 	uintptr_t GetMap(int mapIndex)
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (2 * sizeof(ShaderSetLayout));
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout));
 		for (int i = 0; i < mapIndex; i++)
 		{
 			ShaderMap* map = (ShaderMap*)head;
@@ -158,7 +160,7 @@ struct ShaderGraph
 
 	int GetGraphSize() const
 	{
-		int size = sizeof(ShaderGraph) + (2 * sizeof(ShaderSetLayout));
+		int size = sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout));
 		uintptr_t head = (uintptr_t)(this) + size;
 		for (int i = 0; i < shaderMapCount; i++)
 		{
@@ -177,7 +179,7 @@ struct ShaderGraphsHolder
 	int graphCount;
 
 	uintptr_t shaderGraphs;
-	uint32_t shaderGraphOffset;
+	size_t shaderGraphOffset;
 	std::array<ShaderGraph*, N> shaderGraphPtrs;
 	std::array<EntryHandle, M> shaders;
 

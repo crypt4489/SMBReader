@@ -36,12 +36,12 @@ ShaderGraphReader::hash(const std::string& string)
 }
 
 
-ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, void* graphmemory)
+ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t *outSize)
 {
 
 	uintptr_t TreeNodes[50]{};
-
-	int setCount = 0;
+	int SetNodes[15]{};
+	
 
 	std::vector<char> fileData;
 
@@ -51,6 +51,10 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, v
 	{
 		throw std::runtime_error("Shader Init file is unable to be opened");
 	}
+
+	int shaderCount = 0;
+	int shaderResourceCount = 0;
+	int setCount = 0;
 
 	int tagCount = 0;
 	int curr = 0;
@@ -81,6 +85,7 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, v
 		}
 		else {
 			//std::cout << "Opening Node" << std::endl;
+			tagCount++;
 		}
 
 		unsigned long hashl = hash(tag);
@@ -89,16 +94,22 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, v
 		{
 		case hash("ShaderGraph"):
 			//std::cout << "ShaderGraph" << std::endl;
+			if (!opening)
+				curr = (int)fileData.size();
 			break;
 		case hash("GLSLShader"):
 			//std::cout << "GLSLShader" << std::endl;
 			if (opening) {
 				stride = HandleGLSLShader(fileData, curr, &TreeNodes[tagCount]);
+				shaderCount++;
 			}
 			break;
 		case hash("ShaderResourceSet"):
 			//std::cout << "ShaderResourceSet" << std::endl;
-			setCount++;
+			if (opening) {
+				SetNodes[setCount] = tagCount;
+				setCount++;
+			}
 			break;
 		case hash("ShaderResourceItem"):
 			//std::cout << "ShaderResourceItem" << std::endl;
@@ -117,11 +128,89 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, v
 
 		curr += stride;
 
-		tagCount++;
+		
 	}
 
+	uintptr_t head = (graphmemory + *outSize);
 
-	return nullptr;
+	ShaderGraph* graph = (ShaderGraph*)(head);
+
+	memset(graph, 0, sizeof(ShaderGraph) + (setCount * sizeof(ShaderSetLayout)));
+
+	graph->shaderMapCount = shaderCount;
+	graph->resourceSetCount = setCount;
+	uintptr_t mapData = head + sizeof(ShaderGraph) + (setCount * sizeof(ShaderSetLayout));
+
+	int shaderIndex = 0;
+
+	for (uint32_t j = 0; j < shaderCount; j++)
+	{
+		ShaderMap* map = (ShaderMap*)(mapData);
+		
+		ShaderStageType type = 0;
+
+		for (int i = shaderIndex; i < 50; i++)
+		{
+			shaderIndex = i + 1;
+			ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)TreeNodes[i];
+			if (tag && tag->hashCode == hash("GLSLShader"))
+			{
+				type = tag->type;
+				break;
+			}
+		}
+
+		map->type = type;
+		
+		int resourceIter = 0;
+
+		for (int i = 0; i<setCount; i++)
+		{
+
+			ShaderSetLayout* setLay = (ShaderSetLayout*)graph->GetSet(i);
+			int resIter = SetNodes[i]+1;
+			ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
+			int bindingCount = 0;
+			while (tag && tag->hashCode == hash("ShaderResourceItem"))
+			{
+				
+				if (tag->shaderstage == type)
+				{
+					ShaderResource* resource = (ShaderResource*)map->GetResource(resourceIter++);
+					if (tag->resourceType & CONSTANT_BUFFER)
+					{
+						resource->binding = ~0;
+					}
+					else 
+					{
+						resource->binding = bindingCount;
+					}
+					
+					resource->action = tag->resourceAction;
+					resource->type = tag->resourceType;
+					
+					resource->set = i;
+					setLay->bindingCount++;
+				}
+				
+				if (!(tag->resourceType & CONSTANT_BUFFER))
+				{
+					bindingCount++;
+				}
+
+				tag = (ShaderResourceItemXMLTag*)TreeNodes[++resIter];
+			}
+		}
+
+
+		map->resourceCount = resourceIter;
+
+		mapData += (sizeof(ShaderMap) + (map->resourceCount * sizeof(ShaderResource)));
+	}
+
+	*outSize += (mapData - head);
+
+	return graph;
 }
 
 int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocation)
@@ -330,6 +419,13 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 			{
 			case hash("compute"):
 				tag->type = ShaderStageTypeBits::COMPUTESHADERSTAGE;
+				break;
+			case hash("vert"):
+				tag->type = ShaderStageTypeBits::VERTEXSHADERSTAGE;
+				break;
+			case hash("fragment"):
+				tag->type = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
+				break;
 			}
 		}
 		}
@@ -372,11 +468,18 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 		{
 			switch (codeV)
 			{
+			case hash("sampler"):
+				tag->resourceType = ShaderResourceType::SAMPLER;
+				break;
+			case hash("storageimage"):
+				tag->resourceType = ShaderResourceType::IMAGESTORE2D;
+				break;
 			case hash("storage"):
 				tag->resourceType = ShaderResourceType::STORAGE_BUFFER;
 				break;
 			case hash("uniform"):
-				tag->resourceType = ShaderResourceType::STORAGE_BUFFER;
+				tag->resourceType = ShaderResourceType::UNIFORM_BUFFER;
+				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
 			case hash("constantbuffer"):
 				tag->resourceType = ShaderResourceType::CONSTANT_BUFFER;
@@ -394,6 +497,12 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 			{
 			case hash("c"):
 				tag->shaderstage = ShaderStageTypeBits::COMPUTESHADERSTAGE;
+				break;
+			case hash("v"):
+				tag->shaderstage = ShaderStageTypeBits::VERTEXSHADERSTAGE;
+				break;
+			case hash("f"):
+				tag->shaderstage = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			default:
 				throw std::runtime_error("Failed Used Type");

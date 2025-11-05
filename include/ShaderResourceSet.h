@@ -247,6 +247,11 @@ struct ShaderGraphReader
 		ShaderResourceAction resourceAction;
 	};
 
+	struct ShaderResourceSetXMLTag : ShaderXMLTag
+	{
+		int resourceCount;
+	};
+
 
 
 
@@ -258,7 +263,7 @@ struct ShaderGraphReader
 		hash(const std::string& string);
 
 
-	static ShaderGraph* CreateShaderGraph(const std::string& filename, void* graphmemory);
+	static ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize);
 
 	static int ProcessTag(std::vector<char>& fileData, int currentLocation);
 

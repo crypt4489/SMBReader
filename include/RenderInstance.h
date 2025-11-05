@@ -254,8 +254,6 @@ public:
 
 	void CreateShaderResourceMap(ShaderGraph *graph);
 
-	uintptr_t AllocateShaderGraph(uint32_t shaderMapCount, uint32_t* shaderResourceCount, ShaderStageType* types, uint32_t* shaderReferences);
-
 	int AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount);
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);

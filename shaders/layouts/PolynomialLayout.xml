@@ -4,9 +4,9 @@
 		polynomialimage.comp
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem index="0" type="uniform" used="c">
+		<ShaderResourceItem type="uniform" used="c">
 		</ShaderResourceItem>
-		<ShaderResourceItem index="1" type="storageimage" used="c" rw="write" layoutchanged="true">
+		<ShaderResourceItem type="storageimage" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ComputeLayout x="8" y="8" z="1">
