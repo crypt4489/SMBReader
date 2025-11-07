@@ -111,6 +111,7 @@ struct GraphicsIntermediaryPipelineInfo
 	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
+	uint32_t instanceCount;
 };
 
 struct ComputeIntermediaryPipelineInfo

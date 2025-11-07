@@ -72,6 +72,8 @@ public:
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
 	EntryHandle storageBuffer;
+	int instanceAlloc;
+	std::array<glm::mat4, 64> instanceMatrices;
 
 	enum DIRS {
 		RIGHT = 0,

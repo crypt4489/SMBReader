@@ -150,6 +150,11 @@ void ApplicationLoop::CreateGlobalStorageImage()
 {
 
 	auto rendInst = VKRenderer::gRenderInstance;
+
+
+	instanceAlloc = rendInst->GetPageFromUniformBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
+
+
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
@@ -180,6 +185,25 @@ void ApplicationLoop::CreateGlobalStorageImage()
 	std::array arr = { computeMemory };
 
 	EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data());
+
+
+	float offsetX = 4 * -15.0f;
+	float offsetY = 4 * -15.0f;
+
+	for (int i = 0; i < 64; i++)
+	{
+		instanceMatrices[i] = glm::identity<glm::mat4>();
+		instanceMatrices[i][3].y = offsetY;
+		instanceMatrices[i][3].x = offsetX;
+		offsetX += 15.0f;
+		if ((i & 7) == 7)
+		{
+			offsetX = 4 * -15.0f;
+			offsetY += 15.0f;
+		}
+	}
+
+	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET);
 }
 
 void ApplicationLoop::MoveCamera(double fps)
@@ -260,6 +284,7 @@ void ApplicationLoop::UpdateRenderables()
 
 
 	rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
+
 }
 
 void ApplicationLoop::UpdateCameraMatrix()

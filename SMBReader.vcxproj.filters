@@ -155,6 +155,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shadercompile.bat" />
+    <None Include="shaders\3dtexturedInstanced.vert">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="shaders\3dtextured.frag">
@@ -199,6 +202,9 @@
       <Filter>Shaders</Filter>
     </Xml>
     <Xml Include="shaders\layouts\InterpolateMeshLayout.xml">
+      <Filter>Shaders</Filter>
+    </Xml>
+    <Xml Include="shaders\layouts\GPUInstancing.xml">
       <Filter>Shaders</Filter>
     </Xml>
   </ItemGroup>

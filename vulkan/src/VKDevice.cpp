@@ -90,9 +90,9 @@ void RecordingBufferObject::BindVertexBuffer(EntryHandle bufferIndex, uint32_t f
 	vkCmdBindVertexBuffers(cbBufferHandler.buffer, firstBindingCount, bindingCount, &buffer, offsets);
 }
 
-void RecordingBufferObject::BindingDrawCmd(uint32_t first, uint32_t drawSize)
+void RecordingBufferObject::BindingDrawCmd(uint32_t first, uint32_t drawSize, uint32_t firstInstance, uint32_t instanceCount)
 {
-	vkCmdDraw(cbBufferHandler.buffer, drawSize, 1, first, 0);
+	vkCmdDraw(cbBufferHandler.buffer, drawSize, instanceCount, first, firstInstance);
 }
 
 void RecordingBufferObject::BindingDrawIndexedCmd(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)

@@ -301,9 +301,11 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </EmbeddedResource>
+    <None Include="shaders\3dtexturedInstanced.vert" />
   </ItemGroup>
   <ItemGroup>
     <Xml Include="shaders\layouts\3DTexturedLayout.xml" />
+    <Xml Include="shaders\layouts\GPUInstancing.xml" />
     <Xml Include="shaders\layouts\InterpolateMeshLayout.xml" />
     <Xml Include="shaders\layouts\PolynomialLayout.xml" />
     <Xml Include="shaders\layouts\TextLayout.xml" />

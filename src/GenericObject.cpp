@@ -41,7 +41,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	objVertexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
 	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
-	rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objSpecificMemIndex[0], REPEAT, 0);
+	rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, loop->instanceAlloc, DIRECT, 0);
 	rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->storageBuffer, 1);
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(2, 0, frames);
@@ -74,7 +74,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.maxDynCap = 1,
 			.indexBufferHandle = objIndexMemoryIndex,
 			.indexCount = m->indexCount,
-			.pushRangeCount = 0
+			.pushRangeCount = 0, 
+			.instanceCount = 64,
 		};
 
 
@@ -95,7 +96,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data());
 
-		std::array dynamicOffsets = { objSpecificMemIndex[0] };
+		std::array dynamicOffsets = { loop->instanceAlloc };
 
 		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data());
 	}
@@ -111,7 +112,7 @@ GenericObject::~GenericObject()
 void GenericObject::CallUpdate()
 {
 	updateObject(this);
-	memoryCallback(&mat, sizeof(glm::mat4), objSpecificMemIndex[0]);
+	//memoryCallback(&mat, sizeof(glm::mat4), objSpecificMemIndex[0]);
 	//memoryCallback(&interpolate, sizeof(float), objSpecificMemIndex[1]);
 
 

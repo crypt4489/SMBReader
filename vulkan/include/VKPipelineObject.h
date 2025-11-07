@@ -35,6 +35,7 @@ struct VKGraphicsPipelineObjectCreateInfo
 	uint32_t indexBufferOffset;
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
+	uint32_t instanceCount;
 };
 
 struct PushConstantArguments
@@ -139,6 +140,7 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 
 	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
 	std::size_t vertexCount, indexCount;
+	uint32_t instanceCount;
 };
 
 

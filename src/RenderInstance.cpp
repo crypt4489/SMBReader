@@ -580,7 +580,7 @@ void RenderInstance::CreatePipelines()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	std::array<std::string, 4> layouts = {
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml",
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\GPUInstancing.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml"
@@ -1166,7 +1166,8 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.indexBufferHandle = allocations[info->indexBufferHandle].memIndex,
 			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
 			.indexCount = info->indexCount,
-			.pushRangeCount = info->pushRangeCount
+			.pushRangeCount = info->pushRangeCount,
+			.instanceCount = info->instanceCount
 	};
 
 	auto& ref = pipelinesIdentifier[info->pipelinename];
