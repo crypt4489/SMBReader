@@ -59,6 +59,8 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	rendInst->UpdateAllocation(m->GetIndexData(), objIndexMemoryIndex, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
 
+	ShaderComputeLayout* layout = rendInst->GetComputeLayout(2);
+
 	if (be == RenderingBackend::VULKAN)
 	{
 
@@ -79,7 +81,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 		std::array compDynamicOffsets = { objMorphFromVertexMemory, objMorphToVertexMemory, objVertexMemoryIndex };
 
 		ComputeIntermediaryPipelineInfo create2 = {
-			.x = m->vertexCount / 8,
+			.x = m->vertexCount / layout->x,
 			.y = 1,
 			.z = 1,
 			.maxDynCap = 3,

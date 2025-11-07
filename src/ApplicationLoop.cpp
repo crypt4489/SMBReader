@@ -164,9 +164,11 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	//rendInst->UpdateAllocation(&data, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
 
+	ShaderComputeLayout* layout = rendInst->GetComputeLayout(3);
+
 	ComputeIntermediaryPipelineInfo create2 = {
-			.x = 512 / 8,
-			.y = 512 / 8,
+			.x = 512 / layout->x,
+			.y = 512 / layout->y,
 			.z = 1,
 			.maxDynCap = 1,
 			.pipelinename = POLY,

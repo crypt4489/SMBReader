@@ -112,14 +112,13 @@ struct ShaderResource
 	ShaderResourceType type;
 	int set;
 	int binding;
-	MemoryBarrierType barrier;
 };
 
 struct ShaderMap
 {
 	ShaderStageType type;
 	int shaderReference;
-	int resourceCount; //array of contigous ShaderResources 
+	int resourceCount; //array of contigous ShaderResources -- how many resources the shader consumes
 
 	uintptr_t GetResource(int resourceIndex)
 	{
@@ -132,7 +131,7 @@ struct ShaderMap
 
 	int GetMapSize() const
 	{
-		return sizeof(ShaderMap) + (resourceCount * sizeof(ShaderResource));
+		return sizeof(ShaderMap) +  (resourceCount * sizeof(ShaderResource));
 	}
 };
 
@@ -182,6 +181,7 @@ struct ShaderGraphsHolder
 	size_t shaderGraphOffset;
 	std::array<ShaderGraph*, N> shaderGraphPtrs;
 	std::array<EntryHandle, M> shaders;
+	
 
 	uintptr_t GetGraph(int graphIndex)
 	{

@@ -2,6 +2,8 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
 		polynomialimage.comp
+		<ComputeLayout x="8" y="8" z="1">
+		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="c">
@@ -9,6 +11,5 @@
 		<ShaderResourceItem type="storageimage" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
-	<ComputeLayout x="8" y="8" z="1">
-	</ComputeLayout>
+	
 </ShaderGraph>

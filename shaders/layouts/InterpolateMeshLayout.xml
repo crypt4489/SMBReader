@@ -2,6 +2,8 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
 		mesh_interpolate.comp
+		<ComputeLayout x="8" y="1" z="1">
+		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="constantbuffer" used="c">
@@ -13,6 +15,5 @@
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
-	<ComputeLayout x="8" y="1" z="1">
-	</ComputeLayout>
+	
 </ShaderGraph>

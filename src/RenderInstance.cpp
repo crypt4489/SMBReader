@@ -579,46 +579,74 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	
+	std::array<std::string, 4> layouts = {
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml",
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml",
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml",
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml"
+	};
 
-	std::array shaders1 = { "3dtextured.vert.spv", "3dtextured.frag.spv", "text.vert.spv" , "text.frag.spv", "mesh_interpolate.comp.spv", "polynomialimage.comp.spv"};
+	int detailsSize = 0, totalDetailSize = 0;
 
-	vulkanShaderGraphs.shaderGraphPtrs[0] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
+	int byteOffset = 0;
 
-	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[0]);
-
-	vulkanShaderGraphs.shaderGraphPtrs[1] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
-
-	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[1]);
-
-	vulkanShaderGraphs.shaderGraphPtrs[2] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
-
-	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[2]);
-
-	vulkanShaderGraphs.shaderGraphPtrs[3] = ShaderGraphReader::CreateShaderGraph("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml", vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset);
-
-	CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[3]);
-
-	size_t counter = 0;
-
-	for (size_t i = 0; i < shaders1.size(); i++)
+	for (int i = 0; i < 4; i++)
 	{
-		std::string name = shaders1[i];
-		std::vector<char> buffer;
-		if (FileManager::FileExists(name)) {
 
-			auto ret = FileManager::ReadFileInFull(name, buffer, std::ios::binary);
+		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
+			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
+			shaderDetailsData.data() + shaderDetailAlloc, &byteOffset, &detailsSize);
+
+		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
+
+		shaderDetailAlloc += byteOffset;
+
+		totalDetailSize += detailsSize;
+	}
+
+	ShaderDetails* deats = (ShaderDetails*)shaderDetailsData.data();
+
+	int shaderGraph = 0;
+
+	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
+
+	int shaderMapCount = graph->shaderMapCount, mapIter = 0;
+
+	for (int i = 0; i < totalDetailSize; i++)
+	{
+		char* str = deats->GetString();
+
+		if (mapIter >= shaderMapCount)
+		{
+			++shaderGraph;
+			graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
+			shaderMapCount = graph->shaderMapCount;
+			mapIter = 0;
+		}
+
+		ShaderMap* map = (ShaderMap*)graph->GetMap(mapIter++);
+		map->shaderReference = i;
+
+		std::string shaderNameString = std::string(str);
+
+		std::vector<char> buffer{};
+
+		if (FileManager::FileExists(shaderNameString + ".spv")) {
+
+			auto ret = FileManager::ReadFileInFull(shaderNameString + ".spv", buffer, std::ios::binary);
 		}
 		else
 		{
-			std::string uncompiled = name.substr(0, name.length() - 4);
-
-			auto ret = FileManager::ReadFileInFull(uncompiled, buffer, std::ios::binary);
+			auto ret = FileManager::ReadFileInFull(shaderNameString, buffer, std::ios::binary);
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 		}
 
-		vulkanShaderGraphs.shaders[counter++] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(name));
+		vulkanShaderGraphs.shaders[i] = dev->CreateShader(buffer.data(), buffer.size(), dev->ConvertShaderFlags(shaderNameString));
+
+		shaderDetails[i] = deats;
+
+		deats = deats->GetNext();
 	}
 
 	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);
@@ -1172,6 +1200,14 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 	}
 
 	return EntryHandle();
+}
+
+ShaderComputeLayout* RenderInstance::GetComputeLayout(int shaderGraphIndex)
+{
+	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	ShaderDetails* deats = shaderDetails[map->shaderReference];
+	return (ShaderComputeLayout*)deats->GetShaderData();
 }
 
 EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets)

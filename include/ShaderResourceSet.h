@@ -67,7 +67,7 @@ struct ShaderResourceManager
 {
 	EntryHandle deviceResourceHeap;
 	uintptr_t hostResourceHeap;
-	uintptr_t hostResourceHead;
+	std::atomic<uintptr_t> hostResourceHead;
 	std::array<uintptr_t, N> descriptorSets;
 	std::atomic<int> descriptorSetIndex;
 
@@ -76,7 +76,7 @@ struct ShaderResourceManager
 		int indexRet = descriptorSetIndex.fetch_add(1);
 
 		descriptorSets[indexRet] = location;
-		hostResourceHead += size;
+		hostResourceHead.store(hostResourceHead + size);
 
 		return indexRet;
 	}
@@ -210,6 +210,34 @@ struct ShaderResourceManager
 
 };
 
+struct ShaderComputeLayout
+{
+	unsigned long x;
+	unsigned long y;
+	unsigned long z;
+};
+
+struct ShaderDetails
+{
+	int shaderNameSize;
+	int shaderDataSize;
+
+	ShaderDetails* GetNext()
+	{
+		return (ShaderDetails*)((uintptr_t)this + sizeof(ShaderDetails) + shaderDataSize + shaderNameSize);
+	}
+
+	char* GetString()
+	{
+		return (char*)((uintptr_t)this + sizeof(ShaderDetails));
+	}
+
+	void* GetShaderData()
+	{
+		return (void*)((uintptr_t)this + sizeof(ShaderDetails) + shaderNameSize);
+	}
+};
+
 #define KB 1024
 #define MB 1024 * KB
 #define GB 1024 * MB
@@ -218,8 +246,6 @@ struct ShaderGraphReader
 {
 	static char readerMemBuffer[16 * MB];
 	static int readerMemBufferAllocate;
-	static char strings[4 * KB];
-	static int stringAllocate;
 
 
 	struct ShaderXMLTag
@@ -230,14 +256,11 @@ struct ShaderGraphReader
 	struct ShaderGLSLShaderXMLTag : ShaderXMLTag //followed by shaderNameLen Bytes
 	{
 		ShaderStageType type;
-		int shaderNameLen;
 	}; 
 
 	struct ShaderComputeLayoutXMLTag : ShaderXMLTag
 	{
-		int x;
-		int y;
-		int z;
+		ShaderComputeLayout comps;
 	};
 
 	struct ShaderResourceItemXMLTag : ShaderXMLTag
@@ -263,20 +286,22 @@ struct ShaderGraphReader
 		hash(const std::string& string);
 
 
-	static ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize);
+	static ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize, void* shaderDataOut, int* shaderDataSize, int* shaderDetailCount);
 
-	static int ProcessTag(std::vector<char>& fileData, int currentLocation);
+	static int ProcessTag(std::vector<char>& fileData, int currentLocation, unsigned long* hash, bool* opening);
 
 	static int SkipLine(std::vector<char>& fileData, int currentLocation);
-	static int ReadValue(std::vector<char>& fileData, int currentLocation, int* len);
+	static int ReadValue(std::vector<char>& fileData, int currentLocation, char* str, int* len);
 
-	static int ReadAttributeName(std::vector<char>& fileData, int currentLocation);
+	static int ReadAttributeName(std::vector<char>& fileData, int currentLocation, unsigned long *hash);
 
-	static int ReadAttributeValue(std::vector<char>& fileData, int currentLocation);
+	static int ReadAttributeValueHash(std::vector<char>& fileData, int currentLocation, unsigned long *hash);
 
+	static int ReadAttributeValueVal(std::vector<char>& fileData, int currentLocation, unsigned long* val);
 
-	static int ReadAttributes(std::vector<char>& fileData, int currentLocation, uintptr_t* offsets, int* stackSize);
-	static int HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
+	static int ReadAttributes(std::vector<char>& fileData, int currentLocation, unsigned long* hashes, int* stackSize, int valType);
+
+	static int HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset, void* shaderData, int* shaderDataSize);
 
 	static int HandleShaderResourceItem(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
 

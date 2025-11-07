@@ -1,8 +1,7 @@
 #include "ShaderResourceSet.h"
 char ShaderGraphReader::readerMemBuffer[16 * MB];
 int ShaderGraphReader::readerMemBufferAllocate = 0;
-char ShaderGraphReader::strings[4 * KB];
-int ShaderGraphReader::stringAllocate = 0;
+
 
 
 constexpr unsigned long
@@ -36,12 +35,19 @@ ShaderGraphReader::hash(const std::string& string)
 }
 
 
-ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t *outSize)
+ShaderGraph* ShaderGraphReader::CreateShaderGraph(
+	const std::string& filename, uintptr_t graphmemory, size_t *outSize, 
+	void* shaderDataOut, int *shaderDataSize, int *shaderDetailCount
+)
 {
 
 	uintptr_t TreeNodes[50]{};
 	int SetNodes[15]{};
+	int ShaderRefs[5]{};
+	ShaderDetails* details[5]{};
 	
+	uintptr_t shaderDeatsIter = (uintptr_t)shaderDataOut;
+	uintptr_t shaderDeatsHead = shaderDeatsIter;
 
 	std::vector<char> fileData;
 
@@ -56,6 +62,9 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, u
 	int shaderResourceCount = 0;
 	int setCount = 0;
 
+	int lastShader = 0;
+	int shaderDetailDataStride = 0;
+
 	int tagCount = 0;
 	int curr = 0;
 
@@ -64,31 +73,19 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, u
 	while (curr + stride < fileData.size())
 	{
 
-		int memCounter = stringAllocate;
-
-		stride = ProcessTag(fileData, curr);
+		unsigned long hashl = 0;
+		bool opening = true; 
+		stride = ProcessTag(fileData, curr, &hashl, &opening);
 		curr += stride;
 
 		stride = SkipLine(fileData, curr);
 
-		char c1 = strings[memCounter + 1];
-
-		char* tag = &strings[memCounter + 1];
-
-		bool opening = true;
-
-		if (c1 == '/')
+		if (opening)
 		{
-			opening = false;
-			tag = &strings[memCounter + 2];
-			//std::cout << "Closing Node" << std::endl;
-		}
-		else {
-			//std::cout << "Opening Node" << std::endl;
 			tagCount++;
 		}
 
-		unsigned long hashl = hash(tag);
+		
 
 		switch (hashl)
 		{
@@ -100,7 +97,15 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, u
 		case hash("GLSLShader"):
 			//std::cout << "GLSLShader" << std::endl;
 			if (opening) {
-				stride = HandleGLSLShader(fileData, curr, &TreeNodes[tagCount]);
+				stride = HandleGLSLShader(fileData, curr, &TreeNodes[tagCount], (void*)shaderDeatsIter, &shaderDetailDataStride);
+				
+				ShaderRefs[shaderCount] = tagCount;
+				details[shaderCount] = (ShaderDetails*)shaderDeatsIter;
+				
+				shaderDeatsIter += shaderDetailDataStride;
+				
+				lastShader = shaderCount;
+				
 				shaderCount++;
 			}
 			break;
@@ -143,21 +148,22 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, u
 
 	int shaderIndex = 0;
 
-	for (uint32_t j = 0; j < shaderCount; j++)
+	for (int j = 0; j < shaderCount; j++)
 	{
 		ShaderMap* map = (ShaderMap*)(mapData);
-		
-		ShaderStageType type = 0;
 
-		for (int i = shaderIndex; i < 50; i++)
+		ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)TreeNodes[ShaderRefs[j]];
+		
+		ShaderStageType type = tag->type;
+
+		if (type == ShaderStageTypeBits::COMPUTESHADERSTAGE)
 		{
-			shaderIndex = i + 1;
-			ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)TreeNodes[i];
-			if (tag && tag->hashCode == hash("GLSLShader"))
-			{
-				type = tag->type;
-				break;
-			}
+			ShaderComputeLayoutXMLTag* ctag = (ShaderComputeLayoutXMLTag*)TreeNodes[ShaderRefs[j] + 1];
+			ShaderDetails* deats = details[j];
+			ShaderComputeLayout* layout = (ShaderComputeLayout*)deats->GetShaderData();
+			layout->x = ctag->comps.x;
+			layout->y = ctag->comps.y;
+			layout->z = ctag->comps.z;
 		}
 
 		map->type = type;
@@ -210,34 +216,53 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(const std::string& filename, u
 
 	*outSize += (mapData - head);
 
+	*shaderDataSize = (int)(shaderDeatsIter - shaderDeatsHead);
+
+	*shaderDetailCount = shaderCount;
+
 	return graph;
 }
 
-int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocation)
+int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocation, unsigned long *hash, bool *opening)
 {
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
 	size_t size = fileData.size();
-	int memCounter = stringAllocate;
+	int memCounter = 0;
+
+	unsigned long hashl = 5381;
+
+	
+
 	while (currentLocation + count < size)
 	{
 		int test = count++;
 
-		if (std::isspace(data[test]) && memCounter == stringAllocate)
+		if (std::isspace(data[test]) && memCounter == 0)
 			continue;
 
-		if (data[test] != '<' && memCounter == stringAllocate)
+		if (data[test] != '<' && memCounter == 0)
 			throw std::runtime_error("malformed xml tag");
 
 		if (data[test] == '\n' || data[test] == ' ' || data[test] == '>') {
-			strings[memCounter++] = 0;
 			break;
 		}
 
-		strings[memCounter++] = data[test];
+		if (data[test] == '<')
+		{
+			memCounter++;
+			if (data[test + 1] == '/')
+			{
+				*opening = false;
+				count++;
+			}
+			continue;
+		}
+
+		hashl = ((hashl << 5) + hashl) + data[test];
 	}
 
-	stringAllocate = memCounter;
+	*hash = hashl;
 
 	return count;
 }
@@ -252,9 +277,9 @@ int ShaderGraphReader::SkipLine(std::vector<char>& fileData, int currentLocation
 	return count;
 }
 
-int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocation, int* len)
+int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocation, char* str, int* len)
 {
-	int memCounter = readerMemBufferAllocate;
+	int memCounter = 0;
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
 	while (true)
@@ -272,24 +297,68 @@ int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocatio
 		if (std::isspace(c))
 			continue;
 
-		readerMemBuffer[memCounter++] = c;
+		str[memCounter++] = c;
 
 	}
 
-	readerMemBuffer[memCounter++] = 0;
+	str[memCounter++] = 0;
 
-	*len = (memCounter - readerMemBufferAllocate);
-
-	readerMemBufferAllocate = memCounter;
+	*len = (memCounter);
 
 	return count;
 }
 #define MAX_ATTRIBUTE_LEN 50
-int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int currentLocation)
+int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
 {
-	int memCounter = readerMemBufferAllocate;
+	int memCounter = 0;
+	
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
+
+	unsigned long hashl = 5381;
+
+
+	while (true)
+	{
+		int test = count++;
+
+		int c = data[test];
+
+		if (c == '>')
+		{
+			count = count - 1;
+			break;
+		}
+
+		if (c == '=')
+			break;
+
+		if (std::isspace(c))
+			continue;
+
+		if (memCounter == MAX_ATTRIBUTE_LEN)
+			throw std::runtime_error("malformed xml attribute");
+
+	
+		memCounter++;
+
+		hashl = ((hashl << 5) + hashl) + c;
+
+	}
+	
+	*hash = hashl;
+
+	return count;
+}
+
+int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
+{
+	int memCounter = 0;
+	int count = 0;
+	char* data = fileData.data() + currentLocation;
+
+	unsigned long hashl = 5381;
+
 	while (true)
 	{
 		int test = count++;
@@ -303,31 +372,39 @@ int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int curren
 		}
 
 		if (std::isspace(c))
-			continue;
-
-		if (c != '=' && memCounter == readerMemBufferAllocate + MAX_ATTRIBUTE_LEN)
-			throw std::runtime_error("malformed xml attribute");
-
-		if (c == '=')
 		{
-			readerMemBuffer[memCounter++] = 0;
-			break;
+			if (memCounter == 0)
+				continue;
+			else
+				break;
 		}
 
-		readerMemBuffer[memCounter++] = c;
+		if (c == '\"' || c == '\'')
+			continue;
+
+		if (memCounter == MAX_ATTRIBUTE_LEN) {
+			throw std::runtime_error("malformed xml attribute");
+		}
+
+		memCounter++;
+
+		hashl = ((hashl << 5) + hashl) + c;
 
 	}
 
-	readerMemBufferAllocate = memCounter;
+	*hash = hashl;
 
 	return count;
 }
 
-int ShaderGraphReader::ReadAttributeValue(std::vector<char>& fileData, int currentLocation)
+int ShaderGraphReader::ReadAttributeValueVal(std::vector<char>& fileData, int currentLocation, unsigned long* val)
 {
-	int memCounter = readerMemBufferAllocate;
+	int memCounter = 0;
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
+
+	unsigned long out = 0;
+
 	while (true)
 	{
 		int test = count++;
@@ -340,33 +417,35 @@ int ShaderGraphReader::ReadAttributeValue(std::vector<char>& fileData, int curre
 			break;
 		}
 
-		if (std::isspace(c) && memCounter == readerMemBufferAllocate)
-			continue;
-
-		if (std::isspace(c) && memCounter != readerMemBufferAllocate)
+		if (std::isspace(c))
 		{
-
-			break;
+			if (memCounter == 0)
+				continue;
+			else
+				break;
 		}
 
-		if (!std::isspace(c) && memCounter == readerMemBufferAllocate + MAX_ATTRIBUTE_LEN) {
+		if (c == '\"' || c == '\'')
+			continue;
+
+		if (memCounter == MAX_ATTRIBUTE_LEN || ((c - '0') < 0 || (c - '9') > 0)) {
 			throw std::runtime_error("malformed xml attribute");
 		}
 
-		readerMemBuffer[memCounter++] = c;
+		memCounter++;
+
+		out = (out * 10) + (c - '0');
 
 	}
 
-	readerMemBuffer[memCounter++] = 0;
-
-	readerMemBufferAllocate = memCounter;
+	*val = out;
 
 	return count;
 }
 
+#define MAX_ATTRIBUTE_LINE_LEN 200
 
-
-int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLocation, uintptr_t* offsets, int* stackSize)
+int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLocation, unsigned long* hashes, int* stackSize, int valType)
 {
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
@@ -375,13 +454,15 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 	int ret = 0;
 	char c = data[ret];
 
-	while (c != '>')
+	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN)
 	{
-		offsets[count++] = (uintptr_t)&readerMemBuffer[readerMemBufferAllocate];
-		ret += ReadAttributeName(fileData, currentLocation + ret);
-		offsets[count++] = (uintptr_t)&readerMemBuffer[readerMemBufferAllocate];
-		ret += ReadAttributeValue(fileData, currentLocation + ret);
+		ret += ReadAttributeName(fileData, currentLocation + ret, &hashes[count]);
+		if (valType == 0)
+			ret += ReadAttributeValueHash(fileData, currentLocation + ret, &hashes[count+1]);
+		else if (valType == 1)
+			ret += ReadAttributeValueVal(fileData, currentLocation + ret, &hashes[count+1]);
 		c = data[ret];
+		count += 2;
 	}
 
 	*stackSize = count;
@@ -389,13 +470,24 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 	return ret + 2;
 }
 
-int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset)
+
+
+int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset, void *shaderData, int *shaderDataSize)
 {
-	uintptr_t offsets[6];
+	unsigned long hashes[6];
 
 	int size = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, offsets, &size);
+	int ret = ReadAttributes(fileData, currentLocation, hashes, &size, 0);
+
+	uintptr_t detailHead = (uintptr_t)shaderData;
+
+	ShaderDetails* details = (ShaderDetails*)detailHead;
+
+	details->shaderDataSize = 0;
+	details->shaderNameSize = 0;
+
+	detailHead += sizeof(ShaderDetails);
 
 	ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -407,10 +499,9 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 
 	while (size > stackIter)
 	{
-		char* codeStr = (char*)offsets[stackIter];
-		char* valStr = (char*)offsets[stackIter + 1];
-		unsigned long code = hash(codeStr);
-		unsigned long codeV = hash(valStr);
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+	
 		switch (code)
 		{
 		case hash("type"):
@@ -418,6 +509,7 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 			switch (codeV)
 			{
 			case hash("compute"):
+				details->shaderDataSize = 12;
 				tag->type = ShaderStageTypeBits::COMPUTESHADERSTAGE;
 				break;
 			case hash("vert"):
@@ -427,7 +519,12 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 				tag->type = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			}
+			break;
 		}
+
+		default:
+			throw std::runtime_error("Failed GLSL Type of Shader");
+			break;
 		}
 
 		stackIter += 2;
@@ -435,18 +532,20 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 
 	readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
 
-	ret += ReadValue(fileData, currentLocation + ret, &tag->shaderNameLen);
+	ret += ReadValue(fileData, currentLocation + ret, details->GetString(), &details->shaderNameSize);
+
+	*shaderDataSize = (sizeof(ShaderDetails) + details->shaderNameSize + details->shaderDataSize);
 
 	return ret;
 }
 
 int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int currentLocation, uintptr_t* offset)
 {
-	uintptr_t offsets[12];
+	unsigned long hashes[12];
 
 	int size = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, offsets, &size);
+	int ret = ReadAttributes(fileData, currentLocation, hashes, &size, 0);
 
 	ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -458,10 +557,8 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 
 	while (size > stackIter)
 	{
-		char* codeStr = (char*)offsets[stackIter];
-		char* valStr = (char*)offsets[stackIter + 1];
-		unsigned long code = hash(codeStr);
-		unsigned long codeV = hash(valStr);
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
 		switch (code)
 		{
 		case hash("type"):
@@ -555,11 +652,11 @@ constexpr int ShaderGraphReader::ASCIIToInt(char* str)
 
 int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int currentLocation, uintptr_t* offset)
 {
-	uintptr_t offsets[6];
+	unsigned long hashesAndVals[6];
 
 	int size = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, offsets, &size);
+	int ret = ReadAttributes(fileData, currentLocation, hashesAndVals, &size, 1);
 
 	ShaderComputeLayoutXMLTag* tag = (ShaderComputeLayoutXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -571,28 +668,25 @@ int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int curr
 
 	while (size > stackIter)
 	{
-		char* codeStr = (char*)offsets[stackIter];
-		char* valStr = (char*)offsets[stackIter + 1];
-		unsigned long code = hash(codeStr);
-
-		int comp = ASCIIToInt(valStr);
+		unsigned long code = hashesAndVals[stackIter];
+		unsigned long comp = hashesAndVals[stackIter + 1];
 
 		switch (code)
 		{
 		case hash("x"):
 		{
-			tag->x = comp;
+			tag->comps.x = comp;
 
 			break;
 		}
 		case hash("y"):
 		{
-			tag->y = comp;
+			tag->comps.y = comp;
 			break;
 		}
 		case hash("z"):
 		{
-			tag->z = comp;
+			tag->comps.z = comp;
 
 			break;
 		}
@@ -600,6 +694,8 @@ int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int curr
 
 		stackIter += 2;
 	}
+
+	readerMemBufferAllocate += sizeof(ShaderComputeLayoutXMLTag);
 
 	return ret;
 }

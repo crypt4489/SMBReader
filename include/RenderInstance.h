@@ -262,6 +262,8 @@ public:
 
 	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int descriptorid);
 
+	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -298,6 +300,9 @@ public:
 
 	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier;
 	std::array<EntryHandle, 5> vulkanDescriptorLayouts;
+	std::array<ShaderDetails*, 6> shaderDetails;
+	std::array<char, 2 * KB> shaderDetailsData;
+	int shaderDetailAlloc = 0;
 
 	RenderAllocationHolder<50> allocations;
 };
