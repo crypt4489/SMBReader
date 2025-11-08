@@ -198,6 +198,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\SMBFile.cpp" />
     <ClCompile Include="src\SMBTexture.cpp" />
     <ClCompile Include="src\TextManager.cpp" />
+    <ClCompile Include="src\TextureDictionary.cpp" />
     <ClCompile Include="src\ThreadManager.cpp" />
     <ClCompile Include="src\WindowManager.cpp" />
   </ItemGroup>
@@ -222,6 +223,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClInclude Include="include\SMBTexture.h" />
     <ClInclude Include="include\TextManager.h" />
     <ClInclude Include="include\TextureData.h" />
+    <ClInclude Include="include\TextureDictionary.h" />
     <ClInclude Include="include\ThreadManager.h" />
     <ClInclude Include="include\VertexTypes.h" />
     <ClInclude Include="include\WindowManager.h" />

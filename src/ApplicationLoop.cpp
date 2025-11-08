@@ -151,8 +151,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
-
-	instanceAlloc = rendInst->GetPageFromUniformBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
+	instanceAlloc = rendInst->GetPageFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
 
 
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);

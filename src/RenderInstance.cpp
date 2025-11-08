@@ -264,23 +264,30 @@ void RenderInstance::DestroySwapChainAttachments()
 	
 }
 
-void RenderInstance::RecreateSwapChain() {
+int RenderInstance::RecreateSwapChain() {
+
+	int ret = 0;
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	
-	int width = 0, height = 0;
 	
 	windowMan->GetWindowSize(&width, &height);
 
-	dev->WaitOnDevice();
+	if (width && height) {
 
-	DestroySwapChainAttachments();
-	
-	CreateSwapChain(width, height, true);
+		dev->WaitOnDevice();
 
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-	{
-		threadedRecordBuffers[i].Reset();
+		DestroySwapChainAttachments();
+
+		CreateSwapChain(width, height, true);
+
+		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+		{
+			threadedRecordBuffers[i].Reset();
+		}
+
+		ret = 1;
 	}
+
+	return ret;
 }
 
 void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount)
@@ -387,11 +394,19 @@ uint32_t RenderInstance::BeginFrame()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	if (resizeWindow) {
+		
+		int ret = RecreateSwapChain(); 
+		if (ret) resizeWindow = false;
+		currentFrame = 0;
+		return ~0ui32;
+	}
+
 	auto& trb = threadedRecordBuffers[currentFrame];
 
 	EntryHandle nextCbIndex = trb.GetCurrentBuffer();
 
-	if (nextCbIndex == EntryHandle()) {
+	if (nextCbIndex == EntryHandle() || !(width || height)) {
 		return ~0ui32;
 	}
 
@@ -408,7 +423,8 @@ uint32_t RenderInstance::BeginFrame()
 
 	if (imageIndex == ~0ui32)
 	{
-		RecreateSwapChain();
+		int ret = RecreateSwapChain();
+		if (ret) resizeWindow = false;
 		return imageIndex;
 	}
 
@@ -428,8 +444,8 @@ void RenderInstance::SubmitFrame(uint32_t imageIndex)
 	trb.ReleaseCurrentCommandBuffer();
 
 	if (!res || resizeWindow) {
-		resizeWindow = false;
-		RecreateSwapChain();
+		int ret = RecreateSwapChain();
+		if (ret) resizeWindow = false;
 		currentFrame = 0;
 	}
 	else {
@@ -1016,7 +1032,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		CreateRenderPass(i, (VkSampleCountFlagBits)(1 << i));
 	}
 
-	CreateSwapChain(800, 600, false);
+	width = 800;
+	height = 600;
+
+	CreateSwapChain(width, height, false);
 	
 
 

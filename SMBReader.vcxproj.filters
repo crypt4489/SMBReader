@@ -78,6 +78,9 @@
     <ClCompile Include="src\ShaderResourceSet.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\TextureDictionary.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\Exporter.h">
@@ -147,6 +150,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ShaderResourceSet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\TextureDictionary.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

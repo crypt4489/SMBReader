@@ -187,7 +187,7 @@ public:
 
 	void DestroySwapChainAttachments();
 
-	void RecreateSwapChain();
+	int RecreateSwapChain();
 
 	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
 
@@ -306,6 +306,10 @@ public:
 	int shaderDetailAlloc = 0;
 
 	RenderAllocationHolder<50> allocations;
+
+	int width = 0; 
+	int height = 0;
+
 };
 
 namespace VKRenderer {
