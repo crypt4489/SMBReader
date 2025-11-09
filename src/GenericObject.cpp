@@ -6,6 +6,8 @@
 #include "VertexTypes.h"
 #include "VKDescriptorSetBuilder.h"
 
+
+
 GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : objectIndex(_oi)
 {
 	for (const auto& chunk : file.chunks)
@@ -75,7 +77,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 			.indexBufferHandle = objIndexMemoryIndex,
 			.indexCount = m->indexCount,
 			.pushRangeCount = 0, 
-			.instanceCount = 64,
+			.instanceCount = 4096,
 		};
 
 
@@ -94,7 +96,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 
 		interpolate = 0.5f;
 
-		EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data());
+		computeHandle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data());
 
 		std::array dynamicOffsets = { loop->instanceAlloc };
 

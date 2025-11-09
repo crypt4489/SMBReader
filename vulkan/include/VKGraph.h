@@ -17,9 +17,11 @@ struct VKGraph {
 
 	VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d);
 
-	void AddObject(EntryHandle obj);
+	uint32_t AddObject(EntryHandle obj);
 
 	void AddDynamicOffset(uint32_t offset);
+
+	bool SetActive(uint32_t objIndex, bool active);
 
 	EntryHandle currentPipeline;
 
@@ -30,6 +32,8 @@ struct VKGraph {
 	std::mutex objectGuard;
 
 	EntryHandle* objects;
+
+	uint8_t* activeIndicators;
 
 	VKDevice* dev;
 

@@ -26,6 +26,7 @@ public:
 	int objVertexMemoryIndex, objIndexMemoryIndex;
 	float interpolate = 0.0f;
 	std::array<int, 2> objSpecificMemIndex;
+	uint32_t computeHandle = 0xFFFFFFFF;
 	Mesh* m;
 };
 

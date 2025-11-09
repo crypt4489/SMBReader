@@ -29,6 +29,8 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 	for (size_t i = 0; i<pipelineObjCount; i++)
 	{
 
+		if (!activeIndicators[i]) continue;
+
 		EntryHandle objIndex = objects[i];
 
 		VKPipelineObject* objHeader = dev->GetPipelineObject(objIndex);
@@ -80,6 +82,10 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle objIndex = objects[i];
 
+	
+
+		if (!activeIndicators[i]) continue;
+
 		VKPipelineObject* objHeader = dev->GetPipelineObject(objIndex);
 
 		EntryHandle handle = objHeader->pipelineID;
@@ -112,16 +118,28 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 	currentPipeline = EntryHandle();
 }
 
-void VKGraph::AddObject(EntryHandle obj)
+uint32_t VKGraph::AddObject(EntryHandle obj)
 {
 	std::unique_lock lock(objectGuard);
-	objects[pipelineObjCount++] = obj;
+	uint32_t objIndex = pipelineObjCount++;
+	objects[objIndex] = obj;
+	activeIndicators[objIndex] = true;
+	return objIndex;
 }
 
 void VKGraph::AddDynamicOffset(uint32_t offset)
 {
 	std::unique_lock lock(objectGuard);
 	dynamicOffsets[dynamicOffsetCount++] = offset;
+}
+
+bool VKGraph::SetActive(uint32_t objIndex, bool active)
+{
+	std::unique_lock lock(objectGuard);
+	bool ret = ((bool)activeIndicators[objIndex]) == active;
+	if (!ret) 
+		activeIndicators[objIndex] = active;
+	return ret;
 }
 
 VKGraph::VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
@@ -133,4 +151,7 @@ VKGraph::VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
 	dynamicOffsets = reinterpret_cast<uint32_t*>(head);
 	head += sizeof(uint32_t) * dCount;
 	objects = reinterpret_cast<EntryHandle*>(head);
+	head += sizeof(EntryHandle) * pCount;
+	activeIndicators = reinterpret_cast<uint8_t*>(head);
+	memset(activeIndicators, 0, pCount);
 }

@@ -1230,7 +1230,18 @@ ShaderComputeLayout* RenderInstance::GetComputeLayout(int shaderGraphIndex)
 	return (ShaderComputeLayout*)deats->GetShaderData();
 }
 
-EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets)
+void RenderInstance::SetActiveComputePipeline(uint32_t objectIndex, bool active)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	auto graph = dev->GetComputeGraph(computeGraphIndex);
+	if (!graph->SetActive(objectIndex, active))
+	{
+		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+			threadedRecordBuffers[i].Reset();
+	}
+}
+
+uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1270,9 +1281,9 @@ EntryHandle RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediar
 	AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid);
 	
 	auto graph = dev->GetComputeGraph(computeGraphIndex);
-	graph->AddObject(pipelineIndex);
+	uint32_t ret = graph->AddObject(pipelineIndex);
 
-	return pipelineIndex;
+	return ret;
 }
 
 void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, int descriptorid)

@@ -73,7 +73,7 @@ public:
 	Camera c;
 	EntryHandle storageBuffer;
 	int instanceAlloc;
-	std::array<glm::mat4, 64> instanceMatrices;
+	std::array<glm::mat4, 64*64> instanceMatrices;
 
 	enum DIRS {
 		RIGHT = 0,

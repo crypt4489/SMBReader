@@ -353,7 +353,7 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount)
 {
 	std::shared_lock lock(deviceLock);
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * dynamicCount) + (sizeof(EntryHandle) * maxPipelineCount));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * dynamicCount) + (sizeof(EntryHandle) * maxPipelineCount) + (sizeof(uint8_t) * maxPipelineCount));
 	auto graph = reinterpret_cast<VKComputeGraph*>(AllocFromPerDeviceData(sizeof(VKComputeGraph)));
 
 	graph = std::construct_at(graph, alloc, dynamicCount, maxPipelineCount, this);
@@ -1027,7 +1027,7 @@ void VKDevice::CreateRenderGraph(EntryHandle renderPass)
 
 	auto renderPassData = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(renderPass));
 
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
 
 	auto graph = std::construct_at(&renderPassData->graph, renderPass, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 }
@@ -1042,18 +1042,7 @@ EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 		throw std::runtime_error("failed to create render pass!");
 	}
 
-
-
-
-	EntryHandle ret;
-
-	ret = AddVkTypeToEntry(ref);
-
-	//auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
-
-	//auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
-
-	return ret;
+	return AddVkTypeToEntry(ref);
 }
 
 VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint32_t numDeps, uint32_t numDescs)
@@ -1082,7 +1071,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount * 2);
 	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
 	
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
 
 	auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 

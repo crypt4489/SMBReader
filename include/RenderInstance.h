@@ -235,7 +235,7 @@ public:
 
 	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets);
 
-	EntryHandle CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
+	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
 
 	size_t CreateRenderGraph(size_t datasize, size_t alignment);
 
@@ -264,6 +264,8 @@ public:
 	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int descriptorid);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
+
+	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;

@@ -30,6 +30,12 @@ static int computeMemory;
 
 static float x = 0.0f;
 
+static uint32_t computeObjIndex = 0;
+
+static bool imageVisible = true;
+
+static bool justUpdatedObj = false;
+
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
@@ -183,23 +189,33 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	std::array arr = { computeMemory };
 
-	EntryHandle handle = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data());
+	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data());
 
 
 	float offsetX = 4 * -15.0f;
 	float offsetY = 4 * -15.0f;
+	float offsetZ = 0.0f;
 
-	for (int i = 0; i < 64; i++)
+	for (int i = 0; i < 4096; i++)
 	{
 		instanceMatrices[i] = glm::identity<glm::mat4>();
 		instanceMatrices[i][3].y = offsetY;
 		instanceMatrices[i][3].x = offsetX;
+		instanceMatrices[i][3].z = offsetZ;
 		offsetX += 15.0f;
 		if ((i & 7) == 7)
 		{
 			offsetX = 4 * -15.0f;
 			offsetY += 15.0f;
 		}
+
+		if ((i & 63) == 63)
+		{
+			offsetZ -= 15.0f;
+			offsetX = 4 * -15.0f;
+			offsetY = 4 * -15.0f;
+		}
+
 	}
 
 	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET);
@@ -263,7 +279,7 @@ void ApplicationLoop::MoveCamera(double fps)
 
 	if (moved) UpdateCameraMatrix();
 }
-
+static bool what = imageVisible;
 void ApplicationLoop::UpdateRenderables()
 {
 	SemaphoreGuard guard(objsSema);
@@ -281,8 +297,19 @@ void ApplicationLoop::UpdateRenderables()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
+	if (imageVisible)
 
-	rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
+	{
+		rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
+	}
+
+	if (what != imageVisible)
+	{
+		rendInst->SetActiveComputePipeline(computeObjIndex, imageVisible);
+		what = imageVisible;
+	}
+
+		
 
 }
 
@@ -435,6 +462,13 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 	{
 		if (action == GLFW_PRESS) {
 			VKRenderer::gRenderInstance->DecreaseMSAA();
+		}
+	}
+
+	if (key == GLFW_KEY_9)
+	{
+		if (action == GLFW_PRESS) {
+			imageVisible = !imageVisible;
 		}
 	}
 }
