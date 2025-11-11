@@ -8,26 +8,10 @@
 
 
 
-GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi) : objectIndex(_oi)
+GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &images) : objectIndex(_oi)
 {
-	for (const auto& chunk : file.chunks)
-	{
-		switch (chunk.chunkType)
-		{
-		case GEO:
-			break;
-		case TEXTURE:
-			textures.emplace_back(file, chunk);
-			break;
-		case GR2:
-			break;
-		case Joints:
-			break;
-		default:
-			std::cerr << "Unprocessed chunkType\n";
-			break;
-		}
-	}
+
+	textures = images;
 
 	m = new Mesh();
 
@@ -44,7 +28,7 @@ GenericObject::GenericObject(const SMBFile& file, RenderingBackend be, size_t _o
 	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
 	rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, loop->instanceAlloc, DIRECT, 0);
-	rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->storageBuffer, 1);
+	rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->mainDictionary.textureHandles[textures[0]], 1);
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(2, 0, frames);
 

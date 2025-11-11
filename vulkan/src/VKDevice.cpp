@@ -1134,6 +1134,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 EntryHandle VKDevice::CreateSampledImage(
 	char* imageData,
 	uint32_t* imageSizes,
+	uint32_t blobSize,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
 	EntryHandle memIndex,
@@ -1150,12 +1151,7 @@ EntryHandle VKDevice::CreateSampledImage(
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
-	VkDeviceSize imagesSize = 0UL;
-
-	for (uint32_t i = 0; i < mipLevels; i++)
-	{
-		imagesSize += imageSizes[i];
-	}
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
 
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingMemory;
@@ -1167,14 +1163,11 @@ EntryHandle VKDevice::CreateSampledImage(
 	stagingMemory = alloc->memory;
 
 	char* data;
-	auto& sizes = imageSizes;
 	auto& pixels = imageData;
 	vkMapMemory(device, stagingMemory, 0, imagesSize, 0, reinterpret_cast<void**>(&data));
-	for (auto i = 0U; i < mipLevels; i++) {
-		std::memcpy(data, pixels, sizes[i]);
-		data += sizes[i];
-		pixels += sizes[i];
-	}
+	
+	std::memcpy(data, pixels, imagesSize);
+		
 	vkUnmapMemory(device, stagingMemory);
 
 	VkFormat format = type;
@@ -1197,11 +1190,19 @@ EntryHandle VKDevice::CreateSampledImage(
 
 	VkDeviceSize offset = 0UL;
 
-	for (auto i = 0U; i < mipLevels; i++) {
+	if (mipLevels > 1)
 
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+	{
+		for (auto i = 0U; i < mipLevels; i++) {
 
-		offset += static_cast<VkDeviceSize>(sizes[i]);
+			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+
+			offset += static_cast<VkDeviceSize>(imageSizes[i]);
+		}
+	}
+	else
+	{
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
 	}
 
 	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);

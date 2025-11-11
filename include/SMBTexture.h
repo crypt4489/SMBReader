@@ -41,6 +41,7 @@ public:
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
+	uint32_t cumulativeSize;
 	uint32_t* imageSizes;
 	std::byte* data;
 

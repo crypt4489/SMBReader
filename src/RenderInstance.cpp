@@ -815,13 +815,14 @@ int RenderInstance::GetPageFromDeviceBuffer(size_t size, uint32_t alignment)
 
 EntryHandle RenderInstance::CreateImage(
 	char* imageData,
-	uint32_t* imageSizes,
+	uint32_t* sizes,
+	uint32_t blobSize,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat type)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice->CreateSampledImage(
-		imageData, imageSizes,
+		imageData, sizes, blobSize,
 		width, height,
 		mipLevels, API::ConvertSMBToVkFormat(type),
 		attachmentsIndex, 
@@ -1075,7 +1076,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	}
 }
 
-size_t RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
+int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 

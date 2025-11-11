@@ -68,6 +68,8 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFo
 		writeWidth >>= 1;
 	}
 
+	cumulativeSize = totalBlobSize;
+
 	data = new std::byte[totalBlobSize];
 
 	std::byte* readHead = data;

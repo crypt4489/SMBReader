@@ -159,7 +159,6 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	instanceAlloc = rendInst->GetPageFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
 
-
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
@@ -284,17 +283,12 @@ void ApplicationLoop::UpdateRenderables()
 {
 	SemaphoreGuard guard(objsSema);
 
-	
-
 	for (auto& ref : renderables)
 	{
 		ref->CallUpdate();
 	}
 
-
 	x += 0.0001f;
-
-
 	auto rendInst = VKRenderer::gRenderInstance;
 
 	if (imageVisible)
@@ -307,10 +301,7 @@ void ApplicationLoop::UpdateRenderables()
 	{
 		rendInst->SetActiveComputePipeline(computeObjIndex, imageVisible);
 		what = imageVisible;
-	}
-
-		
-
+	}	
 }
 
 void ApplicationLoop::UpdateCameraMatrix()
@@ -327,12 +318,61 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 	}
 }
 
+std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
+{
+	std::vector<int> textureHandles;
+	std::vector<SMBTexture> textures;
+	int alloc = 0;
+	for (const auto& chunk : file.chunks)
+	{
+		switch (chunk.chunkType)
+		{
+		case GEO:
+			break;
+		case TEXTURE:
+			textures.emplace_back(file, chunk);
+			textureHandles.push_back(
+				mainDictionary.AllocateTextureData(
+				(char*)textures[alloc].data, 
+				textures[alloc].cumulativeSize, 
+				textures[alloc].type, 
+				textures[alloc].width, 
+				textures[alloc].height, 
+				textures[alloc].miplevels)
+			);
+			mainDictionary.textureHandles[textureHandles[alloc]] = 
+				VKRenderer::gRenderInstance->CreateImage(
+				(char*)textures[alloc].data,
+				textures[alloc].imageSizes,
+				textures[alloc].cumulativeSize,
+				textures[alloc].width,
+				textures[alloc].height,
+				textures[alloc].miplevels,
+				textures[alloc].type);
+			alloc++;
+			break;
+		case GR2:
+			break;
+		case Joints:
+			break;
+		default:
+			std::cerr << "Unprocessed chunkType\n";
+			break;
+		}
+	}
+
+	return textureHandles;
+}
+
 
 void ApplicationLoop::InitializeRuntime()
 {
 	ThreadManager::LaunchBackgroundThread(
 			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
 				this, std::placeholders::_1));
+
+	mainDictionary.textureCache = (uintptr_t)malloc(16 * MB);
+	mainDictionary.textureSize = 16 * MB;
 
 
 	VKRenderer::gRenderInstance = new RenderInstance();
@@ -479,6 +519,13 @@ void ApplicationLoop::CleanupRuntime()
 
 	VKRenderer::gRenderInstance->DestoryTexture(storageBuffer);
 
+	free((void*)mainDictionary.textureCache);
+
+	for (int i = 0; i < mainDictionary.allocationIndex; i++)
+	{
+		VKRenderer::gRenderInstance->DestoryTexture(mainDictionary.textureHandles[i]);
+	}
+
 	for (auto renderable : renderables)
 	{
 		delete renderable;
@@ -532,7 +579,11 @@ void ApplicationLoop::LoadObject(const std::string& file)
 {
 	SMBFile SMB(file);
 
-	GenericObject* obj = new GenericObject(SMB, RenderingBackend::VULKAN, 0);
+	std::vector<int> handles = LoadSMBFile(SMB);
+
+	GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0, handles);
+
+	
 
 	glm::mat4 identity = glm::identity<glm::mat4>();
 

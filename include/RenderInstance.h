@@ -219,7 +219,8 @@ public:
 
 	EntryHandle CreateImage(
 		char* imageData,
-		uint32_t* imageSizes,
+		uint32_t* sizes,
+		uint32_t blobSize,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type);
 
@@ -237,7 +238,7 @@ public:
 
 	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
 
-	size_t CreateRenderGraph(size_t datasize, size_t alignment);
+	int CreateRenderGraph(size_t datasize, size_t alignment);
 
 	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 

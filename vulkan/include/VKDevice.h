@@ -451,6 +451,7 @@ public:
 	EntryHandle CreateSampledImage(
 		char* imageData,
 		uint32_t* imageSizes,
+		uint32_t blobSize,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkFormat type,
 		EntryHandle memIndex,

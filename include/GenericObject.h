@@ -10,7 +10,7 @@
 class GenericObject
 {
 public:
-	GenericObject(const SMBFile& file, RenderingBackend be, size_t _oi);
+	GenericObject(RenderingBackend be, size_t _oi, std::vector<int>& images);
 
 	~GenericObject();
 
@@ -18,7 +18,7 @@ public:
 
 
 	EntryHandle pipelineIndex;
-	std::vector<AppTexture> textures;
+	std::vector<int> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
 	std::function<void(GenericObject*)> updateObject;

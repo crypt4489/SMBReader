@@ -18,7 +18,9 @@
 #include "GenericObject.h"
 #include "SMBFile.h"
 #include "TextManager.h"
+#include "TextureDictionary.h"
 #include "ThreadManager.h"
+
 
 class ApplicationLoop
 {
@@ -60,6 +62,8 @@ public:
 
 	void CreateGlobalStorageImage();
 
+	std::vector<int> LoadSMBFile(SMBFile& file);
+
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
 	std::queue<std::vector<std::any>> commands;
@@ -68,12 +72,13 @@ public:
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	Text* text1, * text2;
-	size_t globalBufferLocation;
+	int globalBufferLocation;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
 	EntryHandle storageBuffer;
 	int instanceAlloc;
 	std::array<glm::mat4, 64*64> instanceMatrices;
+	TextureDictionary mainDictionary;
 
 	enum DIRS {
 		RIGHT = 0,

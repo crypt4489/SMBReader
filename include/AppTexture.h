@@ -20,8 +20,8 @@ public:
 
 	AppTexture(AppTexture& other) noexcept;
 
-	AppTextureImpl* texImpl;
-	SMBTexture* smbTex;
-	EntryHandle vkImpl;
+	//AppTextureImpl* texImpl;
+	//SMBTexture* smbTex;
+	//EntryHandle vkImpl;
 };
 
