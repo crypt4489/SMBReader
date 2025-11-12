@@ -62,6 +62,10 @@ public:
 
 	void CreateGlobalStorageImage();
 
+	void CreateTexturePools();
+
+	int GetPoolIndexByFormat(ImageFormat format);
+
 	std::vector<int> LoadSMBFile(SMBFile& file);
 
 	ProgramArgs& args;

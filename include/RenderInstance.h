@@ -222,11 +222,13 @@ public:
 		uint32_t* sizes,
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type);
+		uint32_t mipLevels, ImageFormat type, int poolIndex);
 
 	EntryHandle CreateStorageImage(
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type);
+		uint32_t mipLevels, ImageFormat type, int poolIndex);
+
+	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
 	void CreateVulkanRenderer(WindowManager* window);
 
@@ -272,7 +274,6 @@ public:
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle swapChainIndex;
-	EntryHandle attachmentsIndex;
 	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
@@ -288,6 +289,9 @@ public:
 	std::array<EntryHandle, 5> colorImages{};
 	std::array<EntryHandle, 5> renderPasses{};
 
+	std::array<EntryHandle, 9> imagePools;
+	int imagePoolCounter = 0;
+
 	WindowManager *windowMan = nullptr;
 
 	uint32_t currentFrame = 0;
@@ -295,6 +299,7 @@ public:
 	bool resizeWindow = false;
 
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
+	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 

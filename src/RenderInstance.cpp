@@ -66,6 +66,9 @@ namespace API {
 		case ImageFormat::R8G8B8A8_UNORM:
 			vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
 			break;
+		case ImageFormat::B8G8R8A8:
+			vkFormat = VK_FORMAT_B8G8R8A8_SRGB;
+			break;
 		case ImageFormat::D24UNORMS8STENCIL:
 			vkFormat = VK_FORMAT_D24_UNORM_S8_UINT;
 			break;
@@ -108,6 +111,9 @@ namespace API {
 
 		case VK_FORMAT_D32_SFLOAT:
 			format = ImageFormat::D32FLOAT;
+			break;
+		case VK_FORMAT_B8G8R8A8_SRGB:
+			format = ImageFormat::B8G8R8A8;
 			break;
 
 		}
@@ -199,8 +205,9 @@ RenderInstance::~RenderInstance()
 		dev->DestroyRenderPass(renderPasses[i]);
 
 	DestroySwapChainAttachments();
-
-	dev->DestroyImagePool(attachmentsIndex);
+	
+	for (int i = 0; i<imagePoolCounter; i++)
+		dev->DestroyImagePool(imagePools[i]);
 	
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
@@ -236,7 +243,7 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t 
 		1, vkDepthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, attachmentsIndex);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imagePools[1]);
 
 	depthViews[index] = dev->CreateImageView(depthImages[index], 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
@@ -465,7 +472,7 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height, u
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, attachmentsIndex);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imagePools[0]);
 
 	colorViews[index] = dev->CreateImageView(colorImages[index], 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -818,29 +825,87 @@ EntryHandle RenderInstance::CreateImage(
 	uint32_t* sizes,
 	uint32_t blobSize,
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat type)
+	uint32_t mipLevels, ImageFormat type, int poolIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice->CreateSampledImage(
 		imageData, sizes, blobSize,
 		width, height,
 		mipLevels, API::ConvertSMBToVkFormat(type),
-		attachmentsIndex, 
+		imagePools[poolIndex],
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 EntryHandle RenderInstance::CreateStorageImage(
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat type)
+	uint32_t mipLevels, ImageFormat type, int poolIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice->CreateStorageImage(
 		width, height,
 		mipLevels, API::ConvertSMBToVkFormat(type),
-		attachmentsIndex,
+		imagePools[poolIndex],
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
 }
 
+
+int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
+	VkImageUsageFlags flags = 0;
+	switch (format)
+	{
+	case ImageFormat::DXT1:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_BC1_RGB_SRGB_BLOCK;
+		break;
+	case ImageFormat::DXT3:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_BC3_SRGB_BLOCK;
+		break;
+	case ImageFormat::R8G8B8A8:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_R8G8B8A8_SRGB;
+		break;
+	case ImageFormat::R8G8B8A8_UNORM:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+		break;
+	case ImageFormat::B8G8R8A8:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_B8G8R8A8_SRGB;
+		break;
+
+	case ImageFormat::D24UNORMS8STENCIL:
+		flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_D24_UNORM_S8_UINT;
+		break;
+	case ImageFormat::D32FLOATS8STENCIL:
+		flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_D32_SFLOAT_S8_UINT;
+		break;
+
+	case ImageFormat::D32FLOAT:
+		flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_D32_SFLOAT;
+		break;
+	default:
+		throw std::runtime_error("Incorrect depth format");
+	}
+
+	auto poolInfo = majorDevice->FindImageMemoryIndexForPool(maxWidth, maxHeight,
+		1, vkFormat, 1,
+		(attachment * flags) | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	int ret = imagePoolCounter++;
+
+	imagePools[ret] = majorDevice->CreateImageMemoryPool(size, poolInfo.first);
+
+	return ret;
+}
 
 int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount)
 {
@@ -1014,19 +1079,15 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	VkFormat swcFormat = swapChain->GetSwapChainFormat();
 
+	
+
 	depthFormat = API::ConvertVkFormatToAppFormat(depthFormatVK);
 
-	auto swcPool = majorDevice->FindImageMemoryIndexForPool(1920, 1200,
-		1, swcFormat, 1,
-		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	colorFormat = API::ConvertVkFormatToAppFormat(swcFormat);
 
-	auto depthPool = majorDevice->FindImageMemoryIndexForPool(1920, 1200,
-		1, depthFormatVK, 1,
-		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	CreateImagePool(128 * MB, colorFormat, 4096, 4096, true);
 
-	attachmentsIndex = majorDevice->CreateImageMemoryPool(512 * MB, depthPool.first);
+	CreateImagePool(128 * MB, depthFormat, 4096, 4096, true);
 	
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{

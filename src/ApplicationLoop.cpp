@@ -152,6 +152,31 @@ void ApplicationLoop::Execute()
 	}
 }
 
+#define MAX_IMAGE_DIM 1024
+
+void ApplicationLoop::CreateTexturePools()
+{
+	std::array<ImageFormat, 4> formats = {
+		ImageFormat::DXT1,
+		ImageFormat::DXT3,
+		ImageFormat::R8G8B8A8,
+		ImageFormat::R8G8B8A8_UNORM
+	};
+
+	auto rendInst = VKRenderer::gRenderInstance;
+
+	for (int i = 0; i < 4; i++)
+	{
+		mainDictionary.texturePoolsFormat[i] = formats[i];
+		mainDictionary.texturePoolsSize[i] = 128 * MB;
+		mainDictionary.texturePoolsAllocatedSize[i] = 0;
+		mainDictionary.texturePoolHandle[i] = rendInst->CreateImagePool(
+			mainDictionary.texturePoolsSize[i],
+			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, false
+		);
+	}
+}
+
 void ApplicationLoop::CreateGlobalStorageImage()
 {
 
@@ -159,7 +184,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	instanceAlloc = rendInst->GetPageFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
 
-	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM);
+	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM, GetPoolIndexByFormat(R8G8B8A8_UNORM));
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
@@ -169,9 +194,6 @@ void ApplicationLoop::CreateGlobalStorageImage()
 	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, loop->storageBuffer, 1);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 0, BEGINNING_OF_PIPE, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
-	
-
-	//rendInst->UpdateAllocation(&data, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
 
 	ShaderComputeLayout* layout = rendInst->GetComputeLayout(3);
 
@@ -318,6 +340,27 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 	}
 }
 
+int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
+{
+	int ret = 0;
+	switch (format)
+	{
+	case ImageFormat::DXT1:
+		ret = 0;
+		break;
+	case ImageFormat::DXT3:
+		ret = 1;
+		break;
+	case ImageFormat::R8G8B8A8:
+		ret = 2;
+		break;
+	case ImageFormat::R8G8B8A8_UNORM:
+		ret = 3;
+		break;
+	}
+	return ret;
+}
+
 std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 	std::vector<int> textureHandles;
@@ -348,7 +391,8 @@ std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
 				textures[alloc].width,
 				textures[alloc].height,
 				textures[alloc].miplevels,
-				textures[alloc].type);
+				textures[alloc].type,
+				GetPoolIndexByFormat(textures[alloc].type));
 			alloc++;
 			break;
 		case GR2:
@@ -410,6 +454,8 @@ void ApplicationLoop::InitializeRuntime()
 
 
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	CreateTexturePools();
 
 	CreateGlobalStorageImage();
 
