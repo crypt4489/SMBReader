@@ -190,7 +190,8 @@ RenderInstance::~RenderInstance()
 
 	for (auto& i : vulkanDescriptorLayouts)
 	{
-		dev->DestroyDescriptorLayout(i);
+		if (i != EntryHandle())
+			dev->DestroyDescriptorLayout(i);
 	}
 
 	dev->DestroyDescriptorPool(descriptorManager.deviceResourceHeap);
@@ -584,6 +585,10 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			case STORAGE_BUFFER:
 				descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
 				break;
+			case SAMPLERBINDLESS:
+				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+				descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
+				break;
 			}
 		}
 	}
@@ -676,11 +681,11 @@ void RenderInstance::CreatePipelines()
 
 	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
-	pipelinesIdentifier[MESH_INTERPOLATE] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[3], 1, vulkanShaderGraphs.shaders[4]));
+	pipelinesIdentifier[MESH_INTERPOLATE] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[4], 1, vulkanShaderGraphs.shaders[4]));
 
 	auto polyPipeline = dev->CreateComputePipelineBuilder(1, 0);
 
-	pipelinesIdentifier[POLY] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[4], 1, vulkanShaderGraphs.shaders[5]));
+	pipelinesIdentifier[POLY] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[5], 1, vulkanShaderGraphs.shaders[5]));
 
 	std::vector<EntryHandle> l(maxMSAALevels);
 	std::vector<EntryHandle> r(maxMSAALevels);
@@ -692,9 +697,9 @@ void RenderInstance::CreatePipelines()
 
 		UsePipelineBuilders(genericBuilder, textBuilder, (VkSampleCountFlagBits)(1<<i));
 
-		r[i] = genericBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[0], 2, &vulkanShaderGraphs.shaders[0], 2);
+		r[i] = genericBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[0], 3, &vulkanShaderGraphs.shaders[0], 2);
 
-		l[i] = textBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[2], 1, &vulkanShaderGraphs.shaders[2], 2);
+		l[i] = textBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[3], 1, &vulkanShaderGraphs.shaders[2], 2);
 
 	}
 
@@ -947,6 +952,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 			desc->type = resource->type;
 			desc->action = resource->action;
+			desc->arrayCount = resource->arrayCount;
 
 			offset[desc->binding] = ptr;
 
@@ -983,6 +989,12 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 					barriers->type = memBarrierType;
 					ptr += (sizeof(ImageShaderResourceBarrier));
 				}
+				break;
+			}
+			case SAMPLERBINDLESS:
+			{
+				memBarrierType = IMAGE_BARRIER;
+				ptr += sizeof(ShaderResourceSamplerBindless);
 				break;
 			}
 			case CONSTANT_BUFFER:
@@ -1039,24 +1051,36 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	maxMSAALevels += 1;
 	currentMSAALevel = maxMSAALevels - 1;
 
-	VkPhysicalDeviceFeatures features{};
-	features.geometryShader = VK_TRUE;
-	features.textureCompressionBC = VK_TRUE;
-	features.tessellationShader = VK_TRUE;
-	features.samplerAnisotropy = VK_TRUE;
-	features.multiDrawIndirect = VK_TRUE;
+	VkPhysicalDeviceVulkan12Features feature12{};
+	feature12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	feature12.descriptorBindingPartiallyBound = VK_TRUE;
+	feature12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+	feature12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
+	feature12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+	feature12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+
+	VkPhysicalDeviceFeatures2 features2{};
+	features2.pNext = &feature12;
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.features.geometryShader = VK_TRUE;
+	features2.features.textureCompressionBC = VK_TRUE;
+	features2.features.tessellationShader = VK_TRUE;
+	features2.features.samplerAnisotropy = VK_TRUE;
+	features2.features.multiDrawIndirect = VK_TRUE;
+
 
 	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
 		vkInstance->instanceLayerCount,
 		vkInstance->deviceExtensions, 
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
-		features, vkInstance->renderSurface, 
-		12 * KB, 
-		2 * KB,
-		16 * KB,
-		8 * MB,
-		10 * KB);
+		features2, vkInstance->renderSurface, 
+		64 * KB, 
+		8 * KB,
+		96 * KB,
+		12 * MB,
+		16 * KB
+	);
 
 
 
@@ -1106,6 +1130,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddStoragePoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 
+	builder.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+
 	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
 
 	CreateGlobalBuffer();
@@ -1137,22 +1163,30 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	}
 }
 
-int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment)
+int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle *textures, uint32_t texCount)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	int perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
 	int mrpDescHandle = AllocateShaderResourceSet(0, 0, MAX_FRAMES_IN_FLIGHT);
+	int texturesHandle = AllocateShaderResourceSet(0, 1, MAX_FRAMES_IN_FLIGHT);
 
 	descriptorManager.BindBufferToShaderResource(mrpDescHandle, perRenderPassStuff, REPEAT, 0);
 
+	descriptorManager.BindSampledImageArrayToShaderResource(texturesHandle, textures, texCount, 0);
+
 	EntryHandle mrpDescId = CreateShaderResourceSet(mrpDescHandle);
+	EntryHandle imageDescID = CreateShaderResourceSet(texturesHandle);
+
+	std::array<EntryHandle, 2> descIDs{};
+	descIDs[0] = mrpDescId;
+	descIDs[1] = imageDescID;
 
 	std::array<uint32_t, 1> data = { (uint32_t)allocations[perRenderPassStuff].offset };
 
-	for (uint32_t i = 0; i<maxMSAALevels; i++)
+	for (uint32_t i = 0; i < maxMSAALevels; i++)
 
-		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), (uint32_t)data.size(), mrpDescId);
+		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), (uint32_t)data.size(), descIDs.data(), 2);
 	
 
 	return perRenderPassStuff;
@@ -1218,6 +1252,13 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.size / frames, i, frames, 0);
 				else
 					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.size, i, frames, 0);
+				break;
+			}
+
+			case SAMPLERBINDLESS:
+			{
+				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)offsets[i];
+				builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, samplers->arrayCount, frames, i);
 				break;
 			}
 		}

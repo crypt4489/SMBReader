@@ -24,6 +24,7 @@ struct DescriptorPoolBuilder
 		: 
 		poolSizesSize(_pslSize),
 		counter(0),
+		flags(0),
 		poolSizes(reinterpret_cast<VkDescriptorPoolSize*>(data))
 	{
 	}
@@ -43,6 +44,7 @@ struct DescriptorPoolBuilder
 	}
 
 	VkDescriptorPoolSize* poolSizes;
+	VkDescriptorPoolCreateFlags flags;
 	size_t poolSizesSize;
 	size_t counter; 
 };
@@ -355,6 +357,10 @@ public:
 
 	EntryHandle CompileShader(char* data, VkShaderStageFlags flags);
 
+	EntryHandle CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset);
+
+	EntryHandle CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFormat format, size_t rangeSize, size_t offset);
+
 	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
 	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount);
@@ -407,7 +413,7 @@ public:
 		const char** deviceExtensions,
 		uint32_t deviceExtCount,
 		uint32_t queueFlags,
-		VkPhysicalDeviceFeatures& features,
+		VkPhysicalDeviceFeatures2& features,
 		VkSurfaceKHR renderSurface,
 		size_t perDeviceDataSize,
 		size_t perEntriesSize,
@@ -464,6 +470,8 @@ public:
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
 	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages, uint32_t renderTargetCount);
+
+	
 
 	//GETTERS
 
@@ -627,7 +635,7 @@ public:
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle perGraphDescriptor);
+	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount);
 
 	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
 	

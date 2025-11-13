@@ -26,6 +26,9 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 
 	
 	std::unique_lock lock(objectGuard);
+
+	int descI = 0;
+
 	for (size_t i = 0; i<pipelineObjCount; i++)
 	{
 
@@ -37,16 +40,27 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 
 		EntryHandle handle = objHeader->pipelineID;
 
+		
+
 		if (handle != currentPipeline)
 		{
+
+			descI = 0;
 
 			currentPipeline = handle;
 
 			
 			rbo->BindGraphicsPipeline(handle);
 			
+			
 
-			rbo->BindDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
+			while (descriptorId[descI] != EntryHandle()) {
+
+				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, (descI == 0 ? dynamicCount : 0), (descI == 0 ? dynamicOffsets : nullptr));
+				descI++;
+			}
+
+			
 		}
 
 		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
@@ -56,7 +70,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 		}
 
 		VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-		obj->Draw(rbo, frameNum, 1);
+		obj->Draw(rbo, frameNum, descI);
 	
 		
 	}
@@ -77,6 +91,9 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
 	std::unique_lock lock(objectGuard);
+
+	int descI = 0;
+
 	for (size_t i = 0; i < pipelineObjCount; i++)
 	{
 
@@ -90,17 +107,25 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
+		
+
 		if (handle != currentPipeline)
 		{
+
+			descI = 0;
 
 			currentPipeline = handle;
 
 
 			rbo->BindComputePipeline(handle);
 
-			if (descriptorId != EntryHandle())
+			
 
-				rbo->BindComputeDescriptorSets(descriptorId, frameNum, 1, 0, dynamicCount, dynamicOffsets);
+			while (descriptorId[descI] != EntryHandle()) {
+
+				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, (descI == 0 ? dynamicCount : 0), (descI == 0 ? dynamicOffsets : nullptr));
+				descI++;
+			}
 		}
 
 		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
@@ -111,7 +136,7 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 
 		VKComputePipelineObject* obj = (VKComputePipelineObject*)objHeader;
-		obj->Dispatch(rbo, frameNum, 0);
+		obj->Dispatch(rbo, frameNum, descI);
 
 	}
 
@@ -145,7 +170,7 @@ bool VKGraph::SetActive(uint32_t objIndex, bool active)
 VKGraph::VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
 	:
 	dynamicOffsetSize(dCount), pipelineObjSize(pCount),
-	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d)
+	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(5)
 {
 	uintptr_t head = (uintptr_t)data;
 	dynamicOffsets = reinterpret_cast<uint32_t*>(head);
@@ -154,4 +179,9 @@ VKGraph::VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
 	head += sizeof(EntryHandle) * pCount;
 	activeIndicators = reinterpret_cast<uint8_t*>(head);
 	memset(activeIndicators, 0, pCount);
+	head += pCount;
+	descriptorId = reinterpret_cast<EntryHandle*>(head);
+	for (int i = 0; i < 5; i++)
+		descriptorId[i] = EntryHandle();
+	
 }

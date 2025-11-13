@@ -18,7 +18,7 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 	auto rendInst = VKRenderer::gRenderInstance;
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 
-	int graphicDesc = rendInst->AllocateShaderResourceSet(0, 1, frames);
+	int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
 
 	objSpecificMemIndex[0] = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
 	int objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(m->vertexSize, alignof(glm::vec4));
@@ -28,7 +28,7 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 	objIndexMemoryIndex = rendInst->GetPageFromDeviceBuffer(m->indexSize, alignof(uint32_t));
 
 	rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, loop->instanceAlloc, DIRECT, 0);
-	rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->mainDictionary.textureHandles[textures[0]], 1);
+	//rendInst->descriptorManager.BindSampledImageToShaderResource(graphicDesc, loop->mainDictionary.textureHandles[textures[0]], 1);
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(2, 0, frames);
 

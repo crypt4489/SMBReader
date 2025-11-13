@@ -30,9 +30,13 @@ struct DescriptorSetBuilder
 
 	void AddBufferTypeDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset, VkDescriptorType type);
 
+	void AddTexelViewTypeByFrame(VkBufferView buffer, uint32_t binding, uint32_t frame);
+
 	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
 
 	void AddStorageImageDescription(VkImageView view, uint32_t binding, uint32_t frames);
+
+	void AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t arrayCount, uint32_t frames, uint32_t binding);
 
 	EntryHandle AddDescriptorsToCache();
 

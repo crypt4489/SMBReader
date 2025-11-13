@@ -85,8 +85,6 @@ void ApplicationLoop::Execute()
 
 		InitializeRuntime();
 
-		commandMap["load"]({ args.inputFile.string() });
-
 		int i = 0, j = 1;
 
 		LARGE_INTEGER startTime;
@@ -416,6 +414,7 @@ void ApplicationLoop::InitializeRuntime()
 				this, std::placeholders::_1));
 
 	mainDictionary.textureCache = (uintptr_t)malloc(16 * MB);
+	
 	mainDictionary.textureSize = 16 * MB;
 
 
@@ -443,22 +442,23 @@ void ApplicationLoop::InitializeRuntime()
 
 	//TextManager::UploadToVertexBuffer(text1);
 
+	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16);
+	CreateGlobalStorageImage();
+
+	LoadObject(args.inputFile.string());
+
+	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16, mainDictionary.textureHandles.data(), mainDictionary.allocationIndex);
 
 	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();
 
 	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
-
-
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	CreateTexturePools();
-
-	CreateGlobalStorageImage();
-
+	for (int i = 0; i < RenderInstance::MAX_FRAMES_IN_FLIGHT; i++)
+		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
 }
 
 
@@ -642,9 +642,6 @@ void ApplicationLoop::LoadObject(const std::string& file)
 	SemaphoreGuard lock(objsSema);
 
 	renderables.push_back(obj);
-
-	for (int i = 0; i < RenderInstance::MAX_FRAMES_IN_FLIGHT; i++)
-		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
 }
 
 void ApplicationLoop::LoadThreadedWrapper(const std::string file)

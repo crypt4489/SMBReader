@@ -63,6 +63,7 @@ enum ShaderResourceType
 	CONSTANT_BUFFER = 8,
 	IMAGESTORE2D = 16,
 	IMAGESTORE3D = 32,
+	SAMPLERBINDLESS = 64,
 };
 
 enum ShaderResourceAction
@@ -112,6 +113,7 @@ struct ShaderResource
 	ShaderResourceType type;
 	int set;
 	int binding;
+	int arrayCount;
 };
 
 struct ShaderMap

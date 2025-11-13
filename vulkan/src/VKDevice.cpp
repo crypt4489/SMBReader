@@ -329,6 +329,59 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 
 	return ret;
 }
+struct TexelBufferView
+{
+	EntryHandle bufferHandle;
+	EntryHandle viewHandle;
+};
+
+EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset)
+{
+	VkBufferView view;
+	VkBuffer buffer = GetBufferHandle(bufferHandle);
+	VkBufferViewCreateInfo info{};
+	info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
+	info.buffer = buffer;
+	info.offset = offset;
+	info.range = rangeSize;
+	info.format = format;
+
+	if (vkCreateBufferView(device, &info, nullptr, &view) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create buffer view!");
+	}
+
+	EntryHandle poolIndex = AddVkTypeToEntry(view);
+
+	return poolIndex;
+}
+
+EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFormat format, size_t rangeSize, size_t offset)
+{
+	ImageMemoryPool* pool = reinterpret_cast<ImageMemoryPool*>(GetVkTypeFromEntry(poolIndex));
+
+	VkBuffer buffer;
+
+	VkBufferCreateInfo bufferInfo{};
+	bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size = rangeSize;
+	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+
+	if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create buffer!");
+	}
+
+	EntryHandle buffHandle = AddVkTypeToEntry(buffer);
+
+	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, 0);
+
+	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
+
+	viewData->bufferHandle = buffHandle;
+	viewData->viewHandle = viewHandle;
+
+	return AddVkTypeToEntry(viewData);
+}
 
 EntryHandle VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 {
@@ -353,7 +406,7 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex& queueIndex)
 EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount)
 {
 	std::shared_lock lock(deviceLock);
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * dynamicCount) + (sizeof(EntryHandle) * maxPipelineCount) + (sizeof(uint8_t) * maxPipelineCount));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * dynamicCount) + (sizeof(EntryHandle) * maxPipelineCount) + (sizeof(uint8_t) * maxPipelineCount) + (sizeof(EntryHandle)*5));
 	auto graph = reinterpret_cast<VKComputeGraph*>(AllocFromPerDeviceData(sizeof(VKComputeGraph)));
 
 	graph = std::construct_at(graph, alloc, dynamicCount, maxPipelineCount, this);
@@ -374,6 +427,7 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32
 	poolInfo.poolSizeCount = poolSizeCount;
 	poolInfo.pPoolSizes = builder.poolSizes;
 	poolInfo.maxSets = maxSets;
+	poolInfo.flags = builder.flags;
 
 	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create descriptor pool!");
@@ -758,7 +812,7 @@ void VKDevice::CreateLogicalDevice(
 	const char** deviceExtensions,
 	uint32_t deviceExtCount,
 	uint32_t queueFlags,
-	VkPhysicalDeviceFeatures& features,
+	VkPhysicalDeviceFeatures2& features,
 	VkSurfaceKHR renderSurface,
 	size_t perDeviceDataSize,
 	size_t perEntriesSize,
@@ -837,7 +891,7 @@ void VKDevice::CreateLogicalDevice(
 	logDeviceInfo.enabledLayerCount = layerCount;
 	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions;
 	logDeviceInfo.ppEnabledLayerNames = instanceLayers;
-	logDeviceInfo.pEnabledFeatures = &features;
+	logDeviceInfo.pNext = &features;
 
 	auto callbacks = (*deviceAllocator)();
 
@@ -1027,7 +1081,7 @@ void VKDevice::CreateRenderGraph(EntryHandle renderPass)
 
 	auto renderPassData = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(renderPass));
 
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * (MAX_PIPELINE_OBJECTS+5)) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
 
 	auto graph = std::construct_at(&renderPassData->graph, renderPass, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 }
@@ -1071,7 +1125,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount * 2);
 	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
 	
-	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * MAX_PIPELINE_OBJECTS) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
+	auto alloc = AllocFromPerDeviceData((sizeof(uint32_t) * MAX_DYNAMIC_OFFSETS) + (sizeof(EntryHandle) * (MAX_PIPELINE_OBJECTS+5)) + (sizeof(uint8_t) * MAX_PIPELINE_OBJECTS));
 
 	auto graph = std::construct_at(&(renderPassDataHandle->graph), ret, alloc, MAX_DYNAMIC_OFFSETS, MAX_PIPELINE_OBJECTS, this);
 
@@ -2143,14 +2197,15 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 }
 
 
-void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle perGraphDescriptor)
+void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle *perGraphDescriptor, uint32_t descriptorCount)
 {
 //	std::shared_lock lock(deviceLock);
 
 	auto graph = GetRenderGraph(renderPass);
-
-	graph->descriptorId = perGraphDescriptor;
-	
+	for (uint32_t i = 0; i < descriptorCount; i++)
+	{
+		graph->descriptorId[i] = perGraphDescriptor[i];
+	}
 	for (uint32_t i = 0; i<dos; i++)
 	{
 		graph->AddDynamicOffset(dynamicOffsets[i]);

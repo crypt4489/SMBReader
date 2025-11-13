@@ -240,7 +240,7 @@ public:
 
 	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
 
-	int CreateRenderGraph(size_t datasize, size_t alignment);
+	int CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle* textures, uint32_t texCount);
 
 	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 
@@ -289,7 +289,7 @@ public:
 	std::array<EntryHandle, 5> colorImages{};
 	std::array<EntryHandle, 5> renderPasses{};
 
-	std::array<EntryHandle, 9> imagePools;
+	std::array<EntryHandle, 9> imagePools{};
 	int imagePoolCounter = 0;
 
 	WindowManager *windowMan = nullptr;
@@ -303,17 +303,17 @@ public:
 
 	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
-	ShaderGraphsHolder<4, 6> vulkanShaderGraphs;
+	ShaderGraphsHolder<4, 6> vulkanShaderGraphs{};
 	
-	ShaderResourceManager<50> descriptorManager;
+	ShaderResourceManager<50> descriptorManager{};
 
-	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier;
-	std::array<EntryHandle, 5> vulkanDescriptorLayouts;
-	std::array<ShaderDetails*, 6> shaderDetails;
-	std::array<char, 2 * KB> shaderDetailsData;
+	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier{};
+	std::array<EntryHandle, 10> vulkanDescriptorLayouts{};
+	std::array<ShaderDetails*, 6> shaderDetails{};
+	std::array<char, 2 * KB> shaderDetailsData{};
 	int shaderDetailAlloc = 0;
 
-	RenderAllocationHolder<50> allocations;
+	RenderAllocationHolder<50> allocations{};
 
 	int width = 0; 
 	int height = 0;

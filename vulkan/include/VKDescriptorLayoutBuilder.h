@@ -7,6 +7,7 @@ struct DescriptorSetLayoutBuilder
 {
 	DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc);
 	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout();
+
 	void AddPixelImageSamplerLayout(uint32_t binding, VkShaderStageFlags flags);
 
 	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
@@ -19,10 +20,16 @@ struct DescriptorSetLayoutBuilder
 
 	void AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags);
 
+	void AddTexelBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+
+	void AddBindlessSamplersLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
+
 	VkDescriptorSetLayoutBinding* descSetBindings;
+	VkDescriptorBindingFlags* flags;
+
+	VkDescriptorSetLayoutCreateFlags layoutFlags;
 
 	VKDevice *device;
 	uint32_t bindingCounts;
-	uint32_t counter;
 };
 

@@ -25,11 +25,18 @@ struct ShaderResourceHeader
 	ShaderResourceType type;
 	ShaderResourceAction action;
 	int binding;
+	uint32_t arrayCount;
 };
 
 struct ShaderResourceImage : public ShaderResourceHeader
 {
 	EntryHandle textureHandle;
+};
+
+struct ShaderResourceSamplerBindless : public ShaderResourceHeader
+{
+	EntryHandle *textureHandles;
+	uint32_t textureCount;
 };
 
 struct ShaderResourceBuffer : public ShaderResourceHeader
@@ -108,6 +115,21 @@ struct ShaderResourceManager
 			return;
 
 		header->textureHandle = index;
+	}
+
+	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle *indices, uint32_t texCount, int bindingIndex)
+	{
+		uintptr_t head = descriptorSets[descriptorSet];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+		ShaderResourceSamplerBindless* header = (ShaderResourceSamplerBindless*)offsets[bindingIndex];
+
+		if (header->type != SAMPLERBINDLESS)
+			return;
+
+		header->textureHandles = indices;
+		header->textureCount = texCount;
 	}
 
 	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
@@ -268,6 +290,7 @@ struct ShaderGraphReader
 		ShaderStageType shaderstage;
 		ShaderResourceType resourceType;
 		ShaderResourceAction resourceAction;
+		int arrayCount;
 	};
 
 	struct ShaderResourceSetXMLTag : ShaderXMLTag

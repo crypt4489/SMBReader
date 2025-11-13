@@ -194,7 +194,7 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 					
 					resource->action = tag->resourceAction;
 					resource->type = tag->resourceType;
-					
+					resource->arrayCount = tag->arrayCount;
 					resource->set = i;
 					setLay->bindingCount++;
 				}
@@ -454,13 +454,28 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 	int ret = 0;
 	char c = data[ret];
 
-	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN)
+	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation+ret) < size)
 	{
 		ret += ReadAttributeName(fileData, currentLocation + ret, &hashes[count]);
-		if (valType == 0)
-			ret += ReadAttributeValueHash(fileData, currentLocation + ret, &hashes[count+1]);
-		else if (valType == 1)
-			ret += ReadAttributeValueVal(fileData, currentLocation + ret, &hashes[count+1]);
+	
+		switch (hashes[count])
+		{
+		case hash("type"):
+		case hash("used"):
+		case hash("rw"):
+		{
+			ret += ReadAttributeValueHash(fileData, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		case hash("count"):
+		case hash("x"):
+		case hash("y"):
+		case hash("z"):
+		{
+			ret += ReadAttributeValueVal(fileData, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		}
 		c = data[ret];
 		count += 2;
 	}
@@ -553,6 +568,8 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 
 	tag->hashCode = hash("ShaderResourceItem");
 
+	tag->arrayCount = 1;
+
 	int stackIter = 0;
 
 	while (size > stackIter)
@@ -581,6 +598,9 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 			case hash("constantbuffer"):
 				tag->resourceType = ShaderResourceType::CONSTANT_BUFFER;
 				tag->resourceAction = ShaderResourceAction::SHADERREAD;
+				break;
+			case hash("samplerBindless"):
+				tag->resourceType = ShaderResourceType::SAMPLERBINDLESS;
 				break;
 			default:
 				throw std::runtime_error("Failed Resource Type");
@@ -624,6 +644,11 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 				throw std::runtime_error("Failed Action Type");
 			}
 
+			break;
+		}
+		case hash("count"):
+		{
+			tag->arrayCount = codeV;
 			break;
 		}
 		}

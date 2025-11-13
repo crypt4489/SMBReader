@@ -2,7 +2,7 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
-#include <mutex>
+#include <shared_mutex>
 
 
 struct VKGraph {
@@ -25,11 +25,12 @@ struct VKGraph {
 
 	EntryHandle currentPipeline;
 
-	EntryHandle descriptorId;
+	EntryHandle *descriptorId;
+	uint32_t descriptorCount;
 
 	uint32_t* dynamicOffsets;
 
-	std::mutex objectGuard;
+	std::shared_mutex objectGuard;
 
 	EntryHandle* objects;
 
