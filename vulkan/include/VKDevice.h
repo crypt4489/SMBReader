@@ -345,6 +345,56 @@ public:
 	std::mutex bitwiseMutex;
 };
 
+struct ShaderHandle
+{
+	VkShaderModule sMod;
+	VkShaderStageFlags flags;
+};
+
+struct DeviceAllocator
+{
+	uintptr_t memHead;
+	std::atomic<size_t> writeHead;
+	size_t size;
+
+	DeviceAllocator() {
+		writeHead = 0;
+		size = 0;
+		memHead = 0;
+	}
+
+	void* Alloc(size_t inSize)
+	{
+		size_t val, desired, out;
+		val = writeHead.load(std::memory_order_relaxed);
+		do {
+			desired = val + inSize;
+			out = val;
+		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
+			std::memory_order_relaxed));
+
+		return reinterpret_cast<void*>(memHead + out);
+	}
+
+	void* AllocWrapAround(size_t inSize)
+	{
+		size_t val, desired, out;
+		val = writeHead.load(std::memory_order_relaxed);
+		do {
+			desired = val + inSize;
+			out = val;
+			if (desired >= size)
+			{
+				desired = 0;
+				out = 0;
+			}
+
+		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
+			std::memory_order_relaxed));
+
+		return reinterpret_cast<void*>(memHead + out);
+	}
+};
 
 
 class VKDevice
@@ -363,7 +413,7 @@ public:
 
 	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
 
-	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount);
+	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount);
 
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
 
@@ -440,7 +490,7 @@ public:
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
-	void CreateRenderGraph(EntryHandle renderPass);
+	EntryHandle CreateRenderGraph(EntryHandle renderTarget, uint32_t descriptorCount);
 
 	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 
@@ -545,7 +595,7 @@ public:
 
 	VkSemaphore GetSemaphore(EntryHandle index);
 
-	std::pair<VkShaderModule, VkShaderStageFlagBits> GetShader(EntryHandle shaderHandle);
+	ShaderHandle* GetShader(EntryHandle shaderHandle);
 
 	VKSwapChain* GetSwapChain(EntryHandle index);
 
@@ -653,17 +703,12 @@ public:
 
 	mutable std::shared_mutex deviceLock;
 
+	DeviceAllocator deviceDataAlloc;
+	DeviceAllocator deviceCacheAlloc;
+
 	uintptr_t* entries;
 	std::atomic<size_t> indexForEntries = 0;
 	size_t numberOfEntries = 0;
-
-	void* perDeviceData;
-	std::atomic<size_t> perDeviceOffset;
-	size_t perDeviceSize;
-
-	void* deviceCache;
-	std::atomic<size_t> deviceCacheWrite;
-	size_t deviceCacheSize;
 
 	VKDriverAllocator *deviceAllocator;
 };

@@ -43,7 +43,6 @@ void TextManager::CreatePipelineObject()
 		//.pipelinename = TEXT,
 		.descriptorsetid = descHandle,
 		.maxDynCap = 0,
-		.data = nullptr
 	};
 	
 	//obj = new VKGraphicsPipelineObject(&create);

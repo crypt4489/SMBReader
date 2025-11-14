@@ -285,6 +285,8 @@ int RenderInstance::RecreateSwapChain() {
 
 		DestroySwapChainAttachments();
 
+
+
 		CreateSwapChain(width, height, true);
 
 		for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -398,12 +400,14 @@ void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
 	rbo.EndRecordingCommand();
 }
 
+
 uint32_t RenderInstance::BeginFrame()
 {
+	
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	if (resizeWindow) {
-		
 		int ret = RecreateSwapChain(); 
 		if (ret) resizeWindow = false;
 		currentFrame = 0;
@@ -493,6 +497,7 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 	if (recreate)
 	{
 		swapChain->ResetSwapChain();
+		swapChain->CreateSyncObject();
 		swapChain->RecreateSwapChain(width, height);
 	}
 	else
@@ -501,7 +506,9 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 		for (uint32_t i = 0; i < maxMSAALevels; i++)
 		{
 			swapChain->CreateRenderTarget(i, renderPasses[i]);
-			swapchainRenderTargets[i] = swapChain->renderTargetIndex[i];
+			
+			swapchainRenderTargets[i] = dev->CreateRenderGraph(swapChain->renderTargetIndex[i], 2);
+			
 		}
 	}
 	
@@ -1138,7 +1145,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreatePipelines();
 
-	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5);
+	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
 
 	auto drawingCallback = [this](EntryHandle cbIndex, uint32_t iIndex)
 		{
@@ -1157,15 +1164,30 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		}
 		ref.outputImageIndex = i;
 		ref.drawingFunction = drawingCallback;
+	}
+}
+
+void RenderInstance::LaunchRecording()
+{
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+	
+		auto& ref = threadedRecordBuffers[i];
+	
 		ThreadManager::LaunchBackgroundThread(
 			std::bind(std::mem_fn(&ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>::DrawLoop),
 				&ref, std::placeholders::_1));
 	}
 }
 
+
 int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle *textures, uint32_t texCount)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	VKSwapChain* swc = majorDevice->GetSwapChain(swapChainIndex);
+
+	
 
 	int perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
 	int mrpDescHandle = AllocateShaderResourceSet(0, 0, MAX_FRAMES_IN_FLIGHT);
@@ -1284,7 +1306,6 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.pipelinename = EntryHandle(),
 			.descriptorsetid = descHandle,
 			.maxDynCap = info->maxDynCap,
-			.data = nullptr,
 			.indexBufferHandle = allocations[info->indexBufferHandle].memIndex,
 			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
 			.indexCount = info->indexCount,
@@ -1357,7 +1378,6 @@ uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPi
 		.descriptorId = descHandle,
 		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
 		.maxDynCap = info->maxDynCap,
-		.data = nullptr,
 		.barrierCount = info->barrierCount,
 		.pushRangeCount = info->pushRangeCount
 	};

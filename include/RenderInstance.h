@@ -270,6 +270,8 @@ public:
 
 	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
 
+	void LaunchRecording();
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;

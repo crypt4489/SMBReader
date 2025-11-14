@@ -292,6 +292,7 @@ void VKSwapChain::ResetSwapChain()
 	for (uint32_t i = 0; i < renderTargetCount; i++)
 		device->ResetRenderTarget(renderTargetIndex[i]);
 
+	DestroySyncObject();
 }
 
 void VKSwapChain::DestroySwapChain()

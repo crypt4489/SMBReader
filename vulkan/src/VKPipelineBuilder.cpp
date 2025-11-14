@@ -155,8 +155,8 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 	VkPipelineLayout pipelineLayout = CreatePipelineLayout(layouts, descriptorSetCount);
 
 
-	std::pair<VkShaderModule, VkShaderStageFlagBits>* shaders = reinterpret_cast<std::pair<VkShaderModule, VkShaderStageFlagBits>*>(
-		majorDev->AllocFromDeviceCache(sizeof(std::pair<VkShaderModule, VkShaderStageFlagBits>) * shaderCount));
+	ShaderHandle** shaders = reinterpret_cast<ShaderHandle**>(
+		majorDev->AllocFromDeviceCache(sizeof(ShaderHandle*) * shaderCount));
 
 	for (std::size_t i = 0; i < shaderCount; i++)
 	{
@@ -167,7 +167,7 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 
 	for (int i = 0; i < shaderCount; i++)
 	{
-		shaderInfos[i] = AddShader(shaders[i].first, shaders[i].second);
+		shaderInfos[i] = AddShader(shaders[i]->sMod, shaders[i]->flags);
 	}
 
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -227,10 +227,10 @@ EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descrip
 
 	VkPipelineLayout pipelineLayout = CreatePipelineLayout(layouts, descriptorSetCount);
 	
-	std::pair<VkShaderModule, VkShaderStageFlagBits> shader = majorDev->GetShader(shaderHandles);
+	ShaderHandle* shader = majorDev->GetShader(shaderHandles);
 
 	
-	pipelineInfo.stage = AddShader(shader.first, shader.second);
+	pipelineInfo.stage = AddShader(shader->sMod, shader->flags);
 	
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	pipelineInfo.layout = pipelineLayout;
@@ -269,10 +269,10 @@ VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* 
 	return pipelineLayout;
 }
 
-VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags) {
+VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlags flags) {
 	VkPipelineShaderStageCreateInfo shaderStageInfo{};
 	shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStageInfo.stage = flags;
+	shaderStageInfo.stage = (VkShaderStageFlagBits)flags;
 	shaderStageInfo.module = mod;
 	shaderStageInfo.pName = "main";
 	return shaderStageInfo;

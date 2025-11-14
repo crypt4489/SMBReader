@@ -25,7 +25,7 @@ public:
 
 	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
 
-	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlagBits flags);
+	VkPipelineShaderStageCreateInfo AddShader(VkShaderModule& mod, VkShaderStageFlags flags);
 
 	void AddPushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stage, uint32_t rangeLocation);
 };

@@ -6,24 +6,25 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount)
+VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid, EntryHandle _dsid, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount)
 	: 
 	pipelineID(_pid), descriptorSetId(_dsid), 
-	objectData(data), maxObjectCapacity(moc), 
+	maxObjectCapacity(moc), 
 	objectCount(0U), type(_type), 
 	pushConstantCount(pcrCount), memBarrierCapacity(memBarrierCount),
 	memBarrierCounter(0)
 
 {
-	pushArgs = reinterpret_cast<PushConstantArguments*>(objectData + moc);
-	infos = reinterpret_cast<VkBarrierInfo*>(pushArgs + pushConstantCount);
+	objectData = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * moc));
+	pushArgs = reinterpret_cast<PushConstantArguments*>(allocator->Alloc(sizeof(PushConstantArguments) * pushConstantCount));
+	infos = reinterpret_cast<VkBarrierInfo*>(allocator->Alloc(sizeof(VkBarrierInfo) * memBarrierCount));
 }
 
 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
-	VKGraphicsPipelineObjectCreateInfo* createinfo)
+	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceAllocator* allocator)
 	:
-	VKPipelineObject(createinfo->pipelinename, createinfo->descriptorsetid, createinfo->data, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount, 0),
+	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount, 0),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
@@ -92,9 +93,9 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 	objectData[objectCount++] = _dynamicOffset;
 }
 
-VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
+VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceAllocator* allocator)
 	: 
-	VKPipelineObject(info->pipelineId, info->descriptorId, info->data,info->maxDynCap, COMPUTEPO, info->pushRangeCount, info->barrierCount),
+	VKPipelineObject(allocator, info->pipelineId, info->descriptorId, info->maxDynCap, COMPUTEPO, info->pushRangeCount, info->barrierCount),
 	x(info->x),
 	y(info->y),
 	z(info->z)

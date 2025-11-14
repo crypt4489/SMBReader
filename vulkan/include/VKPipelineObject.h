@@ -14,7 +14,6 @@ struct VKComputePipelineObjectCreateInfo
 	EntryHandle descriptorId;
 	EntryHandle pipelineId;
 	uint32_t maxDynCap;
-	uint32_t* data;
 	uint32_t barrierCount;
 	uint32_t pushRangeCount;
 };
@@ -30,7 +29,6 @@ struct VKGraphicsPipelineObjectCreateInfo
 	EntryHandle pipelinename;
 	EntryHandle descriptorsetid;
 	uint32_t maxDynCap;
-	uint32_t* data;
 	EntryHandle indexBufferHandle;
 	uint32_t indexBufferOffset;
 	uint32_t indexCount;
@@ -94,7 +92,7 @@ struct VKPipelineObject
 	uint32_t memBarrierCounter;
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(EntryHandle _pid, EntryHandle _dsid, uint32_t* data, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount);
+	VKPipelineObject(DeviceAllocator* alloc, EntryHandle _pid, EntryHandle _dsid, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount);
 
 	~VKPipelineObject() = default;
 
@@ -123,7 +121,7 @@ struct VKPipelineObject
 struct VKGraphicsPipelineObject : public VKPipelineObject
 {
 	VKGraphicsPipelineObject() = delete;
-	VKGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo *createinfo);
+	VKGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo *createinfo, DeviceAllocator* alloc);
 
 	~VKGraphicsPipelineObject() = default;
 
@@ -151,7 +149,7 @@ struct VKComputePipelineObject : public VKPipelineObject
 
 	VKComputePipelineObject() = delete;
 	~VKComputePipelineObject() = default;
-	VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
+	VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceAllocator* alloc);
 
 	void Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 

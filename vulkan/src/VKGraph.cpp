@@ -4,9 +4,9 @@
 #include "VKDevice.h"
 #include "VKPipelineObject.h"
 
-VKRenderGraph::VKRenderGraph(EntryHandle _renderTargetIndex, void *data, size_t dCount, size_t pCount, VKDevice *_d) 
+VKRenderGraph::VKRenderGraph(EntryHandle _renderTargetIndex, DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
 	:
-	VKGraph(data, dCount, pCount, _d),
+	VKGraph(allocator, dCount, descCount, pCount, _d),
 	renderTargetIndex(_renderTargetIndex)
 {
 	
@@ -24,10 +24,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 
 	rbo->SetScissorCommand(0, 0, rect->width, rect->height);
 
-	
 	std::unique_lock lock(objectGuard);
-
-	int descI = 0;
 
 	for (size_t i = 0; i<pipelineObjCount; i++)
 	{
@@ -44,23 +41,14 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 
 		if (handle != currentPipeline)
 		{
-
-			descI = 0;
-
 			currentPipeline = handle;
 
-			
 			rbo->BindGraphicsPipeline(handle);
 			
-			
-
-			while (descriptorId[descI] != EntryHandle()) {
-
+			for (int descI = 0; i < descriptorCount; i++) {
 				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, (descI == 0 ? dynamicCount : 0), (descI == 0 ? dynamicOffsets : nullptr));
 				descI++;
 			}
-
-			
 		}
 
 		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
@@ -70,9 +58,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 		}
 
 		VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-		obj->Draw(rbo, frameNum, descI);
-	
-		
+		obj->Draw(rbo, frameNum, descriptorCount);
 	}
 
 	rbo->EndRenderPassCommand();
@@ -80,9 +66,9 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 	currentPipeline = EntryHandle();
 }
 
-VKComputeGraph::VKComputeGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
+VKComputeGraph::VKComputeGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
 	: 
-	VKGraph(data, dCount, pCount, _d)
+	VKGraph(allocator, dCount, descCount, pCount, _d)
 {
 
 }
@@ -92,14 +78,9 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
 	std::unique_lock lock(objectGuard);
 
-	int descI = 0;
-
 	for (size_t i = 0; i < pipelineObjCount; i++)
 	{
-
 		EntryHandle objIndex = objects[i];
-
-	
 
 		if (!activeIndicators[i]) continue;
 
@@ -107,22 +88,13 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
-		
-
 		if (handle != currentPipeline)
 		{
-
-			descI = 0;
-
 			currentPipeline = handle;
-
 
 			rbo->BindComputePipeline(handle);
 
-			
-
-			while (descriptorId[descI] != EntryHandle()) {
-
+			for (int descI = 0; i<descriptorCount; i++) {
 				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, (descI == 0 ? dynamicCount : 0), (descI == 0 ? dynamicOffsets : nullptr));
 				descI++;
 			}
@@ -134,9 +106,8 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
 		}
 
-
 		VKComputePipelineObject* obj = (VKComputePipelineObject*)objHeader;
-		obj->Dispatch(rbo, frameNum, descI);
+		obj->Dispatch(rbo, frameNum, descriptorCount);
 
 	}
 
@@ -167,21 +138,15 @@ bool VKGraph::SetActive(uint32_t objIndex, bool active)
 	return ret;
 }
 
-VKGraph::VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d)
+VKGraph::VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
 	:
 	dynamicOffsetSize(dCount), pipelineObjSize(pCount),
-	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(5)
+	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(descCount)
 {
-	uintptr_t head = (uintptr_t)data;
-	dynamicOffsets = reinterpret_cast<uint32_t*>(head);
-	head += sizeof(uint32_t) * dCount;
-	objects = reinterpret_cast<EntryHandle*>(head);
-	head += sizeof(EntryHandle) * pCount;
-	activeIndicators = reinterpret_cast<uint8_t*>(head);
+	dynamicOffsets = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * dCount));
+	objects = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pCount));
+	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pCount));
 	memset(activeIndicators, 0, pCount);
-	head += pCount;
-	descriptorId = reinterpret_cast<EntryHandle*>(head);
-	for (int i = 0; i < 5; i++)
-		descriptorId[i] = EntryHandle();
-	
+	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
+	for (int i = 0; i < descCount; i++) descriptorId[i] = EntryHandle();
 }

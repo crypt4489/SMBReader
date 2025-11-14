@@ -23,3 +23,4 @@ class VKGraphicsPipelineBuilder;
 class VKComputePipelineBuilder;
 struct VKDriverAllocator;
 struct VKComputeGraph;
+struct DeviceAllocator;

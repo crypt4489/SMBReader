@@ -450,6 +450,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16, mainDictionary.textureHandles.data(), mainDictionary.allocationIndex);
 
+	
+
+	
 	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();
@@ -457,8 +460,7 @@ void ApplicationLoop::InitializeRuntime()
 	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	for (int i = 0; i < RenderInstance::MAX_FRAMES_IN_FLIGHT; i++)
-		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
+	VKRenderer::gRenderInstance->LaunchRecording();
 }
 
 

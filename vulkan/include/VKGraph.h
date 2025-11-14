@@ -15,7 +15,7 @@ struct VKGraph {
 	
 	VKGraph& operator=(VKGraph&& other) = delete;
 
-	VKGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d);
+	VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
 
 	uint32_t AddObject(EntryHandle obj);
 
@@ -54,7 +54,7 @@ public:
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(EntryHandle _renderTargetIndex, void* data, size_t dCount, size_t pCount, VKDevice* _d);
+	VKRenderGraph(EntryHandle _renderTargetIndex, DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
 
 	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkExtent2D* rect);
 	
@@ -74,7 +74,7 @@ struct VKComputeGraph : public VKGraph
 
 	VKComputeGraph& operator=(VKComputeGraph&& other) = delete;
 
-	VKComputeGraph(void* data, size_t dCount, size_t pCount, VKDevice* _d);
+	VKComputeGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
 
 	void DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum);
 
