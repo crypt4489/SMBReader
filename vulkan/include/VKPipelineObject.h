@@ -11,7 +11,9 @@ struct VKComputePipelineObjectCreateInfo
 	uint32_t x;
 	uint32_t y;
 	uint32_t z;
-	EntryHandle descriptorId;
+	uint32_t descCount;
+	EntryHandle* descriptorId;
+	uint32_t* dynamicPerSet;
 	EntryHandle pipelineId;
 	uint32_t maxDynCap;
 	uint32_t barrierCount;
@@ -20,14 +22,15 @@ struct VKComputePipelineObjectCreateInfo
 
 struct VKGraphicsPipelineObjectCreateInfo
 {
-	uint32_t drawType;
 	EntryHandle vertexBufferIndex;
 	uint32_t vertexBufferOffset;
 	uint32_t vertexCount;
 	EntryHandle indirectDrawBuffer;
 	uint32_t indirectDrawOffset;
 	EntryHandle pipelinename;
-	EntryHandle descriptorsetid;
+	uint32_t descCount;
+	EntryHandle* descriptorsetid;
+	uint32_t* dynamicPerSet;
 	uint32_t maxDynCap;
 	EntryHandle indexBufferHandle;
 	uint32_t indexBufferOffset;
@@ -77,12 +80,13 @@ struct VkBarrierInfo
 
 struct VKPipelineObject
 {
-	uint32_t type;
 	uint32_t* objectData;
 	uint32_t maxObjectCapacity, objectCount;
 
 	EntryHandle pipelineID;
-	EntryHandle descriptorSetId;
+	EntryHandle* descriptorSetId;
+	uint32_t descriptorCount;
+	uint32_t* dynamicPerSet;
 
 	uint32_t pushConstantCount;
 	PushConstantArguments* pushArgs;
@@ -92,7 +96,7 @@ struct VKPipelineObject
 	uint32_t memBarrierCounter;
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(DeviceAllocator* alloc, EntryHandle _pid, EntryHandle _dsid, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount);
+	VKPipelineObject(DeviceAllocator* alloc, EntryHandle _pid, EntryHandle* _dsid, uint32_t* dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount);
 
 	~VKPipelineObject() = default;
 
@@ -134,7 +138,6 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 		uint32_t firstSet);
 
 	EntryHandle vertexBufferIndex, indirectBufferIndex, indexBufferHandle;
-	uint32_t drawType;
 
 	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
 	std::size_t vertexCount, indexCount;

@@ -148,5 +148,5 @@ VKGraph::VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, si
 	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pCount));
 	memset(activeIndicators, 0, pCount);
 	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
-	for (int i = 0; i < descCount; i++) descriptorId[i] = EntryHandle();
+	for (size_t i = 0; i < descCount; i++) descriptorId[i] = EntryHandle();
 }

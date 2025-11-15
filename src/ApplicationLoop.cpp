@@ -195,20 +195,25 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	ShaderComputeLayout* layout = rendInst->GetComputeLayout(3);
 
+	std::array computeDescriptors = { computeDesc };
+
 	ComputeIntermediaryPipelineInfo create2 = {
 			.x = 512 / layout->x,
 			.y = 512 / layout->y,
 			.z = 1,
 			.maxDynCap = 1,
 			.pipelinename = POLY,
-			.descriptorsetid = computeDesc,
+			.descCount = 1,
+			.descriptorsetid = computeDescriptors.data(),
 			.barrierCount = 2,
 			.pushRangeCount = 0
 	};
 
 	std::array arr = { computeMemory };
 
-	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data());
+	uint32_t offsetsPerCount = 2;
+
+	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data(), &offsetsPerCount);
 
 
 	float offsetX = 4 * -15.0f;

@@ -6,31 +6,37 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid, EntryHandle _dsid, uint32_t moc, PipelineObjectType _type, uint32_t pcrCount, uint32_t memBarrierCount)
+VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid, EntryHandle* _dsid, uint32_t *_dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount)
 	: 
-	pipelineID(_pid), descriptorSetId(_dsid), 
+	pipelineID(_pid),
 	maxObjectCapacity(moc), 
-	objectCount(0U), type(_type), 
+	objectCount(0U), 
 	pushConstantCount(pcrCount), memBarrierCapacity(memBarrierCount),
-	memBarrierCounter(0)
+	memBarrierCounter(0), descriptorCount(descCount)
 
 {
 	objectData = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * moc));
 	pushArgs = reinterpret_cast<PushConstantArguments*>(allocator->Alloc(sizeof(PushConstantArguments) * pushConstantCount));
 	infos = reinterpret_cast<VkBarrierInfo*>(allocator->Alloc(sizeof(VkBarrierInfo) * memBarrierCount));
+	descriptorSetId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
+	dynamicPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
+	for (uint32_t i = 0; i < descCount; i++) {
+		descriptorSetId[i] = _dsid[i];
+		dynamicPerSet[i] = 0;
+		
+	}
 }
 
 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceAllocator* allocator)
 	:
-	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->maxDynCap, GRAPHICSPO, createinfo->pushRangeCount, 0),
+	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
 	indirectBufferIndex(createinfo->indirectDrawBuffer),
 	indirectBufferOffset(createinfo->indirectDrawOffset),
-	drawType(createinfo->drawType),
 	indexBufferHandle(createinfo->indexBufferHandle),
 	indexBufferOffset(createinfo->indexBufferOffset),
 	indexCount(createinfo->indexCount),
@@ -44,9 +50,9 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 {
 	uint32_t drawSize = static_cast<uint32_t>(vertexCount);
 
-	if (EntryHandle() != descriptorSetId) {
-
-		rbo->BindDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
+	for (uint32_t i = 0; i < descriptorCount; i++)
+	{
+		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
 	}
 
 	if (vertexBufferIndex != ~0ui64)
@@ -70,14 +76,10 @@ void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
 	uint32_t frame,
 	uint32_t firstSet)
 {
-	
-	
-
-	if (EntryHandle() != descriptorSetId) {
-
-		rbo->BindDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
+	for (uint32_t i = 0; i < descriptorCount; i++)
+	{
+		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
 	}
-		
 
 	if (vertexBufferIndex != ~0ui64)
 	{
@@ -95,7 +97,7 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 
 VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceAllocator* allocator)
 	: 
-	VKPipelineObject(allocator, info->pipelineId, info->descriptorId, info->maxDynCap, COMPUTEPO, info->pushRangeCount, info->barrierCount),
+	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount),
 	x(info->x),
 	y(info->y),
 	z(info->z)
@@ -184,11 +186,10 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 
 void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)
 {
-	if (EntryHandle() != descriptorSetId) {
-
-		rbo->BindComputeDescriptorSets(descriptorSetId, frame, 1, firstSet, objectCount, objectData);
+	for (uint32_t i = 0; i < descriptorCount; i++)
+	{
+		rbo->BindComputeDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
 	}
-
 	
 	CreatePipelineBarriers(rbo, BEFORE);
 

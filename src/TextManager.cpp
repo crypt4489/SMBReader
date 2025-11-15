@@ -34,14 +34,14 @@ void TextManager::CreatePipelineObject()
 	//descHandle = dsb->AddDescriptorsToCache();
 
 	VKGraphicsPipelineObjectCreateInfo create = {
-		.drawType = 1,
+		//.drawType = 1,
 		.vertexBufferIndex = rendInst->allocations[vertexBufferIndex].memIndex,
 		.vertexBufferOffset = static_cast<uint32_t>(rendInst->allocations[vertexBufferIndex].offset),
 		.vertexCount = ~0U,
 		.indirectDrawBuffer = rendInst->allocations[indirectCommandsIndex].memIndex,
 		.indirectDrawOffset = static_cast<uint32_t>(rendInst->allocations[indirectCommandsIndex].offset),
 		//.pipelinename = TEXT,
-		.descriptorsetid = descHandle,
+		.descriptorsetid = &descHandle,
 		.maxDynCap = 0,
 	};
 	

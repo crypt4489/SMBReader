@@ -106,7 +106,8 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t vertexCount;
 	size_t indirectDrawBuffer;
 	uint32_t pipelinename;
-	int descriptorsetid;
+	uint32_t descCount;
+	int *descriptorsetid;
 	uint32_t maxDynCap;
 	int indexBufferHandle;
 	uint32_t indexCount;
@@ -121,7 +122,8 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t z;
 	uint32_t maxDynCap;
 	uint32_t pipelinename;
-	int descriptorsetid;
+	uint32_t descCount;
+	int* descriptorsetid;
 	uint32_t barrierCount;
 	uint32_t pushRangeCount;
 };
@@ -236,9 +238,9 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets);
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets, uint32_t* offsetPerSet);
 
-	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets);
+	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, uint32_t* offsetPerSet);
 
 	int CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle* textures, uint32_t texCount);
 
