@@ -22,7 +22,7 @@ VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid,
 	dynamicPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
 	for (uint32_t i = 0; i < descCount; i++) {
 		descriptorSetId[i] = _dsid[i];
-		dynamicPerSet[i] = 0;
+		dynamicPerSet[i] = _dynamicPerSet[i];
 		
 	}
 }
@@ -50,9 +50,11 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 {
 	uint32_t drawSize = static_cast<uint32_t>(vertexCount);
 
+	uint32_t offset = 0;
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
-		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
+		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, dynamicPerSet[i], &objectData[offset]);
+		offset += dynamicPerSet[i];
 	}
 
 	if (vertexBufferIndex != ~0ui64)
@@ -76,9 +78,12 @@ void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
 	uint32_t frame,
 	uint32_t firstSet)
 {
+
+	uint32_t offset = 0;
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
-		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
+		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, dynamicPerSet[i], &objectData[offset]);
+		offset += dynamicPerSet[i];
 	}
 
 	if (vertexBufferIndex != ~0ui64)
@@ -186,9 +191,11 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 
 void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)
 {
+	uint32_t offset = 0;
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
-		rbo->BindComputeDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, objectCount, objectData);
+		rbo->BindComputeDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, dynamicPerSet[i], &objectData[offset]);
+		offset += dynamicPerSet[i];
 	}
 	
 	CreatePipelineBarriers(rbo, BEFORE);

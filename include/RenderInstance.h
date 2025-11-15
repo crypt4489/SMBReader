@@ -108,7 +108,6 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t pipelinename;
 	uint32_t descCount;
 	int *descriptorsetid;
-	uint32_t maxDynCap;
 	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
@@ -120,7 +119,6 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t x;
 	uint32_t y;
 	uint32_t z;
-	uint32_t maxDynCap;
 	uint32_t pipelinename;
 	uint32_t descCount;
 	int* descriptorsetid;
@@ -199,6 +197,10 @@ public:
 
 	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits sampleCount);
 
+	EntryHandle CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipeline, ShaderGraph* graph);
+
+	EntryHandle CreateVulkanComputePipelineTemplate(VKComputePipelineBuilder* pipeline, ShaderGraph* graph);
+
 	uint32_t BeginFrame();
 
 	void SubmitFrame(uint32_t imageIndex);
@@ -238,9 +240,9 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, int* offsets, uint32_t* offsetPerSet);
+	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info);
 
-	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, uint32_t* offsetPerSet);
+	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
 	int CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle* textures, uint32_t texCount);
 
@@ -261,6 +263,8 @@ public:
 	void CreateShaderResourceMap(ShaderGraph *graph);
 
 	int AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount);
+
+	uint32_t GetDynamicOffsetsForDescriptorSet(int descriptorSet, std::vector<uint32_t>& dyanmicOffsets);
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);
 

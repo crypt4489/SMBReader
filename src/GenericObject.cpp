@@ -58,7 +58,6 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 			.pipelinename = GENERIC,
 			.descCount = 1,
 			.descriptorsetid = &graphicDesc,
-			.maxDynCap = 1,
 			.indexBufferHandle = objIndexMemoryIndex,
 			.indexCount = m->indexCount,
 			.pushRangeCount = 0, 
@@ -66,13 +65,10 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 		};
 
 
-		std::array compDynamicOffsets = { objMorphFromVertexMemory, objMorphToVertexMemory, objVertexMemoryIndex };
-
 		ComputeIntermediaryPipelineInfo create2 = {
 			.x = m->vertexCount / layout->x,
 			.y = 1,
 			.z = 1,
-			.maxDynCap = 3,
 			.pipelinename = MESH_INTERPOLATE,
 			.descCount = 1,
 			.descriptorsetid = &computeDesc,
@@ -82,15 +78,9 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 
 		interpolate = 0.5f;
 
-		uint32_t cOffsetPerSet = 3;
+		computeHandle = rendInst->CreateComputeVulkanPipelineObject(&create2);
 
-		computeHandle = rendInst->CreateComputeVulkanPipelineObject(&create2, compDynamicOffsets.data(), &cOffsetPerSet);
-
-		std::array dynamicOffsets = { loop->instanceAlloc };
-
-		uint32_t gOffsetPerSet = 1;
-
-		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create, dynamicOffsets.data(), &gOffsetPerSet);
+		pipelineIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create);
 	}
 }
 

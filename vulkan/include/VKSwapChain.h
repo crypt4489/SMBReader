@@ -80,8 +80,7 @@ public:
 	}
 
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-	EntryHandle *renderTargetIndex;
-	uint32_t renderTargetCount;
+	
 
 	VkSurfaceFormatKHR swapChainImageFormat;
 	VkPresentModeKHR presentMode;
@@ -96,6 +95,13 @@ public:
 
 	VkSharingMode queueSharing;
 	VkSurfaceTransformFlagBitsKHR preTransform;
+
+	VkImage* images;
+	uint32_t queueFamiliesCache[2];
+	EntryHandle* renderTargetIndex;
+	uint32_t renderTargetCount;
+	EntryHandle* waitSemaphores;
+	EntryHandle* signalSemaphores;
 
 	uintptr_t headofperdata;
 	

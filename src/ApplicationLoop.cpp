@@ -150,7 +150,7 @@ void ApplicationLoop::Execute()
 	}
 }
 
-#define MAX_IMAGE_DIM 1024
+#define MAX_IMAGE_DIM 4096
 
 void ApplicationLoop::CreateTexturePools()
 {
@@ -201,7 +201,6 @@ void ApplicationLoop::CreateGlobalStorageImage()
 			.x = 512 / layout->x,
 			.y = 512 / layout->y,
 			.z = 1,
-			.maxDynCap = 1,
 			.pipelinename = POLY,
 			.descCount = 1,
 			.descriptorsetid = computeDescriptors.data(),
@@ -209,11 +208,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 			.pushRangeCount = 0
 	};
 
-	std::array arr = { computeMemory };
-
-	uint32_t offsetsPerCount = 2;
-
-	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2, arr.data(), &offsetsPerCount);
+	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2);
 
 
 	float offsetX = 4 * -15.0f;

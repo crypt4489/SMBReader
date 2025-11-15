@@ -688,11 +688,11 @@ void RenderInstance::CreatePipelines()
 
 	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
-	pipelinesIdentifier[MESH_INTERPOLATE] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[4], 1, vulkanShaderGraphs.shaders[4]));
+	pipelinesIdentifier[MESH_INTERPOLATE].push_back(CreateVulkanComputePipelineTemplate(computePipeline, vulkanShaderGraphs.shaderGraphPtrs[2]));
 
 	auto polyPipeline = dev->CreateComputePipelineBuilder(1, 0);
 
-	pipelinesIdentifier[POLY] = std::vector<EntryHandle>(1, computePipeline->CreateComputePipeline(&vulkanDescriptorLayouts[5], 1, vulkanShaderGraphs.shaders[5]));
+	pipelinesIdentifier[POLY].push_back(CreateVulkanComputePipelineTemplate(polyPipeline, vulkanShaderGraphs.shaderGraphPtrs[3]));
 
 	std::vector<EntryHandle> l(maxMSAALevels);
 	std::vector<EntryHandle> r(maxMSAALevels);
@@ -704,9 +704,9 @@ void RenderInstance::CreatePipelines()
 
 		UsePipelineBuilders(genericBuilder, textBuilder, (VkSampleCountFlagBits)(1<<i));
 
-		r[i] = genericBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[0], 3, &vulkanShaderGraphs.shaders[0], 2);
+		r[i] = CreateVulkanGraphicPipelineTemplate(genericBuilder, vulkanShaderGraphs.shaderGraphPtrs[0]);
 
-		l[i] = textBuilder->CreateGraphicsPipeline(&vulkanDescriptorLayouts[3], 1, &vulkanShaderGraphs.shaders[2], 2);
+		l[i] = CreateVulkanGraphicPipelineTemplate(textBuilder, vulkanShaderGraphs.shaderGraphPtrs[1]);
 
 	}
 
@@ -717,6 +717,46 @@ void RenderInstance::CreatePipelines()
 
 
 }
+
+EntryHandle RenderInstance::CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipelineBuilder, ShaderGraph* graph)
+{
+	std::vector<EntryHandle> layoutHandles(graph->resourceSetCount);
+	std::vector<EntryHandle> shaderHandle(graph->shaderMapCount);
+
+	for (int i = 0; i < graph->shaderMapCount; i++)
+	{
+		ShaderMap* map = (ShaderMap*)graph->GetMap(i);
+		shaderHandle[i] = vulkanShaderGraphs.shaders[map->shaderReference];
+	}
+
+	for (int i = 0; i < graph->resourceSetCount; i++)
+	{
+		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
+		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vkDescriptorLayout];
+	}
+
+	return pipelineBuilder->CreateGraphicsPipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle.data(), graph->shaderMapCount);
+}
+
+EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(VKComputePipelineBuilder* pipelineBuilder, ShaderGraph* graph)
+{
+	std::vector<EntryHandle> layoutHandles(graph->resourceSetCount);
+	EntryHandle shaderHandle;
+
+	
+	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	shaderHandle = vulkanShaderGraphs.shaders[map->shaderReference];
+	
+
+	for (int i = 0; i < graph->resourceSetCount; i++)
+	{
+		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
+		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vkDescriptorLayout];
+	}
+
+	return pipelineBuilder->CreateComputePipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle);
+}
+
 
 void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits flags)
 {
@@ -1187,8 +1227,6 @@ int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment, EntryHa
 
 	VKSwapChain* swc = majorDevice->GetSwapChain(swapChainIndex);
 
-	
-
 	int perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
 	int mrpDescHandle = AllocateShaderResourceSet(0, 0, MAX_FRAMES_IN_FLIGHT);
 	int texturesHandle = AllocateShaderResourceSet(0, 1, MAX_FRAMES_IN_FLIGHT);
@@ -1204,11 +1242,13 @@ int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment, EntryHa
 	descIDs[0] = mrpDescId;
 	descIDs[1] = imageDescID;
 
-	std::array<uint32_t, 1> data = { (uint32_t)allocations[perRenderPassStuff].offset };
+	std::vector<uint32_t> data;
+
+	uint32_t dynamicSize = GetDynamicOffsetsForDescriptorSet(mrpDescHandle, data);
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 
-		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), (uint32_t)data.size(), descIDs.data(), 2);
+		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), dynamicSize, descIDs.data(), 2);
 	
 
 	return perRenderPassStuff;
@@ -1223,6 +1263,40 @@ uint32_t RenderInstance::GetSwapChainHeight()
 uint32_t RenderInstance::GetSwapChainWidth()
 {
 	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainWidth();
+}
+
+uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, std::vector<uint32_t>& dynamicOffsets)
+{
+	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
+	ShaderResourceSet* set = (ShaderResourceSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+	int count = set->bindingCount;
+
+	uint32_t size = 0;
+
+	for (int i = 0; i < count; i++)
+	{
+		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
+
+		switch (header->type)
+		{
+		
+		case STORAGE_BUFFER:
+		case UNIFORM_BUFFER:
+		{
+			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
+			auto alloc = allocations[buffer->allocation];
+			dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset));
+			size++;
+			break;
+		}
+
+	
+		}
+	}
+
+	return size;
 }
 
 EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
@@ -1290,14 +1364,19 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 }
 
 
-EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, int* offsets, uint32_t *offsetPerSet)
+EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	uint32_t dynamicNumber = 0;
 	std::vector<EntryHandle> descHandles(info->descCount);
+	std::vector<uint32_t> offsetsPerSet(info->descCount);
+	std::vector<uint32_t> dynamicOffsets;
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
+		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
+		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
 	}
 
@@ -1310,8 +1389,8 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.pipelinename = EntryHandle(),
 			.descCount = 1,
 			.descriptorsetid = descHandles.data(),
-			.dynamicPerSet = offsetPerSet,
-			.maxDynCap = info->maxDynCap,
+			.dynamicPerSet = offsetsPerSet.data(),
+			.maxDynCap = dynamicNumber,
 			.indexBufferHandle = allocations[info->indexBufferHandle].memIndex,
 			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
 			.indexCount = info->indexCount,
@@ -1329,9 +1408,9 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 
 		VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
-		for (uint32_t j = 0; j < info->maxDynCap; j++)
+		for (uint32_t i = 0; i < dynamicNumber; i++)
 		{
-			VKGraphicsPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[j]].offset));
+			VKGraphicsPipelineObject->SetPerObjectData(dynamicOffsets[i]);
 		}
 
 		int constantBufferPerSet = 0;
@@ -1379,14 +1458,19 @@ void RenderInstance::SetActiveComputePipeline(uint32_t objectIndex, bool active)
 	}
 }
 
-uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info, int* offsets, uint32_t* offsetPerSet)
+uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	uint32_t dynamicNumber = 0;
 	std::vector<EntryHandle> descHandles(info->descCount);
+	std::vector<uint32_t> offsetsPerSet(info->descCount);
+	std::vector<uint32_t> dynamicOffsets;
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
+		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
+		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
 	}
 
@@ -1394,11 +1478,11 @@ uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPi
 		.x = info->x,
 		.y = info->y,
 		.z = info->z,
-		.descCount = 1,
+		.descCount = info->descCount,
 		.descriptorId = descHandles.data(),
-		.dynamicPerSet = offsetPerSet,
+		.dynamicPerSet = offsetsPerSet.data(),
 		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
-		.maxDynCap = info->maxDynCap,
+		.maxDynCap = dynamicNumber,
 		.barrierCount = info->barrierCount,
 		.pushRangeCount = info->pushRangeCount
 	};
@@ -1407,9 +1491,9 @@ uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPi
 
 	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
-	for (uint32_t i = 0; i < info->maxDynCap; i++)
+	for (uint32_t i = 0; i < dynamicNumber; i++)
 	{
-		vkPipelineObject->SetPerObjectData(static_cast<uint32_t>(allocations.allocations[offsets[i]].offset));
+		vkPipelineObject->SetPerObjectData(dynamicOffsets[i]);
 	}
 
 	int constantBufferPerSet = 0;
