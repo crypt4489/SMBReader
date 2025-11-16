@@ -1327,9 +1327,7 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t request
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, attachmentCount, requestedImageCount, swcsupport, stages, maxSemaphorePerStage, renderTargetCount);
-
-	swc->SetSwapChainData(AllocFromPerDeviceData(swc->CalculateSwapChainMemoryUsage()));
+	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, attachmentCount, requestedImageCount, swcsupport, renderTargetCount);
 
 	EntryHandle index = AddVkTypeToEntry(swc);
 	return index;
@@ -1945,15 +1943,14 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
-	auto depends = swc->GetDependenciesForImageIndex(frameIdx);
 
-	uint32_t waitCount = static_cast<uint32_t>(swc->semaphorePerStage);
+	uint32_t waitCount = 1;
 	
 	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
 
 	for (uint32_t i = 0; i < waitCount; i++)
 	{
-		waitSemaphores[i] = GetSemaphore(depends[waitCount + i]);
+		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[swc->acquireSemaphore]);
 	}
 
 
@@ -2082,13 +2079,12 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t
 {
 	//std::shared_lock lock(deviceLock);
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
-	auto depends = swc->GetDependenciesForImageIndex(frameIndex);
 
-	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags) * swc->semaphorePerStage));
+	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags)));
 
 	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	return SubmitCommandBuffer(depends, waitStages, &depends[1], 1, 1, cbIndex);
+	return SubmitCommandBuffer(&swc->waitSemaphores[swc->acquireSemaphore], waitStages, &swc->signalSemaphores[swc->acquireSemaphore], 1, 1, cbIndex);
 }
 
 

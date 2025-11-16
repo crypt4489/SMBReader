@@ -32,6 +32,11 @@ struct ThreadedRecordBuffer
 	std::function<void(EntryHandle, uint32_t)> drawingFunction;
 
 	std::atomic<bool> ready = false;
+
+	bool CheckReady() const
+	{
+		return !ready.load();
+	}
 	
 	EntryHandle GetCurrentBuffer()
 	{
@@ -203,7 +208,7 @@ public:
 
 	uint32_t BeginFrame();
 
-	void SubmitFrame(uint32_t imageIndex);
+	int SubmitFrame(uint32_t imageIndex);
 
 	void CreateMSAAColorResources(uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 

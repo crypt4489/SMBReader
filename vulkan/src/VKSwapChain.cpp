@@ -62,53 +62,26 @@ static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
 
 }
 
-static uintptr_t GetDependencies(VKSwapChain* swc)
-{
-	return 
-		swc->headofperdata +
-		SWCQFCOFFSET(swc->imageCount) +
-		SWCDEPENDSOFFSET(2);
+
+VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
+	uint32_t _attachmentCount, uint32_t requestImages,
+	VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount)
+	:
+	device(_d), surface(_surface), attachmentCount(_attachmentCount),
+	renderTargetCount(_renderTargetCount) {
+
+
+
+	SetSwapChainProperties(swapChainSupport, requestImages);
+
+
+	renderTargetIndex = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * _renderTargetCount));
+	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
+	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
+	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
+
 }
 
-static uintptr_t* GetDependenciesPtr(VKSwapChain* swc)
-{
-	return reinterpret_cast<uintptr_t*>(GetDependencies(swc));
-}
-
-
-static VkImage* GetSwapChainImages(VKSwapChain* swc)
-{
-	return reinterpret_cast<VkImage*>(swc->headofperdata);
-}
-
-
-static uint32_t* GetQueueFamilyCache(VKSwapChain* swc)
-{
-	return reinterpret_cast<uint32_t*>(swc->headofperdata + SWCQFCOFFSET(swc->imageCount));
-}
-
-static EntryHandle* GetRenderTargetPointer(VKSwapChain* swc)
-{
-	return reinterpret_cast<EntryHandle*>(swc->headofperdata +
-		SWCQFCOFFSET(swc->imageCount) +
-		SWCDEPENDSOFFSET(2) +
-		SWCRENDERTARGETSOFFSET(swc->imageCount, swc->semaphorePerStage, swc->numberOfStages));
-}
-
-void VKSwapChain::SetSwapChainData(void* data)
-{
-	headofperdata = reinterpret_cast<uintptr_t>(data);
-	renderTargetIndex = GetRenderTargetPointer(this);
-}
-
-size_t VKSwapChain::CalculateSwapChainMemoryUsage()
-{
-	return 
-		(sizeof(VkImage) * imageCount) + //images first
-		(sizeof(uint32_t) * 2) + //queue families
-		(sizeof(EntryHandle) * (imageCount * ((semaphorePerStage * numberOfStages) + 1))) +
-		(sizeof(EntryHandle) * renderTargetCount);
-}
 
 void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount)
 {
@@ -149,7 +122,7 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	
 	
-	uint32_t* qfc = GetQueueFamilyCache(this);
+	uint32_t* qfc = queueFamiliesCache;
 	uint32_t ret = device->GetFamiliesOfCapableQueues(&qfc, &queueFamiliesCacheCount, GRAPHICS | TRANSFER | PRESENT);
 	queueSharing = createInfo.imageSharingMode = (queueFamiliesCacheCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
@@ -168,7 +141,7 @@ void VKSwapChain::CreateSwapChain(
 		throw std::runtime_error("failed to create swap chain!");
 	}
 	
-	VkImage *swcImages = GetSwapChainImages(this);
+	VkImage* swcImages = images;
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 
@@ -185,32 +158,15 @@ void VKSwapChain::CreateSyncObject()
 	EntryHandle* imageAvailablesIndices = device->CreateSemaphores(imageCount);
 	EntryHandle* renderFinishedIndices = device->CreateSemaphores(imageCount);
 
-	uintptr_t dependencies = GetDependencies(this);
-
-	uintptr_t dependenciesdata = dependencies + (sizeof(uintptr_t) * imageCount);
-
-	uintptr_t* ptr1 = reinterpret_cast<uintptr_t*>(dependencies);
-	uintptr_t* ptr2 = reinterpret_cast<uintptr_t*>(dependenciesdata);
-
-	size_t stride = semaphorePerStage * numberOfStages;
-
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
-		ptr1[i] = dependenciesdata;
-		ptr2[0] = imageAvailablesIndices[i];
-		ptr2[1] = renderFinishedIndices[i];
-		
-		ptr2 = std::next(ptr2, stride);
-		dependenciesdata += sizeof(uintptr_t) * stride;
+
+		waitSemaphores[i] = imageAvailablesIndices[i];
+		signalSemaphores[i] = renderFinishedIndices[i];
+	
 	}
 }
 
-EntryHandle* VKSwapChain::GetDependenciesForImageIndex(uint32_t imageIndex)
-{
-	uintptr_t* ptr1 = GetDependenciesPtr(this);
-
-	return reinterpret_cast<EntryHandle*>(ptr1[imageIndex]);
-}
 
 void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 {
@@ -233,7 +189,7 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 	createInfo.imageSharingMode = queueSharing;
 
-	uint32_t* qfc = GetQueueFamilyCache(this);
+	uint32_t* qfc = queueFamiliesCache;
 
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
 	createInfo.pQueueFamilyIndices = qfc;
@@ -247,7 +203,7 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 		throw std::runtime_error("failed to create swap chain!");
 	}
 
-	VkImage* swcImages = GetSwapChainImages(this);
+	VkImage* swcImages = images;
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 }
@@ -256,7 +212,7 @@ EntryHandle* VKSwapChain::CreateSwapchainViews()
 {
 	EntryHandle* imageViews = reinterpret_cast<EntryHandle*>(device->AllocFromDeviceCache(sizeof(EntryHandle) * imageCount));
 
-	VkImage* swcImages = reinterpret_cast<VkImage*>(headofperdata);
+	VkImage* swcImages = images;
 
 	for (size_t i = 0; i < imageCount; i++) {
 		imageViews[i] = device->CreateImageView(swcImages[i], 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT);
@@ -282,8 +238,40 @@ void VKSwapChain::CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCo
 	}
 }
 
+void VKSwapChain::SanitizeSwapChainSemaphores()
+{
+	auto queueDetails = device->GetQueueHandle(GRAPHICS);
+
+	uint32_t managerIndex = std::get<0>(queueDetails);
+	uint32_t queueIndex = std::get<1>(queueDetails);
+	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
+	EntryHandle poolIndex = std::get<3>(queueDetails);
+
+	VkQueue queue;
+	vkGetDeviceQueue(device->device, queueFamilyIndex, queueIndex, &queue);
+
+	VkCommandPool pool = device->GetCommandPool(poolIndex);
+
+	VkSemaphore* semas = (VkSemaphore*)device->AllocFromDeviceCache(sizeof(VkSemaphore)*1);
+	VkPipelineStageFlags* flags = (VkPipelineStageFlags*)device->AllocFromDeviceCache(sizeof(VkPipelineStageFlags) * 1);
+
+	
+	for (int i = 0; i < 1; i++)
+	{
+		flags[i] = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		semas[i] = device->GetSemaphore(waitSemaphores[acquireSemaphore]);
+	}
+
+	VK::Utils::EndOneTimeCommandsSemaphores(device->device, queue, pool, nullptr, semas, flags, 1);
+
+	device->ReturnQueueToManager(managerIndex, queueIndex);
+
+}
+
 void VKSwapChain::ResetSwapChain()
 {
+	//SanitizeSwapChainSemaphores();
+
 	if (swapChain) {
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
 		swapChain = VK_NULL_HANDLE;
@@ -293,6 +281,8 @@ void VKSwapChain::ResetSwapChain()
 		device->ResetRenderTarget(renderTargetIndex[i]);
 
 	DestroySyncObject();
+	CreateSyncObject();
+
 }
 
 void VKSwapChain::DestroySwapChain()
@@ -303,31 +293,27 @@ void VKSwapChain::DestroySwapChain()
 	}
 	for (uint32_t i = 0; i<renderTargetCount; i++)
 		device->DestroyRenderTarget(renderTargetIndex[i]);
+
+	DestroySyncObject();
 }
 
 void VKSwapChain::DestroySyncObject()
 {
-	size_t totalCount = semaphorePerStage * numberOfStages * imageCount;
-
-	uintptr_t dependencies = GetDependencies(this);
-
-	uintptr_t dependenciesdata = dependencies + (sizeof(uintptr_t) * imageCount);
-
-	EntryHandle* ptr2 = reinterpret_cast<EntryHandle*>(dependenciesdata);
 	
-	for (size_t i = 0; i < totalCount; i++)
+	for (size_t i = 0; i < imageCount; i++)
 	{
-		device->DestroySemaphore(ptr2[i]);
+		device->DestroySemaphore(waitSemaphores[i]);
+		device->DestroySemaphore(signalSemaphores[i]);
 	}
 }
 
 uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t frame)
 {
 	uint32_t imageIndex;
-	
-	auto depends = GetDependenciesForImageIndex(frame);
 
-	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(depends[0]), VK_NULL_HANDLE, &imageIndex);
+	acquireSemaphore = (acquireSemaphore + 1) % (imageCount);
+
+	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(waitSemaphores[acquireSemaphore]), VK_NULL_HANDLE, &imageIndex);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
 		return 0xFFFFFFFF;
@@ -336,5 +322,5 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t fram
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
-	return imageIndex;
+	return frame;
 }

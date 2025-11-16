@@ -253,6 +253,26 @@ namespace VK {
 				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 			}
 
+			void EndOneTimeCommandsSemaphores(VkDevice& device, VkQueue& queue, 
+				VkCommandPool& pool, VkCommandBuffer commandBuffer, VkSemaphore* semas, VkPipelineStageFlags* flags,
+				uint32_t semasCount) {
+				if (commandBuffer) vkEndCommandBuffer(commandBuffer);
+
+				VkSubmitInfo submitInfo{};
+				submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+				submitInfo.commandBufferCount = (commandBuffer ? 1 : 0);;
+				submitInfo.pCommandBuffers = (commandBuffer ?  &commandBuffer :  nullptr);
+
+				submitInfo.pWaitDstStageMask = flags;
+				submitInfo.pWaitSemaphores = semas;
+				submitInfo.waitSemaphoreCount = semasCount;
+
+				vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+				vkQueueWaitIdle(queue);
+
+				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
+			}
+
 			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset) {
 				VkCommandBuffer commandBuffer = BeginOneTimeCommands(device, pool);
 

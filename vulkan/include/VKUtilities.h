@@ -55,6 +55,10 @@ namespace VK {
 
 		void EndOneTimeCommands(VkDevice& device, VkQueue& queue, VkCommandPool& pool, VkCommandBuffer commandBuffer);
 
+		void EndOneTimeCommandsSemaphores(VkDevice& device, VkQueue& queue,
+			VkCommandPool& pool, VkCommandBuffer commandBuffer, VkSemaphore* semas, VkPipelineStageFlags* flags,
+			uint32_t semasCount);
+
 		void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset);
 
 		std::pair<VkImage, VkDeviceMemory> CreateImage(VkDevice& device, VkPhysicalDevice& gpu, VkImageCreateInfo& imageInfo, VkMemoryPropertyFlags properties);

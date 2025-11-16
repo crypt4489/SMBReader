@@ -113,7 +113,7 @@ void ApplicationLoop::Execute()
 		QueryPerformanceCounter(&startTime);
 
 
-
+		int cnt = 0;
 
 		while (running)
 		{
@@ -136,7 +136,16 @@ void ApplicationLoop::Execute()
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
 			if (index != ~0ui32) {
-				VKRenderer::gRenderInstance->SubmitFrame(index);
+				if (!VKRenderer::gRenderInstance->SubmitFrame(index))
+				{
+					cnt++;
+				}
+				else {
+					cnt = 0;
+				}
+			}
+			else {
+				cnt = 0;
 			}
 
 			ProcessCommands();

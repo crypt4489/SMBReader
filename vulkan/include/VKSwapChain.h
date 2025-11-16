@@ -22,20 +22,9 @@ class VKSwapChain
 public:
 	VKSwapChain() = default;
 
-	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, 
-		uint32_t _attachmentCount, uint32_t requestImages, 
-		VK::Utils::SwapChainSupportDetails& swapChainSupport, size_t stages, size_t semaphoreperstage, uint32_t _renderTargetCount)
-		: 
-		device(_d), surface(_surface), attachmentCount(_attachmentCount), 
-		semaphorePerStage(semaphoreperstage), numberOfStages(stages), renderTargetCount(_renderTargetCount) {
-		SetSwapChainProperties(swapChainSupport, requestImages);
-	}
-
-	void SetSwapChainData(void* data);
-
-	size_t CalculateSwapChainMemoryUsage();
-
-	EntryHandle* GetDependenciesForImageIndex(uint32_t imageIndex);
+	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
+		uint32_t _attachmentCount, uint32_t requestImages,
+		VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount);
 
 	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
 
@@ -62,7 +51,7 @@ public:
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
-	void AddFramebufferAttachments(EntryHandle** attachmentIndices, uint32_t attachIndicesSize);
+	void SanitizeSwapChainSemaphores();
 
 	VkFormat GetSwapChainFormat() const
 	{
@@ -86,12 +75,11 @@ public:
 	VkPresentModeKHR presentMode;
 	VkExtent2D swapChainExtent;
 
+	int acquireSemaphore = -1;
+
 	uint32_t attachmentCount;
 	uint32_t imageCount;
 	uint32_t queueFamiliesCacheCount;
-
-	size_t semaphorePerStage;
-	size_t numberOfStages;
 
 	VkSharingMode queueSharing;
 	VkSurfaceTransformFlagBitsKHR preTransform;
@@ -102,8 +90,6 @@ public:
 	uint32_t renderTargetCount;
 	EntryHandle* waitSemaphores;
 	EntryHandle* signalSemaphores;
-
-	uintptr_t headofperdata;
 	
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain
