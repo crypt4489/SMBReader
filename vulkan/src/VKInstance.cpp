@@ -3,7 +3,7 @@
 #include "VKInstance.h"
 
 #include "VKDevice.h"
-
+#include <vulkan/vulkan.h>
 
 #include <iostream>
 #include <map>
@@ -135,12 +135,26 @@ void VKInstance::CreateRenderInstance()
 
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfoStruct;
+	
+	VkValidationFeatureEnableEXT enables[] = {
+	VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT, // Catch sync hazards
+	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,               // Detect invalid memory access
+	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+	VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+	};
+
+	VkValidationFeaturesEXT validationFeatures{};
+	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+	validationFeatures.enabledValidationFeatureCount = 1;
+	validationFeatures.pEnabledValidationFeatures = enables;
+
+	createInfo.pNext = &validationFeatures;
 
 	uint32_t glfwReqExtCount;
 
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwReqExtCount);
 
-	instanceExtCount = glfwReqExtCount + 1;
+	instanceExtCount = glfwReqExtCount + 3;
 
 	instanceLayerCount = 1;
 
@@ -156,6 +170,9 @@ void VKInstance::CreateRenderInstance()
 	}
 
 	instanceExtensions[2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	instanceExtensions[3] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+	instanceExtensions[4] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+//	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
 	
 	uint32_t instExtensionRequired = 0;
 
@@ -182,6 +199,7 @@ void VKInstance::CreateRenderInstance()
 		for (; j < instExtensionRequired; j++)
 		{
 			VkExtensionProperties props = extensions[j];
+		//	std::cout << props.extensionName << std::endl;
 			if (strcmp(requested, props.extensionName) == 0) {
 				break;
 			}
@@ -284,11 +302,13 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 	memset(devices, 0, sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1));
 
-	deviceExtCount = 1;
+	deviceExtCount = 2;
 
 	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
 
 	deviceExtensions[0] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+	
+	deviceExtensions[1] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
 
 	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
 
@@ -397,6 +417,7 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 		for (; j < extensionCount; j++)
 		{
 			VkExtensionProperties prop2 = availableExtensions[j];
+	
 			if (strcmp(ext, prop2.extensionName) == 0)
 			{
 				break;

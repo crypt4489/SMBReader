@@ -51,6 +51,8 @@ public:
 
 	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
 
+	uint32_t AcquireNextSwapChainImage(uint64_t _timeout);
+
 	void SanitizeSwapChainSemaphores();
 
 	VkFormat GetSwapChainFormat() const
@@ -68,7 +70,10 @@ public:
 		return swapChainExtent.width;
 	}
 
+	void ReleaseImageMaintenance(uint32_t imageIndex);
+
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
+
 	
 
 	VkSurfaceFormatKHR swapChainImageFormat;
@@ -90,6 +95,10 @@ public:
 	uint32_t renderTargetCount;
 	EntryHandle* waitSemaphores;
 	EntryHandle* signalSemaphores;
+
+	EntryHandle* presentationFences;
+
+	uint32_t currentImage = 0;
 	
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain

@@ -112,9 +112,6 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-
-		int cnt = 0;
-
 		while (running)
 		{
 			//std::string base = std::string("FPS : ");
@@ -135,18 +132,12 @@ void ApplicationLoop::Execute()
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
+			int what = 0;
+
 			if (index != ~0ui32) {
-				if (!VKRenderer::gRenderInstance->SubmitFrame(index))
-				{
-					cnt++;
-				}
-				else {
-					cnt = 0;
-				}
+				what = VKRenderer::gRenderInstance->SubmitFrame(index);
 			}
-			else {
-				cnt = 0;
-			}
+			
 
 			ProcessCommands();
 
@@ -451,6 +442,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	//TextManager::UploadToVertexBuffer(text1);
 
+	
+
 	CreateTexturePools();
 
 	CreateGlobalStorageImage();
@@ -458,8 +451,6 @@ void ApplicationLoop::InitializeRuntime()
 	LoadObject(args.inputFile.string());
 
 	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16, mainDictionary.textureHandles.data(), mainDictionary.allocationIndex);
-
-	
 
 	
 	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

@@ -385,8 +385,8 @@ struct DeviceAllocator
 			out = val;
 			if (desired >= size)
 			{
-				desired = 0;
 				out = 0;
+				desired = inSize;
 			}
 
 		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
@@ -614,6 +614,8 @@ public:
 
 	void DestroyDevice();
 
+	void DestroyFence(EntryHandle index);
+
 	void DestroyImage(EntryHandle imageIndex);
 
 	void DestroyImagePool(EntryHandle handle);
@@ -700,6 +702,8 @@ public:
 	VKInstance* parentInstance;
 	EntryHandle queueManagers;
 	size_t queueManagersSize;
+
+	uint32_t deviceMask = 0;
 
 	mutable std::shared_mutex deviceLock;
 

@@ -62,6 +62,8 @@ static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
 
 }
 
+static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
+
 
 VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
 	uint32_t _attachmentCount, uint32_t requestImages,
@@ -70,8 +72,12 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* a
 	device(_d), surface(_surface), attachmentCount(_attachmentCount),
 	renderTargetCount(_renderTargetCount) {
 
-
-
+	if (!vRelease)
+	{
+		vRelease =
+			(PFN_vkReleaseSwapchainImagesEXT)
+			vkGetDeviceProcAddr(device->device, "vkReleaseSwapchainImagesEXT");
+	}
 	SetSwapChainProperties(swapChainSupport, requestImages);
 
 
@@ -79,6 +85,7 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* a
 	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
 	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
 	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
+	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount));
 
 }
 
@@ -157,12 +164,14 @@ void VKSwapChain::CreateSyncObject()
 {
 	EntryHandle* imageAvailablesIndices = device->CreateSemaphores(imageCount);
 	EntryHandle* renderFinishedIndices = device->CreateSemaphores(imageCount);
+	EntryHandle* fences = device->CreateFences(imageCount, VK_FENCE_CREATE_SIGNALED_BIT);
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
 
 		waitSemaphores[i] = imageAvailablesIndices[i];
 		signalSemaphores[i] = renderFinishedIndices[i];
+		presentationFences[i] = fences[i];
 	
 	}
 }
@@ -270,7 +279,12 @@ void VKSwapChain::SanitizeSwapChainSemaphores()
 
 void VKSwapChain::ResetSwapChain()
 {
-	//SanitizeSwapChainSemaphores();
+	for (int i = 0; i < imageCount; i++)
+	{
+		VkFence fence = device->GetFence(presentationFences[i]);
+		vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
+	
+	}
 
 	if (swapChain) {
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
@@ -280,9 +294,19 @@ void VKSwapChain::ResetSwapChain()
 	for (uint32_t i = 0; i < renderTargetCount; i++)
 		device->ResetRenderTarget(renderTargetIndex[i]);
 
-	DestroySyncObject();
-	CreateSyncObject();
 
+
+}
+
+void VKSwapChain::ReleaseImageMaintenance(uint32_t imageIndex)
+{
+	VkReleaseSwapchainImagesInfoEXT info{};
+	info.sType = VK_STRUCTURE_TYPE_RELEASE_SWAPCHAIN_IMAGES_INFO_EXT;
+	info.imageIndexCount = 1;
+	info.pImageIndices = &imageIndex;
+	info.swapchain = swapChain;
+
+	vRelease(device->device, &info);	
 }
 
 void VKSwapChain::DestroySwapChain()
@@ -304,6 +328,7 @@ void VKSwapChain::DestroySyncObject()
 	{
 		device->DestroySemaphore(waitSemaphores[i]);
 		device->DestroySemaphore(signalSemaphores[i]);
+		device->DestroyFence(presentationFences[i]);
 	}
 }
 
@@ -323,4 +348,41 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t fram
 	}
 
 	return frame;
+}
+
+uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout)
+{
+
+	uint32_t imageIndex;
+	
+	acquireSemaphore = (acquireSemaphore + 1) % (imageCount);
+
+	VkFence fence = device->GetFence(presentationFences[acquireSemaphore]);
+
+	vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+	vkResetFences(device->device, 1, &fence);
+	
+
+	VkAcquireNextImageInfoKHR info{};
+	info.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR;
+	info.semaphore = device->GetSemaphore(waitSemaphores[acquireSemaphore]);
+	info.swapchain = swapChain;
+	info.timeout = _timeout;
+	info.deviceMask = 1;
+	
+	VkResult result = vkAcquireNextImage2KHR(device->device, &info, &imageIndex);
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR ) {
+		if (imageIndex < imageCount)
+			ReleaseImageMaintenance(imageIndex);
+		return 0xFFFFFFFF;
+	}
+	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+		throw std::runtime_error("failed to acquire swap chain image!");
+	}
+
+	currentImage = imageIndex;
+
+	return imageIndex;
 }

@@ -886,6 +886,14 @@ void VKDevice::CreateLogicalDevice(
 		CreateQueueManager(ptr, queueIndex, maxCount, queueFlags, present);
 		ptr = std::next(ptr);
 	}
+
+
+
+	VkDeviceGroupPresentInfoKHR info{};
+	info.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR;
+	info.swapchainCount = 1;
+	info.mode = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
+	info.pDeviceMasks = &deviceMask;
 }
 
 EntryHandle VKDevice::CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst)
@@ -1356,6 +1364,13 @@ void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 	VkFence fence = GetFence(buff->fenceIdx);
 	vkDestroyFence(device, fence, nullptr);
 	entries[handle()] = 0;
+}
+
+void VKDevice::DestroyFence(EntryHandle index)
+{
+	VkFence fence = GetFence(index);
+	vkDestroyFence(device, fence, nullptr);
+	entries[index()] = 0;
 }
 
 void VKDevice::DestroyDescriptorPool(EntryHandle handle)
@@ -1852,7 +1867,7 @@ uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t r
 	std::shared_lock lock(deviceLock);
 	VKSwapChain* swapChain = GetSwapChain(swapChainIndex);
 
-	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage(UINT64_MAX, requestedImage);
+	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage(UINT64_MAX);
 
 	return imageIndex;
 }
@@ -1950,9 +1965,11 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 
 	for (uint32_t i = 0; i < waitCount; i++)
 	{
-		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[swc->acquireSemaphore]);
+		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[swc->currentImage]);
 	}
 
+	
+	VkFence fence = GetFence(swc->presentationFences[swc->acquireSemaphore]);
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1966,6 +1983,13 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 	presentInfo.pSwapchains = &swc->swapChain;
 	presentInfo.pImageIndices = &frameIdx;
 	presentInfo.pResults = results;
+
+	VkSwapchainPresentFenceInfoEXT info{};
+	info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
+	info.swapchainCount = 1;
+	info.pFences = &fence;
+
+	presentInfo.pNext = &info;
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
 
@@ -2077,14 +2101,16 @@ uint32_t VKDevice::SubmitCommandBuffer(
 
 uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, EntryHandle cbIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	std::shared_lock lock(deviceLock);
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
 
 	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags)));
 
 	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	return SubmitCommandBuffer(&swc->waitSemaphores[swc->acquireSemaphore], waitStages, &swc->signalSemaphores[swc->acquireSemaphore], 1, 1, cbIndex);
+	uint32_t ret =  SubmitCommandBuffer(&swc->waitSemaphores[swc->acquireSemaphore], waitStages, &swc->signalSemaphores[frameIndex], 1, 1, cbIndex);
+
+	return ret;
 }
 
 

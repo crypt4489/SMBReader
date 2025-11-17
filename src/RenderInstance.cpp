@@ -404,14 +404,22 @@ uint32_t RenderInstance::BeginFrame()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	if (resizeWindow) {
-		int ret = RecreateSwapChain();
-		if (ret) resizeWindow = false;
-		currentFrame = 0;
+	int32_t res = 0;
+
+	auto& trb2 = threadedRecordBuffers[currentFrame];
+
+	EntryHandle nextCbIndex = trb2.GetCurrentBuffer();
+
+	if (nextCbIndex == EntryHandle()) {
 		return ~0ui32;
 	}
 
-	int32_t res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false);
+	if (nextCbIndex != currentCBIndex[currentFrame])
+		res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false); //wait on previous, but don't reset
+
+	currentCBIndex[currentFrame] = nextCbIndex;
+
+	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true);
 
 	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
@@ -419,25 +427,9 @@ uint32_t RenderInstance::BeginFrame()
 	{
 		int ret = RecreateSwapChain();
 		if (ret) resizeWindow = false;
-		currentFrame = 0;
+		//currentFrame = 0;
 		return imageIndex;
 	}
-	
-	
-
-	auto& trb2 = threadedRecordBuffers[imageIndex];
-
-	EntryHandle nextCbIndex = trb2.GetCurrentBuffer();
-
-	while (nextCbIndex == EntryHandle())
-		nextCbIndex = trb2.GetCurrentBuffer();
-
-	if (nextCbIndex != currentCBIndex[imageIndex])
-		res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[imageIndex], false); //wait on previous, but don't reset
-
-	currentCBIndex[imageIndex] = nextCbIndex;
-	
-	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[imageIndex], true);
 
 	return imageIndex;
 }
@@ -446,11 +438,11 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[imageIndex]);
+	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[imageIndex]);
+	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
 
-	auto& trb = threadedRecordBuffers[imageIndex];
+	auto& trb = threadedRecordBuffers[currentFrame];
 
 	trb.ReleaseCurrentCommandBuffer();
 
@@ -458,11 +450,10 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 		int ret = RecreateSwapChain();
 		if (ret) resizeWindow = false;
 		currentFrame = 0;
-		// currentFrame = 0;
 		return 1;
 	}
 	
-	currentFrame = (imageIndex  + 1) % MAX_FRAMES_IN_FLIGHT;
+	currentFrame = (currentFrame  + 1) % MAX_FRAMES_IN_FLIGHT;
 	return 0;
 }
 
@@ -497,8 +488,11 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 
 	if (recreate)
 	{
+		
 		swapChain->ResetSwapChain();
 		swapChain->RecreateSwapChain(width, height);
+
+		
 	}
 	else
 	{
@@ -1206,6 +1200,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		ref.outputImageIndex = i;
 		ref.drawingFunction = drawingCallback;
 	}
+
+	LaunchRecording();
 }
 
 void RenderInstance::LaunchRecording()

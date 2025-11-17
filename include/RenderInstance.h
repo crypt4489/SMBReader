@@ -35,7 +35,7 @@ struct ThreadedRecordBuffer
 
 	bool CheckReady() const
 	{
-		return !ready.load();
+		return ready.load();
 	}
 	
 	EntryHandle GetCurrentBuffer()
