@@ -56,7 +56,7 @@ public:
 
 	VKRenderGraph(EntryHandle _renderTargetIndex, DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
 
-	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkExtent2D* rect);
+	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum);
 	
 	EntryHandle renderTargetIndex;
 

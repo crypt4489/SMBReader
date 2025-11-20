@@ -12,17 +12,11 @@ VKRenderGraph::VKRenderGraph(EntryHandle _renderTargetIndex, DeviceAllocator* al
 	
 };
 
-void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkExtent2D *rect)
+void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
 
-	rbo->BeginRenderPassCommand(renderTargetIndex, frameNum, { {0, 0}, *rect });
 
-	float x = static_cast<float>(rect->width), y = static_cast<float>(rect->height);
-
-	rbo->SetViewportCommand(0, 0, x, y, 0.0f, 1.0f);
-
-	rbo->SetScissorCommand(0, 0, rect->width, rect->height);
 
 	std::unique_lock lock(objectGuard);
 
@@ -60,8 +54,6 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum, VkE
 		VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
 		obj->Draw(rbo, frameNum, descriptorCount);
 	}
-
-	rbo->EndRenderPassCommand();
 
 	currentPipeline = EntryHandle();
 }

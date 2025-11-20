@@ -174,6 +174,12 @@ RenderInstance::~RenderInstance()
 	free((void*)descriptorManager.hostResourceHeap);
 
 	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	for (size_t i = 0; i < currentCBIndex.size(); i++)
+	{
+		dev->DestroyCommandBuffer(currentCBIndex[i]);
+	}
+
 	for (size_t i = 0; i < vulkanShaderGraphs.shaders.size(); i++)
 	{
 		dev->DestroyShader(vulkanShaderGraphs.shaders[i]);
@@ -273,16 +279,18 @@ int RenderInstance::RecreateSwapChain() {
 
 	int ret = 0;
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 	
 	windowMan->GetWindowSize(&width, &height);
 
 	if (width && height) {
 
-		dev->WaitOnDevice();
+		//dev->WaitOnDevice();
+
+		swc->Wait();
 
 		DestroySwapChainAttachments();
-
-
 
 		CreateSwapChain(width, height, true);
 
@@ -290,8 +298,6 @@ int RenderInstance::RecreateSwapChain() {
 		{
 			threadedRecordBuffers[i].Reset();
 		}
-
-		//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
 		ret = 1;
 	}
@@ -367,37 +373,30 @@ void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits samp
 	}
 }
 
-void RenderInstance::BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex)
+void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t frameInFlight)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	auto rbo = dev->GetRecordingBufferObject(cb);
+	auto rbo = dev->GetRecordingBufferObject(commandBufferIndex);
 
-	rbo.BeginRecordingCommand();
-}
+	rbo.CommandBufferReset();
 
-void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 
-	commandBufferIndex = dev->RequestWithPossibleBufferResetAndFenceReset(UINT64_MAX, commandBufferIndex, true, false);
+	RenderTarget* target = dev->GetRenderTarget(graph->renderTargetIndex);
 
-	BeginCommandBufferRecording(commandBufferIndex, imageIndex);
+	VkCommandBufferInheritanceInfo info{};
+	info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+	info.renderPass = dev->GetRenderPass(target->renderPassIndex);
+	info.subpass = 0;
 
-	DrawScene(commandBufferIndex, imageIndex);
+	rbo.BeginRecordingCommand(&info, VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT);
 
-	EndCommandBufferRecording(commandBufferIndex);
-}
-
-void RenderInstance::EndCommandBufferRecording(EntryHandle cb)
-{
-
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	auto rbo = dev->GetRecordingBufferObject(cb);
+	BuildMainDrawPacket(&rbo, frameInFlight);
 
 	rbo.EndRecordingCommand();
 }
+
 
 
 uint32_t RenderInstance::BeginFrame()
@@ -406,20 +405,7 @@ uint32_t RenderInstance::BeginFrame()
 
 	int32_t res = 0;
 
-	auto& trb2 = threadedRecordBuffers[currentFrame];
-
-	EntryHandle nextCbIndex = trb2.GetCurrentBuffer();
-
-	if (nextCbIndex == EntryHandle()) {
-		return ~0ui32;
-	}
-
-	if (nextCbIndex != currentCBIndex[currentFrame])
-		res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false); //wait on previous, but don't reset
-
-	currentCBIndex[currentFrame] = nextCbIndex;
-
-	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true);
+	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false);
 
 	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
@@ -427,9 +413,12 @@ uint32_t RenderInstance::BeginFrame()
 	{
 		int ret = RecreateSwapChain();
 		if (ret) resizeWindow = false;
-		//currentFrame = 0;
 		return imageIndex;
 	}
+
+	dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], true);
+	
+	DrawScene(currentCBIndex[currentFrame], imageIndex);
 
 	return imageIndex;
 }
@@ -438,19 +427,19 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
+	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, currentFrame, imageIndex, currentCBIndex[currentFrame]);
 
-	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentCBIndex[currentFrame]);
+	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 
 	auto& trb = threadedRecordBuffers[currentFrame];
 
 	trb.ReleaseCurrentCommandBuffer();
 
 	if (!res || resizeWindow) {
+	
+		dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false);
 		int ret = RecreateSwapChain();
 		if (ret) resizeWindow = false;
-		currentFrame = 0;
-		return 1;
 	}
 	
 	currentFrame = (currentFrame  + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -942,9 +931,14 @@ int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidt
 		throw std::runtime_error("Incorrect depth format");
 	}
 
+	if (!attachment)
+	{
+		flags = 0;
+	}
+
 	auto poolInfo = majorDevice->FindImageMemoryIndexForPool(maxWidth, maxHeight,
 		1, vkFormat, 1,
-		(attachment * flags) | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+		flags | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	int ret = imagePoolCounter++;
@@ -1138,7 +1132,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 
 	
-	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, 1, 2, maxMSAALevels);
+	swapChainIndex = majorDevice->CreateSwapChain(3, MAX_FRAMES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, maxMSAALevels);
 	
 
 	VKSwapChain* swapChain = majorDevice->GetSwapChain(swapChainIndex);
@@ -1187,17 +1181,21 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 			this->MonolithicDrawingTask(cbIndex, iIndex);
 		};
 
+	EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT, true, COMPUTE | TRANSFER | GRAPHICS, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		EntryHandle* cbsIndices = majorDevice->CreateReusableCommandBuffers(3, VK_COMMAND_BUFFER_LEVEL_PRIMARY, true, COMPUTE | TRANSFER | GRAPHICS);
+		currentCBIndex[i] = lprimaryCommandBuffers[i];
+
+		EntryHandle* cbsIndices = majorDevice->CreateReusableCommandBuffers(MAX_FRAMES_IN_FLIGHT, false, COMPUTE | TRANSFER | GRAPHICS, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
 		auto& ref = threadedRecordBuffers[i];
-		int n = MAX_FRAMES_IN_FLIGHT;
-		currentCBIndex[i] = cbsIndices[0];
-		for (int j = 0; j < 3; j++)
+	
+		for (int j = 0; j < MAX_FRAMES_IN_FLIGHT; j++)
 		{
 			ref.buffers[j] = cbsIndices[j];
 		}
-		ref.outputImageIndex = i;
+
+		ref.frameInFlight = i;
 		ref.drawingFunction = drawingCallback;
 	}
 
@@ -1644,14 +1642,14 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 ShaderResourceHeader* RenderInstance::PopShaderResourceBarrier(int descriptorSet, int* counter)
 {
-	int i = *counter;
+
 	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
 	ShaderResourceSet* set = (ShaderResourceSet*)head;
 	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-	while (i < set->bindingCount)
+	while (*counter < set->bindingCount)
 	{
-		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
-		*counter = ++i;
+		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[*counter];
+		(*counter)++;
 		if (header->action & SHADERWRITE)
 		{
 			return (ShaderResourceHeader*)header;
@@ -1669,12 +1667,31 @@ void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
 
 	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
-	//if (!graph.objects.size()) return;
+
 	auto rcb = dev->GetRecordingBufferObject(cbindex);
 
-	cGraph->DispatchWork(&rcb, imageIndex);
+	rcb.CommandBufferReset();
 
-	graph->DrawScene(&rcb, imageIndex, &swc->swapChainExtent);
+	rcb.BeginRecordingCommand(nullptr, 0);
+
+	cGraph->DispatchWork(&rcb, currentFrame);
+
+	VkExtent2D* rect = &swc->swapChainExtent;
+
+	rcb.BeginRenderPassCommand(graph->renderTargetIndex, imageIndex, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, { {0, 0}, *rect });
+
+	auto& trb = threadedRecordBuffers[currentFrame];
+
+	EntryHandle secondaryCommandBuffers = trb.GetCurrentBuffer();
+
+	if (secondaryCommandBuffers != EntryHandle())
+	{
+		rcb.ExecuteSecondaryCommands(&secondaryCommandBuffers, 1);
+	}
+
+	rcb.EndRenderPassCommand();
+
+	rcb.EndRecordingCommand();
 }
 
 void RenderInstance::InvalidateRecordBuffer(uint32_t i)
@@ -1708,4 +1725,24 @@ void RenderInstance::DecreaseMSAA()
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 		threadedRecordBuffers[i].Reset();
+}
+
+
+void RenderInstance::BuildMainDrawPacket(RecordingBufferObject* rcb, uint32_t frameInFlight)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+
+	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
+	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
+
+	VkExtent2D* rect = &swc->swapChainExtent;
+
+	float x = static_cast<float>(rect->width), y = static_cast<float>(rect->height);
+
+	rcb->SetViewportCommand(0, 0, x, y, 0.0f, 1.0f);
+
+	rcb->SetScissorCommand(0, 0, rect->width, rect->height);
+
+	graph->DrawScene(rcb, currentFrame);
 }

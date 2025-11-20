@@ -122,6 +122,7 @@ void RecordingBufferObject::DispatchCommand(uint32_t x, uint32_t y, uint32_t z)
 }
 
 void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
+	VkSubpassContents contents,
 	VkRect2D rect,
 	VkClearColorValue color,
 	VkClearDepthStencilValue depthStencil)
@@ -141,7 +142,7 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();
 
-	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, contents);
 }
 
 void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset)
@@ -187,12 +188,12 @@ void RecordingBufferObject::SetScissorCommand(int xo, int yo, uint32_t extentx, 
 }
 
 
-void RecordingBufferObject::BeginRecordingCommand()
+void RecordingBufferObject::BeginRecordingCommand(VkCommandBufferInheritanceInfo *info, VkCommandBufferUsageFlags flags)
 {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	beginInfo.flags = 0;
-	beginInfo.pInheritanceInfo = nullptr;
+	beginInfo.flags = flags;
+	beginInfo.pInheritanceInfo = info;
 
 	if (vkBeginCommandBuffer(cbBufferHandler.buffer, &beginInfo) != VK_SUCCESS) {
 		throw std::runtime_error("failed to begin recording command buffer!");
@@ -206,7 +207,22 @@ void RecordingBufferObject::EndRecordingCommand()
 	}
 }
 
+void RecordingBufferObject::CommandBufferReset()
+{
+	vkResetCommandBuffer(cbBufferHandler.buffer, 0);
+}
 
+void RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count)
+{
+	VkCommandBuffer* lbuffers = reinterpret_cast<VkCommandBuffer*>(vkDeviceHandle->AllocFromDeviceCache(sizeof(VkCommandBuffer) * count));
+	for (uint32_t i = 0; i < count; i++)
+	{
+		VKCommandBuffer* lbuffer = vkDeviceHandle->GetCommandBuffer(handles[i]);
+		lbuffers[i] = lbuffer->buffer;
+	}
+
+	vkCmdExecuteCommands(cbBufferHandler.buffer, count, lbuffers);
+}
 
 static size_t FindQueueManagerByCapapbilites(QueueManager* managers, size_t managerSize, uint32_t capabilities)
 {
@@ -1090,7 +1106,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 }
 
 EntryHandle* VKDevice::CreateReusableCommandBuffers(
-	uint32_t numberOfCommandBuffers, VkCommandBufferLevel level, bool createFences, uint32_t capabilites)
+	uint32_t numberOfCommandBuffers, bool createFences, uint32_t capabilites, VkCommandBufferLevel level)
 {
 
 	std::shared_lock lock(deviceLock);
@@ -1125,6 +1141,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 		iter->queueFamilyIndex = queueFamilyIndex;
 		iter->queueIndex = queueIndex;
 		iter->poolIndex = poolIndex;
+		iter->fenceIdx = EntryHandle();
 		ret[i] = AddVkTypeToEntry(iter);
 		temp[i] = iter;
 	}
@@ -1326,7 +1343,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages, uint32_t renderTargetCount)
+EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxFramesInFlight, uint32_t renderTargetCount)
 {
 
 	std::shared_lock lock(deviceLock);
@@ -1335,7 +1352,7 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t request
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, attachmentCount, requestedImageCount, swcsupport, renderTargetCount);
+	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, attachmentCount, requestedImageCount, maxFramesInFlight, swcsupport, renderTargetCount);
 
 	EntryHandle index = AddVkTypeToEntry(swc);
 	return index;
@@ -1361,8 +1378,11 @@ void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 	std::shared_lock lock(deviceLock);
 	VKCommandBuffer* buff = GetCommandBuffer(handle);
 	if (!buff) return;
-	VkFence fence = GetFence(buff->fenceIdx);
-	vkDestroyFence(device, fence, nullptr);
+	if (buff->fenceIdx != EntryHandle()) {
+		VkFence fence = GetFence(buff->fenceIdx);
+		vkDestroyFence(device, fence, nullptr);
+		entries[buff->fenceIdx()] = 0;
+	}
 	entries[handle()] = 0;
 }
 
@@ -1862,12 +1882,12 @@ VKTexture* VKDevice::GetTexture(EntryHandle index)
 
 //ACTIONS
 
-uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage)
+uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t currentFrame)
 {
 	std::shared_lock lock(deviceLock);
 	VKSwapChain* swapChain = GetSwapChain(swapChainIndex);
 
-	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage(UINT64_MAX);
+	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, currentFrame);
 
 	return imageIndex;
 }
@@ -1937,7 +1957,7 @@ size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_
 	return alloc->alloc.GetMemory(size, alignment);
 }
 
-uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex)
+uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
 	std::shared_lock lock(deviceLock);
 	VkQueue queue;
@@ -1965,11 +1985,10 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 
 	for (uint32_t i = 0; i < waitCount; i++)
 	{
-		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[swc->currentImage]);
+		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[imageIndex]);
 	}
 
 	
-	VkFence fence = GetFence(swc->presentationFences[swc->acquireSemaphore]);
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1981,15 +2000,23 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx,
 
 	presentInfo.swapchainCount = 1;
 	presentInfo.pSwapchains = &swc->swapChain;
-	presentInfo.pImageIndices = &frameIdx;
+	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = results;
 
-	VkSwapchainPresentFenceInfoEXT info{};
-	info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
-	info.swapchainCount = 1;
-	info.pFences = &fence;
 
-	presentInfo.pNext = &info;
+	if (swc->presentationFences)
+	{
+		VkFence fence = GetFence(swc->presentationFences[frameInFlight]);
+		VkSwapchainPresentFenceInfoEXT info{};
+		info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
+		info.swapchainCount = 1;
+		info.pFences = &fence;
+
+		vkResetFences(device, 1, &fence);
+
+		presentInfo.pNext = &info;
+
+	}
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
 
@@ -2042,6 +2069,7 @@ EntryHandle VKDevice::RequestWithPossibleBufferResetAndFenceReset(uint64_t timeo
 
 	return bufferIndex;
 }
+
 
 void VKDevice::ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex)
 {
@@ -2099,7 +2127,7 @@ uint32_t VKDevice::SubmitCommandBuffer(
 	return 1;
 }
 
-uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, EntryHandle cbIndex)
+uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex)
 {
 	std::shared_lock lock(deviceLock);
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
@@ -2108,7 +2136,7 @@ uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t
 
 	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	uint32_t ret =  SubmitCommandBuffer(&swc->waitSemaphores[swc->acquireSemaphore], waitStages, &swc->signalSemaphores[frameIndex], 1, 1, cbIndex);
+	uint32_t ret =  SubmitCommandBuffer(&swc->waitSemaphores[frameIndex], waitStages, &swc->signalSemaphores[imageIndex], 1, 1, cbIndex);
 
 	return ret;
 }

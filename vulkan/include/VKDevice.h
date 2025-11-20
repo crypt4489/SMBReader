@@ -259,6 +259,7 @@ public:
 	void BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
 
 	void BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
+		VkSubpassContents contents,
 		VkRect2D rect,
 		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
@@ -277,9 +278,13 @@ public:
 
 	void SetScissorCommand(int xo, int yo, uint32_t extentx, uint32_t extenty);
 
-	void BeginRecordingCommand();
+	void BeginRecordingCommand(VkCommandBufferInheritanceInfo* info, VkCommandBufferUsageFlags flags);
 
 	void EndRecordingCommand();
+
+	void CommandBufferReset();
+
+	void ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
 
 	VKCommandBuffer cbBufferHandler;
 	VKDevice* vkDeviceHandle;
@@ -500,8 +505,9 @@ public:
 
 	EntryHandle* CreateReusableCommandBuffers(
 		uint32_t numberOfCommandBuffers,
-		VkCommandBufferLevel level, bool createFences, 
-		uint32_t capabilites
+		bool createFences, 
+		uint32_t capabilites,
+		VkCommandBufferLevel level
 	);
 
 	EntryHandle CreateSampledImage(
@@ -519,7 +525,7 @@ public:
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
-	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxSemaphorePerStage, uint32_t stages, uint32_t renderTargetCount);
+	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxFramesInFlight, uint32_t renderTargetCount);
 
 	
 
@@ -664,11 +670,11 @@ public:
 
 	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t frameIdx, EntryHandle commandBufferIndex);
+	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
 	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
 
-	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool reset, bool fenceReset);
+	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool commnadBufferReset, bool fenceReset);
 
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
@@ -680,8 +686,7 @@ public:
 		uint32_t signalCount,
 		EntryHandle cbIndex);
 
-	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex,
-		EntryHandle cbIndex);
+	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex);
 
 	void TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,

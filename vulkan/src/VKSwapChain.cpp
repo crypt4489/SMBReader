@@ -66,11 +66,11 @@ static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
 
 
 VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
-	uint32_t _attachmentCount, uint32_t requestImages,
+	uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFrameInFlight,
 	VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount)
 	:
 	device(_d), surface(_surface), attachmentCount(_attachmentCount),
-	renderTargetCount(_renderTargetCount) {
+	renderTargetCount(_renderTargetCount), maxFrameInFlight(maxFrameInFlight) {
 
 	if (!vRelease)
 	{
@@ -82,10 +82,10 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* a
 
 
 	renderTargetIndex = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * _renderTargetCount));
-	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
-	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount * 2));
+	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
+	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
-	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount));
+	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 
 }
 
@@ -246,8 +246,8 @@ void VKSwapChain::CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCo
 		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(attachments, aAttachmentCount, renderTarget->renderPassIndex, swapChainExtent);
 	}
 }
-
-void VKSwapChain::SanitizeSwapChainSemaphores()
+/*
+static void SanitizeSwapChainSemaphores()
 {
 	auto queueDetails = device->GetQueueHandle(GRAPHICS);
 
@@ -275,16 +275,22 @@ void VKSwapChain::SanitizeSwapChainSemaphores()
 
 	device->ReturnQueueToManager(managerIndex, queueIndex);
 
+} */
+
+void VKSwapChain::Wait()
+{
+	for (uint32_t i = 0; i < maxFrameInFlight; i++)
+	{
+		VkFence fence = device->GetFence(presentationFences[i]);
+		vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
+
+	}
 }
 
 void VKSwapChain::ResetSwapChain()
 {
-	for (int i = 0; i < imageCount; i++)
-	{
-		VkFence fence = device->GetFence(presentationFences[i]);
-		vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
-	
-	}
+
+	Wait();
 
 	if (swapChain) {
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
@@ -324,7 +330,7 @@ void VKSwapChain::DestroySwapChain()
 void VKSwapChain::DestroySyncObject()
 {
 	
-	for (size_t i = 0; i < imageCount; i++)
+	for (uint32_t i = 0; i < maxFrameInFlight; i++)
 	{
 		device->DestroySemaphore(waitSemaphores[i]);
 		device->DestroySemaphore(signalSemaphores[i]);
@@ -332,11 +338,9 @@ void VKSwapChain::DestroySyncObject()
 	}
 }
 
-uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t frame)
+uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t acquireSemaphore)
 {
 	uint32_t imageIndex;
-
-	acquireSemaphore = (acquireSemaphore + 1) % (imageCount);
 
 	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(waitSemaphores[acquireSemaphore]), VK_NULL_HANDLE, &imageIndex);
 
@@ -347,22 +351,17 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t fram
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
-	return frame;
+	return imageIndex;
 }
 
-uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout)
+uint32_t VKSwapChain::AcquireNextSwapChainImage2(uint64_t _timeout, uint32_t acquireSemaphore)
 {
 
 	uint32_t imageIndex;
-	
-	acquireSemaphore = (acquireSemaphore + 1) % (imageCount);
 
 	VkFence fence = device->GetFence(presentationFences[acquireSemaphore]);
 
 	vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
-
-	vkResetFences(device->device, 1, &fence);
-	
 
 	VkAcquireNextImageInfoKHR info{};
 	info.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR;
@@ -374,15 +373,11 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout)
 	VkResult result = vkAcquireNextImage2KHR(device->device, &info, &imageIndex);
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR ) {
-		if (imageIndex < imageCount)
-			ReleaseImageMaintenance(imageIndex);
 		return 0xFFFFFFFF;
 	}
 	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
-
-	currentImage = imageIndex;
 
 	return imageIndex;
 }

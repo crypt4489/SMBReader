@@ -28,7 +28,7 @@ struct ThreadedRecordBuffer
 	uint32_t currentBuffer = N-1; // current good buffer
 	Semaphore currentGuard{};
 	SPSC invalidate{};
-	uint32_t outputImageIndex;
+	uint32_t frameInFlight;
 	std::function<void(EntryHandle, uint32_t)> drawingFunction;
 
 	std::atomic<bool> ready = false;
@@ -92,7 +92,7 @@ struct ThreadedRecordBuffer
 
 		//do stuff
 
-		drawingFunction(recordBuffer, outputImageIndex);
+		drawingFunction(recordBuffer, frameInFlight);
 
 		{
 			SemaphoreGuard guard(currentGuard);
@@ -187,6 +187,8 @@ public:
 	RenderInstance();
 
 	~RenderInstance();
+
+	void BuildMainDrawPacket(RecordingBufferObject* obj, uint32_t frameInFlight);
 
 	void CreateDepthImage( uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 

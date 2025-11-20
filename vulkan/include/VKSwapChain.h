@@ -10,20 +10,13 @@
 #include <unordered_map>
 #include <vector>
 
-
-
-
-#define SWCQFCOFFSET(x) (sizeof(VkImage) * x)
-#define SWCDEPENDSOFFSET(x) (sizeof(uint32_t) * x)
-#define SWCRENDERTARGETSOFFSET(x, y, z) (sizeof(EntryHandle) * (x * ((y * z) + 1)))
-
 class VKSwapChain
 {
 public:
 	VKSwapChain() = default;
 
 	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
-		uint32_t _attachmentCount, uint32_t requestImages,
+		uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFramesInFlight,
 		VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount);
 
 	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
@@ -33,8 +26,6 @@ public:
 	void CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCount, EntryHandle* attachments, EntryHandle* imageViews);
 
 	void CreateRenderTarget(uint32_t index, EntryHandle renderPassIndex);
-
-	
 
 	void CreateSwapChain(
 		uint32_t width, uint32_t height);
@@ -49,11 +40,9 @@ public:
 
 	void DestroySyncObject();
 
-	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t imageIndex);
+	uint32_t AcquireNextSwapChainImage(uint64_t _timeout, uint32_t acquireSemaphore);
 
-	uint32_t AcquireNextSwapChainImage(uint64_t _timeout);
-
-	void SanitizeSwapChainSemaphores();
+	uint32_t AcquireNextSwapChainImage2(uint64_t _timeout, uint32_t acquireSemaphore);
 
 	VkFormat GetSwapChainFormat() const
 	{
@@ -72,15 +61,12 @@ public:
 
 	void ReleaseImageMaintenance(uint32_t imageIndex);
 
+	void Wait();
+
 	VkSwapchainKHR swapChain = VK_NULL_HANDLE;
-
-	
-
 	VkSurfaceFormatKHR swapChainImageFormat;
 	VkPresentModeKHR presentMode;
 	VkExtent2D swapChainExtent;
-
-	int acquireSemaphore = -1;
 
 	uint32_t attachmentCount;
 	uint32_t imageCount;
@@ -98,9 +84,11 @@ public:
 
 	EntryHandle* presentationFences;
 
-	uint32_t currentImage = 0;
 	
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain
+
+	uint32_t maxFrameInFlight;
+	
 };
 
