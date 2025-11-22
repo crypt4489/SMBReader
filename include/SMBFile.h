@@ -85,7 +85,7 @@ struct SMBChunk
 	}
 };
 
-class SMBFile
+struct SMBFile
 {
 public:
 	uint32_t magic;

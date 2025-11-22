@@ -9,9 +9,8 @@
 #include <thread>
 #include <vector>
 
-class SharedExclusiveFlag
+struct SharedExclusiveFlag
 {
-public:
     std::atomic_flag exclusiveFlag;
     std::atomic<int> sharedCount;
 
@@ -85,9 +84,8 @@ public:
     }
 };
 
-class Semaphore
+struct Semaphore
 {
-public:
     explicit Semaphore(int c = 1) : count(c) {};
 
     void Wait();
@@ -101,7 +99,7 @@ public:
     std::condition_variable cv;
 };
 
-class SPSC
+struct SPSC
 {
 public:
     explicit SPSC(bool c = false) : count(c) {};
@@ -121,18 +119,17 @@ public:
     std::condition_variable_any cv;
 };
 
-class SemaphoreGuard
+struct SemaphoreGuard
 {
-public:
+
     SemaphoreGuard(Semaphore& _s) : sema(_s) { sema.Wait(); }
     ~SemaphoreGuard() { sema.Notify(); }
 
     Semaphore& sema;
 };
 
-class ThreadManager
+struct ThreadManager
 {
-public:
     static std::vector<std::pair<std::jthread, std::shared_ptr<std::atomic<bool>>>> threadsFlags;
 
     static std::vector<std::jthread> backgroundTasks;

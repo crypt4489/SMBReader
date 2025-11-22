@@ -95,7 +95,6 @@ void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, 
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
-	memset(imageInfos, 0, sizeof(VkDescriptorImageInfo) * texCount);
 
 	for (uint32_t i = 0; i < texCount; i++)
 	{

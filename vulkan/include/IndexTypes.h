@@ -1,9 +1,9 @@
 #pragma once
 #include <cstdint>
 
-class DeviceIndex
+struct DeviceIndex
 {
-public:
+
 	DeviceIndex() = default;
 	explicit DeviceIndex(uint8_t _id) : ID(_id) {};
 	explicit DeviceIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
@@ -32,13 +32,13 @@ public:
 	constexpr bool operator==(const DeviceIndex& other) const {
 		return this->ID == other.ID;
 	}
-private:
+
 	uint8_t ID = ~0ui8;
 };
 
-class QueueIndex
+struct QueueIndex
 {
-public:
+
 	QueueIndex() = default;
 	explicit QueueIndex(uint8_t _id) : ID(_id) {};
 	explicit QueueIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
@@ -73,14 +73,13 @@ public:
 
 	
 
-private:
 	uint8_t ID = ~0ui8;
 };
 
 
-class EntryHandle
+struct EntryHandle
 {
-public:
+
 	EntryHandle() = default;
 	~EntryHandle() = default;
 	//explicit EntryHandle(uint64_t _id) : ID(_id) {};
@@ -152,7 +151,6 @@ public:
 		return this->ID != n;
 	}
 
-private:
 	size_t ID = ~0ui64;
 };
 

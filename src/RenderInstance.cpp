@@ -1279,6 +1279,8 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 			size++;
 			break;
 		}
+		default:
+			break;
 
 	
 		}

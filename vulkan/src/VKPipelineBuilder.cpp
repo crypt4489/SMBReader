@@ -5,7 +5,6 @@
 #include <array>
 VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount)
 {
-	memset(this, 0, sizeof(VKGraphicsPipelineBuilder));
 	renderPass = _rp; 
 	majorDev = d;
 	colorBlendAttachmentsCount = colorsBlendAttchCount;
@@ -202,7 +201,6 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 }
 VKComputePipelineBuilder::VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount, uint32_t pushConstantCount) 
 {
-	memset(this, 0, sizeof(VKComputePipelineBuilder));
 	majorDev = d;
 	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
 	pushConstantsCount = pushConstantCount;

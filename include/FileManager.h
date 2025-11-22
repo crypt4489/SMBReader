@@ -9,9 +9,9 @@
 #include <utility>
 
 
-class FileID
+struct FileID
 {
-public:
+
 	FileID() = delete;
 	explicit FileID(uint32_t _id) : ID(_id) {};
 	//delete copies / integer assignment
@@ -26,7 +26,7 @@ public:
 	constexpr uint32_t operator()() const {
 		return ID;
 	}
-private:
+
 	uint32_t ID;
 };
 
@@ -49,7 +49,7 @@ struct FileHandle
 	uint64_t size;
 };
 
-class FileManager
+struct FileManager
 {
 public:
 
@@ -81,7 +81,6 @@ public:
 
 	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
 	static constexpr uint32_t MAXFILES = 10;
-private:
 
 	static uint32_t FindAvailableHandle();
 

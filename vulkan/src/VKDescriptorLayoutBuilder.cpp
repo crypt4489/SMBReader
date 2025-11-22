@@ -16,7 +16,6 @@ DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc
 		d->AllocFromDeviceCache(sizeof(VkDescriptorBindingFlags)
 			* _bc)))
 {
-	memset(flags, 0, sizeof(VkDescriptorBindingFlags) * _bc);
 }
 
 VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()

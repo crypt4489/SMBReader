@@ -34,7 +34,7 @@ inline std::ostream& operator<<(std::ostream& os, const ImageFormat format)
 	return os;
 }
 
-class SMBTexture
+struct SMBTexture
 {
 public:
 	ImageFormat type;

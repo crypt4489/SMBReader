@@ -79,9 +79,9 @@ struct VKDriverAllocator
 
 };
 
-class VKInstance
+struct VKInstance
 {
-public:
+
 
 	VKInstance();
 	~VKInstance();

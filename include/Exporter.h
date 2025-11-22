@@ -27,7 +27,7 @@ namespace ExportHelper
 	}
 }
 
-class Exporter
+struct Exporter
 {
 public:
 	

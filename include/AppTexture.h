@@ -6,7 +6,7 @@
 #include "SMBTexture.h"
 
 
-class AppTexture
+struct AppTexture
 {
 public:
 

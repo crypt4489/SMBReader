@@ -1,8 +1,8 @@
 #pragma once
 #include "IndexTypes.h"
-class VKTexture
+struct VKTexture
 {
-public:
+
 
 	VKTexture(EntryHandle piIndex, EntryHandle *pvIndex, int numViews, EntryHandle* psIndex, int numSamplers);
 

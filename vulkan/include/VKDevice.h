@@ -16,7 +16,7 @@
 #include "VKTypes.h"
 
 
-class VKDevice;
+struct VKDevice;
 
 struct DescriptorPoolBuilder
 {
@@ -49,9 +49,9 @@ struct DescriptorPoolBuilder
 	size_t counter; 
 };
 
-class VKAllocator
+struct VKAllocator
 {
-public:
+
 	VkDeviceSize capacity;
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> freeList; // [staringAddr, endingAddr)
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> occupiedList; //[staringAddr, endingAddr)
@@ -232,9 +232,9 @@ struct RBOPipelineBarrierArgs
 	VkImageMemoryBarrier* pImageMemoryBarriers;
 };
 
-class RecordingBufferObject
+struct RecordingBufferObject
 {
-public:
+
 
 	RecordingBufferObject(VKDevice* device, VKCommandBuffer buffer);
 
@@ -292,9 +292,9 @@ public:
 	VkPipeline currPipeline;
 };
 
-class RenderTarget
+struct RenderTarget
 {
-public:
+
 	
 	RenderTarget() = default;
 	
@@ -323,9 +323,9 @@ enum VKQueueCapabilities : uint32_t
 	PRESENT = 8
 };
 
-class QueueManager
+struct QueueManager
 {
-public:
+
 
 	QueueManager(uint32_t* _cqs, uint32_t _cqss,
 		int32_t _mqc, uint32_t _qfi,
@@ -378,7 +378,11 @@ struct DeviceAllocator
 		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
 			std::memory_order_relaxed));
 
-		return reinterpret_cast<void*>(memHead + out);
+		uintptr_t dest = memHead + out;
+
+		memset((void*)dest, 0, inSize);
+
+		return reinterpret_cast<void*>(dest);
 	}
 
 	void* AllocWrapAround(size_t inSize)
@@ -397,14 +401,18 @@ struct DeviceAllocator
 		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
 			std::memory_order_relaxed));
 
-		return reinterpret_cast<void*>(memHead + out);
+		uintptr_t dest = memHead + out;
+
+		memset((void*)dest, 0, inSize);
+
+		return reinterpret_cast<void*>(dest);
 	}
 };
 
 
-class VKDevice
+struct VKDevice
 {
-public:
+
 	
 	VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst);
 

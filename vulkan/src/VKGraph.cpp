@@ -42,8 +42,15 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 
 			for (uint32_t descI = 0; descI < descriptorCount; descI++) {
 
-				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
+				uint32_t* dynPtr = nullptr;
+				if (dynamicsPerSet[descI])
+				{
+					dynPtr = &dynamicOffsets[dynamicOffset];
+				}
+
+				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], dynPtr);
 				dynamicOffset += dynamicsPerSet[descI];
+				//descI++;
 			}
 		}
 
@@ -92,8 +99,13 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 			for (uint32_t descI = 0; descI<descriptorCount; descI++) {
 
+				uint32_t* dynPtr = nullptr;
+				if (dynamicsPerSet[descI])
+				{
+					dynPtr = &dynamicOffsets[dynamicOffset];
+				}
 
-				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
+				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], dynPtr);
 				dynamicOffset += dynamicsPerSet[descI];
 			}
 		}
@@ -144,11 +156,6 @@ VKGraph::VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, si
 	dynamicOffsets = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * dCount));
 	objects = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pCount));
 	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pCount));
-	memset(activeIndicators, 0, pCount);
 	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
 	dynamicsPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
-	for (size_t i = 0; i < descCount; i++) {
-		descriptorId[i] = EntryHandle();
-		dynamicsPerSet[i] = 0;
-	}
 }

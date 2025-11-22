@@ -1,6 +1,6 @@
 #pragma once
 #include <filesystem>
-class ProgramArgs
+struct ProgramArgs
 {
 public:
 	explicit ProgramArgs(int argc, char** argv);

@@ -26,7 +26,7 @@ struct Font
 	uint32_t widthSize;
 };
 
-class Text
+struct Text
 {
 public:
 	Text() = delete;
@@ -46,7 +46,7 @@ public:
 	float startX, startY;
 };
 
-class TextManager
+struct TextManager
 {
 public:
 	static void CreateFontTextManager(const std::string& imageName, const std::string& dataName);

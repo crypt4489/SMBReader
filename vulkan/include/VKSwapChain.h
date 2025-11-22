@@ -10,9 +10,9 @@
 #include <unordered_map>
 #include <vector>
 
-class VKSwapChain
+struct VKSwapChain
 {
-public:
+
 	VKSwapChain() = default;
 
 	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,

@@ -210,7 +210,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 			.pushRangeCount = 0
 	};
 
-	computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2);
+	//computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2);
 
 
 	float offsetX = 4 * -15.0f;

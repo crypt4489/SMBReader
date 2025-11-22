@@ -15,9 +15,9 @@ struct PipelineCacheObject
 	VkPipeline pipeline;
 };
 
-class VKPipelineBuilder
+struct VKPipelineBuilder
 {
-public:
+
 	VKDevice* majorDev;
 	PipelineCacheObject co;
 	uint32_t pushConstantsCount;
@@ -30,9 +30,9 @@ public:
 	void AddPushConstantRange(uint32_t offset, uint32_t size, VkShaderStageFlags stage, uint32_t rangeLocation);
 };
 
-class VKGraphicsPipelineBuilder : public VKPipelineBuilder
+struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 {
-public:
+
 	VKGraphicsPipelineBuilder() = delete;
 	VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount);
 
@@ -84,9 +84,9 @@ public:
 	
 };
 
-class VKComputePipelineBuilder : public VKPipelineBuilder
+struct VKComputePipelineBuilder : public VKPipelineBuilder
 {
-public:
+
 	VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount, uint32_t pushConstantCount);
 	VkComputePipelineCreateInfo pipelineInfo;
 

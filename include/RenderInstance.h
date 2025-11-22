@@ -180,7 +180,7 @@ enum PipelineLabels
 	POLY = 3,
 };
 
-class RenderInstance
+struct RenderInstance
 {
 public:
 
@@ -197,10 +197,6 @@ public:
 	int RecreateSwapChain();
 
 	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
-
-	void BeginCommandBufferRecording(EntryHandle cb, uint32_t imageIndex);
-
-	void EndCommandBufferRecording(EntryHandle cb);
 
 	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits sampleCount);
 

@@ -2,9 +2,9 @@
 #include "VKTypes.h"
 #include "VKUtilities.h"
 
-class VKRenderPassBuilder
+struct VKRenderPassBuilder
 {
-public:
+
 	enum VKRenderPassAttachmentType
 	{
 		COLORATTACH = 0,

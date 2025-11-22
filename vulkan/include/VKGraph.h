@@ -23,6 +23,8 @@ struct VKGraph {
 
 	bool SetActive(uint32_t objIndex, bool active);
 
+	std::shared_mutex objectGuard;
+
 	EntryHandle currentPipeline;
 
 	EntryHandle* descriptorId;
@@ -31,21 +33,19 @@ struct VKGraph {
 
 	uint32_t* dynamicOffsets;
 
-	std::shared_mutex objectGuard;
-
 	EntryHandle* objects;
 
 	uint8_t* activeIndicators;
 
 	VKDevice* dev;
 
-	uint32_t dynamicOffsetCount, dynamicOffsetSize;
-	uint32_t pipelineObjCount, pipelineObjSize;
+	size_t dynamicOffsetCount, dynamicOffsetSize;
+	size_t pipelineObjCount, pipelineObjSize;
 };
 
-class VKRenderGraph : public VKGraph
+struct VKRenderGraph : public VKGraph
 {
-public:
+
 
 	VKRenderGraph() = default;
 	VKRenderGraph(VKRenderGraph&& other) = delete;

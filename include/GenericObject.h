@@ -7,7 +7,7 @@
 #include "Mesh.h"
 #include "SMBFile.h"
 
-class GenericObject
+struct GenericObject
 {
 public:
 	GenericObject(RenderingBackend be, size_t _oi);

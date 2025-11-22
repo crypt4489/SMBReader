@@ -8,7 +8,7 @@
 #undef min
 #undef max
 
-class WindowManager
+struct WindowManager
 {
 public:
 	void CreateWindowInstance();

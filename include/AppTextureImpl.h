@@ -6,7 +6,7 @@
 #include "TextureData.h"
 
 
-class AppTextureImpl
+struct AppTextureImpl
 {
 public:
 	AppTextureImpl(std::vector<char>& _fileData, TextureIOType type);
