@@ -23,7 +23,6 @@ VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid,
 	for (uint32_t i = 0; i < descCount; i++) {
 		descriptorSetId[i] = _dsid[i];
 		dynamicPerSet[i] = _dynamicPerSet[i];
-		
 	}
 }
 

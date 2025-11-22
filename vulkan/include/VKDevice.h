@@ -599,6 +599,8 @@ public:
 
 	RenderTarget* GetRenderTarget(EntryHandle renderTargetIndex);
 
+	RenderTarget* GetRenderTargetByGraph(EntryHandle index);
+
 	VkSampler GetSamplerByIndex(EntryHandle index);
 
 	VkSampler GetSamplerByTexture(EntryHandle index, int samplerIndex);
@@ -696,7 +698,7 @@ public:
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
-	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount);
+	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet);
 
 	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
 	

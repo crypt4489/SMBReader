@@ -1077,7 +1077,7 @@ EntryHandle VKDevice::CreateRenderGraph(EntryHandle renderTarget, uint32_t descr
 
 	renderPassDataHandle->target = renderTarget;
 
-	auto graph = std::construct_at(&renderPassDataHandle->graph, renderTarget, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, this);
+	auto graph = std::construct_at(&renderPassDataHandle->graph, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, this);
 
 	return AddVkTypeToEntry(renderPassDataHandle);
 }
@@ -1857,6 +1857,14 @@ RenderTarget* VKDevice::GetRenderTarget(EntryHandle index)
 }
 
 
+RenderTarget* VKDevice::GetRenderTargetByGraph(EntryHandle index)
+{
+	std::shared_lock lock(deviceLock);
+	auto data = reinterpret_cast<RenderPassData*>(GetVkTypeFromEntry(index));
+	return GetRenderTarget(data->target);
+}
+
+
 VkSampler VKDevice::GetSamplerByIndex(EntryHandle index)
 {
 	return reinterpret_cast<VkSampler>(GetVkTypeFromEntry(index));
@@ -2187,7 +2195,7 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 }
 
 
-void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle *perGraphDescriptor, uint32_t descriptorCount)
+void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle *perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet)
 {
 //	std::shared_lock lock(deviceLock);
 
@@ -2195,6 +2203,7 @@ void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffset
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
 		graph->descriptorId[i] = perGraphDescriptor[i];
+		graph->dynamicsPerSet[i] = dynamicPerSet[i];
 	}
 	for (uint32_t i = 0; i<dos; i++)
 	{

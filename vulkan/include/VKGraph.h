@@ -25,8 +25,9 @@ struct VKGraph {
 
 	EntryHandle currentPipeline;
 
-	EntryHandle *descriptorId;
+	EntryHandle* descriptorId;
 	uint32_t descriptorCount;
+	uint32_t* dynamicsPerSet;
 
 	uint32_t* dynamicOffsets;
 
@@ -38,8 +39,8 @@ struct VKGraph {
 
 	VKDevice* dev;
 
-	size_t dynamicOffsetCount, dynamicOffsetSize;
-	size_t pipelineObjCount, pipelineObjSize;
+	uint32_t dynamicOffsetCount, dynamicOffsetSize;
+	uint32_t pipelineObjCount, pipelineObjSize;
 };
 
 class VKRenderGraph : public VKGraph
@@ -54,11 +55,9 @@ public:
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(EntryHandle _renderTargetIndex, DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
+	VKRenderGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
 
 	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum);
-	
-	EntryHandle renderTargetIndex;
 
 };
 

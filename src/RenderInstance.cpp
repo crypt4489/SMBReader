@@ -383,7 +383,7 @@ void RenderInstance::MonolithicDrawingTask(EntryHandle commandBufferIndex, uint3
 
 	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 
-	RenderTarget* target = dev->GetRenderTarget(graph->renderTargetIndex);
+	RenderTarget* target = dev->GetRenderTargetByGraph(swapchainRenderTargets[currentMSAALevel]);
 
 	VkCommandBufferInheritanceInfo info{};
 	info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -1030,6 +1030,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			case SAMPLERBINDLESS:
 			{
 				memBarrierType = IMAGE_BARRIER;
+				memset((void*)ptr, 0, sizeof(ShaderResourceSamplerBindless));
 				ptr += sizeof(ShaderResourceSamplerBindless);
 				break;
 			}
@@ -1221,6 +1222,7 @@ void RenderInstance::CreateRenderGraph(int* desc, int descCount)
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	std::vector<EntryHandle> descIDs(descCount);
+	std::vector<uint32_t> dynamicPerSet(descCount);
 
 	uint32_t dynamicSize = 0;
 
@@ -1229,12 +1231,14 @@ void RenderInstance::CreateRenderGraph(int* desc, int descCount)
 	for (int i = 0; i < descCount; i++)
 	{
 		descIDs[i] = CreateShaderResourceSet(desc[i]);
-		dynamicSize += GetDynamicOffsetsForDescriptorSet(desc[i], data);
+		uint32_t size = GetDynamicOffsetsForDescriptorSet(desc[i], data);
+		dynamicPerSet[i] = size;
+		dynamicSize += size;
 	}
 
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
-		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), dynamicSize, descIDs.data(), descCount);
+		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), dynamicSize, descIDs.data(), descCount, dynamicPerSet.data());
 	
 }
 
@@ -1683,7 +1687,7 @@ void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
 
 	VkExtent2D* rect = &swc->swapChainExtent;
 
-	rcb.BeginRenderPassCommand(graph->renderTargetIndex, imageIndex, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, { {0, 0}, *rect });
+	rcb.BeginRenderPassCommand(swc->renderTargetIndex[currentMSAALevel], imageIndex, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS, {{0, 0}, *rect});
 
 	auto& trb = threadedRecordBuffers[currentFrame];
 
