@@ -251,7 +251,7 @@ public:
 
 	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
-	int CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle* textures, uint32_t texCount);
+	void CreateRenderGraph(int* desc, int descCount);
 
 	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 
@@ -284,6 +284,8 @@ public:
 	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
 
 	void LaunchRecording();
+
+	void UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;

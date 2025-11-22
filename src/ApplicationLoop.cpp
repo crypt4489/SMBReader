@@ -85,6 +85,8 @@ void ApplicationLoop::Execute()
 
 		InitializeRuntime();
 
+		commandMap["load"]({ args.inputFile.string() });
+
 		int i = 0, j = 1;
 
 		LARGE_INTEGER startTime;
@@ -112,8 +114,6 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		int cnt = 0;
-
 		while (running)
 		{
 			//std::string base = std::string("FPS : ");
@@ -134,17 +134,10 @@ void ApplicationLoop::Execute()
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
-			int what = 1;
+			
 
 			if (index != ~0ui32) {
-				what = VKRenderer::gRenderInstance->SubmitFrame(index);
-			}
-
-			cnt++;
-
-			if (what)
-			{
-				cnt = 0;
+				VKRenderer::gRenderInstance->SubmitFrame(index);
 			}
 			
 
@@ -368,11 +361,13 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
-std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
+void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 {
-	std::vector<int> textureHandles;
-	std::vector<SMBTexture> textures;
+
+	int previousLevel = mainDictionary.allocationIndex;
+
 	int alloc = 0;
+
 	for (const auto& chunk : file.chunks)
 	{
 		switch (chunk.chunkType)
@@ -380,28 +375,28 @@ std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
 		case GEO:
 			break;
 		case TEXTURE:
-			textures.emplace_back(file, chunk);
-			textureHandles.push_back(
-				mainDictionary.AllocateTextureData(
-				(char*)textures[alloc].data, 
-				textures[alloc].cumulativeSize, 
-				textures[alloc].type, 
-				textures[alloc].width, 
-				textures[alloc].height, 
-				textures[alloc].miplevels)
-			);
-			mainDictionary.textureHandles[textureHandles[alloc]] = 
+		{
+			SMBTexture texture(file, chunk);
+			alloc = mainDictionary.AllocateTextureData(
+				(char*)texture.data,
+				texture.cumulativeSize,
+				texture.type,
+				texture.width,
+				texture.height,
+				texture.miplevels);
+			mainDictionary.textureHandles[alloc] =
 				VKRenderer::gRenderInstance->CreateImage(
-				(char*)textures[alloc].data,
-				textures[alloc].imageSizes,
-				textures[alloc].cumulativeSize,
-				textures[alloc].width,
-				textures[alloc].height,
-				textures[alloc].miplevels,
-				textures[alloc].type,
-				GetPoolIndexByFormat(textures[alloc].type));
-			alloc++;
+					(char*)texture.data,
+					texture.imageSizes,
+					texture.cumulativeSize,
+					texture.width,
+					texture.height,
+					texture.miplevels,
+					texture.type,
+					GetPoolIndexByFormat(texture.type));
+
 			break;
+		}
 		case GR2:
 			break;
 		case Joints:
@@ -412,7 +407,7 @@ std::vector<int> ApplicationLoop::LoadSMBFile(SMBFile &file)
 		}
 	}
 
-	return textureHandles;
+	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data(), previousLevel, mainDictionary.allocationIndex);
 }
 
 
@@ -443,23 +438,22 @@ void ApplicationLoop::InitializeRuntime()
 			VKRenderer::gRenderInstance->UpdateAllocation(_d, _alloc, _si, frame * _si);
 		};
 
-	//TextManager::CreateFontTextManager("text.bmp", "text.dat");
-
-	//std::string name = "FPS : ";
-
-	//text1 = new Text(name, *TextManager::fonts, 0.0f, 0.05f, glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), name.size() + 25);
-
-	//TextManager::UploadToVertexBuffer(text1);
-
-	//VKRenderer::gRenderInstance->LaunchRecording();
 
 	CreateTexturePools();
 
 	CreateGlobalStorageImage();
 
-	LoadObject(args.inputFile.string());
+	
 
-	globalBufferLocation = VKRenderer::gRenderInstance->CreateRenderGraph(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 16, mainDictionary.textureHandles.data(), mainDictionary.allocationIndex);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT,64);
+	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, REPEAT, 0);
+
+	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
+
+	VKRenderer::gRenderInstance->CreateRenderGraph(arr.data(), 2);
 
 	
 	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -468,9 +462,6 @@ void ApplicationLoop::InitializeRuntime()
 
 	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	//for (int i = 0; i < 3; i++)
-	//	VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
 }
 
 
@@ -591,11 +582,11 @@ void ApplicationLoop::CleanupRuntime()
 
 	renderables.clear();
 
-	delete text1;
+	//delete text1;
 
-	delete text2;
+	//delete text2;
 
-	TextManager::DestroyTextManager();
+	//TextManager::DestroyTextManager();
 
 	ThreadManager::DestroyThreadManager();
 
@@ -637,11 +628,9 @@ void ApplicationLoop::LoadObject(const std::string& file)
 {
 	SMBFile SMB(file);
 
-	std::vector<int> handles = LoadSMBFile(SMB);
+	GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0);
 
-	GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0, handles);
-
-	
+	LoadSMBFile(SMB, obj);
 
 	glm::mat4 identity = glm::identity<glm::mat4>();
 
@@ -654,6 +643,10 @@ void ApplicationLoop::LoadObject(const std::string& file)
 	SemaphoreGuard lock(objsSema);
 
 	renderables.push_back(obj);
+
+	for (uint32_t i = 0; i < VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT; i++)
+		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
+
 }
 
 void ApplicationLoop::LoadThreadedWrapper(const std::string file)

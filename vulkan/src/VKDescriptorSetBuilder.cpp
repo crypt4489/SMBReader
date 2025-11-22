@@ -8,12 +8,19 @@
 DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, size_t _ds)
 	:
 	device(_d),
-	counter(0),
 	descriptorSize(_ds),
 	descriptorSets(reinterpret_cast<VkDescriptorSet*>(_d->AllocFromPerDeviceData(sizeof(VkDescriptorSet) * _ds)))
 {
 
 };
+
+
+DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, EntryHandle _dsi)
+	: device(_d),
+	descriptorSets(_d->GetDescriptorSets(_dsi))
+{
+
+} 
 
 void DescriptorSetBuilder::AddTexelViewTypeByFrame(VkBufferView buffer, uint32_t binding, uint32_t frame)
 {
@@ -84,7 +91,7 @@ void DescriptorSetBuilder::AddStorageImageDescription(VkImageView view, uint32_t
 	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t arrayCount, uint32_t frames, uint32_t binding)
+void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t arrayCount, uint32_t frames, uint32_t binding)
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
@@ -105,7 +112,7 @@ void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, 
 		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptorWrite.dstSet = descriptorSets[frame];
 		descriptorWrite.dstBinding = binding;
-		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.dstArrayElement = dstArrayElement;
 		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		descriptorWrite.descriptorCount = texCount;
 		descriptorWrite.pImageInfo = imageInfos;

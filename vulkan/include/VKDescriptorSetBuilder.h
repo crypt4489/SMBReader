@@ -8,6 +8,8 @@ struct DescriptorSetBuilder
 {
 	DescriptorSetBuilder(VKDevice* _d, size_t _ds);
 
+	DescriptorSetBuilder(VKDevice* _d, EntryHandle _dsi);
+
 	void AddPixelShaderImageDescription(VkImageView view, VkSampler sampler, uint32_t binding, uint32_t frames);
 
 	void AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset);
@@ -36,11 +38,11 @@ struct DescriptorSetBuilder
 
 	void AddStorageImageDescription(VkImageView view, uint32_t binding, uint32_t frames);
 
-	void AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t arrayCount, uint32_t frames, uint32_t binding);
+	void AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t arrayCount, uint32_t frames, uint32_t binding);
 
 	EntryHandle AddDescriptorsToCache();
 
 	VkDescriptorSet* descriptorSets;
 	VKDevice *device;
-	size_t counter, descriptorSize;
+	size_t descriptorSize;
 };

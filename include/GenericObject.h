@@ -10,7 +10,7 @@
 class GenericObject
 {
 public:
-	GenericObject(RenderingBackend be, size_t _oi, std::vector<int>& images);
+	GenericObject(RenderingBackend be, size_t _oi);
 
 	~GenericObject();
 
@@ -18,7 +18,6 @@ public:
 
 
 	EntryHandle pipelineIndex;
-	std::vector<int> textures;
 	size_t objectIndex;
 	glm::mat4 mat;
 	std::function<void(GenericObject*)> updateObject;
@@ -26,7 +25,7 @@ public:
 	int objVertexMemoryIndex, objIndexMemoryIndex;
 	float interpolate = 0.0f;
 	std::array<int, 2> objSpecificMemIndex;
-	uint32_t computeHandle = 0xFFFFFFFF;
+	int computeHandle;
 	Mesh* m;
 };
 

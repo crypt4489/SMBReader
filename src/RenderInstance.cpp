@@ -1216,37 +1216,26 @@ void RenderInstance::LaunchRecording()
 }
 
 
-int RenderInstance::CreateRenderGraph(size_t datasize, size_t alignment, EntryHandle *textures, uint32_t texCount)
+void RenderInstance::CreateRenderGraph(int* desc, int descCount)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	VKSwapChain* swc = majorDevice->GetSwapChain(swapChainIndex);
+	std::vector<EntryHandle> descIDs(descCount);
 
-	int perRenderPassStuff = GetPageFromUniformBuffer(datasize, (uint32_t)alignment);
-	int mrpDescHandle = AllocateShaderResourceSet(0, 0, MAX_FRAMES_IN_FLIGHT);
-	int texturesHandle = AllocateShaderResourceSet(0, 1, MAX_FRAMES_IN_FLIGHT);
-
-	descriptorManager.BindBufferToShaderResource(mrpDescHandle, perRenderPassStuff, REPEAT, 0);
-
-	descriptorManager.BindSampledImageArrayToShaderResource(texturesHandle, textures, texCount, 0);
-
-	EntryHandle mrpDescId = CreateShaderResourceSet(mrpDescHandle);
-	EntryHandle imageDescID = CreateShaderResourceSet(texturesHandle);
-
-	std::array<EntryHandle, 2> descIDs{};
-	descIDs[0] = mrpDescId;
-	descIDs[1] = imageDescID;
+	uint32_t dynamicSize = 0;
 
 	std::vector<uint32_t> data;
 
-	uint32_t dynamicSize = GetDynamicOffsetsForDescriptorSet(mrpDescHandle, data);
+	for (int i = 0; i < descCount; i++)
+	{
+		descIDs[i] = CreateShaderResourceSet(desc[i]);
+		dynamicSize += GetDynamicOffsetsForDescriptorSet(desc[i], data);
+	}
+
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
-
-		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), dynamicSize, descIDs.data(), 2);
+		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], data.data(), dynamicSize, descIDs.data(), descCount);
 	
-
-	return perRenderPassStuff;
 }
 
 
@@ -1315,19 +1304,19 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 		{
 			case IMAGESTORE2D:
 			{
-				ShaderResourceImage* image = (ShaderResourceImage*)offsets[i];
+				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
 			case SAMPLER:
 			{
-				ShaderResourceImage* image = (ShaderResourceImage*)offsets[i];
+				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), dev->GetSamplerByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
 			case STORAGE_BUFFER:
 			{
-				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
+				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
 				if (buffer->copyPattern == REPEAT)
 					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.size / frames, i, frames, 0);
@@ -1337,7 +1326,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			}
 			case UNIFORM_BUFFER:
 			{
-				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
+				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
 				if (buffer->copyPattern == REPEAT)
 					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.size / frames, i, frames, 0);
@@ -1348,14 +1337,34 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 			case SAMPLERBINDLESS:
 			{
-				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)offsets[i];
-				builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, samplers->arrayCount, frames, i);
+				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)header;
+				if (!samplers->textureHandles)
+					builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, 0, samplers->arrayCount, frames, i);
 				break;
 			}
 		}
 	}
 
-	return builder->AddDescriptorsToCache();
+	EntryHandle handle = builder->AddDescriptorsToCache();
+
+	descriptorManager.vkDescriptorSets[descriptorSet] = handle;
+
+	return handle;
+}
+
+void RenderInstance::UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
+	ShaderResourceSet* set = (ShaderResourceSet*)head;
+
+	EntryHandle handle = descriptorManager.vkDescriptorSets[descriptorSet];
+
+	int frames = set->setCount;
+
+	DescriptorSetBuilder* builder = dev->UpdateDescriptorSet(handle);
+
+	builder->AddBindlessTextureArray(handles, texCount, destinationArray, 0, frames, bindingIndex);
 }
 
 
@@ -1446,11 +1455,7 @@ void RenderInstance::SetActiveComputePipeline(uint32_t objectIndex, bool active)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	auto graph = dev->GetComputeGraph(computeGraphIndex);
-	if (!graph->SetActive(objectIndex, active))
-	{
-		for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-			threadedRecordBuffers[i].Reset();
-	}
+	graph->SetActive(objectIndex, active);
 }
 
 uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)

@@ -8,11 +8,8 @@
 
 
 
-GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &images) : objectIndex(_oi)
+GenericObject::GenericObject(RenderingBackend be, size_t _oi) : objectIndex(_oi)
 {
-
-	textures = images;
-
 	m = new Mesh();
 
 	auto rendInst = VKRenderer::gRenderInstance;
@@ -86,7 +83,6 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi, std::vector<int> &
 
 GenericObject::~GenericObject()
 {
-	textures.clear();
 	delete m;
 }
 

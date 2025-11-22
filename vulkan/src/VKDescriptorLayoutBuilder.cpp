@@ -127,7 +127,7 @@ void DescriptorSetLayoutBuilder::AddBindlessSamplersLayout(uint32_t binding, VkS
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutBinding.descriptorCount = 8;
+	layoutBinding.descriptorCount = count;
 	layoutBinding.stageFlags = stageFlags;
 
 	const VkDescriptorBindingFlags bindingFlags =

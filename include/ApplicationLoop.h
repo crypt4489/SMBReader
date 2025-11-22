@@ -66,7 +66,7 @@ public:
 
 	int GetPoolIndexByFormat(ImageFormat format);
 
-	std::vector<int> LoadSMBFile(SMBFile& file);
+	void LoadSMBFile(SMBFile& file, GenericObject* obj);
 
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
@@ -77,6 +77,8 @@ public:
 	WindowManager* mainWindow;
 	Text* text1, * text2;
 	int globalBufferLocation;
+	int globalBufferDescriptor;
+	int globalTexturesDescriptor;
 	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
 	EntryHandle storageBuffer;

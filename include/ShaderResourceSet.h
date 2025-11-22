@@ -76,6 +76,7 @@ struct ShaderResourceManager
 	uintptr_t hostResourceHeap;
 	std::atomic<uintptr_t> hostResourceHead;
 	std::array<uintptr_t, N> descriptorSets;
+	std::array<EntryHandle, N> vkDescriptorSets;
 	std::atomic<int> descriptorSetIndex;
 
 	int AddShaderToSets(uintptr_t location, size_t size)

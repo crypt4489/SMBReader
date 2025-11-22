@@ -436,6 +436,17 @@ DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex
 	return dsb;
 }
 
+DescriptorSetBuilder* VKDevice::UpdateDescriptorSet(EntryHandle descriptorHandle)
+{
+	std::shared_lock lock(deviceLock);
+
+	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
+
+	DescriptorSetBuilder* dsb = std::construct_at(data, this, descriptorHandle);
+
+	return dsb;
+}
+
 DescriptorSetLayoutBuilder* VKDevice::CreateDescriptorSetLayoutBuilder(uint32_t bindingCount)
 {
 	DescriptorSetLayoutBuilder* builder = reinterpret_cast<DescriptorSetLayoutBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetLayoutBuilder)));
@@ -1633,12 +1644,18 @@ VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle poolIndex)
 VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 {
 	std::shared_lock lock(deviceLock);
-	using LocalType = std::pair<uint32_t, VkDescriptorSet*>;
-	LocalType* set = reinterpret_cast<LocalType*>(GetVkTypeFromEntry(handle));
+	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(GetVkTypeFromEntry(handle));
 	if (!set) return VK_NULL_HANDLE;
-	if (set->first <= index) throw std::runtime_error("Come on!");
-	return set->second[index];
+	if (set->numberOfSets <= index) throw std::runtime_error("Come on!");
+	return set->sets[index];
 
+}
+
+VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(GetVkTypeFromEntry(handle));
+	return set->sets;
 }
 
 VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle index)

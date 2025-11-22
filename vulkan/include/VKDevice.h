@@ -426,6 +426,8 @@ public:
 
 	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle layout, uint32_t numberofsets);
 
+	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
+
 	DescriptorSetLayoutBuilder* CreateDescriptorSetLayoutBuilder(uint32_t bindingCount);
 
 	EntryHandle CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets);
@@ -542,6 +544,8 @@ public:
 	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
 
 	VkDescriptorSet GetDescriptorSet(EntryHandle handle, uint32_t index);
+
+	VkDescriptorSet* GetDescriptorSets(EntryHandle handle);
 
 	VkDescriptorSetLayout GetDescriptorSetLayout(EntryHandle index);
 
