@@ -15,7 +15,7 @@ struct VKSwapChain
 
 	VKSwapChain() = default;
 
-	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
+	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
 		uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFramesInFlight,
 		VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount);
 

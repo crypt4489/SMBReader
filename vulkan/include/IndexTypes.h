@@ -8,7 +8,6 @@ struct DeviceIndex
 	explicit DeviceIndex(uint8_t _id) : ID(_id) {};
 	explicit DeviceIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
 	explicit DeviceIndex(size_t _id) : ID(static_cast<uint8_t>(_id)) {};
-	//delete copies / integer assignment
 
 	constexpr DeviceIndex& operator=(const DeviceIndex&) = default;
 	DeviceIndex(const DeviceIndex& other) = default;
@@ -43,7 +42,7 @@ struct QueueIndex
 	explicit QueueIndex(uint8_t _id) : ID(_id) {};
 	explicit QueueIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
 	explicit QueueIndex(size_t _id) : ID(static_cast<uint8_t>(_id)) {};
-	//delete copies / integer assignment
+	
 	constexpr QueueIndex& operator=(const uint32_t i) {
 		this->ID = static_cast<uint8_t>(i);
 		return *this;
@@ -82,11 +81,9 @@ struct EntryHandle
 
 	EntryHandle() = default;
 	~EntryHandle() = default;
-	//explicit EntryHandle(uint64_t _id) : ID(_id) {};
+
 	explicit EntryHandle(size_t _id) : ID(_id) {};
-	//EntryHandle(size_t _id) : ID(_id) {};
-	//integer assignment
-	//constexpr EntryHandle& operator=(const uint32_t) = delete;
+
 	
 	EntryHandle& operator=(const size_t n) {
 		this->ID = n;

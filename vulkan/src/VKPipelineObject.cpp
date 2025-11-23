@@ -6,7 +6,7 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid, EntryHandle* _dsid, uint32_t *_dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount)
+VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle _pid, EntryHandle* _dsid, uint32_t *_dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount)
 	: 
 	pipelineID(_pid),
 	maxObjectCapacity(moc), 
@@ -28,7 +28,7 @@ VKPipelineObject::VKPipelineObject(DeviceAllocator* allocator, EntryHandle _pid,
 
 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
-	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceAllocator* allocator)
+	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* allocator)
 	:
 	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0),
 	vertexCount(createinfo->vertexCount),
@@ -99,7 +99,7 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 	objectData[objectCount++] = _dynamicOffset;
 }
 
-VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceAllocator* allocator)
+VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceOwnedAllocator* allocator)
 	: 
 	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount),
 	x(info->x),

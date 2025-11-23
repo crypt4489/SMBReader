@@ -21,6 +21,6 @@ struct DescriptorSetBuilder;
 struct PipelineCacheObject;
 struct VKGraphicsPipelineBuilder;
 struct VKComputePipelineBuilder;
-struct VKDriverAllocator;
+struct VKAllocationCB;
 struct VKComputeGraph;
-struct DeviceAllocator;
+struct DeviceOwnedAllocator;

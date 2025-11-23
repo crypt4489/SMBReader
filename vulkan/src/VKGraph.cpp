@@ -4,22 +4,18 @@
 #include "VKDevice.h"
 #include "VKPipelineObject.h"
 
-VKRenderGraph::VKRenderGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
+VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
 	:
-	VKGraph(allocator, dCount, descCount, pCount, _d)
+	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, maxConcurrentAccesses, _d)
 {
 	
 };
 
 void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
-	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
+	std::shared_lock lock(objectGuard);
 
-
-
-	std::unique_lock lock(objectGuard);
-
-	for (size_t i = 0; i<pipelineObjCount; i++)
+	for (uint32_t i = 0; i<1; i++)
 	{
 
 		if (!activeIndicators[i]) continue;
@@ -30,11 +26,11 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
-		
-
-		if (handle != currentPipeline)
+		if (handle != currentPipeline[frameNum])
 		{
-			currentPipeline = handle;
+			//std::cout << "Here" << std::endl;
+
+			currentPipeline[frameNum] = handle;
 
 			rbo->BindGraphicsPipeline(handle);
 			
@@ -43,6 +39,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 			for (uint32_t descI = 0; descI < descriptorCount; descI++) {
 
 				uint32_t* dynPtr = nullptr;
+
 				if (dynamicsPerSet[descI])
 				{
 					dynPtr = &dynamicOffsets[dynamicOffset];
@@ -50,7 +47,6 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 
 				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], dynPtr);
 				dynamicOffset += dynamicsPerSet[descI];
-				//descI++;
 			}
 		}
 
@@ -64,22 +60,21 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 		obj->Draw(rbo, frameNum, descriptorCount);
 	}
 
-	currentPipeline = EntryHandle();
+	currentPipeline[frameNum] = EntryHandle();
 }
 
-VKComputeGraph::VKComputeGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
+VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
 	: 
-	VKGraph(allocator, dCount, descCount, pCount, _d)
+	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, maxConcurrentAccesses, _d)
 {
 
 }
 
 void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 {
-	uint32_t dynamicCount = static_cast<uint32_t>(dynamicOffsetCount);
-	std::unique_lock lock(objectGuard);
+	std::shared_lock lock(objectGuard);
 
-	for (size_t i = 0; i < pipelineObjCount; i++)
+	for (uint32_t i = 0; i < pipelineObjCount; i++)
 	{
 		EntryHandle objIndex = objects[i];
 
@@ -89,9 +84,9 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
-		if (handle != currentPipeline)
+		if (handle != currentPipeline[frameNum])
 		{
-			currentPipeline = handle;
+			currentPipeline[frameNum] = handle;
 
 			rbo->BindComputePipeline(handle);
 
@@ -121,7 +116,7 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 	}
 
-	currentPipeline = EntryHandle();
+	currentPipeline[frameNum] = EntryHandle();
 }
 
 uint32_t VKGraph::AddObject(EntryHandle obj)
@@ -148,14 +143,17 @@ bool VKGraph::SetActive(uint32_t objIndex, bool active)
 	return ret;
 }
 
-VKGraph::VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d)
+VKGraph::VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
 	:
-	dynamicOffsetSize(static_cast<uint32_t>(dCount)), pipelineObjSize(static_cast<uint32_t>(pCount)),
-	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(static_cast<uint32_t>(descCount))
+	dynamicOffsetSize(dynamicCount), pipelineObjSize(pipelineCount),
+	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(descriptorCount), maxFramesInFlight(maxConcurrentAccesses)
 {
-	dynamicOffsets = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * dCount));
-	objects = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pCount));
-	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pCount));
-	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
-	dynamicsPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
+	dynamicOffsets = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * dynamicOffsetSize));
+	objects = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pipelineObjSize));
+	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pipelineObjSize));
+	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descriptorCount));
+	dynamicsPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descriptorCount));
+	currentPipeline = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFramesInFlight));
+	for (uint32_t i = 0; i < maxConcurrentAccesses; i++)
+		currentPipeline[i] = EntryHandle();
 }

@@ -15,7 +15,7 @@ struct VKGraph {
 	
 	VKGraph& operator=(VKGraph&& other) = delete;
 
-	VKGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
+	VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
 
 	uint32_t AddObject(EntryHandle obj);
 
@@ -25,22 +25,19 @@ struct VKGraph {
 
 	std::shared_mutex objectGuard;
 
-	EntryHandle currentPipeline;
-
+	EntryHandle* currentPipeline;
 	EntryHandle* descriptorId;
-	uint32_t descriptorCount;
 	uint32_t* dynamicsPerSet;
-
 	uint32_t* dynamicOffsets;
-
 	EntryHandle* objects;
-
 	uint8_t* activeIndicators;
-
 	VKDevice* dev;
 
-	size_t dynamicOffsetCount, dynamicOffsetSize;
-	size_t pipelineObjCount, pipelineObjSize;
+	uint32_t descriptorCount;	
+	uint32_t maxFramesInFlight;
+
+	uint32_t dynamicOffsetCount, dynamicOffsetSize;
+	uint32_t pipelineObjCount, pipelineObjSize;
 };
 
 struct VKRenderGraph : public VKGraph
@@ -55,7 +52,7 @@ struct VKRenderGraph : public VKGraph
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
+	VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
 
 	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum);
 
@@ -73,7 +70,7 @@ struct VKComputeGraph : public VKGraph
 
 	VKComputeGraph& operator=(VKComputeGraph&& other) = delete;
 
-	VKComputeGraph(DeviceAllocator* allocator, size_t dCount, size_t descCount, size_t pCount, VKDevice* _d);
+	VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
 
 	void DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum);
 

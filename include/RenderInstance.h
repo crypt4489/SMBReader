@@ -247,7 +247,7 @@ public:
 
 	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
-	void CreateRenderGraph(int* desc, int descCount);
+	void CreateRenderTargetData(int* desc, int descCount);
 
 	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 
@@ -323,8 +323,8 @@ public:
 	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier{};
 	std::array<EntryHandle, 10> vulkanDescriptorLayouts{};
 	std::array<ShaderDetails*, 6> shaderDetails{};
-	std::array<char, 2 * KB> shaderDetailsData{};
-	int shaderDetailAlloc = 0;
+	char* shaderDetailsData;
+	std::atomic<int> shaderDetailAlloc = 0;
 
 	RenderAllocationHolder<50> allocations{};
 

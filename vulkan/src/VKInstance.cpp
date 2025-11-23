@@ -24,7 +24,7 @@ VKInstance::VKInstance()
 	instancePerSize(0),
 	instancePerMemory(0),
 	gpusAndLogicalDevices(nullptr),
-	allocator(new VKDriverAllocator())
+	allocator(new VKAllocationCB())
 {
 }
 
@@ -500,19 +500,19 @@ void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
 }
 
 
-void* VKAPI_CALL VKDriverAllocator::Allocation(
+void* VKAPI_CALL VKAllocationCB::Allocation(
 	void* userData,
 	size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope
 )
 {
-	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
+	VKAllocationCB* allocator = (VKAllocationCB*)userData;
 	return allocator->RealAlloc(size, alignment, allocationScope);
 }
 
 
-void* VKAPI_CALL VKDriverAllocator::Reallocation(
+void* VKAPI_CALL VKAllocationCB::Reallocation(
 	void* userData,
 	void* original,
 	size_t size,
@@ -520,20 +520,20 @@ void* VKAPI_CALL VKDriverAllocator::Reallocation(
 	VkSystemAllocationScope allocationScope
 )
 {
-	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
+	VKAllocationCB* allocator = (VKAllocationCB*)userData;
 	return allocator->RealRealloc(original, size, alignment, allocationScope);
 }
 
-void VKAPI_CALL VKDriverAllocator::Free(
+void VKAPI_CALL VKAllocationCB::Free(
 	void* userData,
 	void* memory
 )
 {
-	VKDriverAllocator* allocator = (VKDriverAllocator*)userData;
+	VKAllocationCB* allocator = (VKAllocationCB*)userData;
 	allocator->RealFree(memory);
 }
 
-void* VKDriverAllocator::RealAlloc(size_t size,
+void* VKAllocationCB::RealAlloc(size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
@@ -576,7 +576,7 @@ void* VKDriverAllocator::RealAlloc(size_t size,
 	return (void*)head;
 }
 
-void* VKDriverAllocator::RealRealloc(void* original, size_t size,
+void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
@@ -585,12 +585,12 @@ void* VKDriverAllocator::RealRealloc(void* original, size_t size,
 	return newaddr;
 }
 
-void VKDriverAllocator::RealFree(void* memory)
+void VKAllocationCB::RealFree(void* memory)
 {
 
 }
 
-void* VKDriverAllocator::RealAlloc(size_t size,
+void* VKAllocationCB::RealAlloc(size_t size,
 	size_t alignment,
 	bool cache)
 {
@@ -632,7 +632,7 @@ void* VKDriverAllocator::RealAlloc(size_t size,
 	return (void*)head;
 }
 
-void* VKDriverAllocator::RealRealloc(void* original, size_t size,
+void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	size_t alignment,
 	bool cache)
 {

@@ -157,8 +157,9 @@ RenderInstance::RenderInstance()
 	vkInstance = new VKInstance();
 	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(1 * KB);
 	descriptorManager.hostResourceHeap = (uintptr_t)malloc(1 * KB);
+	shaderDetailsData = (char*)malloc(2 * KB);
 
-	if (!vulkanShaderGraphs.shaderGraphs || !descriptorManager.hostResourceHeap)
+	if (!vulkanShaderGraphs.shaderGraphs || !descriptorManager.hostResourceHeap || !shaderDetailsData)
 	{
 		throw std::runtime_error("cannot allocate render instance");
 	}
@@ -170,6 +171,7 @@ RenderInstance::RenderInstance()
 
 RenderInstance::~RenderInstance()
 {
+	free(shaderDetailsData);
 	free((void*)vulkanShaderGraphs.shaderGraphs);
 	free((void*)descriptorManager.hostResourceHeap);
 
@@ -491,7 +493,7 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 		{
 			swapChain->CreateRenderTarget(i, renderPasses[i]);
 			
-			swapchainRenderTargets[i] = dev->CreateRenderGraph(swapChain->renderTargetIndex[i], 2);
+			swapchainRenderTargets[i] = dev->CreateRenderTargetData(swapChain->renderTargetIndex[i], 2, MAX_FRAMES_IN_FLIGHT);
 			
 		}
 	}
@@ -614,7 +616,7 @@ void RenderInstance::CreatePipelines()
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
-			shaderDetailsData.data() + shaderDetailAlloc, &byteOffset, &detailsSize);
+			shaderDetailsData + shaderDetailAlloc, &byteOffset, &detailsSize);
 
 		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
 
@@ -623,7 +625,7 @@ void RenderInstance::CreatePipelines()
 		totalDetailSize += detailsSize;
 	}
 
-	ShaderDetails* deats = (ShaderDetails*)shaderDetailsData.data();
+	ShaderDetails* deats = (ShaderDetails*)shaderDetailsData;
 
 	int shaderGraph = 0;
 
@@ -1162,20 +1164,19 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	
 
 
-	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3);
+	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
+
 	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
 	builder.AddStoragePoolSize(MAX_FRAMES_IN_FLIGHT * 100);
 
-	builder.flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-
-	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(builder, MAX_FRAMES_IN_FLIGHT * 101);
+	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(&builder, MAX_FRAMES_IN_FLIGHT * 101);
 
 	CreateGlobalBuffer();
 
 	CreatePipelines();
 
-	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
+	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0, MAX_FRAMES_IN_FLIGHT);
 
 	auto drawingCallback = [this](EntryHandle cbIndex, uint32_t iIndex)
 		{
@@ -1217,7 +1218,7 @@ void RenderInstance::LaunchRecording()
 }
 
 
-void RenderInstance::CreateRenderGraph(int* desc, int descCount)
+void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1755,5 +1756,5 @@ void RenderInstance::BuildMainDrawPacket(RecordingBufferObject* rcb, uint32_t fr
 
 	rcb->SetScissorCommand(0, 0, rect->width, rect->height);
 
-	graph->DrawScene(rcb, currentFrame);
+	graph->DrawScene(rcb, frameInFlight);
 }

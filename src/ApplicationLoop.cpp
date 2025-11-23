@@ -453,7 +453,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
 
-	VKRenderer::gRenderInstance->CreateRenderGraph(arr.data(), 2);
+	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
 	
 	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

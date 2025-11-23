@@ -16,38 +16,7 @@
 #include "VKTypes.h"
 
 
-struct VKDevice;
 
-struct DescriptorPoolBuilder
-{
-	DescriptorPoolBuilder(void* data, size_t _pslSize) 
-		: 
-		poolSizesSize(_pslSize),
-		counter(0),
-		flags(0),
-		poolSizes(reinterpret_cast<VkDescriptorPoolSize*>(data))
-	{
-	}
-	void AddUniformPoolSize(uint32_t size)
-	{
-		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, size };
-	}
-
-	void AddStoragePoolSize(uint32_t size)
-	{
-		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, size };
-	}
-
-	void AddImageSampler(uint32_t size)
-	{
-		poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size };
-	}
-
-	VkDescriptorPoolSize* poolSizes;
-	VkDescriptorPoolCreateFlags flags;
-	size_t poolSizesSize;
-	size_t counter; 
-};
 
 struct VKAllocator
 {
@@ -56,11 +25,7 @@ struct VKAllocator
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> freeList; // [staringAddr, endingAddr)
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> occupiedList; //[staringAddr, endingAddr)
 
-	VKAllocator(const VkDeviceSize _c) : capacity(_c)
-	{
-		auto firstRange = std::make_pair(0U, capacity);
-		freeList.emplace_front(firstRange);
-	}
+	VKAllocator(const VkDeviceSize _c);
 
 	VKAllocator(const VKAllocator&) = delete;
 
@@ -70,137 +35,19 @@ struct VKAllocator
 
 	VKAllocator& operator=(VKAllocator&&) = default;
 
-	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list, 
-		VkDeviceSize first, 
-		VkDeviceSize last)
-	{
-		auto prev = list.before_begin();
-		auto traverse = list.begin();
-		while (traverse != std::end(list) && first > traverse->first)
-		{
-			prev = traverse++;
-		}
-		list.emplace_after(prev, first, last);
-	}
+	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
+		VkDeviceSize first,
+		VkDeviceSize last);
 
 	void InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
 		VkDeviceSize first,
-		VkDeviceSize last)
-	{
-		auto prev = list.before_begin();
-		
-		auto traverse = list.begin();
-		
-		while (traverse != std::end(list) && (first) > traverse->second)
-		{
-			prev = traverse++;
-		}
+		VkDeviceSize last);
 
-		while (traverse != std::end(list) && traverse->first <= last)
-		{
-			first = std::min(first, traverse->first);
-			last = std::max(last, traverse->second);
+	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size, VkDeviceSize alignment);
 
-			traverse = list.erase_after(prev);
-		}
+	VkDeviceSize GetMemory(VkDeviceSize size, VkDeviceSize alignment);
 
-		list.emplace_after(prev, first, last);
-	}
-
-	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size, VkDeviceSize alignment)
-	{
-		VkDeviceSize maxDiff = UINT64_MAX;
-		auto prev = freeList.before_begin();
-		auto iter = freeList.begin();
-		auto candidate = freeList.end();
-		auto candidatePrev = freeList.end();
-		VkDeviceSize addressAlignmentMakeUp = 0U;
-		while (iter != std::end(freeList))
-		{
-
-			VkDeviceSize endingAddress = iter->second;
-			VkDeviceSize startingAddress = iter->first;
-			VkDeviceSize makeup = (startingAddress & (alignment - 1));
-			startingAddress += makeup; //make up for any alignment considerations
-			
-
-			VkDeviceSize holesize = endingAddress - startingAddress;
-			
-			if (holesize >= size)
-			{
-				VkDeviceSize diff = holesize - size;
-
-				if (diff < maxDiff)
-				{
-					maxDiff = diff;
-					candidate = iter;
-					candidatePrev = prev;
-					addressAlignmentMakeUp = makeup;
-					if (!maxDiff) break; //perfect match
-				}
-			}
-
-			prev = iter++;
-		}
-
-		if (candidate == std::end(freeList))
-		{
-			return std::make_pair(UINT64_MAX, UINT64_MAX);
-		}
-
-		auto ret = *candidate;
-		freeList.erase_after(candidatePrev);
-		if (addressAlignmentMakeUp)
-		{
-			InsertSorted(freeList, ret.first, ret.first + addressAlignmentMakeUp);
-			ret.first += addressAlignmentMakeUp;
-		}
-		return ret;
-	}
-
-	VkDeviceSize GetMemory(VkDeviceSize size, VkDeviceSize alignment)
-	{
-		auto iter = GetBestFit(size, alignment);
-		
-		if (iter.first == UINT64_MAX && iter.second == UINT64_MAX) // too large, no lower bound
-		{
-			throw std::runtime_error("too large of allocation!");
-		}
-
-		VkDeviceSize originaladdr = iter.first;
-		VkDeviceSize endaddr = originaladdr + size;
-		VkDeviceSize originalSize = iter.second - originaladdr;
-
-		InsertSorted(occupiedList, originaladdr, endaddr); //add new pair to occupied
-	
-		if (originalSize != size) // if it is not a perfect size, have new hole
-		{
-			InsertSorted(freeList, endaddr, iter.second);
-		}
-		
-		return originaladdr;
-	}
-
-	void FreeMemory(VkDeviceSize addr)
-	{
-		auto prev = occupiedList.before_begin();
-		
-		auto iter = occupiedList.begin();
-
-		while (iter != std::end(occupiedList) && iter->first != addr)
-		{
-			prev = iter++;
-		}
-
-		if (iter == std::end(occupiedList))
-		{
-			throw std::runtime_error("Free memory never allocated");
-		}
-
-		VkDeviceSize beg = iter->first, end = iter->second;
-		occupiedList.erase_after(prev);
-		InsertSortedMerged(freeList, beg, end);
-	}
+	void FreeMemory(VkDeviceSize addr);
 };
 
 struct VKCommandBuffer
@@ -298,16 +145,7 @@ struct RenderTarget
 	
 	RenderTarget() = default;
 	
-	RenderTarget(EntryHandle renderPass, uint32_t imageCount, void *data)
-	{
-		renderPassIndex = renderPass;
-		count = imageCount;
-
-		EntryHandle* head = reinterpret_cast<EntryHandle*>(data);
-
-		framebufferIndices = head;
-		imageViews = std::next(head, imageCount);
-	}
+	RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* data);
 
 	EntryHandle renderPassIndex;
 	uint32_t count;
@@ -315,7 +153,7 @@ struct RenderTarget
 	EntryHandle* imageViews;
 };
 
-enum VKQueueCapabilities : uint32_t
+enum VKQueueCapabilities
 {
 	GRAPHICS = 1,
 	TRANSFER = 2,
@@ -356,57 +194,33 @@ struct ShaderHandle
 	VkShaderStageFlags flags;
 };
 
-struct DeviceAllocator
+struct DeviceOwnedAllocator
 {
 	uintptr_t memHead;
 	std::atomic<size_t> writeHead;
 	size_t size;
 
-	DeviceAllocator() {
-		writeHead = 0;
-		size = 0;
-		memHead = 0;
-	}
+	DeviceOwnedAllocator();
 
-	void* Alloc(size_t inSize)
-	{
-		size_t val, desired, out;
-		val = writeHead.load(std::memory_order_relaxed);
-		do {
-			desired = val + inSize;
-			out = val;
-		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
-			std::memory_order_relaxed));
+	void* Alloc(size_t inSize);
 
-		uintptr_t dest = memHead + out;
+	void* AllocWrapAround(size_t inSize);
+};
 
-		memset((void*)dest, 0, inSize);
 
-		return reinterpret_cast<void*>(dest);
-	}
+struct DescriptorPoolBuilder
+{
+	DescriptorPoolBuilder(DeviceOwnedAllocator* alloc, size_t _numPoolSizes, VkDescriptorPoolCreateFlags _flags);
 
-	void* AllocWrapAround(size_t inSize)
-	{
-		size_t val, desired, out;
-		val = writeHead.load(std::memory_order_relaxed);
-		do {
-			desired = val + inSize;
-			out = val;
-			if (desired >= size)
-			{
-				out = 0;
-				desired = inSize;
-			}
+	void AddUniformPoolSize(uint32_t size);
 
-		} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
-			std::memory_order_relaxed));
+	void AddStoragePoolSize(uint32_t size);
 
-		uintptr_t dest = memHead + out;
-
-		memset((void*)dest, 0, inSize);
-
-		return reinterpret_cast<void*>(dest);
-	}
+	void AddImageSampler(uint32_t size);
+	VkDescriptorPoolSize* poolSizes;
+	VkDescriptorPoolCreateFlags flags;
+	size_t numPoolSizes;
+	size_t counter;
 };
 
 
@@ -422,17 +236,17 @@ struct VKDevice
 
 	EntryHandle CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset);
 
-	EntryHandle CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFormat format, size_t rangeSize, size_t offset);
+	EntryHandle CreateBufferViewFromImagePool(EntryHandle imagePoolIndex, VkFormat format, size_t rangeSize, size_t offset);
 
-	EntryHandle CreateCommandPool(QueueIndex& queueIndex);
+	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
-	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount);
+	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount, uint32_t maxFramesInFlight);
 
-	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder& builder, uint32_t maxSets);
+	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
-	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize);
+	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize, VkDescriptorPoolCreateFlags flags);
 
-	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle layout, uint32_t numberofsets);
+	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets);
 
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
@@ -444,7 +258,7 @@ struct VKDevice
 
 	EntryHandle* CreateFences(uint32_t count, VkFenceCreateFlags flags);
 
-	EntryHandle CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D& extent);
+	EntryHandle CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D extent);
 
 	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage);
 
@@ -487,9 +301,9 @@ struct VKDevice
 		size_t driverPerCache
 	);
 
-	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pcrCount);
+	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount);
 	
-	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numDesc, uint32_t pcrCount);
+	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numberOfDescriptors, uint32_t pushConstantRangeCount);
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
@@ -505,7 +319,7 @@ struct VKDevice
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
-	EntryHandle CreateRenderGraph(EntryHandle renderTarget, uint32_t descriptorCount);
+	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount, uint32_t maxFramesInFlight);
 
 	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 
@@ -541,84 +355,83 @@ struct VKDevice
 
 	//GETTERS
 
-	VKCommandBuffer* GetCommandBuffer(EntryHandle index);
+	VKCommandBuffer* GetCommandBuffer(EntryHandle handle);
 
-	VkCommandBuffer GetCommandBufferHandle(EntryHandle index);
+	VkCommandBuffer GetCommandBufferHandle(EntryHandle handle);
 
-	VkCommandPool GetCommandPool(EntryHandle poolIndex);
+	VkCommandPool GetCommandPool(EntryHandle handle);
 
-	VKComputeGraph* GetComputeGraph(EntryHandle graphIndex);
+	VKComputeGraph* GetComputeGraph(EntryHandle handle);
 
-	VkDescriptorPool GetDescriptorPool(EntryHandle poolIndex);
+	VkDescriptorPool GetDescriptorPool(EntryHandle handle);
 
 	VkDescriptorSet GetDescriptorSet(EntryHandle handle, uint32_t index);
 
 	VkDescriptorSet* GetDescriptorSets(EntryHandle handle);
 
-	VkDescriptorSetLayout GetDescriptorSetLayout(EntryHandle index);
+	VkDescriptorSetLayout GetDescriptorSetLayout(EntryHandle handle);
 
 	uint32_t GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t* size, uint32_t capabilities);
 
-	VkFence GetFence(EntryHandle index);
+	VkFence GetFence(EntryHandle handle);
 
-	VkFramebuffer GetFrameBuffer(EntryHandle index);
+	VkFramebuffer GetFrameBuffer(EntryHandle handle);
 	
-	VkBuffer GetBufferHandle(EntryHandle index);
+	VkBuffer GetBufferHandle(EntryHandle handle);
 
-	VkImage GetImageByIndex(EntryHandle index);
+	VkImage GetImageByHandle(EntryHandle handle);
 
-	VkImage GetImageByTexture(EntryHandle index);
+	VkImage GetImageByTexture(EntryHandle handle);
 
-	VkImageView GetImageViewByIndex(EntryHandle index);
+	VkImageView GetImageViewByHandle(EntryHandle handle);
 
-	VkImageView GetImageViewByTexture(EntryHandle index, int imageViewIndex);
+	VkImageView GetImageViewByTexture(EntryHandle handle, int imageViewIndex);
 
-	VkMemoryBarrier* GetMemoryBarrier(EntryHandle barrierIndex);
+	VkMemoryBarrier* GetMemoryBarrier(EntryHandle handle);
 
-	VkBufferMemoryBarrier* GetBufferMemoryBarrier(EntryHandle barrierIndex);
+	VkBufferMemoryBarrier* GetBufferMemoryBarrier(EntryHandle handle);
 
-	VkImageMemoryBarrier* GetImageMemoryBarrier(EntryHandle barrierIndex);
+	VkImageMemoryBarrier* GetImageMemoryBarrier(EntryHandle handle);
 
-	PipelineCacheObject* GetPipelineCacheObject(EntryHandle index);
+	PipelineCacheObject* GetPipelineCacheObject(EntryHandle handle);
 
-	VKPipelineObject* GetPipelineObject(EntryHandle index);
+	VKPipelineObject* GetPipelineObject(EntryHandle handle);
 
-	VKComputePipelineObject* GetComputePipelineObject(EntryHandle index);
+	VKComputePipelineObject* GetComputePipelineObject(EntryHandle handle);
 
-	int32_t GetPresentQueue(QueueIndex& queueIdx,
-		QueueIndex& maxQueueCount,
+	int32_t GetPresentQueue(QueueIndex* queueIdx,
+		QueueIndex* maxQueueCount,
 		VkQueueFamilyProperties* famProps,
 		uint32_t famPropsCount,
-		VkSurfaceKHR& renderSurface);
+		VkSurfaceKHR renderSurface);
 
-	int32_t GetQueueByMask(QueueIndex& queueIdx,
-		QueueIndex& maxQueueCount,
+	int32_t GetQueueByMask(QueueIndex* queueIdx,
+		QueueIndex* maxQueueCount,
 		VkQueueFamilyProperties* famProps,
 		uint32_t famPropsCount,
 		uint32_t queueMask);
 
 	std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> GetQueueHandle(uint32_t capabilites);
 
-	RecordingBufferObject GetRecordingBufferObject(EntryHandle commandBufferIndex);
+	RecordingBufferObject GetRecordingBufferObject(EntryHandle handle);
 
-	VKRenderGraph* GetRenderGraph(EntryHandle renderPassIndex);
+	VKRenderGraph* GetRenderGraph(EntryHandle handle);
 
-	VkRenderPass GetRenderPass(EntryHandle index);
+	VkRenderPass GetRenderPass(EntryHandle handle);
 
-	RenderTarget* GetRenderTarget(EntryHandle renderTargetIndex);
+	RenderTarget* GetRenderTarget(EntryHandle handle);
 
-	RenderTarget* GetRenderTargetByGraph(EntryHandle index);
+	RenderTarget* GetRenderTargetByGraph(EntryHandle handle);
 
-	VkSampler GetSamplerByIndex(EntryHandle index);
+	VkSampler GetSamplerByHandle(EntryHandle handle);
 
-	VkSampler GetSamplerByTexture(EntryHandle index, int samplerIndex);
+	VkSampler GetSamplerByTexture(EntryHandle handle, int samplerIndex);
 
-	VkSemaphore GetSemaphore(EntryHandle index);
+	VkSemaphore GetSemaphore(EntryHandle handle);
 
-	ShaderHandle* GetShader(EntryHandle shaderHandle);
+	ShaderHandle* GetShader(EntryHandle handle);
 
-	VKSwapChain* GetSwapChain(EntryHandle index);
-
+	VKSwapChain* GetSwapChain(EntryHandle handle);
 
 	VKTexture* GetTexture(EntryHandle handle);
 
@@ -634,13 +447,13 @@ struct VKDevice
 
 	void DestroyDevice();
 
-	void DestroyFence(EntryHandle index);
+	void DestroyFence(EntryHandle handle);
 
-	void DestroyImage(EntryHandle imageIndex);
+	void DestroyImage(EntryHandle handle);
 
 	void DestroyImagePool(EntryHandle handle);
 
-	void DestroyImageView(EntryHandle imageViewIndex);
+	void DestroyImageView(EntryHandle handle);
 
 	void DestroyPipelineCacheObject(EntryHandle handle);
 
@@ -648,15 +461,15 @@ struct VKDevice
 
 	void DestroyRenderTarget(EntryHandle handle);
 
-	void DestorySampler(EntryHandle samplerIndex);
+	void DestorySampler(EntryHandle handle);
 
 	void DestroySemaphore(EntryHandle handle);
 
-	void DestroyShader(EntryHandle shaderHandle);
+	void DestroyShader(EntryHandle handle);
 
-	void DestroyTexture(EntryHandle textureHandle);
+	void DestroyTexture(EntryHandle handle);
 
-	void ResetRenderTarget(EntryHandle handle);
+	
 
 	//Allocation
 
@@ -690,6 +503,8 @@ struct VKDevice
 
 	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool commnadBufferReset, bool fenceReset);
 
+	void ResetRenderTarget(EntryHandle handle);
+
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
 	uint32_t SubmitCommandBuffer(
@@ -716,23 +531,24 @@ struct VKDevice
 
 	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset);
 
+	mutable std::shared_mutex deviceLock;
+
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
+
 	EntryHandle queueManagers;
 	size_t queueManagersSize;
 
 	uint32_t deviceMask = 0;
 
-	mutable std::shared_mutex deviceLock;
-
-	DeviceAllocator deviceDataAlloc;
-	DeviceAllocator deviceCacheAlloc;
+	DeviceOwnedAllocator deviceDataAlloc;
+	DeviceOwnedAllocator deviceCacheAlloc;
 
 	uintptr_t* entries;
 	std::atomic<size_t> indexForEntries = 0;
 	size_t numberOfEntries = 0;
 
-	VKDriverAllocator *deviceAllocator;
+	VKAllocationCB *deviceDriverAllocator;
 };
 

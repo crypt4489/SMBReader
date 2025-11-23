@@ -65,7 +65,7 @@ static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
 static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
 
 
-VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceAllocator* allocator,
+VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
 	uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFrameInFlight,
 	VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount)
 	:

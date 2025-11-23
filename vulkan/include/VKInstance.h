@@ -7,9 +7,9 @@
 #include "GLFW/include/GLFW/glfw3.h"
 #include <mutex>
 
-struct VKDriverAllocator
+struct VKAllocationCB
 {
-	VKDriverAllocator() = default;
+	VKAllocationCB() = default;
 
 	uint8_t* instanceData = nullptr;
 	size_t instanceDataSize = 0;
@@ -141,6 +141,6 @@ struct VKInstance
 
 	
 	
-	VKDriverAllocator *allocator;
+	VKAllocationCB *allocator;
 };
 
