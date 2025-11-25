@@ -34,8 +34,6 @@ VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
-	indirectBufferIndex(createinfo->indirectDrawBuffer),
-	indirectBufferOffset(createinfo->indirectDrawOffset),
 	indexBufferHandle(createinfo->indexBufferHandle),
 	indexBufferOffset(createinfo->indexBufferOffset),
 	indexCount(createinfo->indexCount),
@@ -71,6 +69,7 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 	}
 }
 
+/*
 void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
 	RecordingBufferObject *rbo,
 	uint32_t drawCount,
@@ -91,7 +90,7 @@ void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
 	}
 
 	rbo->BindingIndirectDrawCmd(indirectBufferIndex, drawCount, indirectBufferOffset);
-}
+} */
 
 
 void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)

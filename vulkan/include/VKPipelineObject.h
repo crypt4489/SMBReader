@@ -25,8 +25,6 @@ struct VKGraphicsPipelineObjectCreateInfo
 	EntryHandle vertexBufferIndex;
 	uint32_t vertexBufferOffset;
 	uint32_t vertexCount;
-	EntryHandle indirectDrawBuffer;
-	uint32_t indirectDrawOffset;
 	EntryHandle pipelinename;
 	uint32_t descCount;
 	EntryHandle* descriptorsetid;
@@ -137,11 +135,31 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 		uint32_t frame,
 		uint32_t firstSet);
 
+	EntryHandle vertexBufferIndex, indexBufferHandle;
+
+	std::size_t vertexBufferOffset, indexBufferOffset;
+	std::size_t vertexCount, indexCount;
+	uint32_t instanceCount;
+};
+
+
+struct VKIndirectPipelineObject : public VKPipelineObject
+{
+	VKIndirectPipelineObject() = delete;
+	VKIndirectPipelineObject(VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc);
+
+	~VKIndirectPipelineObject() = default;
+
+	void DrawIndirect(
+		RecordingBufferObject* rbo,
+		uint32_t frame,
+		uint32_t firstSet
+	);
+
 	EntryHandle vertexBufferIndex, indirectBufferIndex, indexBufferHandle;
 
 	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
-	std::size_t vertexCount, indexCount;
-	uint32_t instanceCount;
+	uint32_t drawCount;
 };
 
 

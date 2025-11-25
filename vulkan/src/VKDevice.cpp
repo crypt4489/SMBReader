@@ -22,13 +22,13 @@ struct BufferAlloc
 {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
-	VKAllocator alloc;
+	VKMemoryAllocator alloc;
 };
 
 struct ImageMemoryPool
 {
 	VkDeviceMemory memory;
-	VKAllocator alloc;
+	VKMemoryAllocator alloc;
 };
 
 
@@ -67,14 +67,14 @@ void DescriptorPoolBuilder::AddImageSampler(uint32_t size)
 
 
 
-VKAllocator::VKAllocator(const VkDeviceSize _c) : capacity(_c)
+VKMemoryAllocator::VKMemoryAllocator(const VkDeviceSize _c) : capacity(_c)
 {
 	auto firstRange = std::make_pair(0U, capacity);
 	freeList.emplace_front(firstRange);
 }
 
 
-void VKAllocator::InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
+void VKMemoryAllocator::InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
 	VkDeviceSize first,
 	VkDeviceSize last)
 {
@@ -87,7 +87,7 @@ void VKAllocator::InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDevic
 	list.emplace_after(prev, first, last);
 }
 
-void VKAllocator::InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
+void VKMemoryAllocator::InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
 	VkDeviceSize first,
 	VkDeviceSize last)
 {
@@ -111,7 +111,7 @@ void VKAllocator::InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, V
 	list.emplace_after(prev, first, last);
 }
 
-std::pair<VkDeviceSize, VkDeviceSize> VKAllocator::GetBestFit(VkDeviceSize size, VkDeviceSize alignment)
+std::pair<VkDeviceSize, VkDeviceSize> VKMemoryAllocator::GetBestFit(VkDeviceSize size, VkDeviceSize alignment)
 {
 	VkDeviceSize maxDiff = UINT64_MAX;
 	auto prev = freeList.before_begin();
@@ -162,7 +162,7 @@ std::pair<VkDeviceSize, VkDeviceSize> VKAllocator::GetBestFit(VkDeviceSize size,
 	return ret;
 }
 
-VkDeviceSize VKAllocator::GetMemory(VkDeviceSize size, VkDeviceSize alignment)
+VkDeviceSize VKMemoryAllocator::GetMemory(VkDeviceSize size, VkDeviceSize alignment)
 {
 	auto iter = GetBestFit(size, alignment);
 
@@ -185,7 +185,7 @@ VkDeviceSize VKAllocator::GetMemory(VkDeviceSize size, VkDeviceSize alignment)
 	return originaladdr;
 }
 
-void VKAllocator::FreeMemory(VkDeviceSize addr)
+void VKMemoryAllocator::FreeMemory(VkDeviceSize addr)
 {
 	auto prev = occupiedList.before_begin();
 
@@ -1030,7 +1030,7 @@ void VKDevice::CreateLogicalDevice(
 	const char** deviceExtensions,
 	uint32_t deviceExtCount,
 	uint32_t queueFlags,
-	VkPhysicalDeviceFeatures2& features,
+	VkPhysicalDeviceFeatures2* features,
 	VkSurfaceKHR renderSurface,
 	size_t perDeviceDataSize,
 	size_t perEntriesSize,
@@ -1110,7 +1110,7 @@ void VKDevice::CreateLogicalDevice(
 	logDeviceInfo.enabledLayerCount = layerCount;
 	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions;
 	logDeviceInfo.ppEnabledLayerNames = instanceLayers;
-	logDeviceInfo.pNext = &features;
+	logDeviceInfo.pNext = features;
 
 	auto callbacks = (*deviceDriverAllocator)();
 

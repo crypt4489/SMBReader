@@ -24,6 +24,8 @@ struct DescriptorSetLayoutBuilder
 
 	void AddBindlessSamplersLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
 
+	void AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
+
 	VkDescriptorSetLayoutBinding* descSetBindings;
 	VkDescriptorBindingFlags* flags;
 

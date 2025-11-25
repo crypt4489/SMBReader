@@ -72,7 +72,7 @@ void ApplicationLoop::InitializeCommandMap()
 void ApplicationLoop::Execute()
 {
 
-	if (args.justexport)
+	if (true)
 	{
 		SMBFile mainSMB(args.inputFile);
 		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));

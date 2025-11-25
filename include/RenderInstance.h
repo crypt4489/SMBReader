@@ -109,7 +109,6 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t drawType;
 	int vertexBufferIndex;
 	uint32_t vertexCount;
-	size_t indirectDrawBuffer;
 	uint32_t pipelinename;
 	uint32_t descCount;
 	int *descriptorsetid;
@@ -215,8 +214,6 @@ public:
 	void CreatePipelines();
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
-
-	void CreateGlobalBuffer();
 
 	void UpdateAllocation(void* data, size_t handle, size_t size, size_t offset);
 

@@ -38,8 +38,6 @@ void TextManager::CreatePipelineObject()
 		.vertexBufferIndex = rendInst->allocations[vertexBufferIndex].memIndex,
 		.vertexBufferOffset = static_cast<uint32_t>(rendInst->allocations[vertexBufferIndex].offset),
 		.vertexCount = ~0U,
-		.indirectDrawBuffer = rendInst->allocations[indirectCommandsIndex].memIndex,
-		.indirectDrawOffset = static_cast<uint32_t>(rendInst->allocations[indirectCommandsIndex].offset),
 		//.pipelinename = TEXT,
 		.descriptorsetid = &descHandle,
 		.maxDynCap = 0,
@@ -122,7 +120,7 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
 {
-	obj->DrawIndirectOneBuffer(&cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
+	//obj->DrawIndirectOneBuffer(&cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
 }
 
 void TextManager::DestroyTextManager()

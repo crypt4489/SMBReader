@@ -288,8 +288,6 @@ int RenderInstance::RecreateSwapChain() {
 
 	if (width && height) {
 
-		//dev->WaitOnDevice();
-
 		swc->Wait();
 
 		DestroySwapChainAttachments();
@@ -405,9 +403,7 @@ uint32_t RenderInstance::BeginFrame()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	int32_t res = 0;
-
-	res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false);
+	int32_t res = dev->WaitOnCommandBufferAndPossibleResetFence(UINT64_MAX, currentCBIndex[currentFrame], false);
 
 	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, currentFrame);
 
@@ -787,30 +783,6 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS);
 }
 
-void RenderInstance::CreateGlobalBuffer()
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	globalIndex = dev->CreateHostBuffer
-	(
-		128'000'000, true,
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-	);
-
-	globalDeviceBufIndex = dev->CreateDeviceBuffer(32'000'000,
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-}
-
 void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
@@ -1113,7 +1085,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		vkInstance->deviceExtensions, 
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, 
-		features2, vkInstance->renderSurface, 
+		&features2, vkInstance->renderSurface, 
 		64 * KB, 
 		8 * KB,
 		96 * KB,
@@ -1172,7 +1144,26 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(&builder, MAX_FRAMES_IN_FLIGHT * 101);
 
-	CreateGlobalBuffer();
+	globalIndex = majorDevice->CreateHostBuffer
+	(
+		128'000'000, true,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+	);
+
+	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(32'000'000,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 	CreatePipelines();
 
@@ -1395,8 +1386,6 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.vertexBufferIndex = allocations[info->vertexBufferIndex].memIndex,
 			.vertexBufferOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset),
 			.vertexCount = info->vertexCount,
-			.indirectDrawBuffer = allocations[info->indirectDrawBuffer].memIndex,
-			.indirectDrawOffset = static_cast<uint32_t>(allocations[info->indirectDrawBuffer].offset),
 			.pipelinename = EntryHandle(),
 			.descCount = 1,
 			.descriptorsetid = descHandles.data(),

@@ -138,3 +138,15 @@ void DescriptorSetLayoutBuilder::AddBindlessSamplersLayout(uint32_t binding, VkS
 	descSetBindings[binding] = layoutBinding;
 	flags[binding] = bindingFlags;
 }
+
+void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	layoutBinding.descriptorCount = count;
+	layoutBinding.stageFlags = stageFlags;
+
+
+	descSetBindings[binding] = layoutBinding;
+}

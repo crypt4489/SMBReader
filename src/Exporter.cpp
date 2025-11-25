@@ -12,12 +12,20 @@
 
 void Exporter::ExportChunksFromFile(SMBFile& smb)
 {
-
+	bool geoseen = false;
+	std::cout << smb << std::endl;
 	for (const auto& chunk : smb.chunks)
 	{
+		if (geoseen)
+		{
+			std::cout << chunk << std::endl;
+			geoseen = false;
+		}
 		switch (chunk.chunkType)
 		{
 		case GEO:
+			std::cout << chunk << std::endl;
+			geoseen = true;
 			break;
 		case TEXTURE:
 			ExportTextureFromFile(smb, chunk);

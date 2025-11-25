@@ -51,7 +51,6 @@ GenericObject::GenericObject(RenderingBackend be, size_t _oi) : objectIndex(_oi)
 			.drawType = 0,
 			.vertexBufferIndex = objVertexMemoryIndex,
 			.vertexCount = m->vertexCount,
-			.indirectDrawBuffer{},
 			.pipelinename = GENERIC,
 			.descCount = 1,
 			.descriptorsetid = &graphicDesc,

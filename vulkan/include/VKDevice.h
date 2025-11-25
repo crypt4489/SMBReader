@@ -18,22 +18,22 @@
 
 
 
-struct VKAllocator
+struct VKMemoryAllocator
 {
 
 	VkDeviceSize capacity;
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> freeList; // [staringAddr, endingAddr)
 	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> occupiedList; //[staringAddr, endingAddr)
 
-	VKAllocator(const VkDeviceSize _c);
+	VKMemoryAllocator(const VkDeviceSize _c);
 
-	VKAllocator(const VKAllocator&) = delete;
+	VKMemoryAllocator(const VKMemoryAllocator&) = delete;
 
-	VKAllocator& operator=(const VKAllocator&) = delete;
+	VKMemoryAllocator& operator=(const VKMemoryAllocator&) = delete;
 
-	VKAllocator(VKAllocator&&) = default;
+	VKMemoryAllocator(VKMemoryAllocator&&) = default;
 
-	VKAllocator& operator=(VKAllocator&&) = default;
+	VKMemoryAllocator& operator=(VKMemoryAllocator&&) = default;
 
 	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
 		VkDeviceSize first,
@@ -292,7 +292,7 @@ struct VKDevice
 		const char** deviceExtensions,
 		uint32_t deviceExtCount,
 		uint32_t queueFlags,
-		VkPhysicalDeviceFeatures2& features,
+		VkPhysicalDeviceFeatures2* features,
 		VkSurfaceKHR renderSurface,
 		size_t perDeviceDataSize,
 		size_t perEntriesSize,

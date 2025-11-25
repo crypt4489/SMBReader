@@ -72,12 +72,12 @@ struct SMBChunk
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
 	{
-		os << chunk.fileName << "\n"
-			<< chunk.fileOffset << "\n"
-			<< chunk.numOfBytesAfterTag << "\n"
-			<< chunk.chunkId << "\n"
-			<< chunk.chunkType << "\n"
-			<< chunk.contigOffset << "\n"
+		os << std::hex << "File Reference Name " << chunk.fileName << "\n"
+		<< "File SMB Offset "  << chunk.fileOffset << "\n"
+		<< "File SMB Number of Bytes after tag " << chunk.numOfBytesAfterTag << "\n"
+		<< "Chunk Id number " << chunk.chunkId << "\n"
+		<< "Chunk Id type " << chunk.chunkType << "\n"
+		<< "Chunk Continguos Offset " << chunk.contigOffset << "\n"
 			<< chunk.tag << "\n"
 			<< chunk.pad3 << " " << chunk.pad4 << "\n"
 			<< "------------------" << "\n";
@@ -114,6 +114,19 @@ public:
 	FileID LoadFile(const std::filesystem::path& path);
 
 	FileID LoadFile(const std::string& name);
+
+	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
+	{
+		os << std::hex << "File Offset (where real data begins) " << file.fileOffset << "\n"
+			<< "File Header Ends " << file.headerStreamEnd << "\n"
+			<< "Something " << file.numContiguousBytes << "\n"
+			<< "Number of Resources " << file.numResources << "\n"
+			<< "Number of Chunks " << file.chunks.size() << "\n"
+			<< "------------------" << "\n";
+		return os;
+	}
+
+
 private:
 	void ReadHeader(std::fstream& fh);
 

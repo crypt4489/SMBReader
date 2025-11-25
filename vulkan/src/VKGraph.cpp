@@ -28,8 +28,6 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		if (handle != currentPipeline[frameNum])
 		{
-			//std::cout << "Here" << std::endl;
-
 			currentPipeline[frameNum] = handle;
 
 			rbo->BindGraphicsPipeline(handle);
@@ -37,15 +35,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 			uint32_t dynamicOffset = 0;
 
 			for (uint32_t descI = 0; descI < descriptorCount; descI++) {
-
-				uint32_t* dynPtr = nullptr;
-
-				if (dynamicsPerSet[descI])
-				{
-					dynPtr = &dynamicOffsets[dynamicOffset];
-				}
-
-				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], dynPtr);
+				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
 				dynamicOffset += dynamicsPerSet[descI];
 			}
 		}
@@ -93,14 +83,7 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 			uint32_t dynamicOffset = 0;
 
 			for (uint32_t descI = 0; descI<descriptorCount; descI++) {
-
-				uint32_t* dynPtr = nullptr;
-				if (dynamicsPerSet[descI])
-				{
-					dynPtr = &dynamicOffsets[dynamicOffset];
-				}
-
-				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], dynPtr);
+				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
 				dynamicOffset += dynamicsPerSet[descI];
 			}
 		}
