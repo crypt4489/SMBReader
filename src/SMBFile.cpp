@@ -66,8 +66,6 @@ void SMBFile::ReadChunk(std::fstream& fh, SMBChunk& chunk)
 	std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16LL));
 	std::streamoff next = chunk.offsetInHeader + offset;
 	fh.seekg(next, std::ios_base::beg);
-	if (chunk.chunkType == GEO)
-		std::cout << chunk << std::endl;
 }
 
 void SMBFile::ProcessFile(std::fstream& fh)
@@ -77,13 +75,6 @@ void SMBFile::ProcessFile(std::fstream& fh)
 	for (auto& i : chunks)
 	{
 		ReadChunk(fh, i);
-
-		if (i.chunkType == GEO)
-		{
-			std::cout << fileOffset
-				<< std::endl <<
-				i.contigOffset + fileOffset << std::endl;
-		}
 	
 	}
 }
