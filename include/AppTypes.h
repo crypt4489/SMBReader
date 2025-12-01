@@ -34,6 +34,5 @@ enum TextureIOType
 enum PrimitiveType
 {
 	TRIANGLES = 0,
-	TRISTRIPS = 1,
-	MAXPRIM
+	TRISTRIPS = 6,
 };

@@ -68,7 +68,7 @@ struct SMBChunk
 	uint32_t endmag;
 	uint32_t stringsize;
 	std::string fileName;
-	std::streampos offsetInHeader;
+	std::size_t offsetInHeader;
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
 	{

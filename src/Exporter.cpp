@@ -34,11 +34,19 @@
 //25-27 Binormals
 //28-32 sprites
 
-std::vector<glm::vec3> positions;
-std::vector<glm::vec2> texCoords;
-std::vector<glm::vec3> positions2;
-std::vector<glm::vec2> texCoords2;
-std::vector<std::vector<uint16_t>> indices(5);
+std::vector<std::vector<glm::vec3>> positions;
+std::vector<std::vector<glm::vec2>> texCoords;
+std::vector<std::vector<glm::ivec2>> bonesID;
+std::vector<std::vector<glm::vec2>> weights;
+
+std::vector<std::vector<uint16_t>> indices;;
+
+
+const int MaterialDefSize = 136; //bytes
+const int GeometryBaseDefSize = 72; //bytes
+
+const uint64_t RenderableByVertex = 5292387491162064043;
+const uint64_t RenderableByIndex = 5792287050554945273;
 
 const float dx = 3.051851e-05;
 
@@ -60,6 +68,8 @@ float top[6] = {
 	2.88332748413086
 };
 
+float top2[6];
+
 
 const float ax = 4.661165e-10;
 const float bx = 4.665726e-10;
@@ -77,18 +87,144 @@ glm::vec3 pack6decomp(uint16_t* hello)
 	return glm::vec3(x, y, z);
 }
 
+enum RenderableFlags
+{
+	VBRENDERABLE = 0,
+	IVBRENDERABLE = 1,
+};
+
+int sizes[3] = {
+	18,
+	18,
+	14,
+};
+
+enum SMBVertexSize
+{
+	PosPack6_CNorm_C16Tex1_Bone2_Size = 0,
+	PosPack6_C16Tex2_Bone2_Size = 1,
+	PosPack6_C16Tex1_Bone2_Size = 2,
+};
+
+enum SMBVertexTypes
+{
+	PosPack6_CNorm_C16Tex1_Bone2 = 122,
+	PosPack6_C16Tex2_Bone2 = 119,
+	PosPack6_C16Tex1_Bone2 = 114,
+};
+
+std::vector<int> renderableTypes;
+std::vector<SMBVertexTypes> vertexTypes;
+std::vector<int> indicesCount;
+std::vector<int> verticesCount;
+std::vector<int> vertexOffset1;
+std::vector<int> indicesOffset;
+std::vector<PrimitiveType> primitiveType;
+
+static void ProcessGeometry(char* data)
+{
+	char* iter = data;
+	char* axialBox = iter + 36;
+	memcpy(top2, axialBox, sizeof(float) * 6);
+
+
+	char* material = iter + GeometryBaseDefSize;
+
+	while (true)
+	{
+		int copy =  *((int*)material);
+		if (copy != 737893) break;
+
+		uint64_t *burrr = ((uint64_t*)(material + 4));
+		uint64_t copy2 = *burrr;
+		
+		if (copy2 == RenderableByIndex)
+		{
+			char* renderable = material + 4 + 8 + 8;
+			int indexCount = *((int*)(renderable + (18 + 48)));
+			int vertexCount = *((int*)(renderable + (18 + 16)));
+			int vertexGroupSize = *((int*)(renderable + (18 + 16 + 16)));
+			int vertexGroupSize2 = *((int*)(renderable + (18 + 16 + 16 + 8)));
+			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
+			indicesCount.push_back(indexCount);
+			verticesCount.push_back(vertexCount);
+			renderableTypes.push_back(IVBRENDERABLE);
+			vertexTypes.push_back(vertexType);
+			vertexOffset1.push_back(vertexGroupSize);
+			indicesOffset.push_back(vertexGroupSize2);
+			material += (64 + 13 + 13);
+		}
+		else if (copy2 == RenderableByVertex)
+		{
+			char* renderable = material + 4 + 8 + 8;
+			int vertexCount = *((int*)(renderable + (18 + 16)));
+			int vertexGroupSize = *((int*)(renderable + (18 + 16 + 16)));
+	
+			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
+			verticesCount.push_back(vertexCount);
+			renderableTypes.push_back(VBRENDERABLE);
+			vertexTypes.push_back(vertexType);
+			vertexOffset1.push_back(vertexGroupSize);
+	
+			material += (64 + 18);
+		}
+		else {
+
+			material += MaterialDefSize;
+
+			copy = *((int*)material);
+
+
+			while (copy != 0)
+			{
+				material += (copy + 4);
+				copy = *((int*)material);
+			}
+
+			material += 8;
+
+			copy = *((int*)material);
+
+			while (copy != 0)
+			{
+				if (copy == 737893) break;
+				material += (copy + 4);
+				copy = *((int*)material);
+				if (copy != 0) {
+					break;
+				}
+				material += 8;
+				copy = *((int*)material);
+
+			}
+
+			copy = *((int*)material);
+
+			if (copy == 0)
+			{
+				material = (char*)((uintptr_t)material + (((uintptr_t)material | 0xf) - (uintptr_t)material));
+			}
+		}
+	}
+
+}
+
 void Exporter::ExportChunksFromFile(SMBFile& smb)
 {
-	bool geoseen = false;
-	std::cout << smb << std::endl;
-	size_t geoLocation = 0;
-	for (const auto& chunk : smb.chunks)
+
+	auto& chunk = smb.chunks;
+	for (size_t i = 0; i<smb.chunks.size(); i++)
 	{
-		if (geoseen)
-		{
+		
 			
-			std::string name = "GEOSTRANGER.bin";
-			FileHandle *handle, *handle2;
+			
+		switch (smb.chunks[i].chunkType)
+		{
+		case GEO:
+		{
+
+			std::string name = "GEOSTRANGER2.bin";
+			FileHandle* handle, * handle2;
 			auto outputfilehandle = FileManager::OpenFile(name, std::ios::binary | std::ios::out, handle);
 
 			if (!outputfilehandle)
@@ -105,11 +241,25 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			auto& geoChunk = handle2->streamHandle;
 
-			size_t seekpos = chunk.contigOffset + smb.fileOffset;
+			size_t seekpos2 = chunk[i].offsetInHeader;
 
-			geoChunk.seekg(geoLocation);
+			geoChunk.seekg(seekpos2);
 
-			size_t size = seekpos - geoLocation;
+			size_t howbout = chunk[i].numOfBytesAfterTag-(16+chunk[i].stringsize);
+
+			std::vector<char> data2(howbout);
+
+			geoChunk.read(data2.data(), howbout);
+
+			ProcessGeometry(data2.data());
+
+			size_t seekpos = chunk[i].contigOffset + smb.fileOffset;
+
+			seekpos2 = chunk[i + 1].contigOffset + smb.fileOffset;
+
+			geoChunk.seekg(seekpos);
+
+			size_t size = seekpos2 - seekpos;
 
 			std::vector<char> data(size);
 
@@ -118,98 +268,158 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 			outputFile.write(data.data(), size);
 
 
+
 			FileManager::RemoveOpenFile(outputfilehandle.value());
 
-			char* c = &data[0x4DD70];
 
-			for (size_t i = 0x4DD70; i < 0x52246; c+=14, i+=14)
+			size_t renderables = renderableTypes.size();
+
+			positions.resize(renderables);
+			texCoords.resize(renderables);
+			weights.resize(renderables);
+			bonesID.resize(renderables);
+			indices.resize(renderables);
+
+			size_t vbCount = 0;
+			size_t ibCount = 0;
+
+
+			for (size_t i = 0; i < renderables; i++)
 			{
-				uint32_t* god = (uint32_t*)c;
-				if (*god == 0) break;
 
-				uint16_t* huh = (uint16_t*)(c + 4);
-
-				int16_t* duh = (int16_t*)(c + 4+6);
-			
-				positions.push_back(pack6decomp(huh));
-				texCoords.push_back(converttexcoords(duh));
-				
-			}
-
-			c = &data[0x4e670];
-
-			for (size_t i = 0x4e670; i < 0x52246; c += 18, i += 18)
-			{
-				uint32_t* god = (uint32_t*)c;
-				if (*god == 0) break;
-
-				uint16_t* huh = (uint16_t*)(c + 4);
-
-				//int16_t* duh = (int16_t*)(c + 4+6);
-
-				positions2.push_back(pack6decomp(huh));
-				//texCoords.push_back(converttexcoords(duh));
-
-			}
+				unsigned char* g = (unsigned char*)(data.data() + vertexOffset1[i]);
+				int vertexSize = 0;
+				SMBVertexTypes type = vertexTypes[i];
 
 
-			int arr[] =
-			{
-				0x906c,
-				0x34da4,
-				0x4b0e4,
-				0x52250,
-			};
-
-			indices[0].reserve(1'000'000);
-			c = &data[arr[2]];
-			int accum = 0;
-			while (true) {
-				uint32_t* god = (uint32_t*)c;
-				uint32_t stride = (*god >> 0x12) & 0x7ff;
-				uint32_t type = (*god & 0x3ffff);
-
-
-
-				if (type == 0x1800)
+				switch (type)
 				{
-					std::vector<uint16_t> blah(stride * 2);
-					memcpy(blah.data(), c + 4, stride * 4);
-					accum += (stride * 2);
-					indices[0].insert(indices[0].end(), blah.begin(), blah.end());
-				}
-
-				else if (type == 0x1808)
-				{
-					uint16_t blah;
-					memcpy(&blah, c + 4, 2);
-					indices[0].push_back(blah);
-					accum += 1;
-				}
-				else if (type == 0x17fc) {
+				case PosPack6_CNorm_C16Tex1_Bone2:
+					vertexSize = sizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
+					break;
+				case PosPack6_C16Tex2_Bone2:
+					vertexSize = sizes[PosPack6_C16Tex2_Bone2_Size];
+					break;
+				case PosPack6_C16Tex1_Bone2:
+					vertexSize = sizes[PosPack6_C16Tex1_Bone2_Size];
 					break;
 				}
 
 
-				c += ((stride * 4)+4);
-			}
-			
-			auto max = std::max_element(indices[0].begin(), indices[0].end());
-		
+				int vSize = verticesCount[i];
 
-			std::cout << std::dec << "HELLO " << (*max)+1 << " " << accum << "\n";
-			std::cout << chunk << std::endl;
-			geoseen = false;
-		}
-		switch (chunk.chunkType)
-		{
-		case GEO:
-			std::cout << chunk << std::endl;
-			geoLocation = chunk.contigOffset+smb.fileOffset;
-			geoseen = true;
+				auto& bonesRef = bonesID[i];
+				bonesRef.resize(vSize);
+				auto& weightRef = weights[i];
+				weightRef.resize(vSize);
+
+				for (int i = 0; i < vSize; i++)
+				{
+					switch (type) {
+					case PosPack6_CNorm_C16Tex1_Bone2:
+					{
+						uint32_t l = g[2], h = g[3];
+						bonesRef[i].x = g[0];
+						bonesRef[i].y = g[1];
+						weightRef[i].x = ((float)l) * 0.00392156f;
+						weightRef[i].y = ((float)h) * 0.00392156f;
+						break;
+					}
+					case PosPack6_C16Tex2_Bone2:
+					{
+						uint32_t l = g[2], h = g[3];
+						bonesRef[i].x = g[0];
+						bonesRef[i].y = g[1];
+						weightRef[i].x = ((float)l) * 0.00392156f;
+						weightRef[i].y = ((float)h) * 0.00392156f;
+						break;
+					}
+					case PosPack6_C16Tex1_Bone2:
+					{
+						uint32_t l = g[2], h = g[3];
+						bonesRef[i].x = g[0];
+						bonesRef[i].y = g[1];
+						weightRef[i].x = ((float)l) * 0.00392156f;
+						weightRef[i].y = ((float)h) * 0.00392156f;
+						break;
+					}
+					}
+					g += vertexSize;
+				}
+
+
+				if (renderableTypes[i] == IVBRENDERABLE)
+				{
+					auto& currIB = indices[ibCount];
+					currIB.resize(indicesCount[ibCount]);
+					size_t buh = currIB.size();
+					size_t accum = 0;
+					uint32_t* god = (uint32_t*)(data.data() + indicesOffset[ibCount]);
+					while (buh > 0) {
+						
+						uint32_t stride = (*god >> 0x12) & 0x7ff;
+						uint32_t indexType = (*god & 0x3ffff);
+
+						if (indexType == 0x1800)
+						{
+		
+							memcpy(currIB.data()+accum, god + 1, stride * 4);
+							accum += (stride * 2);
+							buh -= (stride * 2);
+						}
+
+						else if (indexType == 0x1808)
+						{
+							uint16_t blah;
+							memcpy(&blah, god+1, 2);
+							currIB[indicesCount[ibCount]-1] = blah;
+							accum += 1;
+							buh -= 1;
+						}
+						else if (indexType == 0x17fc) {
+							PrimitiveType ptype;
+							memcpy(&ptype, god + 1, 4);
+	
+						}
+
+						
+
+						god += (stride + 1);
+					
+					}
+
+					ibCount++;
+					
+
+				
+				}
+
+				
+
+			}
+
+			for (size_t i = 0; i < renderables; i++)
+			{
+				auto& weightRef = weights[i];
+				int vSize = verticesCount[i];
+				for (int j = 0; j < vSize; j++)
+
+				{
+					float x = weightRef[j].x;
+					float y = weightRef[j].y;
+					float z = x + y;
+					if (z < 0.99f || z > 1.0f)
+					{
+						std::cout << z << std::endl;
+					}
+				}
+			}
+
 			break;
+		}
+		
 		case TEXTURE:
-			ExportTextureFromFile(smb, chunk);
+			ExportTextureFromFile(smb, chunk[i]);
 			break;
 		case GR2:
 			break;
