@@ -72,7 +72,7 @@ void ApplicationLoop::InitializeCommandMap()
 void ApplicationLoop::Execute()
 {
 
-	if (true)
+	if (args.justexport)
 	{
 		SMBFile mainSMB(args.inputFile);
 		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));
@@ -361,6 +361,8 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
+int objMemory = 0;
+
 void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 {
 
@@ -368,15 +370,107 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 
 	int alloc = 0;
 
-	for (const auto& chunk : file.chunks)
+	auto& chunk = file.chunks;
+
+	for (size_t i = 0; i<chunk.size(); i++)
 	{
-		switch (chunk.chunkType)
+		switch (chunk[i].chunkType)
 		{
 		case GEO:
+		{
+
+			FileHandle* handle = FileManager::GetFile(file.id);
+
+			auto& geoChunk = handle->streamHandle;
+
+			size_t seekpos = chunk[i].offsetInHeader;
+
+			geoChunk.seekg(seekpos);
+
+			std::vector<char> geomHeader(chunk[i].headerSize);
+
+			geoChunk.read(geomHeader.data(), chunk[i].headerSize);
+
+			SMBGeoChunk* geoDef = ProcessGeometryClass(geomHeader.data());
+
+			geoDef->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
+
+			seekpos = chunk[i + 1].contigOffset + file.fileOffset;
+
+			geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
+
+
+			int what = 3;
+
+			std::vector<Vertex_PosPack6_C16Tex2_Bone2> vertices;
+
+			std::vector<uint32_t> indices;
+
+			vertices.resize(geoDef->verticesCount[what]);
+
+			indices.resize(geoDef->indicesCount[what]);
+
+			SMBCopyVertexData(geoDef, what, file, vertices.data());
+
+			SMBCopyIndices4Bytes(geoDef, what, file, indices.data());
+
+			std::vector<BasicVertex> transfer(geoDef->verticesCount[what]);
+
+			for (int ii = 0; ii < geoDef->verticesCount[what]; ii++)
+			{
+				transfer[ii].TEXTURE = glm::vec4(vertices[ii].TEXTURE, 0.0f, 0.0f);
+				transfer[ii].POSITION = vertices[ii].POSITION;
+			}
+
+
+
+			auto rendInst = VKRenderer::gRenderInstance;
+			uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+
+			int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
+
+			objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+			int objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(BasicVertex) * transfer.size(), alignof(glm::vec4));
+			int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint32_t) * geoDef->indicesCount[what], alignof(uint32_t));
+
+		
+			glm::mat4 identity = glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f));
+
+			identity = glm::rotate(identity, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+
+			rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objMemory, REPEAT, 0);
+			
+
+			rendInst->UpdateAllocation(&identity, objMemory, 64, 0);
+			rendInst->UpdateAllocation(&identity, objMemory, 64, 64);
+			rendInst->UpdateAllocation(&identity, objMemory, 64, 128);
+
+			rendInst->UpdateAllocation((void*)(transfer.data()), objMorphFromVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+			rendInst->UpdateAllocation(indices.data(), indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+			
+
+			GraphicsIntermediaryPipelineInfo create = {
+				.drawType = 0,
+				.vertexBufferIndex = objMorphFromVertexMemory,
+				.vertexCount = (uint32_t)transfer.size(),
+				.pipelinename = GENERIC,
+				.descCount = 1,
+				.descriptorsetid = &graphicDesc,
+				.indexBufferHandle = indexMemory,
+				.indexCount = (uint32_t)indices.size(),
+				.pushRangeCount = 0,
+				.instanceCount = 1,
+			};
+
+			rendInst->CreateGraphicsVulkanPipelineObject(&create);
+
 			break;
+		}
 		case TEXTURE:
 		{
-			SMBTexture texture(file, chunk);
+			SMBTexture texture(file, chunk[i]);
 			alloc = mainDictionary.AllocateTextureData(
 				(char*)texture.data,
 				texture.cumulativeSize,
@@ -628,21 +722,11 @@ void ApplicationLoop::LoadObject(const std::string& file)
 {
 	SMBFile SMB(file);
 
-	GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0);
+	//GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0);
 
-	LoadSMBFile(SMB, obj);
+	LoadSMBFile(SMB, nullptr);
 
-	glm::mat4 identity = glm::identity<glm::mat4>();
-
-	obj->mat = identity;
-
-	obj->updateObject = Rotate;
-
-	obj->memoryCallback = (gMemoryCallback);
-
-	SemaphoreGuard lock(objsSema);
-
-	renderables.push_back(obj);
+	
 
 	for (uint32_t i = 0; i < VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT; i++)
 		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
@@ -657,7 +741,7 @@ void ApplicationLoop::LoadThreadedWrapper(const std::string file)
 void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file)
 {
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
 	this->LoadObject(file);
 

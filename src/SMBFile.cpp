@@ -1,5 +1,13 @@
 #include "SMBFile.h"
 
+#include "VertexTypes.h"
+int VertexCompressedSizes[3] = {
+	18,
+	18,
+	14,
+};
+
+
 SMBFile::SMBFile(const std::filesystem::path& path) : id(LoadFile(path))
 {
 }
@@ -64,6 +72,7 @@ void SMBFile::ReadChunk(std::fstream& fh, SMBChunk& chunk)
 	fh.read(chunk.fileName.data(), chunk.stringsize);
 	chunk.offsetInHeader = fh.tellg();
 	std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16LL));
+	chunk.headerSize = offset;
 	std::streamoff next = chunk.offsetInHeader + offset;
 	fh.seekg(next, std::ios_base::beg);
 }
@@ -76,5 +85,381 @@ void SMBFile::ProcessFile(std::fstream& fh)
 	{
 		ReadChunk(fh, i);
 	
+	}
+}
+
+SMBGeoChunk* ProcessGeometryClass(char* data)
+{
+	char* iter = data;
+
+	int numRenderables = 0;
+
+	memcpy(&numRenderables, iter + 68, 4);
+
+	if (numRenderables < 0 || numRenderables > 15)
+	{
+		return nullptr;
+	}
+
+	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables);
+
+	char* axialBox = iter + 36;
+	memcpy(&geoChunk->axialBox, axialBox, sizeof(float) * 6);
+
+
+	char* material = iter + GeometryBaseDefSize;
+
+	int renderableIndex = 0;
+
+	while (true)
+	{
+		int header = *((int*)material);
+
+		if (header != 737893) break;
+
+		uint64_t definitionID = *((uint64_t*)(material + 4));
+
+		if (definitionID == RenderableByIndex)
+		{
+			char* renderable = material + 4 + 8 + 8;
+			int indexCount = *((int*)(renderable + (18 + 48)));
+			int vertexCount = *((int*)(renderable + (18 + 16)));
+			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
+			int indexOffset = *((int*)(renderable + (18 + 16 + 16 + 8)));
+			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
+			geoChunk->indicesCount[renderableIndex] = indexCount;
+			geoChunk->verticesCount[renderableIndex] = vertexCount;
+			geoChunk->renderablesTypes[renderableIndex] = IVBRENDERABLE;
+			geoChunk->vertexTypes[renderableIndex] = vertexType;
+			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
+			geoChunk->indexOffsetInArchive[renderableIndex] = indexOffset;
+			material += (64 + 26);
+			renderableIndex++;
+		}
+		else if (definitionID == RenderableByVertex)
+		{
+			char* renderable = material + 4 + 8 + 8;
+			int vertexCount = *((int*)(renderable + (18 + 16)));
+			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
+			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
+			
+			geoChunk->verticesCount[renderableIndex] = vertexCount;
+			geoChunk->renderablesTypes[renderableIndex] = VBRENDERABLE;
+			geoChunk->vertexTypes[renderableIndex] = vertexType;
+			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
+
+			material += (64 + 18);
+			renderableIndex++;
+		}
+		else {
+
+			material += MaterialDefSize;
+
+			int copy = *((int*)material);
+
+
+			while (copy != 0)
+			{
+				material += (copy + 4);
+				copy = *((int*)material);
+			}
+
+			material += 8;
+
+			copy = *((int*)material);
+
+			while (copy != 0)
+			{
+				if (copy == 737893) break;
+				material += (copy + 4);
+				copy = *((int*)material);
+				if (copy != 0) {
+					break;
+				}
+				material += 8;
+				copy = *((int*)material);
+
+			}
+
+			copy = *((int*)material);
+
+			if (copy == 0)
+			{
+				material = (char*)((uintptr_t)material + (((uintptr_t)material | 0xf) - (uintptr_t)material));
+			}
+		}
+	}
+	return geoChunk;
+}
+
+static glm::vec2 converttexcoords16(int16_t* huh)
+{
+	float x = huh[0] * dx * 16.0f;
+	float y = huh[1] * dx * 16.0f;
+
+
+	return glm::vec2(x, y);
+}
+
+static glm::vec3 pack6decomp(int16_t* hello, AxisBox& box)
+{
+	float x = ((hello[0] * dx) + 1.0) * 0.5;
+	float y = (((hello[1] * dx)) + 1.0) * 0.5;
+	float z = (((hello[2] * dx)) + 1.0) * 0.5;
+
+	x = ((box.max.x - box.min.x) * x) + box.min.x;
+	y = ((box.max.y - box.min.y) * y) + box.min.y;
+	z = ((box.max.z - box.min.z) * z) + box.min.z;
+
+	return glm::vec3(x, y, z);
+}
+
+int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
+{
+	SMBVertexTypes type = geoDef->vertexTypes[renderableIndex];
+	size_t size = 0;
+
+	switch (type)
+	{
+	case PosPack6_CNorm_C16Tex1_Bone2:
+		size = sizeof(Vertex_PosPack6_CNorm_C16Tex1_Bone2);
+		break;
+	case PosPack6_C16Tex2_Bone2:
+		size = sizeof(Vertex_PosPack6_C16Tex2_Bone2);
+		break;
+	case PosPack6_C16Tex1_Bone2:
+		size = sizeof(Vertex_PosPack6_C16Tex1_Bone2);
+		break;
+	}
+
+	return (int)size * geoDef->verticesCount[renderableIndex];
+}
+
+int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex)
+{
+	int type = geoDef->renderablesTypes[renderableIndex];
+	if (type != IVBRENDERABLE) return -1;
+	return sizeof(uint32_t) * geoDef->indicesCount[renderableIndex];
+}
+
+
+static inline uint32_t bswap32_u(uint32_t x) {
+	return ((x << 24) & 0xFF000000u) |
+		((x << 8) & 0x00FF0000u) |
+		((x >> 8) & 0x0000FF00u) |
+		((x >> 24) & 0x000000FFu);
+}
+
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut)
+{
+	FileHandle* handle = FileManager::GetFile(file.id);
+
+	handle->streamHandle.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->vertexOffsetInArchive[renderableIndex]);
+
+	SMBVertexTypes type = geoDefinition->vertexTypes[renderableIndex];
+
+	int vertexSize = geoDefinition->verticesCount[renderableIndex];
+
+
+	switch (type)
+	{
+	case PosPack6_CNorm_C16Tex1_Bone2:
+		vertexSize *= VertexCompressedSizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
+		break;
+	case PosPack6_C16Tex2_Bone2:
+		vertexSize *= VertexCompressedSizes[PosPack6_C16Tex2_Bone2_Size];
+		break;
+	case PosPack6_C16Tex1_Bone2:
+		vertexSize *= VertexCompressedSizes[PosPack6_C16Tex1_Bone2_Size];
+		break;
+	}
+
+	std::vector<char> data(vertexSize);
+
+	handle->streamHandle.read(data.data(), vertexSize);
+
+	
+	int vSize = geoDefinition->verticesCount[renderableIndex];
+
+	unsigned char* g = (unsigned char*)data.data();
+
+	switch (type) {
+	case PosPack6_CNorm_C16Tex1_Bone2:
+	{
+		Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertices = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexDataOut;
+		for (int i = 0; i < vSize; i++)
+		{
+		
+			Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertex = &vertices[i];
+			uint32_t l = g[2], h = g[3];
+			vertex->BONES.x = g[0];
+			vertex->BONES.y = g[1];
+			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
+
+			int32_t norms = *(int32_t*)&g[8];
+
+			//norms = bswap32_u(norms);
+
+			vertex->NORMAL.x = (((float)(norms & 0x7ff)) * ax) - 1.0f;
+			vertex->NORMAL.y = (((float)((norms & 0x3ff800) >> 11)) * ax) - 1.0f;
+			vertex->NORMAL.z = (((float)((norms & 0xffc00000) >> 22)) * bx) -1.0f;
+
+			int16_t t[2];
+			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+			vertex->TEXTURE = converttexcoords16(t);
+
+
+			int16_t s[3];
+
+			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+		
+			g += VertexCompressedSizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
+		
+		}
+		break;
+	}
+	case PosPack6_C16Tex2_Bone2:
+	{
+		Vertex_PosPack6_C16Tex2_Bone2* vertices = (Vertex_PosPack6_C16Tex2_Bone2*)vertexDataOut;
+		for (int i = 0; i < vSize; i++)
+		{
+			Vertex_PosPack6_C16Tex2_Bone2* vertex = &vertices[i];
+			uint32_t l = g[2], h = g[3];
+			vertex->BONES.x = g[0];
+			vertex->BONES.y = g[1];
+			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
+			
+
+
+			int16_t t[2];
+			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+			vertex->TEXTURE = converttexcoords16(t);
+
+			t[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
+			t[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
+
+			vertex->TEXTURE2 = converttexcoords16(t);
+
+			int16_t s[3];
+
+			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+
+			g += VertexCompressedSizes[PosPack6_C16Tex2_Bone2_Size];
+		}
+		break;
+	}
+	case PosPack6_C16Tex1_Bone2:
+	{
+		Vertex_PosPack6_C16Tex1_Bone2* vertices = (Vertex_PosPack6_C16Tex1_Bone2*)vertexDataOut;
+		for (int i = 0; i < vSize; i++)
+		{
+			Vertex_PosPack6_C16Tex1_Bone2* vertex = &vertices[i];
+			uint32_t l = g[2], h = g[3];
+			vertex->BONES.x = g[0];
+			vertex->BONES.y = g[1];
+			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
+
+			int16_t t[2];
+			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+			vertex->TEXTURE = converttexcoords16(t);
+
+			int16_t s[3];
+
+			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+		
+			g += VertexCompressedSizes[PosPack6_C16Tex1_Bone2_Size];
+		}
+
+		break;
+	}
+	}
+}
+
+void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut)
+{
+	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
+	if (renderableType != IVBRENDERABLE) return;
+	
+	int iCount = geoDefinition->indicesCount[renderableIndex];
+
+	FileHandle* handle = FileManager::GetFile(file.id);
+
+	handle->streamHandle.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex]);
+
+	auto& stream = handle->streamHandle;
+
+	bool started = false;
+
+	int iter = 0;
+
+	int* indices4 = (int*)indexDataOut;
+
+	while (iCount > 0) {
+
+
+		uint32_t god;
+
+		stream.read((char*)&god, 4);
+
+		uint32_t stride = (god >> 0x12) & 0x7ff;
+		uint32_t indexType = (god & 0x3ffff);
+
+		if (indexType == 0x1800)
+		{
+			std::vector<int16_t> data(stride * 2);
+			stream.read(
+				(char*)data.data(),
+				stride * 4
+			);
+
+			int start = iter;
+
+			int dataOut = 0;
+
+			while (iter < (start + (stride * 2)))
+			{
+				indices4[iter++] = data[dataOut++];
+			}
+		
+
+			iCount -= (stride * 2);
+		}
+
+		else if (indexType == 0x1808)
+		{
+			int input;
+			stream.read((char*)&input, 4);
+			indices4[iter++] = input;
+			iCount--;
+		}
+		else if (indexType == 0x17fc) {
+			if (started) break;
+			stream.read(
+				(char*)&geoDefinition->primitiveTypes[renderableIndex],
+				4
+			);
+			
+		}
 	}
 }

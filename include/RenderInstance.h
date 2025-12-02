@@ -148,7 +148,7 @@ struct RenderAllocationHolder
 	
 	RenderAllocation operator[](size_t index)
 	{
-		if (index >= N)
+		if (index >= N || index < 0)
 			return { EntryHandle(), ~0ui64, ~0ui64 };
 
 		return allocations[index];
@@ -156,7 +156,7 @@ struct RenderAllocationHolder
 
 	RenderAllocation operator[](int index)
 	{
-		if (index >= N)
+		if (index >= N || index < 0)
 			return { EntryHandle(), ~0ui64, ~0ui64 };
 
 		return allocations[index];

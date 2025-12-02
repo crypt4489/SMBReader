@@ -597,7 +597,7 @@ void RenderInstance::CreatePipelines()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	std::array<std::string, 4> layouts = {
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\GPUInstancing.xml",
+		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml",
 		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml"
@@ -761,7 +761,7 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	generic->CreateVertexInput(bindings1.data(), 1, ref1.data(), ref1.size());
 	text->CreateVertexInput(bindings.data(), 1, ref.data(), ref.size());
 
-	generic->CreateInputAssembly(API::ConvertTopology(TRIANGLES), false);
+	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 
 	generic->CreateViewportState(1, 1);

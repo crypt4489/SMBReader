@@ -59,7 +59,7 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 		rbo->BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	if (indexBufferOffset != ~0ui64)
+	if (indexBufferOffset != ~0ui32)
 	{
 		rbo->BindIndexBuffer(indexBufferHandle, static_cast<uint32_t>(indexBufferOffset));
 		rbo->BindingDrawIndexedCmd(static_cast<uint32_t>(indexCount), instanceCount, 0, 0, 0);

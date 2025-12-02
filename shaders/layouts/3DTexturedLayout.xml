@@ -11,9 +11,11 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="uniform" used="v">
+		<ShaderResourceItem type="samplerBindless" used="f" count="8">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="sampler" used ="f">
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="uniform" used="v">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

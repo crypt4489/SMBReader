@@ -23,6 +23,7 @@ enum chunktype
 
 //Second part is I think the GeometryDef
 
+/*
 struct GEOBaseChunk
 {
 	uint32_t numLods;
@@ -52,6 +53,91 @@ struct GEOGeometryBase
 	uint32_t skinnedRenderables;
 
 	uint32_t rigidcollidables;
+}; */
+
+#define MaterialDefSize 136 //bytes
+#define GeometryBaseDefSize 72 //bytes
+
+#define RenderableByVertex 5292387491162064043
+#define RenderableByIndex 5792287050554945273
+
+
+constexpr float dx = 3.051851e-05f;
+constexpr float ax = 0.0009770395f;
+constexpr float bx = 0.0019550342f;
+
+
+
+
+enum RenderableFlags
+{
+	VBRENDERABLE = 0,
+	IVBRENDERABLE = 1
+};
+
+extern int VertexCompressedSizes[3];
+
+enum SMBVertexSize
+{
+	PosPack6_CNorm_C16Tex1_Bone2_Size = 0,
+	PosPack6_C16Tex2_Bone2_Size = 1,
+	PosPack6_C16Tex1_Bone2_Size = 2,
+};
+
+enum SMBVertexTypes
+{
+	PosPack6_CNorm_C16Tex1_Bone2 = 122,
+	PosPack6_C16Tex2_Bone2 = 119,
+	PosPack6_C16Tex1_Bone2 = 114
+};
+
+struct AxisBox
+{
+	glm::vec3 min;
+	glm::vec3 max;
+};
+
+struct SMBGeoChunk
+{
+	int vertexAndIndicesInfo;
+	int verticesandIndexCompressedSize;
+	int numRenderables;
+	int* renderablesTypes;
+	SMBVertexTypes* vertexTypes;
+	int* indicesCount;
+	int* indexOffsetInArchive;
+	int* verticesCount;
+	int* vertexOffsetInArchive;
+	int* primitiveTypes;
+	AxisBox axialBox;
+
+	SMBGeoChunk() = delete;
+	SMBGeoChunk(int _numRenderables)
+	{
+		numRenderables = _numRenderables;
+		renderablesTypes = (int*)malloc(sizeof(int) * _numRenderables);
+		vertexTypes = (SMBVertexTypes*)malloc(sizeof(SMBVertexTypes) * _numRenderables);
+		indicesCount = (int*)malloc(sizeof(int) * _numRenderables);
+		indexOffsetInArchive = (int*)malloc(sizeof(int) * _numRenderables);
+		verticesCount = (int*)malloc(sizeof(int) * _numRenderables);
+		vertexOffsetInArchive = (int*)malloc(sizeof(int) * _numRenderables);
+		primitiveTypes = (int*)malloc(sizeof(int) * _numRenderables);
+		memset(&axialBox, 0, sizeof(AxisBox));
+		memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
+		memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
+	}
+
+	~SMBGeoChunk()
+	{
+		free(renderablesTypes);
+		free(vertexTypes);
+		free(indicesCount);
+		free(indexOffsetInArchive);
+		free(verticesCount);
+		free(vertexOffsetInArchive);
+		free(primitiveTypes);
+	}
+	
 };
 
 struct SMBChunk
@@ -69,6 +155,7 @@ struct SMBChunk
 	uint32_t stringsize;
 	std::string fileName;
 	std::size_t offsetInHeader;
+	std::size_t headerSize;
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
 	{
@@ -137,3 +224,13 @@ private:
 	void ProcessFile(std::fstream& fh);
 };
 
+
+SMBGeoChunk* ProcessGeometryClass(char* data);
+
+int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
+
+int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex);
+
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut);
+
+void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
