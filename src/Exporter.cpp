@@ -35,7 +35,9 @@
 //28-32 sprites
 
 std::vector<std::vector<glm::vec3>> positions;
+std::vector<std::vector<glm::vec3>> normals;
 std::vector<std::vector<glm::vec2>> texCoords;
+std::vector<std::vector<glm::vec2>> texCoordsP2;
 std::vector<std::vector<glm::ivec2>> bonesID;
 std::vector<std::vector<glm::vec2>> weights;
 
@@ -50,23 +52,15 @@ const uint64_t RenderableByIndex = 5792287050554945273;
 
 const float dx = 3.051851e-05;
 
-glm::vec2 converttexcoords(int16_t* huh)
+glm::vec2 converttexcoords16(int16_t* huh)
 {
-	float x = huh[0] * dx;
-	float y = huh[1] * dx;
+	float x = huh[0] * dx * 16.0f;
+	float y = huh[1] * dx * 16.0f;
 
 
 	return glm::vec2(x, y);
 }
 
-float top[6] = {
-	-1.83279168605804,
-	-0.432298421859741,
-	-0.000535726605448872,
-	1.83279168605804,
-	0.959592878818512,
-	2.88332748413086
-};
 
 float top2[6];
 
@@ -74,7 +68,7 @@ float top2[6];
 const float ax = 4.661165e-10;
 const float bx = 4.665726e-10;
 
-glm::vec3 pack6decomp(uint16_t* hello)
+glm::vec3 pack6decomp(int16_t* hello, float *top)
 {
 	float x = ((hello[0] * dx) + 1.0) * 0.5;
 	float y = (((hello[1] * dx)) + 1.0) * 0.5;
@@ -213,12 +207,12 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 {
 
 	auto& chunk = smb.chunks;
-	for (size_t i = 0; i<smb.chunks.size(); i++)
+	for (size_t j = 0; j<smb.chunks.size(); j++)
 	{
 		
 			
 			
-		switch (smb.chunks[i].chunkType)
+		switch (smb.chunks[j].chunkType)
 		{
 		case GEO:
 		{
@@ -241,11 +235,11 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			auto& geoChunk = handle2->streamHandle;
 
-			size_t seekpos2 = chunk[i].offsetInHeader;
+			size_t seekpos2 = chunk[j].offsetInHeader;
 
 			geoChunk.seekg(seekpos2);
 
-			size_t howbout = chunk[i].numOfBytesAfterTag-(16+chunk[i].stringsize);
+			size_t howbout = chunk[j].numOfBytesAfterTag-(16+chunk[j].stringsize);
 
 			std::vector<char> data2(howbout);
 
@@ -253,9 +247,9 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			ProcessGeometry(data2.data());
 
-			size_t seekpos = chunk[i].contigOffset + smb.fileOffset;
+			size_t seekpos = chunk[j].contigOffset + smb.fileOffset;
 
-			seekpos2 = chunk[i + 1].contigOffset + smb.fileOffset;
+			seekpos2 = chunk[j + 1].contigOffset + smb.fileOffset;
 
 			geoChunk.seekg(seekpos);
 
@@ -279,17 +273,19 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 			weights.resize(renderables);
 			bonesID.resize(renderables);
 			indices.resize(renderables);
+			normals.resize(renderables);
+			texCoordsP2.resize(renderables);
 
 			size_t vbCount = 0;
 			size_t ibCount = 0;
 
 
-			for (size_t i = 0; i < renderables; i++)
+			for (size_t ii = 0; ii < renderables; ii++)
 			{
 
-				unsigned char* g = (unsigned char*)(data.data() + vertexOffset1[i]);
+				unsigned char* g = (unsigned char*)(data.data() + vertexOffset1[ii]);
 				int vertexSize = 0;
-				SMBVertexTypes type = vertexTypes[i];
+				SMBVertexTypes type = vertexTypes[ii];
 
 
 				switch (type)
@@ -306,23 +302,53 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 				}
 
 
-				int vSize = verticesCount[i];
+				int vSize = verticesCount[ii];
 
-				auto& bonesRef = bonesID[i];
+				auto& bonesRef = bonesID[ii];
 				bonesRef.resize(vSize);
-				auto& weightRef = weights[i];
+				auto& weightRef = weights[ii];
 				weightRef.resize(vSize);
+				auto& positionsRef = positions[ii];
+				positionsRef.resize(vSize);
+				auto& tex1Ref = texCoords[ii];
+				tex1Ref.resize(vSize);
 
 				for (int i = 0; i < vSize; i++)
 				{
 					switch (type) {
 					case PosPack6_CNorm_C16Tex1_Bone2:
 					{
+
+						auto& normalRef = normals[ii];
+						normalRef.resize(vSize);
+
 						uint32_t l = g[2], h = g[3];
 						bonesRef[i].x = g[0];
 						bonesRef[i].y = g[1];
 						weightRef[i].x = ((float)l) * 0.00392156f;
 						weightRef[i].y = ((float)h) * 0.00392156f;
+
+						uint32_t norms = *(uint32_t*)&g[8];
+
+						normalRef[i].x = ((float)(norms << 0x15)) * ax;
+						normalRef[i].x = ((float)((norms & 0xfffff800) << 10)) * ax;
+						normalRef[i].x = ((float)((norms & 0xffc00000) << 10)) * bx;
+
+						int16_t t[2];
+						t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+						t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+				
+						tex1Ref[i] = converttexcoords16(t);
+
+
+						int16_t s[3];
+
+						s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+						s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+						s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+						positionsRef[i] = pack6decomp(s, top2);
+
 						break;
 					}
 					case PosPack6_C16Tex2_Bone2:
@@ -332,6 +358,33 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 						bonesRef[i].y = g[1];
 						weightRef[i].x = ((float)l) * 0.00392156f;
 						weightRef[i].y = ((float)h) * 0.00392156f;
+
+
+						int16_t t[2];
+						t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+						t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+						tex1Ref[i] = converttexcoords16(t);
+
+
+						auto& tex2Ref = texCoordsP2[ii];
+						tex2Ref.resize(vSize);
+
+			
+						t[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
+						t[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
+
+						tex2Ref[i] = converttexcoords16(t);
+
+						int16_t s[3];
+
+						s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+						s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+						s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+						positionsRef[i] = pack6decomp(s, top2);
+
+
 						break;
 					}
 					case PosPack6_C16Tex1_Bone2:
@@ -341,6 +394,21 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 						bonesRef[i].y = g[1];
 						weightRef[i].x = ((float)l) * 0.00392156f;
 						weightRef[i].y = ((float)h) * 0.00392156f;
+
+						int16_t t[2];
+						t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+						t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+						tex1Ref[i] = converttexcoords16(t);
+
+						int16_t s[3];
+
+						s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+						s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+						s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+
+						positionsRef[i] = pack6decomp(s, top2);
+
 						break;
 					}
 					}
@@ -348,7 +416,7 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 				}
 
 
-				if (renderableTypes[i] == IVBRENDERABLE)
+				if (renderableTypes[ii] == IVBRENDERABLE)
 				{
 					auto& currIB = indices[ibCount];
 					currIB.resize(indicesCount[ibCount]);
@@ -415,11 +483,111 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 				}
 			}
 
+			for (size_t i = 0; i < renderables; i++)
+			{
+				auto& ref = normals[i];
+				int vSize = verticesCount[i];
+				if (!ref.size()) continue;
+				for (int j = 0; j < vSize; j++)
+
+				{
+					float x = ref[j].x;
+					float y = ref[j].y;
+					float z = ref[j].z;
+					if (z > 1.0f || z < -1.0f)
+					{
+						std::cout << "NORMALZ: " << i << " " << j << " " << z <<  std::endl;
+					}
+
+					if (y > 1.0f || y < -1.0f)
+					{
+						std::cout << "NORMALY: " << i << " " << j << " " << y << std::endl;
+					}
+
+					if (x > 1.0f || x < -1.0f)
+					{
+						std::cout << "NORMALX: " << i << " " << j << " " << x << std::endl;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < renderables; i++)
+			{
+				auto& ref = texCoords[i];
+				int vSize = verticesCount[i];
+				if (!ref.size()) continue;
+				for (int j = 0; j < vSize; j++)
+
+				{
+					float x = ref[j].x;
+					float y = ref[j].y;
+					
+
+					if (y > 1.0f || y < -1.0f)
+					{
+						std::cout << "TEXTUREY: " << i << " " << j << " " << y << std::endl;
+					}
+
+					if (x > 1.0f || x < -1.0f)
+					{
+						std::cout << "TEXTUREX: " << i << " " << j << " " << x << std::endl;
+					}
+				}
+
+				auto& ref2 = texCoordsP2[i];
+				if (!ref2.size()) continue;
+
+				for (int j = 0; j < vSize; j++)
+
+				{
+					float x = ref2[j].x;
+					float y = ref2[j].y;
+
+
+					if (y > 1.0f || y < -1.0f)
+					{
+						std::cout << "TEXTURE2Y: " << i << " " << j << " " << y << std::endl;
+					}
+
+					if (x > 1.0f || x < -1.0f)
+					{
+						std::cout << "TEXTURE2X: " << i << " " << j << " " << x << std::endl;
+					}
+				}
+			}
+
+			for (size_t i = 0; i < renderables; i++)
+			{
+				auto& positionRef = positions[i];
+				int vSize = verticesCount[i];
+				for (int j = 0; j < vSize; j++)
+
+				{
+					float x = positionRef[j].x;
+					float y = positionRef[j].y;
+					float z = positionRef[j].z;
+					if ((z < top2[2] || z > top2[5]))
+					{
+						std::cout << "POSITIONZ: " << i << " " << j << " " << z << " " << top2[2] << " " << top2[5] << std::endl;
+					}
+
+					if ((y < top2[1] || y > top2[4]))
+					{
+						std::cout << "POSITIONY: " << i << " " << j << " " << y << std::endl;
+					}
+
+					if ((x < top2[0] || x > top2[3]))
+					{
+						std::cout << "POSITIONX: " << i << " " << j << " " << x << std::endl;
+					}
+				}
+			}
+
 			break;
 		}
 		
 		case TEXTURE:
-			ExportTextureFromFile(smb, chunk[i]);
+			ExportTextureFromFile(smb, chunk[j]);
 			break;
 		case GR2:
 			break;
