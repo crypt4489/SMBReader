@@ -5,7 +5,6 @@ layout(location = 0) in vec4 inPos;
 layout(location = 1) in vec4 inTex;
 
 layout(location = 0) out vec2 texCoords;
-layout(location = 1) flat out int instanceID;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;

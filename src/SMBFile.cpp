@@ -75,6 +75,11 @@ void SMBFile::ReadChunk(std::fstream& fh, SMBChunk& chunk)
 	chunk.headerSize = offset;
 	std::streamoff next = chunk.offsetInHeader + offset;
 	fh.seekg(next, std::ios_base::beg);
+
+	if (chunk.chunkId != chunk.chunkIdCopy)
+	{
+		throw std::runtime_error("chunk did not equal");
+	}
 }
 
 void SMBFile::ProcessFile(std::fstream& fh)
@@ -88,7 +93,7 @@ void SMBFile::ProcessFile(std::fstream& fh)
 	}
 }
 
-SMBGeoChunk* ProcessGeometryClass(char* data)
+SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 {
 	char* iter = data;
 
@@ -101,7 +106,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data)
 		return nullptr;
 	}
 
-	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables);
+	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, numMaterials*2);
 
 	char* axialBox = iter + 36;
 	memcpy(&geoChunk->axialBox, axialBox, sizeof(float) * 6);
@@ -111,9 +116,15 @@ SMBGeoChunk* ProcessGeometryClass(char* data)
 
 	int renderableIndex = 0;
 
+	int* lMaterialCount = geoChunk->materialsCount;
+
+	int* lMaterialId = geoChunk->materialsId;
+
 	while (true)
 	{
 		int header = *((int*)material);
+
+		
 
 		if (header != 737893) break;
 
@@ -153,6 +164,19 @@ SMBGeoChunk* ProcessGeometryClass(char* data)
 		}
 		else {
 
+			int type = *((int*)(material+4));
+
+			if (type == -1373022986)
+			{
+				*lMaterialCount = 2;
+			}
+			else {
+				*lMaterialCount = 1;
+			}
+
+
+			
+
 			material += MaterialDefSize;
 
 			int copy = *((int*)material);
@@ -164,21 +188,36 @@ SMBGeoChunk* ProcessGeometryClass(char* data)
 				copy = *((int*)material);
 			}
 
-			material += 8;
+			
 
-			copy = *((int*)material);
+			int iter = *lMaterialCount;
 
-			while (copy != 0)
+			while (iter--)
 			{
 				if (copy == 737893) break;
-				material += (copy + 4);
-				copy = *((int*)material);
-				if (copy != 0) {
-					break;
-				}
+
+				*lMaterialId = *((int*)(material + 4));
+
+				lMaterialId++;
+
 				material += 8;
+
 				copy = *((int*)material);
 
+				material += (copy + 4);
+
+			}
+
+			
+
+			lMaterialCount++;
+
+			renderableIndex++;
+
+			if (renderableIndex == numRenderables)
+			{
+				material += 8;
+				renderableIndex = 0;
 			}
 
 			copy = *((int*)material);
@@ -187,6 +226,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data)
 			{
 				material = (char*)((uintptr_t)material + (((uintptr_t)material | 0xf) - (uintptr_t)material));
 			}
+
 		}
 	}
 	return geoChunk;
@@ -242,13 +282,6 @@ int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex)
 	return sizeof(uint32_t) * geoDef->indicesCount[renderableIndex];
 }
 
-
-static inline uint32_t bswap32_u(uint32_t x) {
-	return ((x << 24) & 0xFF000000u) |
-		((x << 8) & 0x00FF0000u) |
-		((x >> 8) & 0x0000FF00u) |
-		((x >> 24) & 0x000000FFu);
-}
 
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut)
 {

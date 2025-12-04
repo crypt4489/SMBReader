@@ -102,6 +102,7 @@ struct SMBGeoChunk
 	int vertexAndIndicesInfo;
 	int verticesandIndexCompressedSize;
 	int numRenderables;
+	int numMaterials;
 	int* renderablesTypes;
 	SMBVertexTypes* vertexTypes;
 	int* indicesCount;
@@ -109,10 +110,13 @@ struct SMBGeoChunk
 	int* verticesCount;
 	int* vertexOffsetInArchive;
 	int* primitiveTypes;
+	int* materialsCount;
+	int* materialStart;
+	int* materialsId;
 	AxisBox axialBox;
 
 	SMBGeoChunk() = delete;
-	SMBGeoChunk(int _numRenderables)
+	SMBGeoChunk(int _numRenderables, int _numMaterials)
 	{
 		numRenderables = _numRenderables;
 		renderablesTypes = (int*)malloc(sizeof(int) * _numRenderables);
@@ -122,6 +126,9 @@ struct SMBGeoChunk
 		verticesCount = (int*)malloc(sizeof(int) * _numRenderables);
 		vertexOffsetInArchive = (int*)malloc(sizeof(int) * _numRenderables);
 		primitiveTypes = (int*)malloc(sizeof(int) * _numRenderables);
+		materialsCount = (int*)malloc(sizeof(int) * _numRenderables);
+		materialsId = (int*)malloc(sizeof(int) * _numMaterials);
+		materialStart = (int*)malloc(sizeof(int) * _numRenderables);
 		memset(&axialBox, 0, sizeof(AxisBox));
 		memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
 		memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
@@ -136,6 +143,9 @@ struct SMBGeoChunk
 		free(verticesCount);
 		free(vertexOffsetInArchive);
 		free(primitiveTypes);
+		free(materialsId);
+		free(materialsCount);
+		free(materialStart);
 	}
 	
 };
@@ -151,7 +161,7 @@ struct SMBChunk
 	uint32_t pad3;
 	uint32_t tag;
 	uint32_t pad4;
-	uint32_t endmag;
+	uint32_t chunkIdCopy;
 	uint32_t stringsize;
 	std::string fileName;
 	std::size_t offsetInHeader;
@@ -225,7 +235,7 @@ private:
 };
 
 
-SMBGeoChunk* ProcessGeometryClass(char* data);
+SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials);
 
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 

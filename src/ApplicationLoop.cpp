@@ -36,6 +36,13 @@ static bool imageVisible = true;
 
 static bool justUpdatedObj = false;
 
+
+
+static void* transientVertexData;
+static int transientVertexDataPtr = 0;
+static int transientVertexDataSize = 16 * MB;
+
+
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
@@ -361,16 +368,194 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
-int objMemory = 0;
+char* AllocTransientVertexData(int size)
+{
 
-void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
+	char* head = (char*)transientVertexData;
+
+	if ((transientVertexDataPtr + size) >= transientVertexDataSize)
+	{
+		transientVertexDataPtr = 0;
+	}
+
+	int out = transientVertexDataPtr;
+
+	transientVertexDataPtr += size;
+
+	return (head + out);
+
+}
+
+void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
+{
+	auto rendInst = VKRenderer::gRenderInstance;
+	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+	int objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+	int count = geoDef->numRenderables;
+
+	glm::mat4 hierarchialMatrix = glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f));
+
+	glm::mat4 rotation = LTM::CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
+
+	hierarchialMatrix *= rotation;
+
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 128);
+
+	for (int i = 0; i<count; i++)
+	{
+
+		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
+
+		int indexCount = geoDef->indicesCount[i];
+
+		int vertexCount = geoDef->verticesCount[i];
+
+		SMBVertexTypes type = geoDef->vertexTypes[i];
+
+		uint32_t* indices = (uint32_t*)AllocTransientVertexData(sizeof(uint32_t) * indexCount);
+
+		size_t vertexSize = 0;
+
+		void* vertexData;
+
+		switch (type)
+		{
+		case PosPack6_CNorm_C16Tex1_Bone2:
+			vertexSize = sizeof(Vertex_PosPack6_CNorm_C16Tex1_Bone2);
+			break;
+		case PosPack6_C16Tex2_Bone2:
+			vertexSize = sizeof(Vertex_PosPack6_C16Tex2_Bone2);
+			break;
+		case PosPack6_C16Tex1_Bone2:
+			vertexSize = sizeof(Vertex_PosPack6_C16Tex1_Bone2);
+			break;
+		}
+
+		vertexData = (void*)AllocTransientVertexData(vertexSize * vertexCount);
+
+		SMBCopyVertexData(geoDef, i, file, vertexData);
+
+		SMBCopyIndices4Bytes(geoDef, i, file, indices);
+
+		std::vector<BasicVertex> transfer(vertexCount);
+
+		switch (type)
+		{
+		case PosPack6_CNorm_C16Tex1_Bone2:
+		{
+			Vertex_PosPack6_CNorm_C16Tex1_Bone2* verts = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexData;
+			for (int ii = 0; ii < vertexCount; ii++)
+			{
+				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
+				transfer[ii].POSITION = verts[ii].POSITION;
+			}
+			break;
+		}
+		case PosPack6_C16Tex2_Bone2:
+		{
+			Vertex_PosPack6_C16Tex2_Bone2* verts = (Vertex_PosPack6_C16Tex2_Bone2*)vertexData;
+			for (int ii = 0; ii < vertexCount; ii++)
+			{
+				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
+				transfer[ii].POSITION = verts[ii].POSITION;
+			}
+			break;
+		}
+		case PosPack6_C16Tex1_Bone2:
+		{
+			Vertex_PosPack6_C16Tex1_Bone2* verts = (Vertex_PosPack6_C16Tex1_Bone2*)vertexData;
+			for (int ii = 0; ii < vertexCount; ii++)
+			{
+				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
+				transfer[ii].POSITION = verts[ii].POSITION;
+			}
+			break;
+		}
+		}
+
+		
+
+
+		int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
+
+		int vertexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(BasicVertex) * vertexCount, alignof(glm::vec4));
+		int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint32_t) * indexCount, alignof(uint32_t));
+
+		int textureHandles = rendInst->GetPageFromUniformBuffer(64 * frames, alignof(glm::mat4));
+
+		struct Handles
+		{
+			uint32_t numHandles;
+			uint32_t handles[15];
+		};
+
+		
+
+		Handles handles;
+
+		memset(&handles, 0, sizeof(Handles));
+
+		handles.numHandles = geoDef->materialsCount[i];
+
+		
+
+		int base = geoDef->materialStart[i];
+
+		for (int ii = 0; ii < handles.numHandles; ii++)
+		{
+			handles.handles[ii] = (uint32_t)geoDef->materialsId[base+ii];
+		}
+		
+
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objMemory, REPEAT, 0);
+
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 1);
+
+
+		rendInst->UpdateAllocation((void*)(transfer.data()), vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), sizeof(Handles) * 1);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), sizeof(Handles) * 2);
+
+
+		GraphicsIntermediaryPipelineInfo create = {
+			.drawType = 0,
+			.vertexBufferIndex = vertexMemory,
+			.vertexCount = (uint32_t)vertexCount,
+			.pipelinename = GENERIC,
+			.descCount = 1,
+			.descriptorsetid = &graphicDesc,
+			.indexBufferHandle = indexMemory,
+			.indexCount = (uint32_t)indexCount,
+			.pushRangeCount = 0,
+			.instanceCount = 1,
+		};
+
+		rendInst->CreateGraphicsVulkanPipelineObject(&create);
+	}
+}
+
+
+
+void ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 
 	int previousLevel = mainDictionary.allocationIndex;
 
+	int totalTextureCount = 0;
+
+	std::vector<uint32_t> textureIds;
+
 	int alloc = 0;
 
 	auto& chunk = file.chunks;
+
+	SMBGeoChunk* geoDef = nullptr;
 
 	for (size_t i = 0; i<chunk.size(); i++)
 	{
@@ -391,7 +576,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 
 			geoChunk.read(geomHeader.data(), chunk[i].headerSize);
 
-			SMBGeoChunk* geoDef = ProcessGeometryClass(geomHeader.data());
+			geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
 
 			geoDef->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
 
@@ -399,77 +584,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 
 			geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
 
-
-			int what = 3;
-
-			std::vector<Vertex_PosPack6_C16Tex2_Bone2> vertices;
-
-			std::vector<uint32_t> indices;
-
-			vertices.resize(geoDef->verticesCount[what]);
-
-			indices.resize(geoDef->indicesCount[what]);
-
-			SMBCopyVertexData(geoDef, what, file, vertices.data());
-
-			SMBCopyIndices4Bytes(geoDef, what, file, indices.data());
-
-			std::vector<BasicVertex> transfer(geoDef->verticesCount[what]);
-
-			for (int ii = 0; ii < geoDef->verticesCount[what]; ii++)
-			{
-				transfer[ii].TEXTURE = glm::vec4(vertices[ii].TEXTURE, 0.0f, 0.0f);
-				transfer[ii].POSITION = vertices[ii].POSITION;
-			}
-
-
-
-			auto rendInst = VKRenderer::gRenderInstance;
-			uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-
-			int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
-
-			objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
-			int objMorphFromVertexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(BasicVertex) * transfer.size(), alignof(glm::vec4));
-			int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint32_t) * geoDef->indicesCount[what], alignof(uint32_t));
-
-		
-			glm::mat4 identity = glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f));
-
-			identity = glm::rotate(identity, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-
-			rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objMemory, REPEAT, 0);
 			
-
-			rendInst->UpdateAllocation(&identity, objMemory, 64, 0);
-			rendInst->UpdateAllocation(&identity, objMemory, 64, 64);
-			rendInst->UpdateAllocation(&identity, objMemory, 64, 128);
-
-			rendInst->UpdateAllocation((void*)(transfer.data()), objMorphFromVertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
-
-			rendInst->UpdateAllocation(indices.data(), indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
-
-			
-
-			GraphicsIntermediaryPipelineInfo create = {
-				.drawType = 0,
-				.vertexBufferIndex = objMorphFromVertexMemory,
-				.vertexCount = (uint32_t)transfer.size(),
-				.pipelinename = GENERIC,
-				.descCount = 1,
-				.descriptorsetid = &graphicDesc,
-				.indexBufferHandle = indexMemory,
-				.indexCount = (uint32_t)indices.size(),
-				.pushRangeCount = 0,
-				.instanceCount = 1,
-			};
-
-			rendInst->CreateGraphicsVulkanPipelineObject(&create);
 
 			break;
 		}
 		case TEXTURE:
 		{
+			std::cout << chunk[i].fileName << std::endl;
 			SMBTexture texture(file, chunk[i]);
 			alloc = mainDictionary.AllocateTextureData(
 				(char*)texture.data,
@@ -488,7 +609,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 					texture.miplevels,
 					texture.type,
 					GetPoolIndexByFormat(texture.type));
-
+			textureIds.push_back(chunk[i].chunkId);
+			totalTextureCount++;
 			break;
 		}
 		case GR2:
@@ -500,6 +622,46 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file, GenericObject *obj)
 			break;
 		}
 	}
+	
+	if (geoDef)
+	{
+		
+		int base = 0;
+
+		for (int jj = 0; jj < geoDef->numRenderables; jj++)
+		{
+			int count = geoDef->materialsCount[jj];
+			for (int hh = 0; hh < count; hh++)
+			{
+				uint32_t id = geoDef->materialsId[hh + base];
+				int gg = 0;
+				for (; gg < totalTextureCount; gg++)
+				{
+					if (id == textureIds[gg])
+					{
+						geoDef->materialsId[hh + base] = previousLevel + gg;
+						break;
+					}
+				}
+
+				if (gg == totalTextureCount)
+				{
+					throw std::runtime_error("Invalid texture ID");
+				}
+
+			}
+
+			geoDef->materialStart[jj] = base;
+
+			base += count;
+		} 
+
+		SMBGeometricalObject(geoDef, file);
+
+		delete geoDef;
+	}
+
+	
 
 	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data(), previousLevel, mainDictionary.allocationIndex);
 }
@@ -510,6 +672,8 @@ void ApplicationLoop::InitializeRuntime()
 	ThreadManager::LaunchBackgroundThread(
 			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
 				this, std::placeholders::_1));
+
+	transientVertexData = malloc(transientVertexDataSize);
 
 	mainDictionary.textureCache = (uintptr_t)malloc(16 * MB);
 	
@@ -526,18 +690,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
-	gMemoryCallback = [this](void* _d, size_t _si, size_t _alloc)
-		{
-			uint32_t frame = VKRenderer::gRenderInstance->currentFrame;
-			VKRenderer::gRenderInstance->UpdateAllocation(_d, _alloc, _si, frame * _si);
-		};
-
-
 	CreateTexturePools();
 
 	CreateGlobalStorageImage();
-
-	
 
 	globalBufferLocation = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT,64);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -662,6 +817,8 @@ void ApplicationLoop::CleanupRuntime()
 
 	VKRenderer::gRenderInstance->DestoryTexture(storageBuffer);
 
+	free(transientVertexData);
+
 	free((void*)mainDictionary.textureCache);
 
 	for (int i = 0; i < mainDictionary.allocationIndex; i++)
@@ -675,12 +832,6 @@ void ApplicationLoop::CleanupRuntime()
 	}
 
 	renderables.clear();
-
-	//delete text1;
-
-	//delete text2;
-
-	//TextManager::DestroyTextManager();
 
 	ThreadManager::DestroyThreadManager();
 
@@ -722,11 +873,7 @@ void ApplicationLoop::LoadObject(const std::string& file)
 {
 	SMBFile SMB(file);
 
-	//GenericObject* obj = new GenericObject(RenderingBackend::VULKAN, 0);
-
-	LoadSMBFile(SMB, nullptr);
-
-	
+	LoadSMBFile(SMB);
 
 	for (uint32_t i = 0; i < VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT; i++)
 		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);

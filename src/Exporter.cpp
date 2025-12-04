@@ -103,7 +103,7 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			geoChunk.read(data2.data(), chunk[j].headerSize);
 
-			SMBGeoChunk* geoDef = ProcessGeometryClass(data2.data());
+			SMBGeoChunk* geoDef = ProcessGeometryClass(data2.data(), 0);
 
 			geoDef->vertexAndIndicesInfo = chunk[j].contigOffset + smb.fileOffset;
 

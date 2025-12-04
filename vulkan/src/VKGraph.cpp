@@ -15,7 +15,7 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 	std::shared_lock lock(objectGuard);
 
-	for (uint32_t i = 0; i<1; i++)
+	for (uint32_t i = 0; i<pipelineObjCount; i++)
 	{
 
 		if (!activeIndicators[i]) continue;

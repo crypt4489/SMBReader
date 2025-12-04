@@ -66,7 +66,9 @@ public:
 
 	int GetPoolIndexByFormat(ImageFormat format);
 
-	void LoadSMBFile(SMBFile& file, GenericObject* obj);
+	void LoadSMBFile(SMBFile& file);
+
+	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
 
 	ProgramArgs& args;
 	Semaphore queueSema, objsSema;
@@ -79,7 +81,6 @@ public:
 	int globalBufferLocation;
 	int globalBufferDescriptor;
 	int globalTexturesDescriptor;
-	std::function<void(void*, size_t, size_t)> gMemoryCallback;
 	Camera c;
 	EntryHandle storageBuffer;
 	int instanceAlloc;
