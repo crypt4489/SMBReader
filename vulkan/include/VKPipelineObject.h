@@ -35,6 +35,7 @@ struct VKGraphicsPipelineObjectCreateInfo
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
 	uint32_t instanceCount;
+	uint32_t indexSize;
 };
 
 struct PushConstantArguments
@@ -129,17 +130,12 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 
 	void Draw(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 
-	void DrawIndirectOneBuffer(
-		RecordingBufferObject* rbo,
-		uint32_t drawCount,
-		uint32_t frame,
-		uint32_t firstSet);
-
 	EntryHandle vertexBufferIndex, indexBufferHandle;
 
 	std::size_t vertexBufferOffset, indexBufferOffset;
 	std::size_t vertexCount, indexCount;
 	uint32_t instanceCount;
+	VkIndexType indexType;
 };
 
 

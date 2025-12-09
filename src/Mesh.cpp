@@ -1,3 +1,4 @@
+#if 0
 #include "Mesh.h"
 #include <glm/glm.hpp>
 
@@ -152,3 +153,5 @@ void* Mesh::GetIndexData() const {
     head += indexPosition;
     return (void*)head;
 }
+
+#endif

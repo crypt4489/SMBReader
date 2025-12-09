@@ -34,45 +34,7 @@
 //25-27 Binormals
 //28-32 sprites
 
-std::vector<std::vector<glm::vec3>> positions;
-std::vector<std::vector<glm::vec3>> normals;
-std::vector<std::vector<glm::vec2>> texCoords;
-std::vector<std::vector<glm::vec2>> texCoordsP2;
-std::vector<std::vector<glm::ivec2>> bonesID;
-std::vector<std::vector<glm::vec2>> weights;
 
-std::vector<std::vector<uint16_t>> indices;;
-
-
-
-
-
-glm::vec2 converttexcoords16(int16_t* huh)
-{
-	float x = huh[0] * dx * 16.0f;
-	float y = huh[1] * dx * 16.0f;
-
-
-	return glm::vec2(x, y);
-}
-
-
-float top2[6];
-
-
-
-glm::vec3 pack6decomp(int16_t* hello, float *top)
-{
-	float x = ((hello[0] * dx) + 1.0) * 0.5;
-	float y = (((hello[1] * dx)) + 1.0) * 0.5;
-	float z = (((hello[2] * dx)) + 1.0) * 0.5;
-
-	x = ((top[3] - top[0]) * x) + top[0];
-	y = ((top[4] - top[1]) * y) + top[1];
-	z = ((top[5] - top[2]) * z) + top[2];
-
-	return glm::vec3(x, y, z);
-}
 
 
 void Exporter::ExportChunksFromFile(SMBFile& smb)
@@ -109,7 +71,7 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			seekpos = chunk[j + 1].contigOffset + smb.fileOffset;
 
-			geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
+			geoDef->verticesandIndexCompressedSize = ((int)seekpos - geoDef->vertexAndIndicesInfo);
 
 
 			break;

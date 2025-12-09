@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include "AppTypes.h"
+#if 0
 struct Mesh
 {
 	uint32_t vertexCount;
@@ -26,4 +27,4 @@ struct Mesh
 
 	static void GenerateCube(Mesh* m);
 };
-
+#endif

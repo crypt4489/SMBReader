@@ -106,7 +106,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 		return nullptr;
 	}
 
-	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, numMaterials*2);
+	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, 15);
 
 	char* axialBox = iter + 36;
 	memcpy(&geoChunk->axialBox, axialBox, sizeof(float) * 6);
@@ -208,8 +208,6 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 			}
 
-			
-
 			lMaterialCount++;
 
 			renderableIndex++;
@@ -222,9 +220,10 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 			copy = *((int*)material);
 
-			if (copy == 0)
+			if (-1866346045 == type)
 			{
-				material = (char*)((uintptr_t)material + (((uintptr_t)material | 0xf) - (uintptr_t)material));
+				char* start = material;
+				while (*material != 0x65 && (material != start + 20)) material++;
 			}
 
 		}
@@ -243,9 +242,9 @@ static glm::vec2 converttexcoords16(int16_t* huh)
 
 static glm::vec3 pack6decomp(int16_t* hello, AxisBox& box)
 {
-	float x = ((hello[0] * dx) + 1.0) * 0.5;
-	float y = (((hello[1] * dx)) + 1.0) * 0.5;
-	float z = (((hello[2] * dx)) + 1.0) * 0.5;
+	float x = ((hello[0] * dx) + 1.0f) * 0.5f;
+	float y = (((hello[1] * dx)) + 1.0f) * 0.5f;
+	float z = (((hello[2] * dx)) + 1.0f) * 0.5f;
 
 	x = ((box.max.x - box.min.x) * x) + box.min.x;
 	y = ((box.max.y - box.min.y) * y) + box.min.y;
@@ -429,7 +428,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 	}
 }
 
-void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut)
+void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut)
 {
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
 	if (renderableType != IVBRENDERABLE) return;
@@ -446,7 +445,7 @@ void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFi
 
 	int iter = 0;
 
-	int* indices4 = (int*)indexDataOut;
+	uint16_t* indices = (uint16_t*)indexDataOut;
 
 	while (iCount > 0) {
 
@@ -460,30 +459,19 @@ void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFi
 
 		if (indexType == 0x1800)
 		{
-			std::vector<int16_t> data(stride * 2);
 			stream.read(
-				(char*)data.data(),
+				(char*)indices,
 				stride * 4
 			);
 
-			int start = iter;
-
-			int dataOut = 0;
-
-			while (iter < (start + (stride * 2)))
-			{
-				indices4[iter++] = data[dataOut++];
-			}
-		
+			indices += (stride * 2);
 
 			iCount -= (stride * 2);
 		}
 
 		else if (indexType == 0x1808)
 		{
-			int input;
-			stream.read((char*)&input, 4);
-			indices4[iter++] = input;
+			stream.read((char*)indices, 2);
 			iCount--;
 		}
 		else if (indexType == 0x17fc) {

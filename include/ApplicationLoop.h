@@ -15,7 +15,7 @@
 #include "Camera.h"
 #include "Exporter.h"
 #include "ProgramArgs.h"
-#include "GenericObject.h"
+
 #include "SMBFile.h"
 #include "TextManager.h"
 #include "TextureDictionary.h"
@@ -28,7 +28,7 @@ public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
 
-	void InitializeCommandMap();
+	void ExecuteCommands(const std::string& command, const std::vector<std::any>& args);
 
 	void Execute();
 
@@ -71,10 +71,8 @@ public:
 	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
 
 	ProgramArgs& args;
-	Semaphore queueSema, objsSema;
+	Semaphore queueSema;
 	std::queue<std::vector<std::any>> commands;
-	std::unordered_map<std::string, std::function<void(std::vector<std::any>)>> commandMap;
-	std::vector<GenericObject*> renderables;
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	Text* text1, * text2;
@@ -83,8 +81,7 @@ public:
 	int globalTexturesDescriptor;
 	Camera c;
 	EntryHandle storageBuffer;
-	int instanceAlloc;
-	std::array<glm::mat4, 64*64> instanceMatrices;
+	
 	TextureDictionary mainDictionary;
 
 	enum DIRS {

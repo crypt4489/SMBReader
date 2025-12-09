@@ -8,23 +8,14 @@
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-static void Rotate(GenericObject* obj)
-{
-	static auto startTime = std::chrono::high_resolution_clock::now();
-
-	auto currentTime = std::chrono::high_resolution_clock::now();
-	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-	obj->mat = glm::identity<glm::mat4>();
-	//obj->interpolate += 0.000001f;
-	if (obj->interpolate >= 15.0f)
-	{
-		obj->interpolate = 0.0f;
-	}
-	//std::cout << obj->interpolate << std::endl;
-}
-
 
 ApplicationLoop* loop;
+
+std::array<std::string, 2> commandsStrings =
+{
+	"end",
+	"load"
+};
 
 static int computeMemory;
 
@@ -43,12 +34,56 @@ static int transientVertexDataPtr = 0;
 static int transientVertexDataSize = 16 * MB;
 
 
+#define MAX_GEOMETRY 2048
+#define MAX_MESHES 4096
+#define MAX_MESH_TEXTURES 8192
+
+
+struct Geometry
+{
+	int meshCount;
+	int meshStart;
+};
+
+struct Mesh
+{
+	int vertexId;
+	int verticesCount;
+	int vertexSize;
+	int indexId;
+	int indicesCount;
+	int indexSize;
+	int texuresCount;
+	int texturesStart;
+	int drawableIndex;
+	int meshInstanceMemoryCount;
+	int meshInstanceMemoryStart;
+	int meshDescriptor;
+	int deviceIndices;
+	int deviceVertices;
+};
+
+static int meshTextureHandlesAlloc = 0;
+static int meshVertexDataAlloc = 0;
+static int meshIndexDataAlloc = 0;
+static int meshInstanceDataAlloc = 0;
+static int geometryInstanceDataAlloc = 0;
+//static int meshObjectMemoryDataAlloc = 0;
+static int meshDeviceMemoryDataAlloc = 0;
+
+static std::array<int, MAX_MESH_TEXTURES> meshTextureHandles;
+static std::array<void*, MAX_MESHES> meshVertexData;
+static std::array<void*, MAX_MESHES> meshIndexData;
+//static std::array<int, MAX_MESHES * 2> meshObjectMemoryData;
+static std::array<int, MAX_MESHES * 2> meshDeviceMemoryData;
+static std::array<Mesh, MAX_MESHES> meshInstanceData;
+static std::array<Geometry, MAX_GEOMETRY> geometryInstanceData;
+
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	queueSema(Semaphore()),
-	objsSema(Semaphore()),
 	running(true),
 	cleaned(false)
 {
@@ -63,17 +98,17 @@ ApplicationLoop::~ApplicationLoop() {
 	delete mainWindow; 
 }
 
-void ApplicationLoop::InitializeCommandMap()
+void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vector<std::any>& args)
 {
-	commandMap["end"] = [this](std::optional<std::vector<std::any>> args)
-		{
-			SetRunning(false);
-		};
 
-	commandMap["load"] = [this](std::optional<std::vector<std::any>> args)
-		{
-			LoadThreadedWrapper(std::any_cast<std::string>(args->at(0)));
-		};
+	if (command == "load")
+	{
+		LoadThreadedWrapper(std::any_cast<std::string>(args.at(0)));
+	}
+	else if (command == "end")
+	{
+		SetRunning(false);
+	}
 }
 
 void ApplicationLoop::Execute()
@@ -88,11 +123,10 @@ void ApplicationLoop::Execute()
 	}
 	else
 	{
-		InitializeCommandMap();
 
 		InitializeRuntime();
 
-		commandMap["load"]({ args.inputFile.string() });
+		ExecuteCommands("load", { args.inputFile.string() });
 
 		int i = 0, j = 1;
 
@@ -112,7 +146,7 @@ void ApplicationLoop::Execute()
 
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
-					std::cout << FPS << "\n";
+					//std::cout << FPS << "\n";
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -137,7 +171,7 @@ void ApplicationLoop::Execute()
 
 			MoveCamera(FPS);
 
-			UpdateRenderables();
+			//UpdateRenderables();
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
@@ -183,6 +217,10 @@ void ApplicationLoop::CreateTexturePools()
 		);
 	}
 }
+
+int instanceAlloc;
+std::array<glm::mat4, 64 * 64> instanceMatrices;
+
 
 void ApplicationLoop::CreateGlobalStorageImage()
 {
@@ -310,12 +348,6 @@ void ApplicationLoop::MoveCamera(double fps)
 static bool what = imageVisible;
 void ApplicationLoop::UpdateRenderables()
 {
-	SemaphoreGuard guard(objsSema);
-
-	for (auto& ref : renderables)
-	{
-		ref->CallUpdate();
-	}
 
 	x += 0.0001f;
 	auto rendInst = VKRenderer::gRenderInstance;
@@ -323,13 +355,13 @@ void ApplicationLoop::UpdateRenderables()
 	if (imageVisible)
 
 	{
-		rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
+	//	rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
 	}
 
 	if (what != imageVisible)
 	{
-		rendInst->SetActiveComputePipeline(computeObjIndex, imageVisible);
-		what = imageVisible;
+		//rendInst->SetActiveComputePipeline(computeObjIndex, imageVisible);
+		//what = imageVisible;
 	}	
 }
 
@@ -370,13 +402,7 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 
 char* AllocTransientVertexData(int size)
 {
-
 	char* head = (char*)transientVertexData;
-
-	if ((transientVertexDataPtr + size) >= transientVertexDataSize)
-	{
-		transientVertexDataPtr = 0;
-	}
 
 	int out = transientVertexDataPtr;
 
@@ -403,19 +429,37 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64);
 	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 128);
 
+	Geometry* geom = &geometryInstanceData[geometryInstanceDataAlloc++];
+
+	geom->meshStart = meshInstanceDataAlloc;
+
 	for (int i = 0; i<count; i++)
 	{
 
 		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
 
+		Mesh* mesh = &meshInstanceData[meshInstanceDataAlloc++];
+
+		geom->meshCount++;
+
 		int indexCount = geoDef->indicesCount[i];
 
 		int vertexCount = geoDef->verticesCount[i];
 
+		mesh->indicesCount = indexCount;
+
+		mesh->verticesCount = vertexCount;
+
+		mesh->indexId = meshIndexDataAlloc;
+
+		mesh->vertexId = meshVertexDataAlloc;
+
 		SMBVertexTypes type = geoDef->vertexTypes[i];
 
-		uint32_t* indices = (uint32_t*)AllocTransientVertexData(sizeof(uint32_t) * indexCount);
+		uint16_t* indices = (uint16_t*)AllocTransientVertexData(sizeof(uint16_t) * indexCount);
 
+		meshIndexData[meshIndexDataAlloc++] = indices;
+		
 		size_t vertexSize = 0;
 
 		void* vertexData;
@@ -433,11 +477,17 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			break;
 		}
 
+		mesh->vertexSize = (int)vertexSize;
+
+		mesh->indexSize = 2;
+
 		vertexData = (void*)AllocTransientVertexData(vertexSize * vertexCount);
 
+		meshVertexData[meshVertexDataAlloc++] = vertexData;
+		
 		SMBCopyVertexData(geoDef, i, file, vertexData);
 
-		SMBCopyIndices4Bytes(geoDef, i, file, indices);
+		SMBCopyIndices(geoDef, i, file, indices);
 
 		std::vector<BasicVertex> transfer(vertexCount);
 
@@ -480,15 +530,24 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
 
+		mesh->meshDescriptor = graphicDesc;
+		
 		int vertexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(BasicVertex) * vertexCount, alignof(glm::vec4));
 		int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint32_t) * indexCount, alignof(uint32_t));
 
+		mesh->deviceIndices = indexMemory;
+		mesh->deviceVertices = vertexMemory;
+		mesh->meshInstanceMemoryStart = meshDeviceMemoryDataAlloc;
+		mesh->meshInstanceMemoryCount = 1;
+
 		int textureHandles = rendInst->GetPageFromUniformBuffer(64 * frames, alignof(glm::mat4));
 
+		meshDeviceMemoryData[meshDeviceMemoryDataAlloc++] = textureHandles;
+		
 		struct Handles
 		{
-			uint32_t numHandles;
-			uint32_t handles[15];
+			int numHandles;
+			int handles[15];
 		};
 
 		
@@ -499,13 +558,15 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		handles.numHandles = geoDef->materialsCount[i];
 
-		
-
 		int base = geoDef->materialStart[i];
+
+		mesh->texuresCount = meshTextureHandlesAlloc;
+		mesh->texuresCount = handles.numHandles;
 
 		for (int ii = 0; ii < handles.numHandles; ii++)
 		{
-			handles.handles[ii] = (uint32_t)geoDef->materialsId[base+ii];
+			handles.handles[ii] = geoDef->materialsId[base+ii];
+			meshTextureHandles[meshTextureHandlesAlloc++] = handles.handles[ii];
 		}
 		
 
@@ -514,7 +575,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 1);
 
 
-		rendInst->UpdateAllocation((void*)(transfer.data()), vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation(transfer.data(), vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
 		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
@@ -534,9 +595,10 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			.indexCount = (uint32_t)indexCount,
 			.pushRangeCount = 0,
 			.instanceCount = 1,
+			.indexSize = 2
 		};
 
-		rendInst->CreateGraphicsVulkanPipelineObject(&create);
+		mesh->drawableIndex = (int)rendInst->CreateGraphicsVulkanPipelineObject(&create);
 	}
 }
 
@@ -584,13 +646,10 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 			geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
 
-			
-
 			break;
 		}
 		case TEXTURE:
 		{
-			std::cout << chunk[i].fileName << std::endl;
 			SMBTexture texture(file, chunk[i]);
 			alloc = mainDictionary.AllocateTextureData(
 				(char*)texture.data,
@@ -692,7 +751,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	CreateGlobalStorageImage();
+	//CreateGlobalStorageImage();
 
 	globalBufferLocation = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT,64);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -710,112 +769,69 @@ void ApplicationLoop::InitializeRuntime()
 	c.UpdateCamera();
 
 	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
+	
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 }
 
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (key == GLFW_KEY_D) {
-		if (action == GLFW_PRESS) {
-			
-			loop->camMovements[ApplicationLoop::RIGHT] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::RIGHT] = false;
-		}
-	}
-	if (key == GLFW_KEY_A) {
-		
-		if (action == GLFW_PRESS) {
-	
-			loop->camMovements[ApplicationLoop::LEFT] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::LEFT] = false;
-		}
-	}
-	if (key == GLFW_KEY_W) {
-		
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::FORWARD] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::FORWARD] = false;
-		}
-	}
-	if (key == GLFW_KEY_S) {
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::BACK] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::BACK] = false;
-		}
-	}
+	bool pressed = (action == GLFW_PRESS || action == GLFW_REPEAT);
 
-	if (key == GLFW_KEY_UP) {
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::PITCHUP] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::PITCHUP] = false;
-		}
-	}
-
-	if (key == GLFW_KEY_DOWN) {
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::PITCHDOWN] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::PITCHDOWN] = false;
-		}
-	}
-
-	if (key == GLFW_KEY_RIGHT) {
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = false;
-		}
-	}
-
-	if (key == GLFW_KEY_LEFT) {
-		if (action == GLFW_PRESS) {
-			loop->camMovements[ApplicationLoop::ROTATEYLEFT] = true;
-		}
-		else if (action == GLFW_RELEASE) {
-			loop->camMovements[ApplicationLoop::ROTATEYLEFT] = false;
-		}
-	}
-
-	if (key == GLFW_KEY_2)
+	switch (key)
 	{
-		if (action == GLFW_PRESS) {
+	case GLFW_KEY_D:
+		loop->camMovements[ApplicationLoop::RIGHT] = pressed;
+		break;
+
+	case GLFW_KEY_A:
+		loop->camMovements[ApplicationLoop::LEFT] = pressed;
+		break;
+
+	case GLFW_KEY_W:
+		loop->camMovements[ApplicationLoop::FORWARD] = pressed;
+		break;
+
+	case GLFW_KEY_S:
+		loop->camMovements[ApplicationLoop::BACK] = pressed;
+		break;
+
+	case GLFW_KEY_UP:
+		loop->camMovements[ApplicationLoop::PITCHUP] = pressed;
+		break;
+
+	case GLFW_KEY_DOWN:
+		loop->camMovements[ApplicationLoop::PITCHDOWN] = pressed;
+		break;
+
+	case GLFW_KEY_RIGHT:
+		loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = pressed;
+		break;
+
+	case GLFW_KEY_LEFT:
+		loop->camMovements[ApplicationLoop::ROTATEYLEFT] = pressed;
+		break;
+
+	case GLFW_KEY_2:
+		if (pressed && action == GLFW_PRESS)
 			VKRenderer::gRenderInstance->IncreaseMSAA();
-		}
-	}
+		break;
 
-	if (key == GLFW_KEY_1)
-	{
-		if (action == GLFW_PRESS) {
+	case GLFW_KEY_1:
+		if (pressed && action == GLFW_PRESS)
 			VKRenderer::gRenderInstance->DecreaseMSAA();
-		}
-	}
+		break;
 
-	if (key == GLFW_KEY_9)
-	{
-		if (action == GLFW_PRESS) {
+	case GLFW_KEY_9:
+		if (pressed && action == GLFW_PRESS)
 			imageVisible = !imageVisible;
-		}
+		break;
 	}
 }
 
 void ApplicationLoop::CleanupRuntime()
 {
 	VKRenderer::gRenderInstance->WaitOnRender();
-
-	VKRenderer::gRenderInstance->DestoryTexture(storageBuffer);
 
 	free(transientVertexData);
 
@@ -825,13 +841,6 @@ void ApplicationLoop::CleanupRuntime()
 	{
 		VKRenderer::gRenderInstance->DestoryTexture(mainDictionary.textureHandles[i]);
 	}
-
-	for (auto renderable : renderables)
-	{
-		delete renderable;
-	}
-
-	renderables.clear();
 
 	ThreadManager::DestroyThreadManager();
 
@@ -851,9 +860,9 @@ void ApplicationLoop::ProcessCommands()
 	commands.pop();
 	queueSema.Notify();
 	if (!com.size()) { std::cerr << "what are you doing\n"; return; }
-	auto mapFunc = commandMap.find(std::any_cast<std::string>(com[0]));
-	if (mapFunc == std::end(commandMap)) return;
-	mapFunc->second({ com.begin() + 1, com.end() });
+	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), std::any_cast<std::string>(com[0]));
+	if (mapFunc == std::end(commandsStrings)) return;
+	ExecuteCommands(*mapFunc, { com.begin() + 1, com.end() });
 }
 
 

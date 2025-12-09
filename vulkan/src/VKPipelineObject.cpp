@@ -39,7 +39,13 @@ VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	indexCount(createinfo->indexCount),
 	instanceCount(createinfo->instanceCount)
 {
-
+	if (createinfo->indexSize == 4)
+	{
+		indexType = VK_INDEX_TYPE_UINT32;
+	}
+	else if (createinfo->indexSize == 2) {
+		indexType = VK_INDEX_TYPE_UINT16;
+	}
 }
 
 
@@ -61,7 +67,7 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 
 	if (indexBufferOffset != ~0ui32)
 	{
-		rbo->BindIndexBuffer(indexBufferHandle, static_cast<uint32_t>(indexBufferOffset));
+		rbo->BindIndexBuffer(indexBufferHandle, static_cast<uint32_t>(indexBufferOffset), indexType);
 		rbo->BindingDrawIndexedCmd(static_cast<uint32_t>(indexCount), instanceCount, 0, 0, 0);
 	}
 	else {

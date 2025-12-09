@@ -1395,7 +1395,8 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.indexBufferOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset),
 			.indexCount = info->indexCount,
 			.pushRangeCount = info->pushRangeCount,
-			.instanceCount = info->instanceCount
+			.instanceCount = info->instanceCount,
+			.indexSize = info->indexSize
 	};
 
 	auto& ref = pipelinesIdentifier[info->pipelinename];

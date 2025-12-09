@@ -372,10 +372,10 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, contents);
 }
 
-void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset)
+void RecordingBufferObject::BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset, VkIndexType indexType)
 {
 	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferIndex);
-	vkCmdBindIndexBuffer(cbBufferHandler.buffer, buffer, indexOffset, VK_INDEX_TYPE_UINT32);
+	vkCmdBindIndexBuffer(cbBufferHandler.buffer, buffer, indexOffset, indexType);
 }
 
 void RecordingBufferObject::BindPipelineBarrierCommand(RBOPipelineBarrierArgs* args)

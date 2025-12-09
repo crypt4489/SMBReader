@@ -111,7 +111,7 @@ struct RecordingBufferObject
 		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
 		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
 
-	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset);
+	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset, VkIndexType indexType);
 
 	void BindPipelineBarrierCommand(RBOPipelineBarrierArgs* args);
 

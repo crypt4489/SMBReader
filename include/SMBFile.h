@@ -118,34 +118,49 @@ struct SMBGeoChunk
 	SMBGeoChunk() = delete;
 	SMBGeoChunk(int _numRenderables, int _numMaterials)
 	{
+		memset(this, 0, sizeof(SMBGeoChunk));
 		numRenderables = _numRenderables;
-		renderablesTypes = (int*)malloc(sizeof(int) * _numRenderables);
-		vertexTypes = (SMBVertexTypes*)malloc(sizeof(SMBVertexTypes) * _numRenderables);
-		indicesCount = (int*)malloc(sizeof(int) * _numRenderables);
-		indexOffsetInArchive = (int*)malloc(sizeof(int) * _numRenderables);
-		verticesCount = (int*)malloc(sizeof(int) * _numRenderables);
-		vertexOffsetInArchive = (int*)malloc(sizeof(int) * _numRenderables);
-		primitiveTypes = (int*)malloc(sizeof(int) * _numRenderables);
-		materialsCount = (int*)malloc(sizeof(int) * _numRenderables);
-		materialsId = (int*)malloc(sizeof(int) * _numMaterials);
-		materialStart = (int*)malloc(sizeof(int) * _numRenderables);
-		memset(&axialBox, 0, sizeof(AxisBox));
-		memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
-		memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
+		int chunkSize = _numRenderables * 9 * sizeof(int);
+		chunkSize += (sizeof(int) * _numMaterials);
+
+		int* chunkPtr = (int*)malloc(chunkSize);
+		int* cP = chunkPtr;
+
+		if (chunkPtr)
+		{
+
+			renderablesTypes = chunkPtr;
+			chunkPtr += (_numRenderables);
+			vertexTypes = (SMBVertexTypes*)chunkPtr;
+			chunkPtr += (_numRenderables);
+			indicesCount = chunkPtr;
+			chunkPtr += (_numRenderables);
+			indexOffsetInArchive = chunkPtr;
+			chunkPtr += (_numRenderables);
+			verticesCount = chunkPtr;
+			chunkPtr += (_numRenderables);
+			vertexOffsetInArchive = chunkPtr;
+			chunkPtr += (_numRenderables);
+			primitiveTypes = chunkPtr;
+			chunkPtr += (_numRenderables);
+			materialsCount = chunkPtr;
+			chunkPtr += (_numRenderables);
+			materialsId = chunkPtr;
+			chunkPtr += (_numMaterials);
+			materialStart = chunkPtr;
+			chunkPtr += (_numRenderables);
+
+			memset(&axialBox, 0, sizeof(AxisBox));
+			memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
+			memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
+		}
+
+	
 	}
 
 	~SMBGeoChunk()
 	{
 		free(renderablesTypes);
-		free(vertexTypes);
-		free(indicesCount);
-		free(indexOffsetInArchive);
-		free(verticesCount);
-		free(vertexOffsetInArchive);
-		free(primitiveTypes);
-		free(materialsId);
-		free(materialsCount);
-		free(materialStart);
 	}
 	
 };
@@ -243,4 +258,4 @@ int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex);
 
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut);
 
-void SMBCopyIndices4Bytes(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
+void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);

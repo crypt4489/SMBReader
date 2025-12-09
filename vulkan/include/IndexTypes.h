@@ -116,6 +116,11 @@ struct EntryHandle
 		return static_cast<uint32_t>(ID);
 	}
 
+	constexpr operator int() const
+	{
+		return static_cast<int>(ID);
+	}
+
 	EntryHandle operator+(const EntryHandle& other)
 	{
 		return EntryHandle(other.ID + ID);
