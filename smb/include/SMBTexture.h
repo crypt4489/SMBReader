@@ -3,27 +3,26 @@
 #include <fstream>
 #include <vector>
 
-#include "AppTextureImpl.h"
 #include "DXTCompression.h"
 #include "SMBFile.h"
 
 
 
 
-inline std::ostream& operator<<(std::ostream& os, const ImageFormat format)
+inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
 {
 	switch (format)
 	{
-	case ImageFormat::X8L8U8V8:
+	case SMBImageFormat::SMB_X8L8U8V8:
 		os << "X8L8U8V8 format";
 		break;
-	case ImageFormat::DXT1:
+	case SMBImageFormat::SMB_DXT1:
 		os << "DXT1";
 		break;
-	case ImageFormat::DXT3:
+	case SMBImageFormat::SMB_DXT3:
 		os << "DXT3";
 		break;
-	case ImageFormat::R8G8B8A8:
+	case SMBImageFormat::SMB_R8G8B8A8:
 		os << "R8G8B8A8";
 		break;
 	default:
@@ -37,7 +36,7 @@ inline std::ostream& operator<<(std::ostream& os, const ImageFormat format)
 struct SMBTexture
 {
 public:
-	ImageFormat type;
+	SMBImageFormat type;
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
@@ -46,7 +45,7 @@ public:
 	std::byte* data;
 
 
-	SMBTexture(ImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
+	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
 	~SMBTexture()
 	{
 		if (data)

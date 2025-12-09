@@ -18,6 +18,15 @@ enum chunktype
 	Joints = 20,
 };
 
+enum SMBImageFormat : uint32_t
+{
+	SMB_X8L8U8V8 = 7,
+	SMB_DXT1 = 12,
+	SMB_DXT3 = 14,
+	SMB_R8G8B8A8 = 18,
+	SMB_IMAGEUNKNOWN = 0xffffffff
+};
+
 
 //First Part of SMB GEo Chunk is the BaseGeometry Definition BaseGeometryDef
 

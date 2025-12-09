@@ -3,8 +3,7 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
-
-#include "AppTextureImpl.h"
+#include "TextureIO.h"
 #include "FileManager.h"
 #include "DXTCompression.h"
 #include "SMBTexture.h"

@@ -252,12 +252,12 @@ Font::Font(const std::string& imageName, const std::string& dataName)
 		throw std::runtime_error("Cannot open Font Widths data");
 	}
 
-	texture = new AppTexture(imageData, type);
+	
 	CreateFontWidths(fontData);
 }
 
 Font::~Font() {
-	if (texture) delete texture;
+
 	if (fontWidths) delete[] fontWidths;
 }
 

@@ -1,4 +1,7 @@
 #pragma once
+#include "AppTypes.h"
+#include <vector>
+
 #include <cstdint>
 #include <fstream>
 #include <utility>
@@ -54,4 +57,14 @@ namespace TexUtils
 	}
 }
 
-//either DX8 or DX9 format, mix of both in the SMB archives
+struct TextureDetails
+{
+
+	ImageFormat type;
+	uint32_t dataSize;
+	uint32_t width, height, miplevels;
+	char* data;
+};
+
+
+void ParseBMP(std::vector<char>& _fileData, TextureDetails* details);

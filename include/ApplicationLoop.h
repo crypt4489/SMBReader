@@ -46,7 +46,7 @@ public:
 
 	void LoadThreadedWrapper(const std::string file);
 
-	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file);
+	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string file);
 
 	void FindWords(std::string words, std::vector<std::any>& out);
 

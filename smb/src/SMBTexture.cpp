@@ -1,6 +1,6 @@
 #include "SMBTexture.h"
-SMBTexture::SMBTexture(ImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips)
-	: type(_type), width(_width), height(_height), miplevels(_mips)
+SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips)
+	: type(_type), width(_width), height(_height), miplevels(_mips), cumulativeSize(0), imageSizes(nullptr), data(nullptr)
 {
 	
 }
@@ -16,7 +16,8 @@ void SMBTexture::MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data
 	memcpy(ref, _data.data(), _data.size());
 }
 
-SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFormat::IMAGE_UNKNOWN), height(0), width(0), miplevels(0)
+SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) 
+	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), imageSizes(nullptr), data(nullptr)
 {
 	auto fileHandle = FileManager::GetFile(smb.id);
 
@@ -45,13 +46,13 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) : type(ImageFo
 			//case SMBImageFormat::X8L8U8V8:
 			//	std::cerr << "X8L8U8V8 format is not exportable\n";
 			//	return;
-		case ImageFormat::DXT1:
+		case SMBImageFormat::SMB_DXT1:
 			size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			break;
-		case ImageFormat::DXT3:
+		case SMBImageFormat::SMB_DXT3:
 			size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			break;
-		case ImageFormat::R8G8B8A8:
+		case SMBImageFormat::SMB_R8G8B8A8:
 			size = writeWidth * writeHeight * 4;
 			break;
 		default:

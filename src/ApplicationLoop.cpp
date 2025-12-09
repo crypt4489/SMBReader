@@ -5,16 +5,20 @@
 #endif
 #include "Camera.h"
 
+
+#include "SMBTexture.h"
+
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 ApplicationLoop* loop;
 
-std::array<std::string, 2> commandsStrings =
+std::array<std::string, 3> commandsStrings =
 {
 	"end",
-	"load"
+	"load",
+	"position"
 };
 
 static int computeMemory;
@@ -80,6 +84,43 @@ static std::array<Mesh, MAX_MESHES> meshInstanceData;
 static std::array<Geometry, MAX_GEOMETRY> geometryInstanceData;
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
+{
+	switch (format)
+	{
+	case X8L8U8V8:         return SMB_X8L8U8V8;
+	case DXT1:             return SMB_DXT1;
+	case DXT3:             return SMB_DXT3;
+	case R8G8B8A8:         return SMB_R8G8B8A8;
+
+		// Formats that have no SMB equivalent:
+	case B8G8R8A8:
+	case D24UNORMS8STENCIL:
+	case D32FLOATS8STENCIL:
+	case D32FLOAT:
+	case R8G8B8A8_UNORM:
+	case R8G8B8:
+	case IMAGE_UNKNOWN:
+	default:
+		return SMB_IMAGEUNKNOWN;
+	}
+}
+
+ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
+{
+	switch (fmt)
+	{
+	case SMB_X8L8U8V8:     return X8L8U8V8;
+	case SMB_DXT1:         return DXT1;
+	case SMB_DXT3:         return DXT3;
+	case SMB_R8G8B8A8:     return R8G8B8A8;
+
+	case SMB_IMAGEUNKNOWN:
+	default:
+		return IMAGE_UNKNOWN;
+	}
+}
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -651,10 +692,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		case TEXTURE:
 		{
 			SMBTexture texture(file, chunk[i]);
+
+			ImageFormat format = ConvertSMBImageToAppImage(texture.type);
+
 			alloc = mainDictionary.AllocateTextureData(
 				(char*)texture.data,
 				texture.cumulativeSize,
-				texture.type,
+				format,
 				texture.width,
 				texture.height,
 				texture.miplevels);
@@ -666,8 +710,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 					texture.width,
 					texture.height,
 					texture.miplevels,
-					texture.type,
-					GetPoolIndexByFormat(texture.type));
+					format,
+					GetPoolIndexByFormat(format));
 			textureIds.push_back(chunk[i].chunkId);
 			totalTextureCount++;
 			break;
@@ -750,8 +794,6 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
 	CreateTexturePools();
-
-	//CreateGlobalStorageImage();
 
 	globalBufferLocation = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT,64);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -862,7 +904,7 @@ void ApplicationLoop::ProcessCommands()
 	if (!com.size()) { std::cerr << "what are you doing\n"; return; }
 	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), std::any_cast<std::string>(com[0]));
 	if (mapFunc == std::end(commandsStrings)) return;
-	ExecuteCommands(*mapFunc, { com.begin() + 1, com.end() });
+	ExecuteCommands(*mapFunc, { com[1] });
 }
 
 
@@ -894,12 +936,21 @@ void ApplicationLoop::LoadThreadedWrapper(const std::string file)
 	ThreadManager::LaunchASyncThread(std::bind(std::mem_fn(&ApplicationLoop::LoadObjectThreaded), this, std::placeholders::_1, file));
 }
 
-void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string& file)
+void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string file)
 {
 
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-	this->LoadObject(file);
+	std::string out = file;
+
+	if (file[0] == 0x22)
+	{
+		out = file.substr(1, file.length() - 2);
+	}
+
+
+
+	this->LoadObject(out);
 
 	flag->store(true);
 }
@@ -908,12 +959,17 @@ void ApplicationLoop::FindWords(std::string words, std::vector<std::any>& out)
 {
 	size_t size = words.length();
 	int i = 0, j = 1;
+
 	while (j < size) {
+
 		if (words[j] == 0x20)
 		{
 			out.push_back(words.substr(i, (j - i)));
-			j++;
-			i = j;
+			i = j+1;
+		}
+		else if (words[j] == 0x22)
+		{
+			while (j++ < size && words[j] != 0x22);
 		}
 		j++;
 	}

@@ -3,7 +3,6 @@
 #include <tuple>
 #include <vector>
 
-#include "AppTexture.h"
 #include "RenderInstance.h"
 #include "VertexTypes.h"
 
@@ -21,7 +20,7 @@ struct Font
 	uint32_t pictureHeight, pictureWidth;
 	uint32_t cellWidth, cellHeight;
 	char startingChar;
-	AppTexture *texture;
+	int textureHandle;
 	char *fontWidths;
 	uint32_t widthSize;
 };
