@@ -263,7 +263,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials);
 
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
-int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex);
+int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut);
 

@@ -1,8 +1,8 @@
 #pragma once
-#include "glm/glm.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
-struct GlobalObjects
-{
-	glm::mat4 view;
-	glm::mat4 proj;
-};
+
+glm::mat3 CreateRotationMatrix(const glm::vec3& up, float angle);
+
+glm::mat4 CreateRotationMatrixMat4(const glm::vec3& up, float angle);

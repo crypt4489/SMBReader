@@ -7,6 +7,7 @@
 
 
 #include "SMBTexture.h"
+#include "AppAllocator.h"
 
 #define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
@@ -22,20 +23,26 @@ std::array<std::string, 3> commandsStrings =
 };
 
 static int computeMemory;
+static int computeObjIndex = 0;
 
-static float x = 0.0f;
-
-static uint32_t computeObjIndex = 0;
+static int globalBufferLocation;
+static int globalBufferDescriptor;
+static int globalTexturesDescriptor;
 
 static bool imageVisible = true;
 
-static bool justUpdatedObj = false;
+static char vertexAndIndicesMemory[16 * MB];
+static char meshObjectSpecificMemory[2 * MB];
+static char geometryObjectSpecificMemory[1 * MB];
+static char mainTextureCacheMemory[16 * MB];
 
 
+SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
+SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
+SlabAllocator vgeometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
 
-static void* transientVertexData;
-static int transientVertexDataPtr = 0;
-static int transientVertexDataSize = 16 * MB;
+
+static TextureDictionary mainDictionary;
 
 
 #define MAX_GEOMETRY 2048
@@ -67,21 +74,14 @@ struct Mesh
 	int deviceVertices;
 };
 
-static int meshTextureHandlesAlloc = 0;
-static int meshVertexDataAlloc = 0;
-static int meshIndexDataAlloc = 0;
-static int meshInstanceDataAlloc = 0;
-static int geometryInstanceDataAlloc = 0;
-//static int meshObjectMemoryDataAlloc = 0;
-static int meshDeviceMemoryDataAlloc = 0;
-
-static std::array<int, MAX_MESH_TEXTURES> meshTextureHandles;
-static std::array<void*, MAX_MESHES> meshVertexData;
-static std::array<void*, MAX_MESHES> meshIndexData;
-//static std::array<int, MAX_MESHES * 2> meshObjectMemoryData;
-static std::array<int, MAX_MESHES * 2> meshDeviceMemoryData;
-static std::array<Mesh, MAX_MESHES> meshInstanceData;
-static std::array<Geometry, MAX_GEOMETRY> geometryInstanceData;
+static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
+static ArrayAllocator<int, MAX_MESHES * 2> meshDeviceMemoryData{};
+static ArrayAllocator<void*, MAX_MESHES> meshIndexData{};
+static ArrayAllocator<void*, MAX_MESHES> meshVertexData{};
+static ArrayAllocator<void*, MAX_MESHES> meshObjectData{};
+static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
+static ArrayAllocator<Mesh, MAX_MESHES> meshInstanceData{};
+static ArrayAllocator<Geometry, MAX_GEOMETRY> geometryInstanceData{};
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
@@ -168,6 +168,8 @@ void ApplicationLoop::Execute()
 		InitializeRuntime();
 
 		ExecuteCommands("load", { args.inputFile.string() });
+
+		//ExecuteCommands("load", { std::string("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\strangernew.smb") });
 
 		int i = 0, j = 1;
 
@@ -262,6 +264,8 @@ void ApplicationLoop::CreateTexturePools()
 int instanceAlloc;
 std::array<glm::mat4, 64 * 64> instanceMatrices;
 
+static EntryHandle storageBuffer;
+
 
 void ApplicationLoop::CreateGlobalStorageImage()
 {
@@ -277,7 +281,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 	computeMemory = rendInst->GetPageFromUniformBuffer(64, 64);
 
 	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, DIRECT, 0);
-	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, loop->storageBuffer, 1);
+	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, storageBuffer, 1);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 0, BEGINNING_OF_PIPE, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
 
@@ -389,21 +393,6 @@ void ApplicationLoop::MoveCamera(double fps)
 static bool what = imageVisible;
 void ApplicationLoop::UpdateRenderables()
 {
-
-	x += 0.0001f;
-	auto rendInst = VKRenderer::gRenderInstance;
-
-	if (imageVisible)
-
-	{
-	//	rendInst->UpdateAllocation(&x, computeMemory, 4, ABSOLUTE_ALLOCATION_OFFSET);
-	}
-
-	if (what != imageVisible)
-	{
-		//rendInst->SetActiveComputePipeline(computeObjIndex, imageVisible);
-		//what = imageVisible;
-	}	
 }
 
 void ApplicationLoop::UpdateCameraMatrix()
@@ -441,28 +430,24 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
-char* AllocTransientVertexData(int size)
-{
-	char* head = (char*)transientVertexData;
 
-	int out = transientVertexDataPtr;
-
-	transientVertexDataPtr += size;
-
-	return (head + out);
-
-}
+std::atomic<float> geoX = 0.0f;
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
+	
 	int objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
 	int count = geoDef->numRenderables;
 
-	glm::mat4 hierarchialMatrix = glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f));
+	float xLoc = UpdateAtomic(geoX, 5.0f, 0.0f);
 
-	glm::mat4 rotation = LTM::CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
+	glm::mat4 hierarchialMatrix = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));;
+
+	
+
+	glm::mat4 rotation = CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
 
 	hierarchialMatrix *= rotation;
 
@@ -470,16 +455,20 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64);
 	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 128);
 
-	Geometry* geom = &geometryInstanceData[geometryInstanceDataAlloc++];
+	Geometry* geom = nullptr;
 
-	geom->meshStart = meshInstanceDataAlloc;
+	std::tie(std::ignore, geom) = geometryInstanceData.Allocate();
+
+	geom->meshStart = meshInstanceData.allocatorPtr;
 
 	for (int i = 0; i<count; i++)
 	{
 
 		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
 
-		Mesh* mesh = &meshInstanceData[meshInstanceDataAlloc++];
+		Mesh* mesh = nullptr;
+		
+		std::tie(std::ignore, mesh) = meshInstanceData.Allocate();
 
 		geom->meshCount++;
 
@@ -491,15 +480,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->verticesCount = vertexCount;
 
-		mesh->indexId = meshIndexDataAlloc;
-
-		mesh->vertexId = meshVertexDataAlloc;
 
 		SMBVertexTypes type = geoDef->vertexTypes[i];
 
-		uint16_t* indices = (uint16_t*)AllocTransientVertexData(sizeof(uint16_t) * indexCount);
+		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
 
-		meshIndexData[meshIndexDataAlloc++] = indices;
+		mesh->indexId = meshIndexData.Allocate(indices);
 		
 		size_t vertexSize = 0;
 
@@ -522,9 +508,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->indexSize = 2;
 
-		vertexData = (void*)AllocTransientVertexData(vertexSize * vertexCount);
+		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
-		meshVertexData[meshVertexDataAlloc++] = vertexData;
+		mesh->vertexId = meshVertexData.Allocate(vertexData);
 		
 		SMBCopyVertexData(geoDef, i, file, vertexData);
 
@@ -578,39 +564,33 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->deviceIndices = indexMemory;
 		mesh->deviceVertices = vertexMemory;
-		mesh->meshInstanceMemoryStart = meshDeviceMemoryDataAlloc;
+		 
 		mesh->meshInstanceMemoryCount = 1;
 
-		int textureHandles = rendInst->GetPageFromUniformBuffer(64 * frames, alignof(glm::mat4));
 
-		meshDeviceMemoryData[meshDeviceMemoryDataAlloc++] = textureHandles;
-		
 		struct Handles
 		{
 			int numHandles;
 			int handles[15];
-		};
+		} handles{ 0 };
 
-		
+		int textureHandles = rendInst->GetPageFromUniformBuffer(sizeof(Handles) * frames, alignof(glm::mat4));
 
-		Handles handles;
-
-		memset(&handles, 0, sizeof(Handles));
+		mesh->meshInstanceMemoryStart = meshDeviceMemoryData.Allocate(textureHandles);
 
 		handles.numHandles = geoDef->materialsCount[i];
 
 		int base = geoDef->materialStart[i];
 
-		mesh->texuresCount = meshTextureHandlesAlloc;
+		mesh->texturesStart = meshTextureHandles.AllocateN(handles.numHandles);
 		mesh->texuresCount = handles.numHandles;
 
 		for (int ii = 0; ii < handles.numHandles; ii++)
 		{
 			handles.handles[ii] = geoDef->materialsId[base+ii];
-			meshTextureHandles[meshTextureHandlesAlloc++] = handles.handles[ii];
+			meshTextureHandles.Update(mesh->texturesStart+ii, handles.handles[ii]);
 		}
 		
-
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, objMemory, REPEAT, 0);
 
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 1);
@@ -648,13 +628,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 void ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 
-	int previousLevel = mainDictionary.allocationIndex;
-
 	int totalTextureCount = 0;
 
-	std::vector<uint32_t> textureIds;
-
-	int alloc = 0;
+	std::vector<SMBTexture> textures;
 
 	auto& chunk = file.chunks;
 
@@ -693,26 +669,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		{
 			SMBTexture texture(file, chunk[i]);
 
-			ImageFormat format = ConvertSMBImageToAppImage(texture.type);
-
-			alloc = mainDictionary.AllocateTextureData(
-				(char*)texture.data,
-				texture.cumulativeSize,
-				format,
-				texture.width,
-				texture.height,
-				texture.miplevels);
-			mainDictionary.textureHandles[alloc] =
-				VKRenderer::gRenderInstance->CreateImage(
-					(char*)texture.data,
-					texture.imageSizes,
-					texture.cumulativeSize,
-					texture.width,
-					texture.height,
-					texture.miplevels,
-					format,
-					GetPoolIndexByFormat(format));
-			textureIds.push_back(chunk[i].chunkId);
+			
+			textures.emplace_back( texture );
 			totalTextureCount++;
 			break;
 		}
@@ -724,6 +682,35 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			std::cerr << "Unprocessed chunkType\n";
 			break;
 		}
+	}
+
+	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount);
+
+	for (int ii = 0; ii < totalTextureCount; ii++)
+	{
+		SMBTexture& texture = textures[ii];
+
+		ImageFormat format = ConvertSMBImageToAppImage(texture.type);
+
+		mainDictionary.UpdateTextureData(
+			ii + index,
+			(char*)texture.data,
+			texture.cumulativeSize,
+			format,
+			texture.width,
+			texture.height,
+			texture.miplevels);
+
+		mainDictionary.textureHandles[ii + index] =
+			VKRenderer::gRenderInstance->CreateImage(
+				(char*)texture.data,
+				texture.imageSizes,
+				texture.cumulativeSize,
+				texture.width,
+				texture.height,
+				texture.miplevels,
+				format,
+				GetPoolIndexByFormat(format));
 	}
 	
 	if (geoDef)
@@ -740,9 +727,9 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				int gg = 0;
 				for (; gg < totalTextureCount; gg++)
 				{
-					if (id == textureIds[gg])
+					if (id == textures[gg].id)
 					{
-						geoDef->materialsId[hh + base] = previousLevel + gg;
+						geoDef->materialsId[hh + base] = index + gg;
 						break;
 					}
 				}
@@ -766,7 +753,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	
 
-	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data(), previousLevel, mainDictionary.allocationIndex);
+	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data() + index, index, totalTextureCount);
 }
 
 
@@ -776,11 +763,9 @@ void ApplicationLoop::InitializeRuntime()
 			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
 				this, std::placeholders::_1));
 
-	transientVertexData = malloc(transientVertexDataSize);
-
-	mainDictionary.textureCache = (uintptr_t)malloc(16 * MB);
+	mainDictionary.textureCache = (uintptr_t)mainTextureCacheMemory;
 	
-	mainDictionary.textureSize = 16 * MB;
+	mainDictionary.textureSize = sizeof(mainTextureCacheMemory);
 
 
 	VKRenderer::gRenderInstance = new RenderInstance();
@@ -874,10 +859,6 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 void ApplicationLoop::CleanupRuntime()
 {
 	VKRenderer::gRenderInstance->WaitOnRender();
-
-	free(transientVertexData);
-
-	free((void*)mainDictionary.textureCache);
 
 	for (int i = 0; i < mainDictionary.allocationIndex; i++)
 	{

@@ -274,11 +274,11 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
 	return (int)size * geoDef->verticesCount[renderableIndex];
 }
 
-int GetSMBIndexSize4Bytes(SMBGeoChunk* geoDef, int renderableIndex)
+int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 {
 	int type = geoDef->renderablesTypes[renderableIndex];
 	if (type != IVBRENDERABLE) return -1;
-	return sizeof(uint32_t) * geoDef->indicesCount[renderableIndex];
+	return sizeof(uint16_t) * geoDef->indicesCount[renderableIndex];
 }
 
 

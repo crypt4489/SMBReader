@@ -75,14 +75,8 @@ public:
 	std::queue<std::vector<std::any>> commands;
 	bool running, cleaned;
 	WindowManager* mainWindow;
-	Text* text1, * text2;
-	int globalBufferLocation;
-	int globalBufferDescriptor;
-	int globalTexturesDescriptor;
-	Camera c;
-	EntryHandle storageBuffer;
 	
-	TextureDictionary mainDictionary;
+	Camera c;
 
 	enum DIRS {
 		RIGHT = 0,

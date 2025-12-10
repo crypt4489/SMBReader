@@ -36,6 +36,7 @@ inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
 struct SMBTexture
 {
 public:
+	
 	SMBImageFormat type;
 	uint32_t width;
 	uint32_t height;
@@ -43,6 +44,7 @@ public:
 	uint32_t cumulativeSize;
 	uint32_t* imageSizes;
 	std::byte* data;
+	uint32_t id;
 
 
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
@@ -66,6 +68,8 @@ public:
 		this->width = other.width;
 		this->miplevels = other.miplevels;
 		this->type = other.type;
+		this->id = other.id;
+		this->cumulativeSize = other.cumulativeSize;
 		other.data = nullptr;
 		other.imageSizes = nullptr;
 	};
@@ -77,6 +81,8 @@ public:
 		this->width = other.width;
 		this->miplevels = other.miplevels;
 		this->type = other.type;
+		this->id = other.id;
+		this->cumulativeSize = other.cumulativeSize;
 		other.data = nullptr;
 		other.imageSizes = nullptr;
 	};

@@ -1,7 +1,9 @@
 #pragma once
 #include <array>
 
+#include "AppAllocator.h"
 #include "AppTypes.h"
+
 #include "IndexTypes.h"
 #include "ThreadManager.h"
 
@@ -27,6 +29,7 @@ struct TextureDictionary
 	size_t textureSize = 0;
 	std::atomic<int> allocationIndex = 0;
 	std::atomic<size_t> textureAllocator = 0;
+	
 
 	std::array<TextureAllocation, 50> textureAllocations{};
 	std::array<EntryHandle, 50> textureHandles{};
@@ -39,19 +42,7 @@ struct TextureDictionary
 
 	int AllocateTextureData(char* data, size_t size, ImageFormat format, int width, int height, int mips)
 	{
-		size_t val, desired, out;
-		val = textureAllocator.load(std::memory_order_relaxed);
-		do {
-
-			desired = val + size;
-			out = val;
-			if (desired >= textureSize)
-			{
-				out = 0;
-				desired = out + size;
-			}
-		} while (!textureAllocator.compare_exchange_weak(val, desired, std::memory_order_relaxed,
-			std::memory_order_relaxed));
+		size_t out = UpdateAtomic(textureAllocator, size, textureSize);
 
 		uintptr_t head = textureCache + out;
 	
@@ -70,6 +61,30 @@ struct TextureDictionary
 
 		return outIndex;
 
+	}
+
+	void UpdateTextureData(int index, char* data, size_t size, ImageFormat format, int width, int height, int mips)
+	{
+		size_t out = UpdateAtomic(textureAllocator, size, textureSize);
+
+		uintptr_t head = textureCache + out;
+
+		int memPoolAllocate = FindPoolByFormat(format);
+
+		textureAllocations[index].cacheAddress = head;
+		textureAllocations[index].size = size;
+		textureAllocations[index].pool = memPoolAllocate;
+		textureAllocations[index].width = width;
+		textureAllocations[index].height = height;
+		textureAllocations[index].miplevels = mips;
+
+		memcpy((void*)head, data, size);
+	}
+
+	int AllocateNTextureHandles(int n)
+	{
+		int outIndex = allocationIndex.fetch_add(n);
+		return outIndex;
 	}
 
 	int FindPoolByFormat(ImageFormat format)

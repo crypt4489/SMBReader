@@ -183,11 +183,13 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="smb\src\SMBFile.cpp" />
     <ClCompile Include="smb\src\SMBTexture.cpp" />
+    <ClCompile Include="src\AppAllocator.cpp" />
     <ClCompile Include="src\ApplicationLoop.cpp" />
     <ClCompile Include="src\Camera.cpp" />
     <ClCompile Include="src\Exporter.cpp" />
     <ClCompile Include="src\FileManager.cpp" />
     <ClCompile Include="src\LTM.cpp" />
+    <ClCompile Include="src\MatrixMath.cpp" />
     <ClCompile Include="src\ProgramArgs.cpp" />
     <ClCompile Include="src\DXTCompression.cpp" />
     <ClCompile Include="src\RenderInstance.cpp" />
@@ -200,6 +202,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="include\AppAllocator.h" />
     <ClInclude Include="include\ApplicationLoop.h" />
     <ClInclude Include="include\AppTypes.h" />
     <ClInclude Include="include\Camera.h" />
