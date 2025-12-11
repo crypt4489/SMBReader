@@ -431,6 +431,16 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 }
 
 
+enum VertexComponents
+{
+	POSITION = 1,
+	TEXTURES1 = 2,
+	TEXTURES2 = 4,
+	TEXTURES3 = 8,
+	NORMAL = 16,
+	BONES2 = 32
+};
+
 std::atomic<float> geoX = 0.0f;
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -487,7 +497,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->indexId = meshIndexData.Allocate(indices);
 		
-		size_t vertexSize = 0;
+		int vertexSize = 0;
 
 		void* vertexData;
 
@@ -504,7 +514,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			break;
 		}
 
-		mesh->vertexSize = (int)vertexSize;
+		mesh->vertexSize = vertexSize;
 
 		mesh->indexSize = 2;
 
@@ -516,38 +526,24 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		SMBCopyIndices(geoDef, i, file, indices);
 
-		std::vector<BasicVertex> transfer(vertexCount);
+
+		int vertexFlags = POSITION | TEXTURES1;
 
 		switch (type)
 		{
 		case PosPack6_CNorm_C16Tex1_Bone2:
-		{
-			Vertex_PosPack6_CNorm_C16Tex1_Bone2* verts = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexData;
-			for (int ii = 0; ii < vertexCount; ii++)
-			{
-				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
-				transfer[ii].POSITION = verts[ii].POSITION;
-			}
+		{ 
+			vertexFlags = POSITION | TEXTURES1 | NORMAL | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex2_Bone2:
 		{
-			Vertex_PosPack6_C16Tex2_Bone2* verts = (Vertex_PosPack6_C16Tex2_Bone2*)vertexData;
-			for (int ii = 0; ii < vertexCount; ii++)
-			{
-				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
-				transfer[ii].POSITION = verts[ii].POSITION;
-			}
+			vertexFlags = POSITION | TEXTURES1 | TEXTURES2 | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex1_Bone2:
 		{
-			Vertex_PosPack6_C16Tex1_Bone2* verts = (Vertex_PosPack6_C16Tex1_Bone2*)vertexData;
-			for (int ii = 0; ii < vertexCount; ii++)
-			{
-				transfer[ii].TEXTURE = glm::vec4(verts[ii].TEXTURE, 0.0f, 0.0f);
-				transfer[ii].POSITION = verts[ii].POSITION;
-			}
+			vertexFlags = POSITION | TEXTURES1 | BONES2;
 			break;
 		}
 		}
@@ -559,8 +555,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->meshDescriptor = graphicDesc;
 		
-		int vertexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(BasicVertex) * vertexCount, alignof(glm::vec4));
-		int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint32_t) * indexCount, alignof(uint32_t));
+		int vertexMemory = rendInst->GetPageFromDeviceBuffer(vertexSize * vertexCount, 16);
+		int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64);
 
 		mesh->deviceIndices = indexMemory;
 		mesh->deviceVertices = vertexMemory;
@@ -570,8 +566,11 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		struct Handles
 		{
+			int vertexFlags;
 			int numHandles;
-			int handles[15];
+			int stride;
+			int pad;
+			int handles[12];
 		} handles{ 0 };
 
 		int textureHandles = rendInst->GetPageFromUniformBuffer(sizeof(Handles) * frames, alignof(glm::mat4));
@@ -585,6 +584,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->texturesStart = meshTextureHandles.AllocateN(handles.numHandles);
 		mesh->texuresCount = handles.numHandles;
 
+		handles.vertexFlags = vertexFlags;
+		handles.stride = vertexSize;
+
 		for (int ii = 0; ii < handles.numHandles; ii++)
 		{
 			handles.handles[ii] = geoDef->materialsId[base+ii];
@@ -595,8 +597,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 1);
 
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 2);
 
-		rendInst->UpdateAllocation(transfer.data(), vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, DIRECT, 3);
+
+
+		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 
 		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
 

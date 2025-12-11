@@ -124,8 +124,8 @@ std::pair<VkDeviceSize, VkDeviceSize> VKMemoryAllocator::GetBestFit(VkDeviceSize
 
 		VkDeviceSize endingAddress = iter->second;
 		VkDeviceSize startingAddress = iter->first;
-		VkDeviceSize makeup = (startingAddress & (alignment - 1));
-		startingAddress += makeup; //make up for any alignment considerations
+		VkDeviceSize makeup = alignment - (startingAddress & (alignment - 1));
+		startingAddress += (makeup); //make up for any alignment considerations
 
 
 		VkDeviceSize holesize = endingAddress - startingAddress;

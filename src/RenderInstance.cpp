@@ -758,7 +758,7 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
-	generic->CreateVertexInput(bindings1.data(), 1, ref1.data(), ref1.size());
+	generic->CreateVertexInput(bindings1.data(), 0, ref1.data(), 0);
 	text->CreateVertexInput(bindings.data(), 1, ref.data(), ref.size());
 
 	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
@@ -1069,6 +1069,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	feature12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
 	feature12.descriptorBindingVariableDescriptorCount = VK_TRUE;
 	feature12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+	feature12.storageBuffer8BitAccess = VK_TRUE;
 
 	VkPhysicalDeviceFeatures2 features2{};
 	features2.pNext = &feature12;

@@ -17,7 +17,11 @@
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="v">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="uniform" used="v">
+		</ShaderResourceItem>
 		<ShaderResourceItem type="uniform" used="f">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

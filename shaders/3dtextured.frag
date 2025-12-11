@@ -6,15 +6,17 @@ layout(location = 0) out vec4 outColor;
 
 layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
 
-layout(set = 2, binding = 1) uniform PerModel {
+layout(set = 2, binding = 2) uniform PerModel {
+    uint vertexComponents;
     uint numHandles;
-    uint diffuseTexture;
-    uint normalTexture;
+    uint vertexStride;
+    uint pad2;
+    uint textureHandles[12];
 } TextureHandles;
 
 void main() {
 
-    uint textureIndex = TextureHandles.diffuseTexture;
+    uint textureIndex = TextureHandles.textureHandles[0];
 
     outColor = texture(Textures[textureIndex], texCoords);
 
