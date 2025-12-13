@@ -590,6 +590,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		for (int ii = 0; ii < handles.numHandles; ii++)
 		{
 			handles.handles[ii] = geoDef->materialsId[base+ii];
+			if (handles.handles[ii] == -1) handles.handles[ii] = 0;
 			meshTextureHandles.Update(mesh->texturesStart+ii, handles.handles[ii]);
 		}
 		
@@ -648,26 +649,34 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		{
 		case GEO:
 		{
+			if (!geoDef)
+			{
 
-			FileHandle* handle = FileManager::GetFile(file.id);
+				FileHandle* handle = FileManager::GetFile(file.id);
 
-			auto& geoChunk = handle->streamHandle;
+				auto& geoChunk = handle->streamHandle;
 
-			size_t seekpos = chunk[i].offsetInHeader;
+				size_t seekpos = chunk[i].offsetInHeader;
 
-			geoChunk.seekg(seekpos);
+				geoChunk.seekg(seekpos);
 
-			std::vector<char> geomHeader(chunk[i].headerSize);
+				std::vector<char> geomHeader(chunk[i].headerSize);
 
-			geoChunk.read(geomHeader.data(), chunk[i].headerSize);
+				geoChunk.read(geomHeader.data(), chunk[i].headerSize);
 
-			geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
+				geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
 
-			geoDef->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
+				geoDef->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
 
-			seekpos = chunk[i + 1].contigOffset + file.fileOffset;
+				if (i < chunk.size() - 1)
+				{
+					seekpos = chunk[i + 1].contigOffset + file.fileOffset;
+				}
 
-			geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
+
+
+				geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
+			}
 
 			break;
 		}
@@ -742,7 +751,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 				if (gg == totalTextureCount)
 				{
-					throw std::runtime_error("Invalid texture ID");
+					geoDef->materialsId[hh + base] = -1;
 				}
 
 			}
@@ -891,7 +900,10 @@ void ApplicationLoop::ProcessCommands()
 	if (!com.size()) { std::cerr << "what are you doing\n"; return; }
 	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), std::any_cast<std::string>(com[0]));
 	if (mapFunc == std::end(commandsStrings)) return;
-	ExecuteCommands(*mapFunc, { com[1] });
+	if (com.size() > 1)
+		ExecuteCommands(*mapFunc, { com[1] });
+	else 
+		ExecuteCommands(*mapFunc, { });
 }
 
 

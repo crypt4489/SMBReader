@@ -68,7 +68,10 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			geoDef->vertexAndIndicesInfo = chunk[j].contigOffset + smb.fileOffset;
 
-			seekpos = chunk[j + 1].contigOffset + smb.fileOffset;
+			if (j < chunk.size() - 1)
+			{
+				seekpos = chunk[j + 1].contigOffset + smb.fileOffset;
+			}
 
 			geoDef->verticesandIndexCompressedSize = ((int)seekpos - geoDef->vertexAndIndicesInfo);
 
@@ -132,19 +135,19 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 		input.resize(writeWidth * writeHeight * 4);;
 		switch (tex.type)
 		{
-		case X8L8U8V8:
+		case SMBImageFormat::SMB_X8L8U8V8:
 			std::cerr << "X8L8U8V8 format is not exportable\n";
 			return;
-		case DXT1:
+		case SMBImageFormat::SMB_DXT1:
 			//compressedSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			
 			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input.data());
 			break;
-		case DXT3:
+		case SMBImageFormat::SMB_DXT3:
 			//compressedSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input.data());
 			break;
-		case R8G8B8A8:
+		case SMBImageFormat::SMB_R8G8B8A8:
 			std::memcpy(input.data(), ptr, writeWidth * writeHeight * 4);
 			break;
 		default:

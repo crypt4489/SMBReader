@@ -97,22 +97,41 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 {
 	char* iter = data;
 
+	int geometryType = *((int*)(iter + 8));
+
+	int numRenderablesOffset = 0;
+	int axialBoxOffset = 0;
+	int geometryTypeDefSize = 0;
+
+	if (geometryType == 1)
+	{
+		numRenderablesOffset = 68;
+		axialBoxOffset = 36;
+		geometryTypeDefSize = GeometryBaseDefSize;
+	}
+	else if (geometryType == 2)
+	{
+		numRenderablesOffset = 76;
+		axialBoxOffset = 44;
+		geometryTypeDefSize = 80;
+	}
+
 	int numRenderables = 0;
 
-	memcpy(&numRenderables, iter + 68, 4);
+	memcpy(&numRenderables, iter + numRenderablesOffset, 4);
 
-	if (numRenderables < 0 || numRenderables > 15)
+	if (numRenderables <= 0 || numRenderables > 15)
 	{
 		return nullptr;
 	}
 
 	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, 15);
 
-	char* axialBox = iter + 36;
+	char* axialBox = iter + axialBoxOffset;
 	memcpy(&geoChunk->axialBox, axialBox, sizeof(float) * 6);
 
 
-	char* material = iter + GeometryBaseDefSize;
+	char* material = iter + geometryTypeDefSize;
 
 	int renderableIndex = 0;
 
@@ -126,7 +145,11 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 		
 
-		if (header != 737893) break;
+		if (header != 737893)
+		{
+			
+			break;
+		}
 
 		uint64_t definitionID = *((uint64_t*)(material + 4));
 
@@ -214,8 +237,11 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 			if (renderableIndex == numRenderables)
 			{
-				material += 8;
 				renderableIndex = 0;
+				int numberMinMaxes = *((int*)material);
+				
+				material += ((198 * numberMinMaxes)+8);
+				
 			}
 
 			copy = *((int*)material);
@@ -256,7 +282,7 @@ static glm::vec3 pack6decomp(int16_t* hello, AxisBox& box)
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
 {
 	SMBVertexTypes type = geoDef->vertexTypes[renderableIndex];
-	size_t size = 0;
+	int size = 0;
 
 	switch (type)
 	{
@@ -271,7 +297,7 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
 		break;
 	}
 
-	return (int)size * geoDef->verticesCount[renderableIndex];
+	return size * geoDef->verticesCount[renderableIndex];
 }
 
 int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)

@@ -155,8 +155,8 @@ RenderInstance::RenderInstance()
 	descriptorManager{}
 {
 	vkInstance = new VKInstance();
-	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(1 * KB);
-	descriptorManager.hostResourceHeap = (uintptr_t)malloc(1 * KB);
+	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(2 * KB);
+	descriptorManager.hostResourceHeap = (uintptr_t)malloc(2 * KB);
 	shaderDetailsData = (char*)malloc(2 * KB);
 
 	if (!vulkanShaderGraphs.shaderGraphs || !descriptorManager.hostResourceHeap || !shaderDetailsData)
