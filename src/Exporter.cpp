@@ -68,14 +68,6 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			geoDef->vertexAndIndicesInfo = chunk[j].contigOffset + smb.fileOffset;
 
-			if (j < chunk.size() - 1)
-			{
-				seekpos = chunk[j + 1].contigOffset + smb.fileOffset;
-			}
-
-			geoDef->verticesandIndexCompressedSize = ((int)seekpos - geoDef->vertexAndIndicesInfo);
-
-
 			break;
 		}
 		

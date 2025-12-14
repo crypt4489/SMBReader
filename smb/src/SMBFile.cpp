@@ -128,8 +128,8 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, 15);
 
 	char* axialBox = iter + axialBoxOffset;
-	memcpy(&geoChunk->axialBox, axialBox, sizeof(float) * 6);
-
+	memcpy(&geoChunk->axialBox.min, axialBox, sizeof(float) * 3);
+	memcpy(&geoChunk->axialBox.max, axialBox + sizeof(float) * 3, sizeof(float) * 3);
 
 	char* material = iter + geometryTypeDefSize;
 
@@ -308,7 +308,7 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 }
 
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut)
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed)
 {
 	FileHandle* handle = FileManager::GetFile(file.id);
 
@@ -341,116 +341,123 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 
 	unsigned char* g = (unsigned char*)data.data();
 
-	switch (type) {
-	case PosPack6_CNorm_C16Tex1_Bone2:
+	if (decompressed)
 	{
-		Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertices = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexDataOut;
-		for (int i = 0; i < vSize; i++)
+
+		switch (type) {
+		case PosPack6_CNorm_C16Tex1_Bone2:
 		{
-		
-			Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertex = &vertices[i];
-			uint32_t l = g[2], h = g[3];
-			vertex->BONES.x = g[0];
-			vertex->BONES.y = g[1];
-			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
-			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
+			Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertices = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexDataOut;
+			for (int i = 0; i < vSize; i++)
+			{
 
-			int32_t norms = *(int32_t*)&g[8];
+				Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertex = &vertices[i];
+				uint32_t l = g[2], h = g[3];
+				vertex->BONES.x = g[0];
+				vertex->BONES.y = g[1];
+				vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+				vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
 
-			//norms = bswap32_u(norms);
+				int32_t norms = *(int32_t*)&g[8];
 
-			vertex->NORMAL.x = (((float)(norms & 0x7ff)) * ax) - 1.0f;
-			vertex->NORMAL.y = (((float)((norms & 0x3ff800) >> 11)) * ax) - 1.0f;
-			vertex->NORMAL.z = (((float)((norms & 0xffc00000) >> 22)) * bx) -1.0f;
+				//norms = bswap32_u(norms);
 
-			int16_t t[2];
-			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
-			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+				vertex->NORMAL.x = (((float)(norms & 0x7ff)) * ax) - 1.0f;
+				vertex->NORMAL.y = (((float)((norms & 0x3ff800) >> 11)) * ax) - 1.0f;
+				vertex->NORMAL.z = (((float)((norms & 0xffc00000) >> 22)) * bx) - 1.0f;
 
-			vertex->TEXTURE = converttexcoords16(t);
+				int16_t t[2];
+				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+
+				vertex->TEXTURE = converttexcoords16(t);
 
 
-			int16_t s[3];
+				int16_t s[3];
 
-			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
-			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
-			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+				s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
-		
-			g += VertexCompressedSizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
-		
+				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+
+				g += VertexCompressedSizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
+
+			}
+			break;
 		}
-		break;
-	}
-	case PosPack6_C16Tex2_Bone2:
-	{
-		Vertex_PosPack6_C16Tex2_Bone2* vertices = (Vertex_PosPack6_C16Tex2_Bone2*)vertexDataOut;
-		for (int i = 0; i < vSize; i++)
+		case PosPack6_C16Tex2_Bone2:
 		{
-			Vertex_PosPack6_C16Tex2_Bone2* vertex = &vertices[i];
-			uint32_t l = g[2], h = g[3];
-			vertex->BONES.x = g[0];
-			vertex->BONES.y = g[1];
-			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
-			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
-			
+			Vertex_PosPack6_C16Tex2_Bone2* vertices = (Vertex_PosPack6_C16Tex2_Bone2*)vertexDataOut;
+			for (int i = 0; i < vSize; i++)
+			{
+				Vertex_PosPack6_C16Tex2_Bone2* vertex = &vertices[i];
+				uint32_t l = g[2], h = g[3];
+				vertex->BONES.x = g[0];
+				vertex->BONES.y = g[1];
+				vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+				vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
 
 
-			int16_t t[2];
-			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
-			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-			vertex->TEXTURE = converttexcoords16(t);
+				int16_t t[2];
+				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-			t[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
-			t[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
+				vertex->TEXTURE = converttexcoords16(t);
 
-			vertex->TEXTURE2 = converttexcoords16(t);
+				t[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
+				t[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
 
-			int16_t s[3];
+				vertex->TEXTURE2 = converttexcoords16(t);
 
-			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
-			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
-			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+				int16_t s[3];
 
-			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+				s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-			g += VertexCompressedSizes[PosPack6_C16Tex2_Bone2_Size];
+				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+
+				g += VertexCompressedSizes[PosPack6_C16Tex2_Bone2_Size];
+			}
+			break;
 		}
-		break;
-	}
-	case PosPack6_C16Tex1_Bone2:
-	{
-		Vertex_PosPack6_C16Tex1_Bone2* vertices = (Vertex_PosPack6_C16Tex1_Bone2*)vertexDataOut;
-		for (int i = 0; i < vSize; i++)
+		case PosPack6_C16Tex1_Bone2:
 		{
-			Vertex_PosPack6_C16Tex1_Bone2* vertex = &vertices[i];
-			uint32_t l = g[2], h = g[3];
-			vertex->BONES.x = g[0];
-			vertex->BONES.y = g[1];
-			vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
-			vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
+			Vertex_PosPack6_C16Tex1_Bone2* vertices = (Vertex_PosPack6_C16Tex1_Bone2*)vertexDataOut;
+			for (int i = 0; i < vSize; i++)
+			{
+				Vertex_PosPack6_C16Tex1_Bone2* vertex = &vertices[i];
+				uint32_t l = g[2], h = g[3];
+				vertex->BONES.x = g[0];
+				vertex->BONES.y = g[1];
+				vertex->WEIGHTS.x = ((float)l) * 0.00392156f;
+				vertex->WEIGHTS.y = ((float)h) * 0.00392156f;
 
-			int16_t t[2];
-			t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
-			t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
+				int16_t t[2];
+				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
+				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-			vertex->TEXTURE = converttexcoords16(t);
+				vertex->TEXTURE = converttexcoords16(t);
 
-			int16_t s[3];
+				int16_t s[3];
 
-			s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
-			s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
-			s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+				s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
+				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
+				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-			vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
-		
-			g += VertexCompressedSizes[PosPack6_C16Tex1_Bone2_Size];
+				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+
+				g += VertexCompressedSizes[PosPack6_C16Tex1_Bone2_Size];
+			}
+
+			break;
 		}
+		}
+	} else {
 
-		break;
-	}
+		memcpy(vertexDataOut, g, vertexSize);
 	}
 }
 

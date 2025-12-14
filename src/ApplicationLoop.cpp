@@ -438,7 +438,8 @@ enum VertexComponents
 	TEXTURES2 = 4,
 	TEXTURES3 = 8,
 	NORMAL = 16,
-	BONES2 = 32
+	BONES2 = 32,
+	COMPRESSED = 0x80000000,
 };
 
 std::atomic<float> geoX = 0.0f;
@@ -448,7 +449,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	auto rendInst = VKRenderer::gRenderInstance;
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 	
-	int objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames, alignof(glm::mat4));
+	int objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames * 2, alignof(glm::mat4));
 	int count = geoDef->numRenderables;
 
 	float xLoc = UpdateAtomic(geoX, 5.0f, 0.0f);
@@ -462,8 +463,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	hierarchialMatrix *= rotation;
 
 	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 128);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64*2);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64*4);
+
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64*3);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64*5);
 
 	Geometry* geom = nullptr;
 
@@ -475,6 +480,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	{
 
 		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
+
+		SMBVertexTypes type = geoDef->vertexTypes[i];
 
 		Mesh* mesh = nullptr;
 		
@@ -490,9 +497,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->verticesCount = vertexCount;
 
-
-		SMBVertexTypes type = geoDef->vertexTypes[i];
-
 		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
 
 		mesh->indexId = meshIndexData.Allocate(indices);
@@ -501,18 +505,31 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		void* vertexData;
 
+		bool decompressed = false;
+
 		switch (type)
 		{
 		case PosPack6_CNorm_C16Tex1_Bone2:
-			vertexSize = sizeof(Vertex_PosPack6_CNorm_C16Tex1_Bone2);
+			if (decompressed)
+				vertexSize = sizeof(Vertex_PosPack6_CNorm_C16Tex1_Bone2);
+			else
+				vertexSize = sizeof(CVertex_PosPack6_CNorm_C16Tex1_Bone2);
 			break;
 		case PosPack6_C16Tex2_Bone2:
-			vertexSize = sizeof(Vertex_PosPack6_C16Tex2_Bone2);
+			if (decompressed)
+				vertexSize = sizeof(Vertex_PosPack6_C16Tex2_Bone2);
+			else
+				vertexSize = sizeof(CVertex_PosPack6_C16Tex2_Bone2);
 			break;
 		case PosPack6_C16Tex1_Bone2:
-			vertexSize = sizeof(Vertex_PosPack6_C16Tex1_Bone2);
+			if (decompressed)
+				vertexSize = sizeof(Vertex_PosPack6_C16Tex1_Bone2);
+			else
+				vertexSize = sizeof(CVertex_PosPack6_C16Tex1_Bone2);
 			break;
 		}
+
+		
 
 		mesh->vertexSize = vertexSize;
 
@@ -522,7 +539,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->vertexId = meshVertexData.Allocate(vertexData);
 		
-		SMBCopyVertexData(geoDef, i, file, vertexData);
+		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
 
 		SMBCopyIndices(geoDef, i, file, indices);
 
@@ -538,7 +555,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		}
 		case PosPack6_C16Tex2_Bone2:
 		{
-			vertexFlags = POSITION | TEXTURES1 | TEXTURES2 | BONES2;
+			vertexFlags =  POSITION | TEXTURES1 | TEXTURES2 | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex1_Bone2:
@@ -546,6 +563,11 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			vertexFlags = POSITION | TEXTURES1 | BONES2;
 			break;
 		}
+		}
+
+		if (!decompressed)
+		{
+			vertexFlags |= COMPRESSED;
 		}
 
 		
@@ -635,13 +657,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 void ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 
-	int totalTextureCount = 0;
+	int totalTextureCount = 0, totalMeshCount = 0;
 
 	std::vector<SMBTexture> textures;
 
 	auto& chunk = file.chunks;
 
-	SMBGeoChunk* geoDef = nullptr;
+	std::array<SMBGeoChunk*, 10> geoDefs{};
 
 	for (size_t i = 0; i<chunk.size(); i++)
 	{
@@ -649,34 +671,25 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		{
 		case GEO:
 		{
-			if (!geoDef)
-			{
+			
+			SMBGeoChunk** geoDef = &geoDefs[totalMeshCount++];
 
-				FileHandle* handle = FileManager::GetFile(file.id);
+			FileHandle* handle = FileManager::GetFile(file.id);
 
-				auto& geoChunk = handle->streamHandle;
+			auto& geoChunk = handle->streamHandle;
 
-				size_t seekpos = chunk[i].offsetInHeader;
+			size_t seekpos = chunk[i].offsetInHeader;
 
-				geoChunk.seekg(seekpos);
+			geoChunk.seekg(seekpos);
 
-				std::vector<char> geomHeader(chunk[i].headerSize);
+			std::vector<char> geomHeader(chunk[i].headerSize);
 
-				geoChunk.read(geomHeader.data(), chunk[i].headerSize);
+			geoChunk.read(geomHeader.data(), chunk[i].headerSize);
 
-				geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
+			*geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
 
-				geoDef->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
-
-				if (i < chunk.size() - 1)
-				{
-					seekpos = chunk[i + 1].contigOffset + file.fileOffset;
-				}
-
-
-
-				geoDef->verticesandIndexCompressedSize = seekpos - geoDef->vertexAndIndicesInfo;
-			}
+			(*geoDef)->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
+		
 
 			break;
 		}
@@ -727,10 +740,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				format,
 				GetPoolIndexByFormat(format));
 	}
+
+	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data() + index, index, totalTextureCount);
 	
-	if (geoDef)
+	for (int i = 0; i < totalMeshCount; i++)
 	{
-		
+		SMBGeoChunk* geoDef = geoDefs[i];
+
 		int base = 0;
 
 		for (int jj = 0; jj < geoDef->numRenderables; jj++)
@@ -759,16 +775,15 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			geoDef->materialStart[jj] = base;
 
 			base += count;
-		} 
+		}
 
 		SMBGeometricalObject(geoDef, file);
 
 		delete geoDef;
 	}
-
 	
 
-	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data() + index, index, totalTextureCount);
+	
 }
 
 

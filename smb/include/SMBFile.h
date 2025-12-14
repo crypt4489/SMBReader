@@ -102,14 +102,13 @@ enum SMBVertexTypes
 
 struct AxisBox
 {
-	glm::vec3 min;
-	glm::vec3 max;
+	glm::vec4 min;
+	glm::vec4 max;
 };
 
 struct SMBGeoChunk
 {
 	int vertexAndIndicesInfo;
-	int verticesandIndexCompressedSize;
 	int numRenderables;
 	int numMaterials;
 	int* renderablesTypes;
@@ -265,6 +264,6 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
 int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut);
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed);
 
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
