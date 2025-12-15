@@ -620,9 +620,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 1);
 
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, textureHandles, REPEAT, 2);
-
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, DIRECT, 3);
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, DIRECT, 2);
 
 
 		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);

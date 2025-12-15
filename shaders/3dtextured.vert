@@ -42,7 +42,7 @@ layout(set = 2, binding = 1) uniform PerModelTextures {
     uint textureHandles[12];
 } TextureHandles;
 
-layout(set = 2, binding = 3) readonly buffer InputVertices {
+layout(set = 2, binding = 2) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
@@ -98,7 +98,7 @@ vec3 pack6decomp(uint offset)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-	return vec3(mix(vec3(model.minMaxBox.min), vec3(model.minMaxBox.max), unormPos));
+	return mix(model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
 }
 
 

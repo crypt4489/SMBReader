@@ -541,45 +541,39 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		set->vkDescriptorLayout = descriptorLayoutIndex+j;
 	}
 
-	
-
-	for (int j = 0; j < graph->shaderMapCount; j++)
+	for (int j = 0; j < graph->resourceCount; j++)
 	{
-		ShaderMap* map = (ShaderMap*)graph->GetMap(j);
+		ShaderResource* resource = (ShaderResource*)graph->GetResource(j);
 
-		VkShaderStageFlags stageFlags = ConvertShaderStageToVKShaderStageFlags(map->type);
+		VkShaderStageFlags stageFlags = ConvertShaderStageToVKShaderStageFlags(resource->stages);
 
-		for (int h = 0; h < map->resourceCount; h++)
-		{
-			ShaderResource* resource = (ShaderResource*)map->GetResource(h);
-
-			if (resource->type & CONSTANT_BUFFER) {
-				descriptorBuilders[resource->set]->bindingCounts--;
-				continue;
-			}
-			
-			DescriptorSetLayoutBuilder* descriptorBuilder = descriptorBuilders[resource->set];
-
-			switch (resource->type)
-			{
-			case UNIFORM_BUFFER:
-				descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags);
-				break;
-			case IMAGESTORE2D:
-				descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
-				break;
-			case SAMPLER:
-				descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
-				break;
-			case STORAGE_BUFFER:
-				descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
-				break;
-			case SAMPLERBINDLESS:
-				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-				descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
-				break;
-			}
+		if (resource->type & CONSTANT_BUFFER) {
+			descriptorBuilders[resource->set]->bindingCounts--;
+			continue;
 		}
+			
+		DescriptorSetLayoutBuilder* descriptorBuilder = descriptorBuilders[resource->set];
+
+		switch (resource->type)
+		{
+		case UNIFORM_BUFFER:
+			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags);
+			break;
+		case IMAGESTORE2D:
+			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
+			break;
+		case SAMPLER:
+			descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
+			break;
+		case STORAGE_BUFFER:
+			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
+			break;
+		case SAMPLERBINDLESS:
+			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
+			break;
+		}
+		
 	}
 
 
@@ -924,119 +918,117 @@ int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidt
 
 int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount)
 {
-	uintptr_t head = descriptorManager.hostResourceHeap + descriptorManager.hostResourceHead;
-	
-	uintptr_t ptr = head;
-	ShaderResourceSet* set = (ShaderResourceSet*)ptr;
-	ptr += sizeof(ShaderResourceSet);
+    uintptr_t head = descriptorManager.hostResourceHeap + descriptorManager.hostResourceHead;
+    
+    uintptr_t ptr = head;
+    ShaderResourceSet* set = (ShaderResourceSet*)ptr;
+    ptr += sizeof(ShaderResourceSet);
 
-	ShaderSetLayout* resourceSet = (ShaderSetLayout*)vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex]->GetSet(targetSet);
+    ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 
-	set->bindingCount = resourceSet->bindingCount;
-	set->layoutHandle = resourceSet->vkDescriptorLayout;
-	set->setCount = setCount;
+    ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(targetSet);
 
-	uintptr_t* offset = (uintptr_t*)ptr;
+    set->bindingCount = resourceSet->bindingCount;
+    set->layoutHandle = resourceSet->vkDescriptorLayout;
+    set->setCount = setCount;
 
-	ptr += sizeof(uintptr_t) * (set->bindingCount);
+    uintptr_t* offset = (uintptr_t*)ptr;
 
-	for (int j = 0; j < vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex]->shaderMapCount; j++)
+    ptr += sizeof(uintptr_t) * (set->bindingCount);
+
+
+	int constantCount = set->bindingCount;
+	for (int h = 0; h < set->bindingCount; h++)
 	{
+		MemoryBarrierType memBarrierType = MEMORY_BARRIER;
 
-		ShaderMap* map = (ShaderMap*)vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex]->GetMap(j);
-		int constantCount = map->resourceCount-1;
-		for (int h = 0; h < map->resourceCount; h++)
+		ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceSet->resourceStart+h);
+
+		if (resource->set != targetSet) continue;
+
+		ShaderResourceHeader* desc = (ShaderResourceHeader*)ptr;
+
+		if (resource->binding != ~0)
+			desc->binding = resource->binding;
+		else
+			desc->binding = constantCount--;
+
+		desc->type = resource->type;
+		desc->action = resource->action;
+		desc->arrayCount = resource->arrayCount;
+
+		offset[desc->binding] = ptr;
+
+		switch (resource->type)
 		{
-			MemoryBarrierType memBarrierType = MEMORY_BARRIER;
-
-			ShaderResource* resource = (ShaderResource*)map->GetResource(h);
-
-			if (resource->set != targetSet) continue;
-
-			ShaderResourceHeader* desc = (ShaderResourceHeader*)ptr;
-
-			if (resource->binding != ~0)
-				desc->binding = resource->binding;
-			else
-				desc->binding = constantCount--;
-
-			desc->type = resource->type;
-			desc->action = resource->action;
-			desc->arrayCount = resource->arrayCount;
-
-			offset[desc->binding] = ptr;
-
-			switch (resource->type)
+		case IMAGESTORE2D:
+		{
+			ptr += sizeof(ShaderResourceImage);
+			memBarrierType = IMAGE_BARRIER;
+			if (resource->action & SHADERWRITE)
 			{
-			case IMAGESTORE2D:
-			{
-				ptr += sizeof(ShaderResourceImage);
-				memBarrierType = IMAGE_BARRIER;
-				if (resource->action & SHADERWRITE)
-				{
-					ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
-					barriers->dstStage = ConvertShaderStageToBarrierStage(map->type);
-					barriers->dstAction = WRITE_SHADER_RESOURCE;
-					barriers->type = memBarrierType;
-				
-					barriers[1].srcStage = ConvertShaderStageToBarrierStage(map->type);
-					barriers[1].srcAction = WRITE_SHADER_RESOURCE;
-					barriers[1].type = memBarrierType;
+				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
+				barriers->dstStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->dstAction = WRITE_SHADER_RESOURCE;
+				barriers->type = memBarrierType;
 
-					ptr += (sizeof(ImageShaderResourceBarrier) * 2);
-				}
-				break;
-			}
-			case SAMPLER:
-			{
-				ptr += sizeof(ShaderResourceImage);
-				memBarrierType = IMAGE_BARRIER;
-				if (resource->action & SHADERWRITE)
-				{
-					ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
-					barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
-					barriers->srcAction = WRITE_SHADER_RESOURCE;
-					barriers->type = memBarrierType;
-					ptr += (sizeof(ImageShaderResourceBarrier));
-				}
-				break;
-			}
-			case SAMPLERBINDLESS:
-			{
-				memBarrierType = IMAGE_BARRIER;
-				memset((void*)ptr, 0, sizeof(ShaderResourceSamplerBindless));
-				ptr += sizeof(ShaderResourceSamplerBindless);
-				break;
-			}
-			case CONSTANT_BUFFER:
-			{
-				ShaderResourceConstantBuffer* constants = (ShaderResourceConstantBuffer*)ptr;
-				constants->size = 4;
-				constants->offset = 0;
-				constants->stage = map->type;
-				ptr += sizeof(ShaderResourceConstantBuffer);
-				break;
-			}
-			case STORAGE_BUFFER:
-			case UNIFORM_BUFFER:
-			{
-				memBarrierType = BUFFER_BARRIER;
-				ptr += sizeof(ShaderResourceBuffer);
-				if (resource->action & SHADERWRITE)
-				{
-					ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
-					barriers->srcStage = ConvertShaderStageToBarrierStage(map->type);
-					barriers->srcAction = WRITE_SHADER_RESOURCE;
-					barriers->type = memBarrierType;
-					ptr += (sizeof(ShaderResourceBarrier));
-				}
-				break;
-			}
-			}
+				barriers[1].srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers[1].srcAction = WRITE_SHADER_RESOURCE;
+				barriers[1].type = memBarrierType;
 
-			
+				ptr += (sizeof(ImageShaderResourceBarrier) * 2);
+			}
+			break;
 		}
-	}
+		case SAMPLER:
+		{
+			ptr += sizeof(ShaderResourceImage);
+			memBarrierType = IMAGE_BARRIER;
+			if (resource->action & SHADERWRITE)
+			{
+				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
+				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->srcAction = WRITE_SHADER_RESOURCE;
+				barriers->type = memBarrierType;
+				ptr += (sizeof(ImageShaderResourceBarrier));
+			}
+			break;
+		}
+		case SAMPLERBINDLESS:
+		{
+			memBarrierType = IMAGE_BARRIER;
+			memset((void*)ptr, 0, sizeof(ShaderResourceSamplerBindless));
+			ptr += sizeof(ShaderResourceSamplerBindless);
+			break;
+		}
+		case CONSTANT_BUFFER:
+		{
+			ShaderResourceConstantBuffer* constants = (ShaderResourceConstantBuffer*)ptr;
+			constants->size = 4;
+			constants->offset = 0;
+			constants->stage = resource->type;
+			ptr += sizeof(ShaderResourceConstantBuffer);
+			break;
+		}
+		case STORAGE_BUFFER:
+		case UNIFORM_BUFFER:
+		{
+			memBarrierType = BUFFER_BARRIER;
+			ptr += sizeof(ShaderResourceBuffer);
+			if (resource->action & SHADERWRITE)
+			{
+				ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
+				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->srcAction = WRITE_SHADER_RESOURCE;
+				barriers->type = memBarrierType;
+				ptr += (sizeof(ShaderResourceBarrier));
+			}
+			break;
+		}
+		}
+
+
+    }
 
 	return descriptorManager.AddShaderToSets(head, ptr - head);
 }

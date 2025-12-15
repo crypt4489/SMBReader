@@ -144,13 +144,13 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 
 	graph->shaderMapCount = shaderCount;
 	graph->resourceSetCount = setCount;
-	uintptr_t mapData = head + sizeof(ShaderGraph) + (setCount * sizeof(ShaderSetLayout));
+	
 
 	int shaderIndex = 0;
 
 	for (int j = 0; j < shaderCount; j++)
 	{
-		ShaderMap* map = (ShaderMap*)(mapData);
+		ShaderMap* map = (ShaderMap*)graph->GetMap(j);
 
 		ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)TreeNodes[ShaderRefs[j]];
 		
@@ -168,53 +168,54 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 
 		map->type = type;
 		
-		int resourceIter = 0;
-
-		for (int i = 0; i<setCount; i++)
-		{
-
-			ShaderSetLayout* setLay = (ShaderSetLayout*)graph->GetSet(i);
-			int resIter = SetNodes[i]+1;
-			ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
-			int bindingCount = 0;
-			while (tag && tag->hashCode == hash("ShaderResourceItem"))
-			{
-				
-				if (tag->shaderstage == type)
-				{
-					ShaderResource* resource = (ShaderResource*)map->GetResource(resourceIter++);
-					if (tag->resourceType & CONSTANT_BUFFER)
-					{
-						resource->binding = ~0;
-					}
-					else 
-					{
-						resource->binding = bindingCount;
-					}
-					
-					resource->action = tag->resourceAction;
-					resource->type = tag->resourceType;
-					resource->arrayCount = tag->arrayCount;
-					resource->set = i;
-					setLay->bindingCount++;
-				}
-				
-				if (!(tag->resourceType & CONSTANT_BUFFER))
-				{
-					bindingCount++;
-				}
-
-				tag = (ShaderResourceItemXMLTag*)TreeNodes[++resIter];
-			}
-		}
-
-
-		map->resourceCount = resourceIter;
-
-		mapData += (sizeof(ShaderMap) + (map->resourceCount * sizeof(ShaderResource)));
+		
 	}
 
-	*outSize += (mapData - head);
+	int resourceIter = 0;
+
+	for (int i = 0; i < setCount; i++)
+	{
+
+		ShaderSetLayout* setLay = (ShaderSetLayout*)graph->GetSet(i);
+		int resIter = SetNodes[i] + 1;
+		ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
+		int bindingCount = 0;
+
+		setLay->resourceStart = resourceIter;
+		while (tag && tag->hashCode == hash("ShaderResourceItem"))
+		{
+
+			ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceIter++);
+			if (tag->resourceType & CONSTANT_BUFFER)
+			{
+				resource->binding = ~0;
+			}
+			else
+			{
+				resource->binding = bindingCount;
+			}
+
+			resource->stages = tag->shaderstage;
+
+			resource->action = tag->resourceAction;
+			resource->type = tag->resourceType;
+			resource->arrayCount = tag->arrayCount;
+			resource->set = i;
+			setLay->bindingCount++;
+
+
+			if (!(tag->resourceType & CONSTANT_BUFFER))
+			{
+				bindingCount++;
+			}
+
+			tag = (ShaderResourceItemXMLTag*)TreeNodes[++resIter];
+		}
+	}
+
+	graph->resourceCount = resourceIter;
+
+	*outSize += graph->GetGraphSize();
 
 	*shaderDataSize = (int)(shaderDeatsIter - shaderDeatsHead);
 
@@ -620,6 +621,9 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 				break;
 			case hash("f"):
 				tag->shaderstage = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
+				break;
+			case hash("vf"):
+				tag->shaderstage = ShaderStageTypeBits::VERTEXSHADERSTAGE | ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			default:
 				throw std::runtime_error("Failed Used Type");

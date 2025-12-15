@@ -105,10 +105,12 @@ struct ShaderSetLayout
 {
 	int vkDescriptorLayout;
 	int bindingCount;
+	int resourceStart;
 };
 
 struct ShaderResource
 {
+	ShaderStageType stages;
 	ShaderResourceAction action;
 	ShaderResourceType type;
 	int set;
@@ -120,20 +122,11 @@ struct ShaderMap
 {
 	ShaderStageType type;
 	int shaderReference;
-	int resourceCount; //array of contigous ShaderResources -- how many resources the shader consumes
 
-	uintptr_t GetResource(int resourceIndex)
-	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderMap);
-		
-		head += (sizeof(ShaderResource) * resourceIndex);
-		
-		return head;
-	}
 
 	int GetMapSize() const
 	{
-		return sizeof(ShaderMap) +  (resourceCount * sizeof(ShaderResource));
+		return sizeof(ShaderMap);
 	}
 };
 
@@ -141,6 +134,7 @@ struct ShaderGraph
 {
 	int shaderMapCount;
 	int resourceSetCount;
+	int resourceCount;
 
 	uintptr_t GetSet(int setIndex)
 	{
@@ -148,28 +142,25 @@ struct ShaderGraph
 		return head;
 	}
 
+	uintptr_t GetResource(int resourceIndex)
+	{
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (shaderMapCount * sizeof(ShaderMap));
+
+		head += (sizeof(ShaderResource) * resourceIndex);
+
+		return head;
+	}
+
 	uintptr_t GetMap(int mapIndex)
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout));
-		for (int i = 0; i < mapIndex; i++)
-		{
-			ShaderMap* map = (ShaderMap*)head;
-			head += map->GetMapSize();
-		}
+		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (mapIndex * sizeof(ShaderMap));
+	
 		return head;
 	}
 
 	int GetGraphSize() const
 	{
-		int size = sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout));
-		uintptr_t head = (uintptr_t)(this) + size;
-		for (int i = 0; i < shaderMapCount; i++)
-		{
-			ShaderMap* map = (ShaderMap*)head;
-			int size2 = map->GetMapSize();
-			head += size2;
-			size += size2;
-		}
+		int size = sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (shaderMapCount * sizeof(ShaderMap)) + (resourceCount * sizeof(ShaderResource));
 		return size;
 	}
 };
