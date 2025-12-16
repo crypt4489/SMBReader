@@ -1,4 +1,7 @@
 #include "pch.h"
+
+#include <array>
+
 #include "VKUtilities.h"
 
 
@@ -273,14 +276,23 @@ namespace VK {
 				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 			}
 
-			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset) {
+			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, int stride) {
+				
+				std::array<VkBufferCopy, 15> regions={0};
+				
 				VkCommandBuffer commandBuffer = BeginOneTimeCommands(device, pool);
 
-				VkBufferCopy copyRegion{};
-				copyRegion.srcOffset = srcOffset;
-				copyRegion.dstOffset = dstOffset;
-				copyRegion.size = size;
-				vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+				for (int i = 0; i < copies; i++)
+				{
+					regions[i].srcOffset = srcOffset;
+					regions[i].dstOffset = dstOffset;
+					regions[i].size = size;
+
+					dstOffset += stride;
+				}
+
+				
+				vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, copies, regions.data());
 
 				EndOneTimeCommands(device, queue, pool, commandBuffer);
 			}

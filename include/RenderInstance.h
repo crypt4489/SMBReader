@@ -139,7 +139,17 @@ struct RenderAllocation
 {
 	EntryHandle memIndex;
 	size_t offset;
-	size_t size;
+	size_t deviceAllocSize;
+	size_t requestedSize;
+	size_t alignment;
+};
+
+
+enum AllocationType
+{
+	STATIC = 0,
+	PERFRAME = 1,
+	PERDRAW = 2
 };
 
 template <int N>
@@ -216,11 +226,13 @@ public:
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
-	void UpdateAllocation(void* data, size_t handle, size_t size, size_t offset);
+	void UpdateAllocation(void* data, size_t handle, size_t size, size_t offset, size_t frame, int copies);
 
-	int GetPageFromUniformBuffer(size_t size, uint32_t alignment);
+	int GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType);
 
-	int GetPageFromDeviceBuffer(size_t size, uint32_t alignment);
+	int GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType);
+
+	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType);
 
 	EntryHandle CreateImage(
 		char* imageData,
@@ -328,6 +340,9 @@ public:
 
 	int width = 0; 
 	int height = 0;
+
+	int minUniformAlignment;
+	int minStorageAlignment; 
 
 };
 

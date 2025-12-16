@@ -86,9 +86,9 @@ struct VKInstance
 	VKInstance();
 	~VKInstance();
 
-	VkPhysicalDevice GetPhysicalDevice(DeviceIndex& gpuIndex);
+	VkPhysicalDevice GetPhysicalDevice(DeviceIndex gpuIndex);
 
-	uintptr_t* GetDeviceArray(DeviceIndex& gpuIndex);
+	uintptr_t* GetDeviceArray(DeviceIndex gpuIndex);
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex);
 
@@ -100,7 +100,7 @@ struct VKInstance
 
 	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);
 
-	VkSampleCountFlagBits GetMaxMSAALevels(DeviceIndex& gpuIndex);
+	VkSampleCountFlagBits GetMaxMSAALevels(DeviceIndex gpuIndex);
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures);
 
@@ -115,6 +115,10 @@ struct VKInstance
 	void* AllocFromInstanceCache(size_t size);
 
 	void* AllocFromInstanceData(size_t size);
+
+	int GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex);
+
+	int GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex);
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;

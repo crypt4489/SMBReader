@@ -777,12 +777,21 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS);
 }
 
-void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset)
+void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset, size_t frame, int copies)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	
-	size_t intSize = allocations[handle].size;
+	size_t intSize = allocations[handle].requestedSize;
 	size_t intOffset = allocations[handle].offset + offset;
+
+	if (frame)
+	{
+		size_t rsize = allocations[handle].requestedSize;
+		size_t align = allocations[handle].alignment;
+		if (align - 1 & rsize) rsize = (rsize + (align - (align - 1 & rsize)));
+		intOffset = allocations[handle].offset + (frame*rsize) + offset;
+	}
+
 	
 	if (size)
 		intSize = size;
@@ -792,33 +801,110 @@ void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, si
 	if (index == globalIndex)
 		dev->WriteToHostBuffer(index, data, intSize, intOffset);
 	else if (index == globalDeviceBufIndex)
-		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset);
+		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, 0);
 }
 
-int RenderInstance::GetPageFromUniformBuffer(size_t size, uint32_t alignment)
+int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType)
 {
+	size_t allocSize = size;
+
+	if (minUniformAlignment - 1 & alignment)
+		alignment = (alignment + (minUniformAlignment - ((minUniformAlignment - 1) & alignment)));
+	
+	if (minUniformAlignment - 1 & size)
+		allocSize = (size + (minUniformAlignment - (minUniformAlignment - 1 & size)));
+
+	switch (allocType)
+	{
+	case STATIC:
+		break;
+	case PERFRAME:
+		allocSize*=MAX_FRAMES_IN_FLIGHT;
+		break;
+	case PERDRAW:
+		break;
+	}
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	size_t location = dev->GetMemoryFromBuffer(globalIndex, size, 64);
+	size_t location = dev->GetMemoryFromBuffer(globalIndex, allocSize, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalIndex;
 	allocations.allocations[index].offset = location;
-	allocations.allocations[index].size = size;
-
+	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].requestedSize = size;
+	allocations.allocations[index].alignment = alignment;
 
 	return index;
 }
 
-int RenderInstance::GetPageFromDeviceBuffer(size_t size, uint32_t alignment)
+int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+
+
+
+	size_t allocSize = (size);
+
+	switch (allocType)
+	{
+	case STATIC:
+		break;
+	case PERFRAME:
+		allocSize *= MAX_FRAMES_IN_FLIGHT;
+		break;
+	case PERDRAW:
+		break;
+	}
+
+
+
 	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalDeviceBufIndex;
 	allocations.allocations[index].offset = location;
-	allocations.allocations[index].size = size;
+	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].requestedSize = size;
+	allocations.allocations[index].alignment = alignment;
 
+	return index;
+}
+
+int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	size_t allocSize = size;
+
+	if (minStorageAlignment - 1 & alignment)
+		alignment = (alignment + (minStorageAlignment - ((minStorageAlignment - 1) & alignment)));
+
+	if (minStorageAlignment - 1 & size)
+		allocSize = (size + (minStorageAlignment - (minStorageAlignment - 1 & size)));
+
+
+	switch (allocType)
+	{
+	case STATIC:
+		break;
+	case PERFRAME:
+		allocSize *= MAX_FRAMES_IN_FLIGHT;
+		break;
+	case PERDRAW:
+		break;
+	}
+
+
+
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
+
+	int index = allocations.Allocate();
+	allocations.allocations[index].memIndex = globalDeviceBufIndex;
+	allocations.allocations[index].offset = location;
+	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].requestedSize = size;
+	allocations.allocations[index].alignment = alignment;
 
 	return index;
 }
@@ -1049,6 +1135,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	physicalIndex = vkInstance->CreatePhysicalDevice(1);
 	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, &deviceIndex);
+
+	minUniformAlignment = vkInstance->GetMinimumUniformBufferAlignment(physicalIndex);
+	minStorageAlignment = vkInstance->GetMinimumStorageBufferAlignment(physicalIndex);
 
 	maxMSAALevels = (uint32_t)log2((float)vkInstance->GetMaxMSAALevels(physicalIndex));
 	maxMSAALevels += 1;
@@ -1310,9 +1399,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
 				if (buffer->copyPattern == REPEAT)
-					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.size / frames, i, frames, 0);
+					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
-					builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.size, i, frames, 0);
+					builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
 				break;
 			}
 			case UNIFORM_BUFFER:
@@ -1320,9 +1409,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
 				if (buffer->copyPattern == REPEAT)
-					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.size / frames, i, frames, 0);
+					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
-					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.size, i, frames, 0);
+					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
 				break;
 			}
 
@@ -1615,7 +1704,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 			VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
 
 			EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0, allocations[bufferBarrier->allocation].memIndex,
-				allocations[bufferBarrier->allocation].size,
+				allocations[bufferBarrier->allocation].deviceAllocSize,
 				allocations[bufferBarrier->allocation].offset);
 
 

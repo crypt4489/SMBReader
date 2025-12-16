@@ -272,13 +272,13 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
-	instanceAlloc = rendInst->GetPageFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4));
+	instanceAlloc = rendInst->GetAllocFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4), STATIC);
 
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM, GetPoolIndexByFormat(R8G8B8A8_UNORM));
 
 	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
-	computeMemory = rendInst->GetPageFromUniformBuffer(64, 64);
+	computeMemory = rendInst->GetAllocFromUniformBuffer(64, 64, STATIC);
 
 	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, DIRECT, 0);
 	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, storageBuffer, 1);
@@ -329,7 +329,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	}
 
-	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET);
+	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 }
 
 void ApplicationLoop::MoveCamera(double fps)
@@ -405,7 +405,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
 	for (uint32_t i = 0; i<frame; i++) {
-		VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, sizeof(glm::mat4) * 2 * i);
+		VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, 0, i, 1);
 	}
 }
 
@@ -449,7 +449,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	auto rendInst = VKRenderer::gRenderInstance;
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 	
-	int objMemory = rendInst->GetPageFromUniformBuffer(sizeof(glm::mat4) * frames * 2, alignof(glm::mat4));
+	int objMemory = rendInst->GetAllocFromUniformBuffer(sizeof(glm::mat4) + sizeof(geoDef->axialBox), alignof(glm::mat4), PERFRAME);
 	int count = geoDef->numRenderables;
 
 	float xLoc = UpdateAtomic(geoX, 5.0f, 0.0f);
@@ -462,13 +462,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	hierarchialMatrix *= rotation;
 
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64*2);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 64*4);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 0, 1);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 1, 1);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 2, 1);
 
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64);
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64*3);
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64*5);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 0, 1);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 1, 1);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 2, 1);
 
 	Geometry* geom = nullptr;
 
@@ -505,7 +505,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		void* vertexData;
 
-		bool decompressed = false;
+		bool decompressed = true;
 
 		switch (type)
 		{
@@ -577,8 +577,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->meshDescriptor = graphicDesc;
 		
-		int vertexMemory = rendInst->GetPageFromDeviceBuffer(vertexSize * vertexCount, 16);
-		int indexMemory = rendInst->GetPageFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64);
+		int vertexMemory = rendInst->GetAllocFromDeviceStorageBuffer(vertexSize * vertexCount, 16, STATIC);
+		int indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
 
 		mesh->deviceIndices = indexMemory;
 		mesh->deviceVertices = vertexMemory;
@@ -595,7 +595,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			int handles[12];
 		} handles{ 0 };
 
-		int textureHandles = rendInst->GetPageFromUniformBuffer(sizeof(Handles) * frames, alignof(glm::mat4));
+		int textureHandles = rendInst->GetAllocFromUniformBuffer(sizeof(Handles), alignof(glm::mat4), PERFRAME);
 
 		mesh->meshInstanceMemoryStart = meshDeviceMemoryData.Allocate(textureHandles);
 
@@ -623,13 +623,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, DIRECT, 2);
 
 
-		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
-		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET);
+		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), ABSOLUTE_ALLOCATION_OFFSET);
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), sizeof(Handles) * 1);
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), sizeof(Handles) * 2);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 0, 1);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 1, 1);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 2, 1);
 
 
 		GraphicsIntermediaryPipelineInfo create = {
@@ -808,7 +808,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(sizeof(glm::mat4) * 2 * VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT,64);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(glm::mat4) * 2, alignof(glm::mat4), PERFRAME);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 

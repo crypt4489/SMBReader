@@ -120,7 +120,7 @@ void main() {
             offset += 4;
         }
 
-         if ((comp & TEXTURES1) == TEXTURES1)
+        if ((comp & TEXTURES1) == TEXTURES1)
         {
             texCoords = converttexcoords16(offset);
             offset += 4;

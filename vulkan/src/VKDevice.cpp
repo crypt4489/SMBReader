@@ -124,8 +124,12 @@ std::pair<VkDeviceSize, VkDeviceSize> VKMemoryAllocator::GetBestFit(VkDeviceSize
 
 		VkDeviceSize endingAddress = iter->second;
 		VkDeviceSize startingAddress = iter->first;
-		VkDeviceSize makeup = alignment - (startingAddress & (alignment - 1));
+		VkDeviceSize makeup = 0;
+		if (startingAddress & (startingAddress & (alignment - 1)))
+			makeup = alignment - (startingAddress & (alignment - 1));
+
 		startingAddress += (makeup); //make up for any alignment considerations
+
 
 
 		VkDeviceSize holesize = endingAddress - startingAddress;
@@ -2473,7 +2477,7 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 	vkUnmapMemory(device, deviceMem->memory);
 }
 
-void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset)
+void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, int stride)
 {
 	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(TRANSFER);
@@ -2511,7 +2515,7 @@ void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingB
 
 	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
 
-	VK::Utils::CopyBuffer(device, pool, queue, stagingBuffer, outBuffer, size, allocOffset, offset);
+	VK::Utils::CopyBuffer(device, pool, queue, stagingBuffer, outBuffer, size, allocOffset, offset, copies, stride);
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 

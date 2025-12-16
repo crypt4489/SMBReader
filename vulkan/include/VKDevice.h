@@ -529,7 +529,7 @@ struct VKDevice
 
 	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset);
 
-	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset);
+	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, int stride);
 
 	mutable std::shared_mutex deviceLock;
 

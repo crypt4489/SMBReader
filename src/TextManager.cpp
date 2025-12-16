@@ -48,8 +48,8 @@ void TextManager::CreatePipelineObject()
 
 void TextManager::CreateTextBuffer()
 {
-	vertexBufferIndex = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(BUFFERSIZE, 0);
-	indirectCommandsIndex = VKRenderer::gRenderInstance->GetPageFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U);
+	vertexBufferIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(BUFFERSIZE, 0, STATIC);
+	indirectCommandsIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U, STATIC);
 }
 
 void TextManager::UploadToVertexBuffer(Text* text)
@@ -65,7 +65,7 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	VKRenderer::gRenderInstance->UpdateAllocation(
 		text->textVertices.data(), vertexBufferIndex, vertsDataSize,
-		bufferOffset);
+		bufferOffset, 0, 1);
 
 	VkDrawIndirectCommand command;
 
@@ -78,7 +78,7 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	VKRenderer::gRenderInstance->UpdateAllocation(
 		&command, indirectCommandsIndex, sizeof(VkDrawIndirectCommand),
-		commandOffset);
+		commandOffset, 0, 1);
 
 	textsCommand.push_back({ text, commandCount++, bufferOffset });
 
@@ -110,12 +110,12 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 	VKRenderer::gRenderInstance->UpdateAllocation(
 		text->textVertices.data(), vertexBufferIndex, newCount * sizeof(TextVertex),
-		 bOffset + startingOffset);
+		 bOffset + startingOffset, 0, 1);
 
 	VKRenderer::gRenderInstance->UpdateAllocation(
 		&textVertexCount, indirectCommandsIndex, sizeof(uint32_t),
 		 offsetof(VkDrawIndirectCommand, vertexCount) +
-		 (cCount * sizeof(VkDrawIndirectCommand)));
+		 (cCount * sizeof(VkDrawIndirectCommand)), 0, 1);
 }
 
 void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)

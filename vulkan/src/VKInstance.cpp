@@ -375,7 +375,7 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 
 
-VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(DeviceIndex& gpuIndex)
+VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(DeviceIndex gpuIndex)
 {
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 	VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -478,15 +478,15 @@ VKDevice* VKInstance::GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceI
 	return dev;
 }
 
-VkPhysicalDevice VKInstance::GetPhysicalDevice(DeviceIndex& gpuIndex)
+VkPhysicalDevice VKInstance::GetPhysicalDevice(DeviceIndex gpuIndex)
 {
 	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
 	return reinterpret_cast<VkPhysicalDevice>(devices[0]);
 }
 
-uintptr_t* VKInstance::GetDeviceArray(DeviceIndex& gpuIndex)
+uintptr_t* VKInstance::GetDeviceArray(DeviceIndex gpuIndex)
 {
-	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);;
+	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
 }
 
 void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
@@ -639,4 +639,28 @@ void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	void* newaddr = RealAlloc(size, alignment, cache);
 	memcpy(newaddr, original, size);
 	return newaddr;
+}
+
+int VKInstance::GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex)
+{
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
+
+	VkPhysicalDeviceProperties deviceProperties;
+	VkPhysicalDeviceFeatures deviceFeatures;
+
+	GetPhysicalDevicePropertiesandFeatures(gpu, deviceProperties, deviceFeatures);
+
+	return static_cast<int>(deviceProperties.limits.minStorageBufferOffsetAlignment);
+}
+
+int VKInstance::GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex)
+{
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
+
+	VkPhysicalDeviceProperties deviceProperties;
+	VkPhysicalDeviceFeatures deviceFeatures;
+
+	GetPhysicalDevicePropertiesandFeatures(gpu, deviceProperties, deviceFeatures);
+
+	return static_cast<int>(deviceProperties.limits.minUniformBufferOffsetAlignment);
 }
