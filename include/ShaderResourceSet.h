@@ -7,11 +7,6 @@
 #include "FileManager.h"
 #include "ResourceDependencies.h"
 
-enum ShaderBufferLocation
-{
-	DIRECT = 0,
-	REPEAT = 1,
-};
 
 struct ShaderResourceSet
 {
@@ -42,7 +37,6 @@ struct ShaderResourceSamplerBindless : public ShaderResourceHeader
 struct ShaderResourceBuffer : public ShaderResourceHeader
 {
 	int allocation;
-	ShaderBufferLocation copyPattern;
 };
 
 struct ShaderResourceConstantBuffer : public ShaderResourceHeader
@@ -89,7 +83,7 @@ struct ShaderResourceManager
 		return indexRet;
 	}
 
-	void BindBufferToShaderResource(int descriptorSet, int allocationIndex, ShaderBufferLocation copy, int bindingIndex)
+	void BindBufferToShaderResource(int descriptorSet, int allocationIndex, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -100,7 +94,6 @@ struct ShaderResourceManager
 		if (header->type != UNIFORM_BUFFER && header->type != STORAGE_BUFFER)
 			return;
 
-		header->copyPattern = copy;
 		header->allocation = allocationIndex;
 	}
 

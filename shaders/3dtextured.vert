@@ -22,6 +22,18 @@ struct AABB
     vec4 max;
 };
 
+struct PerModel
+{
+    uint vertexComponents;
+    uint numHandles;
+    uint vertexStride;
+    uint unused;
+    uint textureHandles[12];
+    mat4 m;
+    AABB minMaxBox;
+};
+
+
 layout(location = 0) out vec2 texCoords;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
@@ -29,18 +41,13 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 proj;
 } gs;
 
-layout(set = 2, binding = 0) uniform PerModel {
-    mat4 m;
-    AABB minMaxBox;
-} model;
+layout(set = 2, binding = 0) uniform ModelIndex {
+    uint modelIndex;
+} modelI;
 
-layout(set = 2, binding = 1) uniform PerModelTextures {
-    uint vertexComponents;
-    uint numHandles;
-    uint vertexStride;
-    uint pad2;
-    uint textureHandles[12];
-} TextureHandles;
+layout(set = 2, binding = 1) readonly buffer PMBuffer {
+    PerModel objects[];
+} perModelBuffer;
 
 layout(set = 2, binding = 2) readonly buffer InputVertices {
 	uint8_t vertexData[];
@@ -87,7 +94,7 @@ vec2 converttexcoords16(uint offset)
 	return vec2(float(tiX), float(tiY)) * dx * 16.0;;
 }
 
-vec3 pack6decomp(uint offset)
+vec3 pack6decomp(uint offset, PerModel model)
 {
 
     int piX = unpack_i16(offset);
@@ -104,10 +111,13 @@ vec3 pack6decomp(uint offset)
 
 void main() {
     
-    uint comp = TextureHandles.vertexComponents;
+    PerModel modelData = perModelBuffer.objects[modelI.modelIndex];
+
+
+    uint comp = modelData.vertexComponents;
     texCoords = vec2(0.0, 0.0);
 
-    uint stride = TextureHandles.vertexStride;
+    uint stride = modelData.vertexStride;
 
     uint offset = stride * gl_VertexIndex;
 
@@ -139,8 +149,8 @@ void main() {
 
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = gs.proj * gs.view * model.m;
-            vec4 intPos = vec4(pack6decomp(offset), 1.0f);
+            mat4 MVP = gs.proj * gs.view * modelData.m;
+            vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
             gl_Position = MVP * intPos;
         }
 
@@ -149,7 +159,7 @@ void main() {
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = gs.proj * gs.view * model.m;
+            mat4 MVP = gs.proj * gs.view * modelData.m;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
         }

@@ -1404,7 +1404,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
-				if (buffer->copyPattern == REPEAT)
+				if (alloc.allocType == PERFRAME)
 					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
 					builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
@@ -1414,7 +1414,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
-				if (buffer->copyPattern == REPEAT)
+				if (alloc.allocType == PERFRAME)
 					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
 					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
@@ -1451,6 +1451,21 @@ void RenderInstance::UpdateSamplerBinding(int descriptorSet, int bindingIndex, E
 	DescriptorSetBuilder* builder = dev->UpdateDescriptorSet(handle);
 
 	builder->AddBindlessTextureArray(handles, texCount, destinationArray, 0, frames, bindingIndex);
+}
+
+int RenderInstance::GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex)
+{
+	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
+	ShaderResourceSet* set = (ShaderResourceSet*)head;
+	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+	ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[bindingIndex];
+
+	if (header->type != UNIFORM_BUFFER && header->type != STORAGE_BUFFER) return -1;
+
+	ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
+
+	return buffer->allocation;
 }
 
 

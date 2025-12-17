@@ -135,6 +135,13 @@ struct ComputeIntermediaryPipelineInfo
 #define FULL_ALLOCATION_SIZE 0
 #define ABSOLUTE_ALLOCATION_OFFSET 0
 
+enum AllocationType
+{
+	STATIC = 0,
+	PERFRAME = 1,
+	PERDRAW = 2
+};
+
 struct RenderAllocation
 {
 	EntryHandle memIndex;
@@ -142,15 +149,11 @@ struct RenderAllocation
 	size_t deviceAllocSize;
 	size_t requestedSize;
 	size_t alignment;
+	AllocationType allocType;
 };
 
 
-enum AllocationType
-{
-	STATIC = 0,
-	PERFRAME = 1,
-	PERDRAW = 2
-};
+
 
 template <int N>
 struct RenderAllocationHolder
@@ -234,6 +237,8 @@ public:
 
 	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType);
 
+	
+
 	EntryHandle CreateImage(
 		char* imageData,
 		uint32_t* sizes,
@@ -292,6 +297,8 @@ public:
 	void LaunchRecording();
 
 	void UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount);
+
+	int GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
