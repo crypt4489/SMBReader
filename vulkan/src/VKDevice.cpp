@@ -2467,17 +2467,22 @@ void VKDevice::WaitOnDevice()
 	vkDeviceWaitIdle(device);
 }
 
-void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset)
+void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
 	std::shared_lock lock(deviceLock);
 	auto deviceMem = reinterpret_cast<BufferAlloc*>(GetVkTypeFromEntry(hostIndex));
 	void* datalocal;
 	vkMapMemory(device, deviceMem->memory, offset, size, 0, reinterpret_cast<void**>(&datalocal));
-	std::memcpy(datalocal, data, size);
+	uintptr_t iter = (uintptr_t)datalocal;
+	for (int i = 0; i < copies; i++)
+	{
+		std::memcpy((void*)iter, data, size);
+		iter += stride;
+	}
 	vkUnmapMemory(device, deviceMem->memory);
 }
 
-void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, int stride)
+void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
 	std::shared_lock lock(deviceLock);
 	auto queueDetails = GetQueueHandle(TRANSFER);

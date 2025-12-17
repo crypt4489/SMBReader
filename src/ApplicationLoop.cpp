@@ -404,9 +404,9 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	for (uint32_t i = 0; i<frame; i++) {
-		VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, 0, i, 1);
-	}
+	
+	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, 0, 0, frame);
+	
 }
 
 int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
@@ -462,13 +462,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	hierarchialMatrix *= rotation;
 
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 0, 1);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 1, 1);
-	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 2, 1);
+	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 0, 1);
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 1, 1);
-	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 2, 1);
+	rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 	Geometry* geom = nullptr;
 
@@ -627,9 +623,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 0, 1);
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 1, 1);
-		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 2, 1);
+		rendInst->UpdateAllocation(&handles, textureHandles, sizeof(Handles), 0, 0, 3);
 
 
 		GraphicsIntermediaryPipelineInfo create = {

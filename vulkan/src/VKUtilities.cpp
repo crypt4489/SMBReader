@@ -276,7 +276,7 @@ namespace VK {
 				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 			}
 
-			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, int stride) {
+			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, size_t stride) {
 				
 				std::array<VkBufferCopy, 15> regions={0};
 				

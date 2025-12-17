@@ -753,7 +753,7 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	auto ref = TextVertex::getAttributeDescriptions();
 
 	generic->CreateVertexInput(bindings1.data(), 0, ref1.data(), 0);
-	text->CreateVertexInput(bindings.data(), 1, ref.data(), ref.size());
+	text->CreateVertexInput(bindings.data(), 1, ref.data(), static_cast<uint32_t>(ref.size()));
 
 	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
@@ -783,29 +783,40 @@ void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, si
 	
 	size_t intSize = allocations[handle].requestedSize;
 	size_t intOffset = allocations[handle].offset + offset;
+	size_t stride = 0;
+
+	if (size) 
+	{
+		intSize = size;
+	}
+
+	size_t rsize = allocations[handle].requestedSize;
+	size_t align = allocations[handle].alignment;
+
+	if (align - 1 & rsize) rsize = (rsize + (align - (align - 1 & rsize)));
 
 	if (frame)
 	{
-		size_t rsize = allocations[handle].requestedSize;
-		size_t align = allocations[handle].alignment;
-		if (align - 1 & rsize) rsize = (rsize + (align - (align - 1 & rsize)));
 		intOffset = allocations[handle].offset + (frame*rsize) + offset;
 	}
 
-	
-	if (size)
-		intSize = size;
+	if (copies > 1)
+	{
+		stride = rsize;
+	}
 
 	EntryHandle index = allocations[handle].memIndex;
 
 	if (index == globalIndex)
-		dev->WriteToHostBuffer(index, data, intSize, intOffset);
+		dev->WriteToHostBuffer(index, data, intSize, intOffset, copies, stride);
 	else if (index == globalDeviceBufIndex)
-		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, 0);
+		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, stride);
 }
 
 int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType)
 {
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
 	size_t allocSize = size;
 
 	if (minUniformAlignment - 1 & alignment)
@@ -824,7 +835,7 @@ int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, A
 	case PERDRAW:
 		break;
 	}
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	
 	size_t location = dev->GetMemoryFromBuffer(globalIndex, allocSize, alignment);
 
 	int index = allocations.Allocate();
@@ -841,9 +852,6 @@ int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, Al
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-
-
-
 	size_t allocSize = (size);
 
 	switch (allocType)
@@ -856,8 +864,6 @@ int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, Al
 	case PERDRAW:
 		break;
 	}
-
-
 
 	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
 
