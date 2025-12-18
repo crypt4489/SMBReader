@@ -12,3 +12,10 @@ void* SlabAllocator::Allocate(int _allocSize)
 	return (head + out);
 }
 
+int DeviceSlabAllocator::Allocate(int _allocSize)
+{
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
+
+	return (out);
+}
+

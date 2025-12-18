@@ -15,11 +15,12 @@
 
 ApplicationLoop* loop;
 
-std::array<std::string, 3> commandsStrings =
+std::array<std::string, 4> commandsStrings =
 {
 	"end",
 	"load",
-	"position"
+	"positionm",
+	"positiong",
 };
 
 struct Handles
@@ -41,7 +42,6 @@ static int globalBufferDescriptor;
 static int globalTexturesDescriptor;
 
 static int globalMeshLocation;
-static int globalMeshAllocator;
 static int globalMeshSize = 24 * KB;
 
 static bool imageVisible = true;
@@ -52,10 +52,10 @@ static char geometryObjectSpecificMemory[1 * MB];
 static char mainTextureCacheMemory[16 * MB];
 
 
-SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
-SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
-SlabAllocator vgeometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
-
+static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
+static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
+static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
+static DeviceSlabAllocator meshDeviceSpecificAlloc(globalMeshSize);
 
 static TextureDictionary mainDictionary;
 
@@ -69,6 +69,8 @@ struct Geometry
 {
 	int meshCount;
 	int meshStart;
+	int geometryInstanceLocalMemoryCount;
+	int geometryInstanceLocalMemoryStart;
 };
 
 struct Mesh
@@ -82,6 +84,8 @@ struct Mesh
 	int texuresCount;
 	int texturesStart;
 	int drawableIndex;
+	int meshInstanceLocalMemoryCount;
+	int meshInstanceLocalMemoryStart;
 	int meshInstanceDeviceMemoryCount;
 	int meshInstanceDeviceMemoryStart;
 	int meshDescriptor;
@@ -154,16 +158,70 @@ ApplicationLoop::~ApplicationLoop() {
 	delete mainWindow; 
 }
 
-void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vector<std::any>& args)
+void ApplicationLoop::SetPositonOfMesh(int meshIndex, const glm::vec3& pos)
+{
+	auto rendInst = VKRenderer::gRenderInstance;
+	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
+	Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+
+
+	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
+
+	handles->m = glm::translate(handles->m, pos);;
+
+	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
+
+}
+
+void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const glm::vec3& pos)
+{
+	auto rendInst = VKRenderer::gRenderInstance;
+	Geometry* geom = &geometryInstanceData.dataArray[geomIndex];
+	
+	int meshCount = geom->meshCount;
+	int meshStart = geom->meshStart;
+
+	for (int i = 0; i < meshCount; i++)
+	{
+		Mesh* mesh = &meshInstanceData.dataArray[meshStart + i];
+		Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+
+
+		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
+
+		handles->m = glm::translate(handles->m, pos);;
+
+		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
+	}
+
+}
+
+void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vector<std::string>& args)
 {
 
 	if (command == "load")
 	{
-		LoadThreadedWrapper(std::any_cast<std::string>(args.at(0)));
+		LoadThreadedWrapper(args.at(0));
 	}
 	else if (command == "end")
 	{
 		SetRunning(false);
+	} 
+	else if (command == "positionm")
+	{
+		int meshIndex = std::stoi(args.at(0));
+		float x1 = std::stof(args.at(1));
+		float y1 = std::stof(args.at(2));
+		float z1 = std::stof(args.at(3));
+		SetPositonOfMesh(meshIndex, glm::vec3(x1, y1, z1));
+	}
+	else if (command == "positiong")
+	{
+		int geomIndex = std::stoi(args.at(0));
+		float x1 = std::stof(args.at(1));
+		float y1 = std::stof(args.at(2));
+		float z1 = std::stof(args.at(3));
+		SetPositionOfGeometry(geomIndex, glm::vec3(x1, y1, z1));
 	}
 }
 
@@ -229,11 +287,7 @@ void ApplicationLoop::Execute()
 
 			MoveCamera(FPS);
 
-			//UpdateRenderables();
-
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
-
-			
 
 			if (index != ~0ui32) {
 				VKRenderer::gRenderInstance->SubmitFrame(index);
@@ -462,30 +516,34 @@ std::atomic<float> geoX = 0.0f;
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
+
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-	
-	//int objMemory = rendInst->GetAllocFromUniformBuffer(sizeof(glm::mat4) + sizeof(geoDef->axialBox), alignof(glm::mat4), PERFRAME);
+
 	int count = geoDef->numRenderables;
 
 	float xLoc = UpdateAtomic(geoX, 5.0f, 0.0f);
 
-	glm::mat4 hierarchialMatrix = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));;
-
 	
-
-	glm::mat4 rotation = CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
-
-	hierarchialMatrix *= rotation;
-
-//	rendInst->UpdateAllocation(&hierarchialMatrix, objMemory, 64, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
-
-	//rendInst->UpdateAllocation(&geoDef->axialBox, objMemory, sizeof(geoDef->axialBox), 64, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 	Geometry* geom = nullptr;
 
 	std::tie(std::ignore, geom) = geometryInstanceData.Allocate();
 
 	geom->meshStart = meshInstanceData.allocatorPtr;
+
+	geom->geometryInstanceLocalMemoryCount = 1;
+
+	glm::mat4 *geomSpecificData = (glm::mat4*)geometryObjectSpecificAlloc.Allocate(sizeof(glm::mat4));
+
+	geom->geometryInstanceLocalMemoryStart = geometryObjectData.Allocate(geomSpecificData);
+
+	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));;
+
+
+
+	glm::mat4 rotation = CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
+
+	*geomSpecificData *= rotation;
 
 	for (int i = 0; i<count; i++)
 	{
@@ -495,8 +553,10 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		SMBVertexTypes type = geoDef->vertexTypes[i];
 
 		Mesh* mesh = nullptr;
+
+		uint32_t meshIndex;
 		
-		std::tie(std::ignore, mesh) = meshInstanceData.Allocate();
+		std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
 
 		geom->meshCount++;
 
@@ -594,39 +654,41 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->deviceIndices = indexMemory;
 		mesh->deviceVertices = vertexMemory;
 		 
-		//mesh->meshInstanceMemoryCount = 1;
+		mesh->meshInstanceLocalMemoryCount = 1;
 
-		Handles handles{ 0 };
+		Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
 
-		//int textureHandles = rendInst->GetAllocFromUniformBuffer(sizeof(Handles), alignof(glm::mat4), PERFRAME);
+		mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
 
-		//mesh->meshInstanceMemoryStart = meshDeviceMemoryData.Allocate(textureHandles);
-
-		handles.numHandles = geoDef->materialsCount[i];
+		handles->numHandles = geoDef->materialsCount[i];
 
 		int base = geoDef->materialStart[i];
 
-		mesh->texturesStart = meshTextureHandles.AllocateN(handles.numHandles);
-		mesh->texuresCount = handles.numHandles;
+		mesh->texturesStart = meshTextureHandles.AllocateN(handles->numHandles);
+		mesh->texuresCount = handles->numHandles;
 
-		handles.vertexFlags = vertexFlags;
-		handles.stride = vertexSize;
+		handles->vertexFlags = vertexFlags;
+		handles->stride = vertexSize;
 
-		for (int ii = 0; ii < handles.numHandles; ii++)
+		for (int ii = 0; ii < handles->numHandles; ii++)
 		{
-			handles.handles[ii] = geoDef->materialsId[base+ii];
-			if (handles.handles[ii] == -1) handles.handles[ii] = 0;
-			meshTextureHandles.Update(mesh->texturesStart+ii, handles.handles[ii]);
+			handles->handles[ii] = geoDef->materialsId[base+ii];
+			if (handles->handles[ii] == -1) handles->handles[ii] = 0;
+			meshTextureHandles.Update(mesh->texturesStart+ii, handles->handles[ii]);
 		}
 
-		memcpy(&handles.minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
-		memcpy(&handles.m, &hierarchialMatrix, sizeof(glm::mat4));
+		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
+		memcpy(&handles->m, geomSpecificData, sizeof(glm::mat4));
+
+		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles));
+
+		mesh->meshInstanceDeviceMemoryCount = 1;
+		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 		
-		rendInst->UpdateAllocation(&handles, globalMeshLocation, sizeof(Handles), globalMeshAllocator, 0, 3);
+		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
 
-		uint32_t index = (globalMeshAllocator / sizeof(Handles));
 
-		globalMeshAllocator += sizeof(Handles);
+
 
 		int smallSliceOfHeaven = rendInst->GetAllocFromUniformBuffer(sizeof(uint32_t), alignof(glm::mat4), PERFRAME);
 
@@ -636,7 +698,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, 2);
 
-		rendInst->UpdateAllocation(&index, smallSliceOfHeaven, 4, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
+		rendInst->UpdateAllocation(&meshIndex, smallSliceOfHeaven, 4, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
@@ -826,7 +888,6 @@ void ApplicationLoop::InitializeRuntime()
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(glm::mat4), PERFRAME);;
-	globalMeshAllocator = 0;
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0);
 
@@ -923,21 +984,21 @@ void ApplicationLoop::ProcessCommands()
 		queueSema.Notify();
 		return;
 	}
-	std::vector<std::any> com = std::move(commands.front());
+	std::vector<std::string> com = std::move(commands.front());
 	commands.pop();
 	queueSema.Notify();
 	if (!com.size()) { std::cerr << "what are you doing\n"; return; }
-	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), std::any_cast<std::string>(com[0]));
+	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), com[0]);
 	if (mapFunc == std::end(commandsStrings)) return;
 	if (com.size() > 1)
-		ExecuteCommands(*mapFunc, { com[1] });
+		ExecuteCommands(*mapFunc, { com.begin()+1, com.end()});
 	else 
 		ExecuteCommands(*mapFunc, { });
 }
 
 
 
-void ApplicationLoop::AddCommandTS(std::vector<std::any>& com)
+void ApplicationLoop::AddCommandTS(std::vector<std::string>& com)
 {
 	SemaphoreGuard lock(std::ref(queueSema));
 	commands.push(std::move(com));
@@ -983,7 +1044,7 @@ void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag
 	flag->store(true);
 }
 
-void ApplicationLoop::FindWords(std::string words, std::vector<std::any>& out)
+void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out)
 {
 	size_t size = words.length();
 	int i = 0, j = 1;
@@ -1064,7 +1125,7 @@ void ApplicationLoop::ScanSTDIN(std::stop_token stoken)
 
 		std::string output(inputBuffer, numberOfBytesRead - 2);
 
-		std::vector<std::any> comandargs{};
+		std::vector<std::string> comandargs{};
 
 		FindWords(output, comandargs);
 

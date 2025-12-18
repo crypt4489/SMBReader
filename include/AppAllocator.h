@@ -38,6 +38,18 @@ struct SlabAllocator
 	void* Allocate(int _allocSize);
 };
 
+struct DeviceSlabAllocator
+{
+	int dataSize;
+	std::atomic<int> dataAllocator;
+	constexpr DeviceSlabAllocator(int _size) :
+		dataSize(_size), dataAllocator(0)
+	{
+
+	}
+	int Allocate(int _allocSize);
+};
+
 
 template <typename T_Type>
 concept ValueType = (std::is_integral_v<T_Type> || std::is_pointer<T_Type>::value);

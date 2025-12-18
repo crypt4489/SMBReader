@@ -28,7 +28,7 @@ public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
 
-	void ExecuteCommands(const std::string& command, const std::vector<std::any>& args);
+	void ExecuteCommands(const std::string& command, const std::vector<std::string>& args);
 
 	void Execute();
 
@@ -38,7 +38,7 @@ public:
 
 	void ProcessCommands();
 
-	void AddCommandTS(std::vector<std::any>& com);
+	void AddCommandTS(std::vector<std::string>& com);
 
 	void SetRunning(bool set = false);
 
@@ -48,7 +48,7 @@ public:
 
 	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string file);
 
-	void FindWords(std::string words, std::vector<std::any>& out);
+	void FindWords(std::string words, std::vector<std::string>& out);
 
 	void ScanSTDIN(std::stop_token stoken);
 
@@ -70,9 +70,13 @@ public:
 
 	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
 
+	void SetPositonOfMesh(int meshIndex, const glm::vec3& pos);
+
+	void SetPositionOfGeometry(int geomIndex, const glm::vec3& pos);
+
 	ProgramArgs& args;
 	Semaphore queueSema;
-	std::queue<std::vector<std::any>> commands;
+	std::queue<std::vector<std::string>> commands;
 	bool running, cleaned;
 	WindowManager* mainWindow;
 	
