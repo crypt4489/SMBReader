@@ -21,6 +21,8 @@ namespace API {
 	VkPrimitiveTopology ConvertTopology(PrimitiveType type);
 }
 
+
+/*
 template <int N>
 struct ThreadedRecordBuffer
 {
@@ -101,7 +103,7 @@ struct ThreadedRecordBuffer
 
 		
 	}
-};
+}; */
 
 
 struct GraphicsIntermediaryPipelineInfo
@@ -201,8 +203,6 @@ public:
 
 	~RenderInstance();
 
-	void BuildMainDrawPacket(RecordingBufferObject* obj, uint32_t frameInFlight);
-
 	void CreateDepthImage( uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 
 	void DestroySwapChainAttachments();
@@ -266,11 +266,7 @@ public:
 
 	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
 
-	void InvalidateRecordBuffer(uint32_t i);
-
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
-
-	void MonolithicDrawingTask(EntryHandle commandBufferIndex, uint32_t imageIndex);
 
 	void DestoryTexture(EntryHandle handle);
 
@@ -294,8 +290,6 @@ public:
 
 	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
 
-	void LaunchRecording();
-
 	void UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount);
 
 	int GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex);
@@ -307,7 +301,7 @@ public:
 	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
-	std::array<EntryHandle, 3> currentCBIndex;
+	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 
 	uint32_t currentMSAALevel = 0;
 	uint32_t maxMSAALevels = 0;
@@ -331,7 +325,7 @@ public:
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
-	std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
+	//std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	ShaderGraphsHolder<4, 6> vulkanShaderGraphs{};
 	

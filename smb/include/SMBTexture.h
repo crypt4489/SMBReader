@@ -45,7 +45,7 @@ public:
 	uint32_t* imageSizes;
 	std::byte* data;
 	uint32_t id;
-
+	const char* name;
 
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
 	~SMBTexture()
@@ -70,6 +70,8 @@ public:
 		this->type = other.type;
 		this->id = other.id;
 		this->cumulativeSize = other.cumulativeSize;
+
+		this->name = std::move(other.name);
 		other.data = nullptr;
 		other.imageSizes = nullptr;
 	};
@@ -83,6 +85,7 @@ public:
 		this->type = other.type;
 		this->id = other.id;
 		this->cumulativeSize = other.cumulativeSize;
+		this->name = other.name;
 		other.data = nullptr;
 		other.imageSizes = nullptr;
 	};

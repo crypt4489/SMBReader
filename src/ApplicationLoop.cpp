@@ -167,9 +167,9 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const glm::vec3& pos)
 
 	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-	handles->m = glm::translate(handles->m, pos);;
+	handles->m[3] = glm::vec4(pos, 1.0f);
 
-	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
+	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 }
 
@@ -189,9 +189,9 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const glm::vec3& pos)
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-		handles->m = glm::translate(handles->m, pos);;
+		handles->m[3] = glm::vec4(pos, 1.0f);
 
-		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
+		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 	}
 
 }
@@ -209,6 +209,8 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 	} 
 	else if (command == "positionm")
 	{
+		if (args.size() != 4)
+			return;
 		int meshIndex = std::stoi(args.at(0));
 		float x1 = std::stof(args.at(1));
 		float y1 = std::stof(args.at(2));
@@ -217,6 +219,8 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 	}
 	else if (command == "positiong")
 	{
+		if (args.size() != 4)
+			return;
 		int geomIndex = std::stoi(args.at(0));
 		float x1 = std::stof(args.at(1));
 		float y1 = std::stof(args.at(2));
@@ -263,6 +267,7 @@ void ApplicationLoop::Execute()
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
+					printf("%f\n", FPS);
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -405,9 +410,9 @@ void ApplicationLoop::MoveCamera(double fps)
 {
 	bool moved = false;
 
-	float stepfactor = 10.0 / fps;
+	float stepfactor = 50.0f / static_cast<float>(fps);
 
-	double angleFactor = 10.0 / fps;
+	double angleFactor = 20.0 / fps;
 
 	if (camMovements[RIGHT])
 	{
@@ -537,7 +542,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	geom->geometryInstanceLocalMemoryStart = geometryObjectData.Allocate(geomSpecificData);
 
-	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));;
+	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(0.f, xLoc, 0.f));
 
 
 
@@ -547,7 +552,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	for (int i = 0; i<count; i++)
 	{
-
 		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
 
 		SMBVertexTypes type = geoDef->vertexTypes[i];
@@ -568,15 +572,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->verticesCount = vertexCount;
 
-		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
-
-		mesh->indexId = meshIndexData.Allocate(indices);
+	
 		
 		int vertexSize = 0;
 
 		void* vertexData;
 
-		bool decompressed = true;
+		bool decompressed = false;
 
 		switch (type)
 		{
@@ -604,7 +606,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->vertexSize = vertexSize;
 
-		mesh->indexSize = 2;
+		
 
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
@@ -612,7 +614,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		
 		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
 
-		SMBCopyIndices(geoDef, i, file, indices);
+		
 
 
 		int vertexFlags = POSITION | TEXTURES1;
@@ -646,12 +648,30 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
 
+		int indexMemory = 0;
+
 		mesh->meshDescriptor = graphicDesc;
 		
 		int vertexMemory = rendInst->GetAllocFromDeviceStorageBuffer(vertexSize * vertexCount, 16, STATIC);
-		int indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
 
-		mesh->deviceIndices = indexMemory;
+		if (geoDef->renderablesTypes[i] == IVBRENDERABLE)
+		{
+			mesh->indexSize = 2;
+
+			uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
+
+			mesh->indexId = meshIndexData.Allocate(indices);
+
+			SMBCopyIndices(geoDef, i, file, indices);
+
+			indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
+
+			mesh->deviceIndices = indexMemory;
+
+			rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
+		}
+
+		
 		mesh->deviceVertices = vertexMemory;
 		 
 		mesh->meshInstanceLocalMemoryCount = 1;
@@ -685,7 +705,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->meshInstanceDeviceMemoryCount = 1;
 		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 		
-		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, 3);
+		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 
 
@@ -702,7 +722,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
-		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
+		
 
 		
 
@@ -1014,9 +1034,6 @@ void ApplicationLoop::LoadObject(const std::string& file)
 	SMBFile SMB(file);
 
 	LoadSMBFile(SMB);
-
-	for (uint32_t i = 0; i < VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT; i++)
-		VKRenderer::gRenderInstance->InvalidateRecordBuffer(i);
 
 }
 

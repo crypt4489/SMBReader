@@ -443,6 +443,12 @@ void RecordingBufferObject::CommandBufferReset()
 	vkResetCommandBuffer(cbBufferHandler.buffer, 0);
 }
 
+void RecordingBufferObject::CommandBufferPool()
+{
+	VkCommandPool pool = vkDeviceHandle->GetCommandPool(cbBufferHandler.poolIndex);
+	vkResetCommandPool(vkDeviceHandle->device, pool, 0);
+}
+
 void RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count)
 {
 	VkCommandBuffer* lbuffers = reinterpret_cast<VkCommandBuffer*>(vkDeviceHandle->AllocFromDeviceCache(sizeof(VkCommandBuffer) * count));
@@ -1362,7 +1368,6 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 	allocInfo.commandPool = GetCommandPool(poolIndex);
 	allocInfo.level = level;
 	allocInfo.commandBufferCount = numberOfCommandBuffers;
-
 	VkCommandBuffer* l = reinterpret_cast<VkCommandBuffer*>(AllocFromDeviceCache(sizeof(VkCommandBuffer) * numberOfCommandBuffers));
 
 	if (vkAllocateCommandBuffers(device, &allocInfo, l) != VK_SUCCESS) {
@@ -2440,7 +2445,7 @@ void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffset
 }
 
 
-int32_t VKDevice::WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence)
+int32_t VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 {
 	std::shared_lock lock(deviceLock);
 	auto vkcb = GetCommandBuffer(bufferIndex);
@@ -2455,10 +2460,22 @@ int32_t VKDevice::WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, Ent
 	if (res == VK_TIMEOUT)
 		return -1;
 
-	if (resetfence)
-		vkResetFences(device, 1, &fence);
-
 	return 0;
+}
+
+void VKDevice::CommandBufferResetFence(EntryHandle bufferIndex)
+{
+	std::shared_lock lock(deviceLock);
+	auto vkcb = GetCommandBuffer(bufferIndex);
+
+	if (vkcb->fenceIdx == ~0ui64)
+		return;
+
+	VkFence fence = GetFence(vkcb->fenceIdx);
+
+	vkResetFences(device, 1, &fence);
+
+	return;
 }
 
 

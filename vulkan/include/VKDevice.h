@@ -54,14 +54,14 @@ struct VKCommandBuffer
 {
 	VKCommandBuffer() :
 		buffer(VK_NULL_HANDLE), fenceIdx(~0U), poolIndex(~0U), queueIndex(~0U), queueFamilyIndex(~0U) {};
-	VKCommandBuffer(VkCommandBuffer _b, EntryHandle i, uint32_t pi, uint32_t qi, uint32_t qfi)
+	VKCommandBuffer(VkCommandBuffer _b, EntryHandle i, EntryHandle pi, uint32_t qi, uint32_t qfi)
 		: buffer(_b), fenceIdx(i), poolIndex(pi), queueIndex(qi), queueFamilyIndex(qfi) {};
 	VKCommandBuffer(const VKCommandBuffer& other) = default;
 	VKCommandBuffer(VKCommandBuffer&& other) = default;
 
 	VkCommandBuffer buffer;
 	EntryHandle fenceIdx;
-	uint32_t poolIndex;
+	EntryHandle poolIndex;
 	uint32_t queueIndex;
 	uint32_t queueFamilyIndex;
 };
@@ -130,6 +130,8 @@ struct RecordingBufferObject
 	void EndRecordingCommand();
 
 	void CommandBufferReset();
+
+	void CommandBufferPool();
 
 	void ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
 
@@ -487,6 +489,8 @@ struct VKDevice
 
 	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
 
+	void CommandBufferResetFence(EntryHandle bufferIndex);
+
 	VkShaderStageFlagBits ConvertShaderFlags(const std::string& filename);
 
 	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
@@ -523,7 +527,7 @@ struct VKDevice
 
 	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet);
 
-	int32_t WaitOnCommandBufferAndPossibleResetFence(uint64_t timeout, EntryHandle bufferIndex, bool resetfence);
+	int32_t CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex);
 	
 	void WaitOnDevice();
 
