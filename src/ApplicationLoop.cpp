@@ -246,8 +246,6 @@ void ApplicationLoop::Execute()
 
 		ExecuteCommands("load", { args.inputFile.string() });
 
-		//ExecuteCommands("load", { std::string("C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\strangernew.smb") });
-
 		int i = 0, j = 1;
 
 		LARGE_INTEGER startTime;
@@ -267,7 +265,7 @@ void ApplicationLoop::Execute()
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
-					printf("%f\n", FPS);
+					//printf("%f\n", FPS);
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -410,9 +408,9 @@ void ApplicationLoop::MoveCamera(double fps)
 {
 	bool moved = false;
 
-	float stepfactor = 50.0f / static_cast<float>(fps);
+	float stepfactor = 15.0f / static_cast<float>(fps);
 
-	double angleFactor = 20.0 / fps;
+	double angleFactor = 15.0 / fps;
 
 	if (camMovements[RIGHT])
 	{
@@ -542,9 +540,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	geom->geometryInstanceLocalMemoryStart = geometryObjectData.Allocate(geomSpecificData);
 
-	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(0.f, xLoc, 0.f));
-
-
+	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));
 
 	glm::mat4 rotation = CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
 
@@ -552,7 +548,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	for (int i = 0; i<count; i++)
 	{
-		if (geoDef->renderablesTypes[i] == VBRENDERABLE) continue;
 
 		SMBVertexTypes type = geoDef->vertexTypes[i];
 
@@ -571,8 +566,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->indicesCount = indexCount;
 
 		mesh->verticesCount = vertexCount;
-
-	
 		
 		int vertexSize = 0;
 
@@ -654,24 +647,22 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		
 		int vertexMemory = rendInst->GetAllocFromDeviceStorageBuffer(vertexSize * vertexCount, 16, STATIC);
 
-		if (geoDef->renderablesTypes[i] == IVBRENDERABLE)
-		{
-			mesh->indexSize = 2;
-
-			uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
-
-			mesh->indexId = meshIndexData.Allocate(indices);
-
-			SMBCopyIndices(geoDef, i, file, indices);
-
-			indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
-
-			mesh->deviceIndices = indexMemory;
-
-			rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
-		}
-
 		
+		mesh->indexSize = 2;
+
+		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
+
+		mesh->indexId = meshIndexData.Allocate(indices);
+
+		SMBCopyIndices(geoDef, i, file, indices);
+
+		indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
+
+		mesh->deviceIndices = indexMemory;
+
+		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
+		
+	
 		mesh->deviceVertices = vertexMemory;
 		 
 		mesh->meshInstanceLocalMemoryCount = 1;
@@ -781,7 +772,21 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 			*geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
 
+			int renderableCount = (*geoDef)->numRenderables;
+
+			int *renderableType = (*geoDef)->renderablesTypes;
+
 			(*geoDef)->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
+
+			for (int ii = 0; ii<renderableCount; ii++)
+			{
+				if (renderableType[ii] == IVRENDERABLE)
+				{
+					(*geoDef)->indexOffsetInArchive[ii] += chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset;
+				}
+			}
+
+			
 		
 
 			break;

@@ -67,7 +67,7 @@ struct GEOGeometryBase
 #define MaterialDefSize 136 //bytes
 #define GeometryBaseDefSize 72 //bytes
 
-#define RenderableByVertex 5292387491162064043
+#define RenderableByIndexNonPB 5292387491162064043
 #define RenderableByIndex 5792287050554945273
 
 
@@ -80,8 +80,8 @@ constexpr float bx = 0.0019550342f;
 
 enum RenderableFlags
 {
-	VBRENDERABLE = 0,
-	IVBRENDERABLE = 1
+	IVRENDERABLE = 0,
+	PBIVRENDERABLE = 1
 };
 
 extern int VertexCompressedSizes[3];

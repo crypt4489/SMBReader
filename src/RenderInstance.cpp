@@ -131,6 +131,13 @@ namespace API {
 		case TRISTRIPS:
 			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 			break;
+		case TRIFAN:
+			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+			break;
+		case PrimitiveType::POINTSLIST:
+			top = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+			break;
+
 		}
 
 		return top;
@@ -714,7 +721,7 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	generic->CreateVertexInput(bindings1.data(), 0, ref1.data(), 0);
 	text->CreateVertexInput(bindings.data(), 1, ref.data(), static_cast<uint32_t>(ref.size()));
 
-	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), true);
+	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 
 	generic->CreateViewportState(1, 1);

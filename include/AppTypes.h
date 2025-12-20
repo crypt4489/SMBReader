@@ -38,4 +38,6 @@ enum PrimitiveType
 {
 	TRIANGLES = 0,
 	TRISTRIPS = 6,
+	TRIFAN = 7,
+	POINTSLIST = 8
 };

@@ -163,25 +163,28 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
 			geoChunk->indicesCount[renderableIndex] = indexCount;
 			geoChunk->verticesCount[renderableIndex] = vertexCount;
-			geoChunk->renderablesTypes[renderableIndex] = IVBRENDERABLE;
+			geoChunk->renderablesTypes[renderableIndex] = PBIVRENDERABLE;
 			geoChunk->vertexTypes[renderableIndex] = vertexType;
 			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
 			geoChunk->indexOffsetInArchive[renderableIndex] = indexOffset;
 			material += (64 + 26);
 			renderableIndex++;
 		}
-		else if (definitionID == RenderableByVertex)
+		else if (definitionID == RenderableByIndexNonPB)
 		{
 			char* renderable = material + 4 + 8 + 8;
 			int vertexCount = *((int*)(renderable + (18 + 16)));
 			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
+			int indexCount = *((int*)(renderable + (18 + 16 + 16+4)));
+			int indexOffset = *((int*)(renderable + (18 + 16 + 16+8)));
 			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
 			
 			geoChunk->verticesCount[renderableIndex] = vertexCount;
-			geoChunk->renderablesTypes[renderableIndex] = VBRENDERABLE;
+			geoChunk->renderablesTypes[renderableIndex] = IVRENDERABLE;
 			geoChunk->vertexTypes[renderableIndex] = vertexType;
 			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
-
+			geoChunk->indicesCount[renderableIndex] = indexCount;
+			geoChunk->indexOffsetInArchive[renderableIndex] = indexOffset;
 			material += (64 + 18);
 			renderableIndex++;
 		}
@@ -303,7 +306,6 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
 int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 {
 	int type = geoDef->renderablesTypes[renderableIndex];
-	if (type != IVBRENDERABLE) return -1;
 	return sizeof(uint16_t) * geoDef->indicesCount[renderableIndex];
 }
 
@@ -443,9 +445,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 
 				int16_t s[3];
 
-				s[0] = (((int16_t)g[13] & 0xff) << 8) | g[12];
-				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
-				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
+				s[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
+				s[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
+				s[2] = (((int16_t)g[13] & 0xff) << 8) | g[12];
 
 				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
 
@@ -464,56 +466,62 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut)
 {
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
-	if (renderableType != IVBRENDERABLE) return;
 	
 	int iCount = geoDefinition->indicesCount[renderableIndex];
 
 	FileHandle* handle = FileManager::GetFile(file.id);
 
-	handle->streamHandle.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex]);
+	uint16_t* indices = (uint16_t*)indexDataOut;
 
 	auto& stream = handle->streamHandle;
 
-	bool started = false;
+	if (renderableType == PBIVRENDERABLE)
+	{
+		stream.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex]);
 
-	int iter = 0;
+		int iter = 0;
 
-	uint16_t* indices = (uint16_t*)indexDataOut;
-
-	while (iCount > 0) {
+		while (iCount > 0) {
 
 
-		uint32_t god;
+			uint32_t god;
 
-		stream.read((char*)&god, 4);
+			stream.read((char*)&god, 4);
 
-		uint32_t stride = (god >> 0x12) & 0x7ff;
-		uint32_t indexType = (god & 0x3ffff);
+			uint32_t stride = (god >> 0x12) & 0x7ff;
+			uint32_t indexType = (god & 0x3ffff);
 
-		if (indexType == 0x1800)
-		{
-			stream.read(
-				(char*)indices,
-				stride * 4
-			);
+			if (indexType == 0x1800)
+			{
+				stream.read(
+					(char*)indices,
+					stride * 4
+				);
 
-			indices += (stride * 2);
+				indices += (stride * 2);
 
-			iCount -= (stride * 2);
+				iCount -= (stride * 2);
+			}
+
+			else if (indexType == 0x1808)
+			{
+				stream.read((char*)indices, 2);
+				iCount--;
+			}
+			else if (indexType == 0x17fc) {
+				
+			}
 		}
 
-		else if (indexType == 0x1808)
-		{
-			stream.read((char*)indices, 2);
-			iCount--;
-		}
-		else if (indexType == 0x17fc) {
-			if (started) break;
-			stream.read(
-				(char*)&geoDefinition->primitiveTypes[renderableIndex],
-				4
-			);
-			
-		}
+	} 
+	else if (renderableType == IVRENDERABLE)
+	{
+		stream.seekg(geoDefinition->indexOffsetInArchive[renderableIndex]);
+
+		stream.read((char*)indices, iCount * 2);
 	}
+
+	
+
+	
 }
