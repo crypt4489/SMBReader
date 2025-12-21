@@ -264,7 +264,7 @@ public:
 
 	void CreateRenderTargetData(int* desc, int descCount);
 
-	void DrawScene(EntryHandle cbindex, uint32_t imageIndex);
+	void DrawScene(uint32_t imageIndex);
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 

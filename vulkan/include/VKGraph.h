@@ -23,7 +23,7 @@ struct VKGraph {
 
 	bool SetActive(uint32_t objIndex, bool active);
 
-	std::shared_mutex objectGuard;
+	//std::shared_mutex objectGuard;
 
 	EntryHandle* currentPipeline;
 	EntryHandle* descriptorId;

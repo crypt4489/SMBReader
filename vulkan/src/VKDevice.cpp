@@ -443,7 +443,7 @@ void RecordingBufferObject::CommandBufferReset()
 	vkResetCommandBuffer(cbBufferHandler.buffer, 0);
 }
 
-void RecordingBufferObject::CommandBufferPool()
+void RecordingBufferObject::ResetCommandPoolForBuffer()
 {
 	VkCommandPool pool = vkDeviceHandle->GetCommandPool(cbBufferHandler.poolIndex);
 	vkResetCommandPool(vkDeviceHandle->device, pool, 0);

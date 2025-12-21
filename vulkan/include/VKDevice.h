@@ -131,7 +131,7 @@ struct RecordingBufferObject
 
 	void CommandBufferReset();
 
-	void CommandBufferPool();
+	void ResetCommandPoolForBuffer();
 
 	void ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
 

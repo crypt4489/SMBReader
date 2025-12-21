@@ -384,9 +384,11 @@ uint32_t RenderInstance::BeginFrame()
 		return imageIndex;
 	}
 
+	
+
 	dev->CommandBufferResetFence(currentCBIndex[currentFrame]);
 	
-	DrawScene(currentCBIndex[currentFrame], imageIndex);
+	//DrawScene(imageIndex);
 
 	return imageIndex;
 }
@@ -400,10 +402,10 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 
 	if (!res || resizeWindow) {
-	
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 		int ret = RecreateSwapChain();
 		if (ret) resizeWindow = false;
+		return -1;
 	}
 	
 	currentFrame = (currentFrame  + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1711,8 +1713,10 @@ ShaderResourceHeader* RenderInstance::PopShaderResourceBarrier(int descriptorSet
 }
 
 
-void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
+void RenderInstance::DrawScene(uint32_t imageIndex)
 {
+	EntryHandle cbindex = currentCBIndex[currentFrame];
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 
@@ -1721,7 +1725,7 @@ void RenderInstance::DrawScene(EntryHandle cbindex, uint32_t imageIndex)
 
 	auto rcb = dev->GetRecordingBufferObject(cbindex);
 
-	rcb.CommandBufferPool();
+	rcb.ResetCommandPoolForBuffer();
 
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 

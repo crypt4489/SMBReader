@@ -13,7 +13,6 @@ VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCo
 
 void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
-	std::shared_lock lock(objectGuard);
 
 	for (uint32_t i = 0; i<pipelineObjCount; i++)
 	{
@@ -62,7 +61,6 @@ VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamic
 
 void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 {
-	std::shared_lock lock(objectGuard);
 
 	for (uint32_t i = 0; i < pipelineObjCount; i++)
 	{
@@ -104,7 +102,6 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 uint32_t VKGraph::AddObject(EntryHandle obj)
 {
-	std::unique_lock lock(objectGuard);
 	uint32_t objIndex = pipelineObjCount++;
 	objects[objIndex] = obj;
 	activeIndicators[objIndex] = true;
@@ -113,13 +110,11 @@ uint32_t VKGraph::AddObject(EntryHandle obj)
 
 void VKGraph::AddDynamicOffset(uint32_t offset)
 {
-	std::unique_lock lock(objectGuard);
 	dynamicOffsets[dynamicOffsetCount++] = offset;
 }
 
 bool VKGraph::SetActive(uint32_t objIndex, bool active)
 {
-	std::unique_lock lock(objectGuard);
 	bool ret = ((bool)activeIndicators[objIndex]) == active;
 	if (!ret) 
 		activeIndicators[objIndex] = active;
