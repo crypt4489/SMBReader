@@ -15,7 +15,7 @@ struct VKGraph {
 	
 	VKGraph& operator=(VKGraph&& other) = delete;
 
-	VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
+	VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d);
 
 	uint32_t AddObject(EntryHandle obj);
 
@@ -23,21 +23,25 @@ struct VKGraph {
 
 	bool SetActive(uint32_t objIndex, bool active);
 
-	//std::shared_mutex objectGuard;
+	void UpdateLists();
 
-	EntryHandle* currentPipeline;
+	EntryHandle currentPipeline;
+	
+	uint32_t descriptorCount;
 	EntryHandle* descriptorId;
 	uint32_t* dynamicsPerSet;
+
+	uint32_t dynamicOffsetSize, dynamicOffsetCount;
 	uint32_t* dynamicOffsets;
+
+	uint32_t pipelineObjSize;
+	std::atomic<uint32_t> pipelineObjCount;
 	EntryHandle* objects;
+	EntryHandle* objectsCopies;
 	uint8_t* activeIndicators;
+	uint8_t* activeIndicatorsCopies;
+
 	VKDevice* dev;
-
-	uint32_t descriptorCount;	
-	uint32_t maxFramesInFlight;
-
-	uint32_t dynamicOffsetCount, dynamicOffsetSize;
-	uint32_t pipelineObjCount, pipelineObjSize;
 };
 
 struct VKRenderGraph : public VKGraph
@@ -52,7 +56,7 @@ struct VKRenderGraph : public VKGraph
 
 	VKRenderGraph& operator=(VKRenderGraph&& other) = delete;
 
-	VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
+	VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d);
 
 	void DrawScene(RecordingBufferObject* rbo, uint32_t frameNum);
 
@@ -70,7 +74,7 @@ struct VKComputeGraph : public VKGraph
 
 	VKComputeGraph& operator=(VKComputeGraph&& other) = delete;
 
-	VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d);
+	VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d);
 
 	void DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum);
 

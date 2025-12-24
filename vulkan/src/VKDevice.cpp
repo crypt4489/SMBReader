@@ -617,13 +617,13 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 	return poolIndex;
 }
 
-EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount, uint32_t maxFramesInFlight)
+EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount)
 {
 	std::shared_lock lock(deviceLock);
 	
 	auto graph = reinterpret_cast<VKComputeGraph*>(AllocFromPerDeviceData(sizeof(VKComputeGraph)));
 
-	graph = std::construct_at(graph, &deviceDataAlloc, dynamicCount, descriptorCount, maxPipelineCount, maxFramesInFlight, this);
+	graph = std::construct_at(graph, &deviceDataAlloc, dynamicCount, descriptorCount, maxPipelineCount, this);
 
 	EntryHandle ret = AddVkTypeToEntry(graph);
 
@@ -1303,7 +1303,7 @@ EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 #define MAX_PIPELINE_OBJECTS 50
 #define MAX_DYNAMIC_OFFSETS 15
 
-EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount, uint32_t maxFramesInFlight)
+EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount)
 {
 	std::shared_lock lock(deviceLock);
 
@@ -1311,7 +1311,7 @@ EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t 
 
 	renderPassDataHandle->target = renderTarget;
 
-	auto graph = std::construct_at(&renderPassDataHandle->graph, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, maxFramesInFlight, this);
+	auto graph = std::construct_at(&renderPassDataHandle->graph, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, this);
 
 	return AddVkTypeToEntry(renderPassDataHandle);
 }

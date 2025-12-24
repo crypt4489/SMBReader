@@ -455,7 +455,7 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 		{
 			swapChain->CreateRenderTarget(i, renderPasses[i]);
 			
-			swapchainRenderTargets[i] = dev->CreateRenderTargetData(swapChain->renderTargetIndex[i], 2, MAX_FRAMES_IN_FLIGHT);
+			swapchainRenderTargets[i] = dev->CreateRenderTargetData(swapChain->renderTargetIndex[i], 2);
 			
 		}
 	}
@@ -1240,7 +1240,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreatePipelines();
 
-	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0, MAX_FRAMES_IN_FLIGHT);
+	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
 
 	
 
@@ -1817,5 +1817,18 @@ void RenderInstance::DestroyBufferView(EntryHandle bufferViewIndex)
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	dev->DestroyBufferView(bufferViewIndex);
+}
+
+void RenderInstance::EndFrame()
+{
+	EntryHandle cbindex = currentCBIndex[currentFrame];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
+	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
+
+	cGraph->UpdateLists();
+	graph->UpdateLists();
 }
 

@@ -4,9 +4,9 @@
 #include "VKDevice.h"
 #include "VKPipelineObject.h"
 
-VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
+VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d)
 	:
-	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, maxConcurrentAccesses, _d)
+	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, _d)
 {
 	
 };
@@ -14,7 +14,9 @@ VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCo
 void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 
-	for (uint32_t i = 0; i<pipelineObjCount; i++)
+	uint32_t count = pipelineObjCount.load();
+
+	for (uint32_t i = 0; i < count; i++)
 	{
 
 		if (!activeIndicators[i]) continue;
@@ -25,9 +27,9 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
-		if (handle != currentPipeline[frameNum])
+		if (handle != currentPipeline)
 		{
-			currentPipeline[frameNum] = handle;
+			currentPipeline = handle;
 
 			rbo->BindGraphicsPipeline(handle);
 			
@@ -49,12 +51,12 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 		obj->Draw(rbo, frameNum, descriptorCount);
 	}
 
-	currentPipeline[frameNum] = EntryHandle();
+	currentPipeline = EntryHandle();
 }
 
-VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
+VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d)
 	: 
-	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, maxConcurrentAccesses, _d)
+	VKGraph(allocator, dynamicCount, descriptorCount, pipelineCount, _d)
 {
 
 }
@@ -62,7 +64,9 @@ VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamic
 void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 
-	for (uint32_t i = 0; i < pipelineObjCount; i++)
+	uint32_t count = pipelineObjCount.load();
+
+	for (uint32_t i = 0; i < count; i++)
 	{
 		EntryHandle objIndex = objects[i];
 
@@ -72,9 +76,9 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 		EntryHandle handle = objHeader->pipelineID;
 
-		if (handle != currentPipeline[frameNum])
+		if (handle != currentPipeline)
 		{
-			currentPipeline[frameNum] = handle;
+			currentPipeline = handle;
 
 			rbo->BindComputePipeline(handle);
 
@@ -97,41 +101,52 @@ void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 
 	}
 
-	currentPipeline[frameNum] = EntryHandle();
+	currentPipeline = EntryHandle();
 }
 
 uint32_t VKGraph::AddObject(EntryHandle obj)
 {
-	uint32_t objIndex = pipelineObjCount++;
-	objects[objIndex] = obj;
-	activeIndicators[objIndex] = true;
+	uint32_t objIndex = pipelineObjCount.fetch_add(1);
+	objectsCopies[objIndex] = obj;
+	activeIndicatorsCopies[objIndex] = true;
 	return objIndex;
 }
 
 void VKGraph::AddDynamicOffset(uint32_t offset)
 {
-	dynamicOffsets[dynamicOffsetCount++] = offset;
+	uint32_t index = dynamicOffsetCount++;
+	dynamicOffsets[index] = offset;
 }
 
 bool VKGraph::SetActive(uint32_t objIndex, bool active)
 {
-	bool ret = ((bool)activeIndicators[objIndex]) == active;
-	if (!ret) 
-		activeIndicators[objIndex] = active;
-	return ret;
+	activeIndicatorsCopies[objIndex] = active;
+	return active;
 }
 
-VKGraph::VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, uint32_t maxConcurrentAccesses, VKDevice* _d)
+void VKGraph::UpdateLists()
+{
+	uint32_t count = pipelineObjSize;
+
+	memcpy(objects, objectsCopies, sizeof(EntryHandle) * count);
+	memcpy(activeIndicators, activeIndicatorsCopies, sizeof(uint8_t) * count);
+
+	std::swap(activeIndicators, activeIndicatorsCopies);
+
+	std::swap(objects, objectsCopies);
+}
+
+VKGraph::VKGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d)
 	:
 	dynamicOffsetSize(dynamicCount), pipelineObjSize(pipelineCount),
-	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(descriptorCount), maxFramesInFlight(maxConcurrentAccesses)
+	pipelineObjCount(0), dynamicOffsetCount(0), dev(_d), descriptorCount(descriptorCount)
 {
 	dynamicOffsets = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * dynamicOffsetSize));
 	objects = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pipelineObjSize));
+	objectsCopies = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * pipelineObjSize));
 	activeIndicators = reinterpret_cast<uint8_t*>(allocator->Alloc(pipelineObjSize));
+	activeIndicatorsCopies = reinterpret_cast<uint8_t*>(allocator->Alloc(pipelineObjSize));
 	descriptorId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descriptorCount));
 	dynamicsPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descriptorCount));
-	currentPipeline = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFramesInFlight));
-	for (uint32_t i = 0; i < maxConcurrentAccesses; i++)
-		currentPipeline[i] = EntryHandle();
+	
 }

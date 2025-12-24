@@ -278,56 +278,27 @@ void ApplicationLoop::Execute()
 
 		while (running)
 		{
-			//std::string base = std::string("FPS : ");
-			//std::string newstring = base + std::to_string(FPS);
-			//size_t stringLoc = base.size() - 1;
-			//text1->UpdateText(newstring);
-			//TextManager::UpdateVertexBuffer(text1, stringLoc);
-
-		
-
 			if (mainWindow->ShouldCloseWindow()) break;
 
 			glfwPollEvents();
 
 			MoveCamera(FPS);
 
-			//auto time1 = std::chrono::high_resolution_clock::now();
-
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
-
-			//auto time2 = std::chrono::high_resolution_clock::now();
-			//auto delta = time2 - time1;
-			//tsb += std::chrono::duration_cast<std::chrono::microseconds>(delta).count();
-
-			
 
 			if (index != ~0ui32) {
 				VKRenderer::gRenderInstance->DrawScene(index);
-				//auto timen1 = std::chrono::high_resolution_clock::now();
-				VKRenderer::gRenderInstance->SubmitFrame(index);
-				//auto timen2 = std::chrono::high_resolution_clock::now();
-				//auto deltan = timen2 - timen1;
-				//tss += std::chrono::duration_cast<std::chrono::microseconds>(deltan).count();
 
-				
+				VKRenderer::gRenderInstance->SubmitFrame(index);
 			}
 			
+			VKRenderer::gRenderInstance->EndFrame();
 
 			ProcessCommands();
 
 			ThreadManager::ASyncThreadsDone();
 
-			//double ts = (double)frameCounter;
-
 			fps();
-
-			//if (frameCounter == 0)
-			{
-				//std::cout << "Begin: " << tsb / ts << std::endl;
-				//std::cout << "Submission: " << tss / ts << std::endl;
-				//tsb = 0.0, tss = 0.0;
-			}
 
 			frameCounter++;
 		}

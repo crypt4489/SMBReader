@@ -242,7 +242,7 @@ struct VKDevice
 
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
-	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount, uint32_t maxFramesInFlight);
+	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t maxFramesInFlight);
 
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
@@ -321,7 +321,7 @@ struct VKDevice
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
-	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount, uint32_t maxFramesInFlight);
+	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount);
 
 	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 

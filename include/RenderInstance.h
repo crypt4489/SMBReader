@@ -298,6 +298,8 @@ public:
 
 	void DestroyBufferView(EntryHandle bufferViewIndex);
 
+	void EndFrame();
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
