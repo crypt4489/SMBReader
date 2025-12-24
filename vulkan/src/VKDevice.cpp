@@ -587,7 +587,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 	EntryHandle buffHandle = AddVkTypeToEntry(buffer);
 
-	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, 0);
+	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, offset);
 
 	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
 
@@ -1617,6 +1617,27 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 	vkFreeMemory(device, deviceMem, nullptr);
 	entries[handle()] = 0;
 }
+
+void VKDevice::DestroyBufferView(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	VkBufferView view = reinterpret_cast<VkBufferView>(GetVkTypeFromEntry(handle));
+	vkDestroyBufferView(device, view, nullptr);
+	entries[handle()] = 0;
+}
+
+void VKDevice::DestroyTexelBufferView(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	TexelBufferView* alloc = reinterpret_cast<TexelBufferView*>(GetVkTypeFromEntry(handle));
+	if (!alloc) return;
+	DestroyBuffer(alloc->bufferHandle);
+	DestroyBufferView(alloc->viewHandle);
+	entries[handle()] = 0;
+}
+
+
+
 void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);
@@ -1843,6 +1864,13 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 
 
 //GETTERS
+
+VkBufferView VKDevice::GetBufferView(EntryHandle handle)
+{
+	std::shared_lock lock(deviceLock);
+	return reinterpret_cast<VkBufferView>(GetVkTypeFromEntry(handle));
+}
+
 VKCommandBuffer* VKDevice::GetCommandBuffer(EntryHandle handle)
 {
 	std::shared_lock lock(deviceLock);

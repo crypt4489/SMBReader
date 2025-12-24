@@ -294,6 +294,10 @@ public:
 
 	int GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex);
 
+	EntryHandle CreateBufferView(int allocationIndex, VkFormat bufferViewFormat);
+
+	void DestroyBufferView(EntryHandle bufferViewIndex);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;

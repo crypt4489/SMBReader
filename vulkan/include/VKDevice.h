@@ -357,6 +357,8 @@ struct VKDevice
 
 	//GETTERS
 
+	VkBufferView GetBufferView(EntryHandle handle);
+
 	VKCommandBuffer* GetCommandBuffer(EntryHandle handle);
 
 	VkCommandBuffer GetCommandBufferHandle(EntryHandle handle);
@@ -440,6 +442,10 @@ struct VKDevice
 	//Destructors
 
 	void DestroyBuffer(EntryHandle handle);
+
+	void DestroyBufferView(EntryHandle handle);
+
+	void DestroyTexelBufferView(EntryHandle handle);
 
 	void DestroyCommandBuffer(EntryHandle handle);
 

@@ -66,11 +66,22 @@ void DescriptorSetLayoutBuilder::AddStorageImageLayout(uint32_t binding, VkShade
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddTexelBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+	layoutBinding.descriptorCount = 1;
+	layoutBinding.stageFlags = flags;
+
+	descSetBindings[binding] = layoutBinding;
+}
+
+void DescriptorSetLayoutBuilder::AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
 	layoutBinding.descriptorCount = 1;
 	layoutBinding.stageFlags = flags;
 

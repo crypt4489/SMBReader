@@ -603,6 +603,9 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 			case hash("samplerBindless"):
 				tag->resourceType = ShaderResourceType::SAMPLERBINDLESS;
 				break;
+			case hash("bufferView"):
+				tag->resourceType = ShaderResourceType::BUFFER_VIEW;
+				break;
 			default:
 				throw std::runtime_error("Failed Resource Type");
 			}

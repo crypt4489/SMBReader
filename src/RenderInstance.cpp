@@ -387,8 +387,6 @@ uint32_t RenderInstance::BeginFrame()
 	
 
 	dev->CommandBufferResetFence(currentCBIndex[currentFrame]);
-	
-	//DrawScene(imageIndex);
 
 	return imageIndex;
 }
@@ -540,7 +538,16 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 			descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
 			break;
+		case BUFFER_VIEW:
+			if (resource->action == SHADERREAD)
+				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags);
+			else if (resource->action == SHADERWRITE)
+				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags);
+			break;
 		}
+	
+
+
 		
 	}
 
@@ -1085,6 +1092,12 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			}
 			break;
 		}
+		case BUFFER_VIEW:
+		{
+			memBarrierType = BUFFER_BARRIER;
+			ptr += sizeof(ShaderResourceBufferView);
+			break;
+		}
 		}
 
 
@@ -1203,6 +1216,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	globalIndex = majorDevice->CreateHostBuffer
 	(
 		128'000'000, true,
+		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
@@ -1213,6 +1228,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	);
 
 	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(32'000'000,
+		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
 		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
@@ -1366,6 +1383,20 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				if (!samplers->textureHandles)
 					builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, 0, samplers->arrayCount, frames, i);
 				break;
+			}
+
+			case BUFFER_VIEW:
+			{
+				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
+				VkBufferView handle = dev->GetBufferView(bufferView->bufferViewHandle);
+				if (bufferView->action == SHADERREAD)
+				{
+					builder->AddUniformBufferView(handle, bufferView->binding, frames);
+				}
+				else if (bufferView->action == SHADERWRITE)
+				{
+					builder->AddStorageBufferView(handle, bufferView->binding, frames);
+				}
 			}
 		}
 	}
@@ -1754,7 +1785,6 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 void RenderInstance::IncreaseMSAA()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 	uint32_t next = currentMSAALevel + 1;
 	if (next >= maxMSAALevels)
 		return;
@@ -1764,11 +1794,28 @@ void RenderInstance::IncreaseMSAA()
 void RenderInstance::DecreaseMSAA()
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 	int32_t next = currentMSAALevel - 1;
 	if (next < 0)
 		return;
 	currentMSAALevel = next;
 
+}
+
+EntryHandle RenderInstance::CreateBufferView(int allocationIndex, VkFormat bufferViewFormat)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	auto alloc = allocations[allocationIndex];
+
+	EntryHandle ret = dev->CreateBufferView(alloc.memIndex, bufferViewFormat, alloc.deviceAllocSize, alloc.offset);
+
+	return ret;
+}
+
+void RenderInstance::DestroyBufferView(EntryHandle bufferViewIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	dev->DestroyBufferView(bufferViewIndex);
 }
 

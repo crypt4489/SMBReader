@@ -39,6 +39,12 @@ struct ShaderResourceBuffer : public ShaderResourceHeader
 	int allocation;
 };
 
+struct ShaderResourceBufferView : public ShaderResourceHeader
+{
+	EntryHandle bufferViewHandle;
+};
+
+
 struct ShaderResourceConstantBuffer : public ShaderResourceHeader
 {
 	ShaderStageType stage;
@@ -124,6 +130,20 @@ struct ShaderResourceManager
 
 		header->textureHandles = indices;
 		header->textureCount = texCount;
+	}
+
+	void BindBufferView(int descriptorSet, EntryHandle bufferViewHandle, int bindingIndex)
+	{
+		uintptr_t head = descriptorSets[descriptorSet];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+		ShaderResourceBufferView* header = (ShaderResourceBufferView*)offsets[bindingIndex];
+
+		if (header->type != BUFFER_VIEW)
+			return;
+
+		header->bufferViewHandle = bufferViewHandle;
 	}
 
 	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)

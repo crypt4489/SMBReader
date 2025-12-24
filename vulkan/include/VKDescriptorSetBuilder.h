@@ -32,7 +32,9 @@ struct DescriptorSetBuilder
 
 	void AddBufferTypeDirect(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset, VkDescriptorType type);
 
-	void AddTexelViewTypeByFrame(VkBufferView buffer, uint32_t binding, uint32_t frame);
+	void AddUniformBufferView(VkBufferView buffer, uint32_t binding, uint32_t frames);
+
+	void AddStorageBufferView(VkBufferView buffer, uint32_t binding, uint32_t frames);
 
 	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t frames);
 

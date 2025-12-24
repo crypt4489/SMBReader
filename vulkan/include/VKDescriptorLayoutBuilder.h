@@ -20,11 +20,14 @@ struct DescriptorSetLayoutBuilder
 
 	void AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags);
 
-	void AddTexelBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
 
 	void AddBindlessSamplersLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
 
 	void AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
+	
+	void AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
+
 
 	VkDescriptorSetLayoutBinding* descSetBindings;
 	VkDescriptorBindingFlags* flags;
