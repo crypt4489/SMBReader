@@ -184,6 +184,8 @@ RenderInstance::~RenderInstance()
 
 	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+
+	/*
 	for (size_t i = 0; i < currentCBIndex.size(); i++)
 	{
 		dev->DestroyCommandBuffer(currentCBIndex[i]);
@@ -225,6 +227,7 @@ RenderInstance::~RenderInstance()
 	dev->DestroyBuffer(globalIndex);
 
 	dev->DestroyBuffer(globalDeviceBufIndex);
+	*/
 
 	dev->DestroyDevice();
 

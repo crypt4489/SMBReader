@@ -226,6 +226,47 @@ struct DescriptorPoolBuilder
 };
 
 
+enum HandleType
+{
+	VulkBuffer = 0,
+	VulkImageHandle = 1,
+	VulkImageView = 2,
+	VulkImageSampler = 3,
+	VulkTextureHandle = 4,
+	VulkBufferView = 5,
+	VulkImageBufferView = 6,
+	VulkCommandPool = 7,
+	VulkComputeGraph = 8,
+	VulkDescriptorPool = 9,
+	VulkDescriptorSet = 10,
+	VulkDescriptorLayout = 11,
+	VulkFence = 12,
+	VulkFrameBuffer = 13,
+	VulkImageMemoryPool = 14,
+	VulkPipelineCacheObject = 15,
+	VulkComputePipeline = 16,
+	VulkGraphicsPipeline = 17,
+	VulkMemoryBarrier = 18,
+	VulkBufferMemoryBarrier = 19,
+	VulkImageMemoryBarrier = 20,
+	VulkRenderTargetData = 21,
+	VulkRenderPassHandle = 22,
+	VulkRenderTarget = 23,
+	VulkVKCommandBuffer = 24,
+	VulkSemaphores = 25,
+	VulkShaderHandle = 26,
+	VulkSwapChain = 27,
+	VulkQueueManager = 28,
+	VulkMaxEnum
+};
+
+struct HandlePoolObject
+{
+	HandleType type;
+	uintptr_t memoryLocation;
+};
+
+
 struct VKDevice
 {
 
@@ -445,9 +486,11 @@ struct VKDevice
 
 	void DestroyBufferView(EntryHandle handle);
 
-	void DestroyTexelBufferView(EntryHandle handle);
+	
 
 	void DestroyCommandBuffer(EntryHandle handle);
+
+	void DestroyCommandPool(EntryHandle handle);
 
 	void DestroyDescriptorPool(EntryHandle handle);
 
@@ -456,6 +499,8 @@ struct VKDevice
 	void DestroyDevice();
 
 	void DestroyFence(EntryHandle handle);
+
+	void DestroyFrameBuffer(EntryHandle handle);
 
 	void DestroyImage(EntryHandle handle);
 
@@ -469,21 +514,25 @@ struct VKDevice
 
 	void DestroyRenderTarget(EntryHandle handle);
 
-	void DestorySampler(EntryHandle handle);
+	void DestroySampler(EntryHandle handle);
 
 	void DestroySemaphore(EntryHandle handle);
 
 	void DestroyShader(EntryHandle handle);
 
+	void DestroySwapChain(EntryHandle handle);
+
 	void DestroyTexture(EntryHandle handle);
+
+	void DestroyTexelBufferView(EntryHandle handle);
 
 	
 
 	//Allocation
 
-	void* GetVkTypeFromEntry(EntryHandle index);
+	HandlePoolObject GetVkTypeFromEntry(EntryHandle index);
 
-	EntryHandle AddVkTypeToEntry(void* handle);
+	EntryHandle AddVkTypeToEntry(void* handle, HandleType type);
 
 	void* AllocFromPerDeviceData(size_t size);
 
@@ -541,7 +590,7 @@ struct VKDevice
 
 	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
 
-	mutable std::shared_mutex deviceLock;
+	//mutable std::shared_mutex deviceLock;
 
 	VkDevice device;
 	VkPhysicalDevice gpu;
@@ -555,7 +604,7 @@ struct VKDevice
 	DeviceOwnedAllocator deviceDataAlloc;
 	DeviceOwnedAllocator deviceCacheAlloc;
 
-	uintptr_t* entries;
+	HandlePoolObject* entries;
 	std::atomic<size_t> indexForEntries = 0;
 	size_t numberOfEntries = 0;
 

@@ -987,11 +987,6 @@ void ApplicationLoop::CleanupRuntime()
 {
 	VKRenderer::gRenderInstance->WaitOnRender();
 
-	for (int i = 0; i < mainDictionary.allocationIndex; i++)
-	{
-		VKRenderer::gRenderInstance->DestoryTexture(mainDictionary.textureHandles[i]);
-	}
-
 	ThreadManager::DestroyThreadManager();
 
 	delete VKRenderer::gRenderInstance;

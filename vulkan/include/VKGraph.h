@@ -2,7 +2,6 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
-#include <shared_mutex>
 
 
 struct VKGraph {
