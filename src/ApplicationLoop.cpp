@@ -241,6 +241,24 @@ void ApplicationLoop::Execute()
 	}
 	else
 	{
+		/*
+		mainWindow = new WindowManager();
+
+		mainWindow->CreateWindowsWindow();
+
+		while (true)
+		{
+			if (mainWindow->ShouldCloseWindow())
+				break;
+
+			mainWindow->PollEvents();
+		}
+		
+
+		cleaned = true;
+
+		return; */
+
 
 		InitializeRuntime();
 
@@ -279,8 +297,6 @@ void ApplicationLoop::Execute()
 		while (running)
 		{
 			if (mainWindow->ShouldCloseWindow()) break;
-
-			glfwPollEvents();
 
 			MoveCamera(FPS);
 
@@ -892,14 +908,11 @@ void ApplicationLoop::InitializeRuntime()
 	
 	mainDictionary.textureSize = sizeof(mainTextureCacheMemory);
 
-
-	VKRenderer::gRenderInstance = new RenderInstance();
-
 	mainWindow = new WindowManager();
 
-	mainWindow->CreateWindowInstance();
+	mainWindow->CreateWindowsWindow();
 
-	glfwSetKeyCallback(mainWindow->GetWindow(), key_callback);
+	VKRenderer::gRenderInstance = new RenderInstance();
 
 	VKRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
 
@@ -928,58 +941,34 @@ void ApplicationLoop::InitializeRuntime()
 }
 
 
-static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+void key_callback(GenericKeyAction keyActions[KC_COUNT])
 {
-	bool pressed = (action == GLFW_PRESS || action == GLFW_REPEAT);
 
-	switch (key)
+	loop->camMovements[ApplicationLoop::RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
+	
+	loop->camMovements[ApplicationLoop::BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
+	
+	loop->camMovements[ApplicationLoop::PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
+	
+	loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
+	
+	loop->camMovements[ApplicationLoop::ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
+
+
+	if (keyActions[KC_TWO].state == PRESSED)
 	{
-	case GLFW_KEY_D:
-		loop->camMovements[ApplicationLoop::RIGHT] = pressed;
-		break;
+		VKRenderer::gRenderInstance->IncreaseMSAA();
+	}
 
-	case GLFW_KEY_A:
-		loop->camMovements[ApplicationLoop::LEFT] = pressed;
-		break;
-
-	case GLFW_KEY_W:
-		loop->camMovements[ApplicationLoop::FORWARD] = pressed;
-		break;
-
-	case GLFW_KEY_S:
-		loop->camMovements[ApplicationLoop::BACK] = pressed;
-		break;
-
-	case GLFW_KEY_UP:
-		loop->camMovements[ApplicationLoop::PITCHUP] = pressed;
-		break;
-
-	case GLFW_KEY_DOWN:
-		loop->camMovements[ApplicationLoop::PITCHDOWN] = pressed;
-		break;
-
-	case GLFW_KEY_RIGHT:
-		loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = pressed;
-		break;
-
-	case GLFW_KEY_LEFT:
-		loop->camMovements[ApplicationLoop::ROTATEYLEFT] = pressed;
-		break;
-
-	case GLFW_KEY_2:
-		if (pressed && action == GLFW_PRESS)
-			VKRenderer::gRenderInstance->IncreaseMSAA();
-		break;
-
-	case GLFW_KEY_1:
-		if (pressed && action == GLFW_PRESS)
-			VKRenderer::gRenderInstance->DecreaseMSAA();
-		break;
-
-	case GLFW_KEY_9:
-		if (pressed && action == GLFW_PRESS)
-			imageVisible = !imageVisible;
-		break;
+	if (keyActions[KC_ONE].state == PRESSED)
+	{
+		VKRenderer::gRenderInstance->IncreaseMSAA();
 	}
 }
 
