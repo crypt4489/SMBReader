@@ -146,11 +146,7 @@ namespace API {
 }
 
 
-static void frameResizeCB(GLFWwindow* window, int width, int height)
-{
-	auto renderInst = reinterpret_cast<RenderInstance*>(glfwGetWindowUserPointer(window));
-	renderInst->resizeWindow = true;
-}
+
 
 #define KB 1024
 #define MB 1024 * KB
@@ -383,7 +379,7 @@ uint32_t RenderInstance::BeginFrame()
 	if (imageIndex == ~0ui32)
 	{
 		int ret = RecreateSwapChain();
-		if (ret) resizeWindow = false;
+	
 		return imageIndex;
 	}
 
@@ -402,10 +398,9 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 
-	if (!res || resizeWindow) {
+	if (!res) {
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 		int ret = RecreateSwapChain();
-		if (ret) resizeWindow = false;
 		return -1;
 	}
 	
@@ -1116,12 +1111,10 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 {
 	this->windowMan = window;
-	windowMan->SetWindowResizeCallback(frameResizeCB);
-	glfwSetWindowUserPointer(windowMan->GetWindow(), this);
 
 	vkInstance->SetInstanceDataAndSize(800 * KB, 256 * KB);
-	vkInstance->CreateRenderInstance();
-	vkInstance->CreateDrawingSurface(window->GetWindow());
+	vkInstance->CreateRenderInstance(WINDOWS);
+	vkInstance->CreateWindowedSurface(windowMan->hInstance, window->hWndMain);
 
 	physicalIndex = vkInstance->CreatePhysicalDevice(1);
 	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, &deviceIndex);

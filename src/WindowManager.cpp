@@ -6,35 +6,6 @@
 const TCHAR CLSNAME[] = TEXT("AppViewerClass");
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
 
-
-
-void WindowManager::CreateWindowInstance()
-{
-	bool good = glfwInit();
-	if (!good) throw std::runtime_error("Cannot create window");
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-
-	window = glfwCreateWindow(800, 600, "SMB File Viewer", nullptr, nullptr);
-
-}
-
-void WindowManager::SetWindowResizeCallback(GLFWframebuffersizefun callback)
-{
-	glfwSetFramebufferSizeCallback(window, callback);
-}
-
-GLFWwindow* WindowManager::GetWindow() const
-{
-	return window;
-}
-
-void WindowManager::DestroyGLFWWindow()
-{
-	glfwDestroyWindow(window);
-	glfwTerminate();
-}
-
 bool WindowManager::ShouldCloseWindow()
 {
 	return windowInfo.shouldBeClosed;
@@ -42,11 +13,8 @@ bool WindowManager::ShouldCloseWindow()
 
 void WindowManager::GetWindowSize(int* width, int* height)
 {
-	glfwGetFramebufferSize(window, width, height);
-	while (width == 0 || height == 0) {
-		glfwGetFramebufferSize(window, width, height);
-		glfwWaitEvents();
-	}
+    *width = windowInfo.width;
+    *height = windowInfo.height;
 }
 
 int WindowManager::CreateWindowsWindow()
@@ -77,14 +45,20 @@ int WindowManager::CreateWindowsWindow()
         return 0;
     }
 
-    hwnd = CreateWindowEx(WS_EX_LEFT,
+    RECT wr = { 0, 0, 800, 600 };   
+    DWORD style = WS_OVERLAPPEDWINDOW;
+    DWORD exStyle = 0;
+
+    AdjustWindowRectEx(&wr, style, FALSE, exStyle);
+
+    hwnd = CreateWindowEx(exStyle,
         CLSNAME,
         NULL,
-        WS_OVERLAPPEDWINDOW,
+        style,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
-        800,
-        600,
+        wr.right - wr.left,
+        wr.bottom - wr.top,
         NULL,
         NULL,
         hInst,
@@ -122,21 +96,49 @@ int WindowManager::PollEvents()
     return ret;
 }
 
+static void UpdateWindowRECT(RECT* rect, UINT dpi)
+{
+    int frameX = GetSystemMetricsForDpi(SM_CXFRAME, dpi);
+    int frameY = GetSystemMetricsForDpi(SM_CYFRAME, dpi);
+    int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
+
+
+    int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpi);
+
+    rect->left += (frameX + padding);
+    rect->top += (captionHeight + padding + frameY);
+    rect->bottom -= (padding + frameY);
+    rect->right -= (frameX + padding);
+}
+
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
 {
+
+    GenericWindowInfo* info = (GenericWindowInfo*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
     switch (wm)
     {
     case WM_SIZE:
     {
         UINT width = LOWORD(lp);
         UINT height = HIWORD(lp);
+        info->width = width;
+        info->height = height;
+
         if (wp == SIZE_MAXIMIZED)
         {
-
+            info->maximized = true;
+            info->minimized = false;
         }
         else if (wp == SIZE_MINIMIZED)
         {
-
+            info->maximized = false;
+            info->minimized = true;
+        }
+        else if (wp == SIZE_RESTORED)
+        {
+            info->maximized = false;
+            info->minimized = false;
         }
         return 0;
     }
@@ -166,53 +168,32 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
     case WM_NCCALCSIZE:
     {
         LRESULT res = 0;
+        UINT dpi = GetDpiForWindow(hwnd);
+
+        RECT* rect = NULL;
+
         if (wp)
         {
-
             NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lp;
 
-            RECT* rect = (RECT*)&params->rgrc[0];
+            rect = (RECT*)&params->rgrc[0];
+            
+            info->resizeRequested = 1;
 
-            UINT dpi = GetDpiForWindow(hwnd);
-
-
-            int frameX = GetSystemMetricsForDpi(SM_CXFRAME, dpi);
-            int frameY = GetSystemMetricsForDpi(SM_CYFRAME, dpi);
-            int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
-
-            int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpi);
-
-            rect->left += (frameX + padding);
-            rect->top += (captionHeight + padding + frameY);
-            rect->bottom -= (padding + frameY);
-            rect->right -= (frameX + padding);
-
-            res = WVR_ALIGNLEFT | WVR_REDRAW;
+            res = WVR_REDRAW;
         }
         else {
-            RECT* rect = (RECT*)lp;
-
-            UINT dpi = GetDpiForWindow(hwnd);
-
-           
-            int frameX = GetSystemMetricsForDpi(SM_CXFRAME, dpi);
-            int frameY = GetSystemMetricsForDpi(SM_CYFRAME, dpi);
-            int padding = GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi);
-
-           
-            int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpi);
-
-            rect->left += (frameX + padding);
-            rect->top += (captionHeight + padding + frameY);
-            rect->bottom -= (padding + frameY);
-            rect->right -= (frameX + padding);
+            rect = (RECT*)lp;
         }
-        return res;
+
+        if (!info || !info->fullScreen) {
+            UpdateWindowRECT(rect, dpi);
+        }
+
+        return 0;
     }
     case WM_DESTROY:
     {
-        GenericWindowInfo* info = (GenericWindowInfo*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
         info->shouldBeClosed = true;
         PostQuitMessage(0);
         return 0;
@@ -221,7 +202,7 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
     case WM_KEYDOWN:
 
     {
-        GenericWindowInfo* info = (GenericWindowInfo*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+        
         WORD vkCode = LOWORD(wp);                                
 
         WORD keyFlags = HIWORD(lp);
@@ -331,13 +312,12 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
     
     case WM_QUIT:
     {
-       
         return 0;
     }
     case WM_NCACTIVATE:
-      
-
+    {
         return 0;
+    }
     }
 
     return DefWindowProc(hwnd, wm, wp, lp);

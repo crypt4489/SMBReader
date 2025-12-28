@@ -2,9 +2,13 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
-#define VK_USE_PLATFORM_WIN32_KHR
-#define GLFW_INCLUDE_VULKAN
-#include "GLFW/include/GLFW/glfw3.h"
+
+#ifdef _MSC_VER
+#include <Windows.h>
+#endif
+#undef min
+#undef max
+
 #include <mutex>
 
 struct VKAllocationCB
@@ -79,6 +83,13 @@ struct VKAllocationCB
 
 };
 
+enum OperatingSystem
+{
+	WINDOWS = 0,
+	LINUX = 1,
+	MAC = 2,
+};
+
 struct VKInstance
 {
 
@@ -94,9 +105,7 @@ struct VKInstance
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
 
-	void CreateDrawingSurface(GLFWwindow* wind);
-
-	void CreateRenderInstance();
+	void CreateRenderInstance(OperatingSystem system);
 
 	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);
 
@@ -119,6 +128,8 @@ struct VKInstance
 	int GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex);
 
 	int GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex);
+
+	void CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
 
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;

@@ -5,10 +5,17 @@
 #include "VKDevice.h"
 #include <vulkan/vulkan.h>
 
+#ifdef _MSC_VER
+#include <vulkan/vulkan_win32.h>
+#endif
+
 #include <iostream>
 #include <map>
 #include <set>
 #include <stdexcept>
+
+#undef min
+#undef max
 
 VKInstance::VKInstance()
 	: 
@@ -100,9 +107,14 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDev
 	return ret;
 }
 
-void VKInstance::CreateDrawingSurface(GLFWwindow* wind)
+void VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 {
-	VkResult res = glfwCreateWindowSurface(instance, wind, nullptr, &renderSurface);
+	VkWin32SurfaceCreateInfoKHR infoStruct{};
+	infoStruct.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+	infoStruct.hinstance = hInst;
+	infoStruct.hwnd = hWnd;
+
+	VkResult res = vkCreateWin32SurfaceKHR(instance, &infoStruct, nullptr, &renderSurface);
 
 	if (res != VK_SUCCESS) {
 		throw std::runtime_error("failed to create window surface!");
@@ -113,7 +125,7 @@ void VKInstance::CreateDrawingSurface(GLFWwindow* wind)
 #define TEMPCACHESIZE 512 * 1024
 #define PERCAHCESIZE 256 * 1024
 
-void VKInstance::CreateRenderInstance()
+void VKInstance::CreateRenderInstance(OperatingSystem system)
 {
 	char* data = new char[TEMPCACHESIZE + PERCAHCESIZE];
 	
@@ -137,8 +149,8 @@ void VKInstance::CreateRenderInstance()
 	createInfo.pApplicationInfo = &appInfoStruct;
 	
 	VkValidationFeatureEnableEXT enables[] = {
-	VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT, // Catch sync hazards
-	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,               // Detect invalid memory access
+	VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,               
 	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
 	VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
 	};
@@ -150,11 +162,9 @@ void VKInstance::CreateRenderInstance()
 
 	createInfo.pNext = &validationFeatures;
 
-	uint32_t glfwReqExtCount;
 
-	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwReqExtCount);
 
-	instanceExtCount = glfwReqExtCount + 3;
+	instanceExtCount = 5;
 
 	instanceLayerCount = 1;
 
@@ -164,10 +174,9 @@ void VKInstance::CreateRenderInstance()
 
 	instanceLayers[0] = "VK_LAYER_KHRONOS_validation";
 
-	for (uint32_t i = 0; i < glfwReqExtCount; i++)
-	{
-		instanceExtensions[i] = glfwExtensions[i];
-	}
+
+	instanceExtensions[0] = VK_KHR_SURFACE_EXTENSION_NAME;
+	instanceExtensions[1] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
 
 	instanceExtensions[2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	instanceExtensions[3] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;

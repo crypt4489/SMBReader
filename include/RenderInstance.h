@@ -326,8 +326,6 @@ public:
 
 	uint32_t currentFrame = 0;
 
-	bool resizeWindow = false;
-
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 

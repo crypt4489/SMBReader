@@ -102,7 +102,7 @@ static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
 static ArrayAllocator<Mesh, MAX_MESHES> meshInstanceData{};
 static ArrayAllocator<Geometry, MAX_GEOMETRY> geometryInstanceData{};
 
-static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
 {
@@ -292,13 +292,21 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		double tss = 0.0, tsb = 0.0;
-
 		while (running)
 		{
+			mainWindow->PollEvents();
+
 			if (mainWindow->ShouldCloseWindow()) break;
 
+			ProcessKeys(mainWindow->windowInfo.actions);
+
 			MoveCamera(FPS);
+
+			if (mainWindow->windowInfo.HandleResizeRequested())
+			{
+				VKRenderer::gRenderInstance->RecreateSwapChain();
+				continue;
+			}
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
@@ -941,7 +949,7 @@ void ApplicationLoop::InitializeRuntime()
 }
 
 
-void key_callback(GenericKeyAction keyActions[KC_COUNT])
+void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 {
 
 	loop->camMovements[ApplicationLoop::RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
@@ -968,7 +976,7 @@ void key_callback(GenericKeyAction keyActions[KC_COUNT])
 
 	if (keyActions[KC_ONE].state == PRESSED)
 	{
-		VKRenderer::gRenderInstance->IncreaseMSAA();
+		VKRenderer::gRenderInstance->DecreaseMSAA();
 	}
 }
 

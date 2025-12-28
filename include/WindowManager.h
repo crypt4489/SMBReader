@@ -1,13 +1,10 @@
 #pragma once
 
-#define VK_USE_PLATFORM_WIN32_KHR
-#define GLFW_INCLUDE_VULKAN
-#include "GLFW/include/GLFW/glfw3.h"
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include "GLFW/include/GLFW/glfw3native.h"
+#ifdef _MSC_VER
+#include <Windows.h>
 #undef min
 #undef max
-
+#endif
 
 enum KeyCodes
 {
@@ -78,21 +75,26 @@ struct GenericKeyAction
 
 struct GenericWindowInfo
 {
-	int shouldBeClosed;
+	int shouldBeClosed = 0;
+    int minimized = 0;
+    int maximized = 0;
+    int fullScreen = 0;
+    int resizeRequested = 0;
+    int width = 0, height = 0;
     GenericKeyAction actions[KC_COUNT];
+
+    int HandleResizeRequested()
+    {
+        int ret = resizeRequested;
+        resizeRequested = 0;
+        return ret;
+    }
 };
 
 
 struct WindowManager
 {
 public:
-	void CreateWindowInstance();
-
-	void SetWindowResizeCallback(GLFWframebuffersizefun callback);
-
-	GLFWwindow* GetWindow() const;
-
-	void DestroyGLFWWindow();
 
 	bool ShouldCloseWindow();
 
@@ -101,8 +103,6 @@ public:
 	int CreateWindowsWindow();
 
 	int PollEvents();
-
-	GLFWwindow* window = nullptr;
 
 	HWND hWndMain;
     HINSTANCE hInstance;
