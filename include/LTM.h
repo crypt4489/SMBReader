@@ -99,7 +99,7 @@ struct LTM
 
 	void RotateAroundUp(double angle)
 	{
-		glm::mat3 rot = CreateRotationMatrix(glm::vec3(0.0, 1.0f, 0.0f), static_cast<float>(glm::radians(angle)));
+		glm::mat3 rot = CreateRotationMatrix(Vector3f(0.0, 1.0f, 0.0f), static_cast<float>(glm::radians(angle)));
 
 		LTM[0] = glm::vec4(glm::vec3(LTM[0]) * rot, LTM[0][3]);
 		LTM[1] = glm::vec4(glm::vec3(LTM[1]) * rot, LTM[1][3]);
@@ -109,7 +109,10 @@ struct LTM
 
 	void PitchLTM(double angle)
 	{
-		glm::mat3 rot = CreateRotationMatrix(glm::vec3(LTM[0]), static_cast<float>(glm::radians(angle)));
+
+		Vector3f rightAxis = { LTM[0].x, LTM[0].y, LTM[0].z };
+
+		glm::mat3 rot = CreateRotationMatrix(rightAxis, static_cast<float>(glm::radians(angle)));
 
 		LTM[1] = glm::vec4(glm::vec3(LTM[1] * rot), LTM[1][3]);
 		

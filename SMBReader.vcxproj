@@ -199,6 +199,7 @@ XCOPY "$(SolutionDir)shaders\compiled\*.SPV" "$(OutDir)" /D /K /Y</Command>
     <ClCompile Include="src\TextureDictionary.cpp" />
     <ClCompile Include="src\TextureIO.cpp" />
     <ClCompile Include="src\ThreadManager.cpp" />
+    <ClCompile Include="src\VectorMath.cpp" />
     <ClCompile Include="src\WindowManager.cpp" />
   </ItemGroup>
   <ItemGroup>

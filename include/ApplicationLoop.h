@@ -70,9 +70,9 @@ public:
 
 	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
 
-	void SetPositonOfMesh(int meshIndex, const glm::vec3& pos);
+	void SetPositonOfMesh(int meshIndex, const Vector3f& pos);
 
-	void SetPositionOfGeometry(int geomIndex, const glm::vec3& pos);
+	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

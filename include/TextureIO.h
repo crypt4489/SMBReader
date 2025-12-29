@@ -17,7 +17,7 @@ namespace TexUtils
 
 	namespace BMP
 	{
-#pragma pack(push, 2)
+#pragma pack(push, 1)
 		typedef struct BitmapFileHeader
 		{
 			uint16_t  bfType;
@@ -26,7 +26,7 @@ namespace TexUtils
 			uint16_t  bfReserved2;
 			uint32_t  bfOffBits;
 		} BitmapFileHeader;
-#pragma pack(pop)
+
 		typedef struct BitmapInfoHeader
 		{
 			uint32_t biSize;
@@ -41,7 +41,7 @@ namespace TexUtils
 			uint32_t biClrUsed;
 			uint32_t biClrImportant;
 		} BitmapInfoHeader;
-
+#pragma pack(pop)
 
 		static_assert(sizeof(BitmapFileHeader) == 14);
 		static_assert(sizeof(BitmapInfoHeader) == 40);

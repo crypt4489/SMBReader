@@ -158,7 +158,7 @@ ApplicationLoop::~ApplicationLoop() {
 	delete mainWindow; 
 }
 
-void ApplicationLoop::SetPositonOfMesh(int meshIndex, const glm::vec3& pos)
+void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
 	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
@@ -167,13 +167,13 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const glm::vec3& pos)
 
 	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-	handles->m[3] = glm::vec4(pos, 1.0f);
+	handles->m[3] = glm::vec4(pos.x, pos.y, pos.z, 1.0f);
 
 	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 }
 
-void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const glm::vec3& pos)
+void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
 	Geometry* geom = &geometryInstanceData.dataArray[geomIndex];
@@ -189,7 +189,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const glm::vec3& pos)
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-		handles->m[3] = glm::vec4(pos, 1.0f);
+		handles->m[3] = glm::vec4(pos.x, pos.y, pos.z, 1.0f);
 
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 	}
@@ -215,7 +215,7 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 		float x1 = std::stof(args.at(1));
 		float y1 = std::stof(args.at(2));
 		float z1 = std::stof(args.at(3));
-		SetPositonOfMesh(meshIndex, glm::vec3(x1, y1, z1));
+		SetPositonOfMesh(meshIndex, Vector3f(x1, y1, z1));
 	}
 	else if (command == "positiong")
 	{
@@ -225,7 +225,7 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 		float x1 = std::stof(args.at(1));
 		float y1 = std::stof(args.at(2));
 		float z1 = std::stof(args.at(3));
-		SetPositionOfGeometry(geomIndex, glm::vec3(x1, y1, z1));
+		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
 	}
 }
 
@@ -241,24 +241,6 @@ void ApplicationLoop::Execute()
 	}
 	else
 	{
-		/*
-		mainWindow = new WindowManager();
-
-		mainWindow->CreateWindowsWindow();
-
-		while (true)
-		{
-			if (mainWindow->ShouldCloseWindow())
-				break;
-
-			mainWindow->PollEvents();
-		}
-		
-
-		cleaned = true;
-
-		return; */
-
 
 		InitializeRuntime();
 
@@ -563,7 +545,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));
 
-	glm::mat4 rotation = CreateRotationMatrixMat4(glm::vec3(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
+	glm::mat4 rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
 
 	*geomSpecificData *= rotation;
 
@@ -939,7 +921,7 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
 	
-	c.CamLookAt(glm::vec3(0.0f, 0.0f, 55.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();
 

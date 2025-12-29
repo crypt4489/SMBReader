@@ -29,7 +29,7 @@ struct Text
 {
 public:
 	Text() = delete;
-	Text(std::string& text, Font& _f, float x, float y, glm::vec4 color, size_t _buffersize);
+	Text(std::string& text, Font& _f, float x, float y, Vector4f color, size_t _buffersize);
 
 	void CreateVertices(std::string& text, float x, float y, size_t startingString);
 
@@ -41,7 +41,7 @@ public:
 	Font& font;
 	std::string mainText;
 	size_t bufferReserved;
-	glm::vec4 textColor;
+	Vector4f textColor;
 	float startX, startY;
 };
 

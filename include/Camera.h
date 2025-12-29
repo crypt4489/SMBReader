@@ -5,22 +5,22 @@ struct Camera
 {
 
 
-	void CamLookAt(const glm::vec3& pos, const glm::vec3& target, const glm::vec3& up)
+	void CamLookAt(const Vector3f& pos, const Vector3f& target, const Vector3f& up)
 	{
-		glm::vec3 camLook =  pos - target;
+		Vector3f camLook =  pos - target;
 
-		camLook = glm::normalize(camLook);
+		camLook = Normalize(camLook);
 
-		glm::vec3 camRight = glm::cross(up, camLook);
+		Vector3f camRight = Cross(up, camLook);
 
-		camRight = glm::normalize(camRight);
+		camRight = Normalize(camRight);
 
-		glm::vec3 camUp = cross(camLook, camRight);
+		Vector3f camUp = Cross(camLook, camRight);
 
-		LTM.SetPos(glm::vec4(pos, 1.0f));
-		LTM.SetForward(camLook);
-		LTM.SetRight(camRight);
-		LTM.SetUp(camUp);
+		LTM.SetPos(glm::vec4(pos.x, pos.y, pos.z, 1.0f));
+		LTM.SetForward(glm::vec3(camLook.x, camLook.y, camLook.z));
+		LTM.SetRight(glm::vec3(camRight.x, camRight.y, camRight.z));
+		LTM.SetUp(glm::vec3(camUp.x, camUp.y, camUp.z));
 	}
 
 	void UpdateCamera()

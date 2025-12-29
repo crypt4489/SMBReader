@@ -260,16 +260,16 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 	return geoChunk;
 }
 
-static glm::vec2 converttexcoords16(int16_t* huh)
+static Vector2f converttexcoords16(int16_t* huh)
 {
 	float x = huh[0] * dx * 16.0f;
 	float y = huh[1] * dx * 16.0f;
 
 
-	return glm::vec2(x, y);
+	return Vector2f(x, y);
 }
 
-static glm::vec3 pack6decomp(int16_t* hello, AxisBox& box)
+static Vector3f pack6decomp(int16_t* hello, AxisBox& box)
 {
 	float x = ((hello[0] * dx) + 1.0f) * 0.5f;
 	float y = (((hello[1] * dx)) + 1.0f) * 0.5f;
@@ -279,7 +279,7 @@ static glm::vec3 pack6decomp(int16_t* hello, AxisBox& box)
 	y = ((box.max.y - box.min.y) * y) + box.min.y;
 	z = ((box.max.z - box.min.z) * z) + box.min.z;
 
-	return glm::vec3(x, y, z);
+	return Vector3f(x, y, z);
 }
 
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
@@ -381,7 +381,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
 				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+
+				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
 				g += VertexCompressedSizes[PosPack6_CNorm_C16Tex1_Bone2_Size];
 
@@ -419,7 +421,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
 				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+
+				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
 				g += VertexCompressedSizes[PosPack6_C16Tex2_Bone2_Size];
 			}
@@ -449,7 +453,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
 				s[2] = (((int16_t)g[13] & 0xff) << 8) | g[12];
 
-				vertex->POSITION = glm::vec4(pack6decomp(s, geoDefinition->axialBox), 1.0f);
+				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+
+				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
 				g += VertexCompressedSizes[PosPack6_C16Tex1_Bone2_Size];
 			}

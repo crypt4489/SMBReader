@@ -1,20 +1,21 @@
 #pragma once
 #include <array>
+#include "MathTypes.h"
 #include "glm/glm.hpp"
 #include "VKUtilities.h"
 typedef struct text_vertex_t
 {
 	text_vertex_t() = default;
-	text_vertex_t(glm::vec2 _p, glm::vec2 _t, glm::vec4 _c) :
+	text_vertex_t(Vector2f _p, Vector2f _t, Vector4f _c) :
 		POSITION(_p), TEXTURE(_t), COLOR(_c)
 
 	{
 
 	}
 
-	glm::vec2 POSITION;
-	glm::vec2 TEXTURE;
-	glm::vec4 COLOR;
+	Vector2f POSITION;
+	Vector2f TEXTURE;
+	Vector4f COLOR;
 
 	static VkVertexInputBindingDescription getBindingDescription() {
 		VkVertexInputBindingDescription bindingDescription{};
@@ -56,12 +57,13 @@ typedef struct text_vertex_t
 
 typedef struct vertex_type_h
 {
-	glm::vec4 POSITION;
-	glm::vec2 TEXTURE;
-	glm::vec3 NORMAL;
+	
+	Vector2f TEXTURE;
+	Vector3f NORMAL;
+	Vector4f POSITION;
 
 	vertex_type_h() = default;
-	vertex_type_h(glm::vec4 _p, glm::vec2 _t, glm::vec3 _n) :
+	vertex_type_h(Vector4f _p, Vector2f _t, Vector3f _n) :
 		POSITION(_p), TEXTURE(_t), NORMAL(_n)
 	{}
 
@@ -105,11 +107,11 @@ typedef struct vertex_type_h
 
 typedef struct basic_vertex_type_h
 {
-	glm::vec4 POSITION;
-	glm::vec4 TEXTURE;
+	Vector4f POSITION;
+	Vector4f TEXTURE;
 
 	basic_vertex_type_h() = default;
-	basic_vertex_type_h(glm::vec4 _p, glm::vec4 _t) :
+	basic_vertex_type_h(Vector4f _p, Vector4f _t) :
 		POSITION(_p), TEXTURE(_t)
 	{
 	}
@@ -150,14 +152,14 @@ typedef struct basic_vertex_type_h
 
 typedef struct pospack6_cnorm_c16tex1_bone2_type_h
 {
-	glm::vec4 POSITION;
-	glm::vec2 TEXTURE;
-	glm::vec3 NORMAL;
-	glm::ivec2 BONES;
-	glm::vec2 WEIGHTS;
+	Vector4f POSITION;
+	Vector2f TEXTURE;
+	Vector3f NORMAL;
+	Vector2i BONES;
+	Vector2f WEIGHTS;
 
 	pospack6_cnorm_c16tex1_bone2_type_h() = default;
-	pospack6_cnorm_c16tex1_bone2_type_h(const glm::vec4& _p, const glm::vec2& _t, const glm::vec3& _n, const glm::ivec2& _b, const glm::vec2& _w) :
+	pospack6_cnorm_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector3f& _n, const Vector2i& _b, const Vector2f& _w) :
 		POSITION(_p), TEXTURE(_t), NORMAL(_n), BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -216,13 +218,13 @@ typedef struct pospack6_cnorm_c16tex1_bone2_type_h
 
 typedef struct pospack6_c16tex1_bone2_type_h
 {
-	glm::vec4 POSITION;
-	glm::vec2 TEXTURE;
-	glm::ivec2 BONES;
-	glm::vec2 WEIGHTS;
+	Vector4f POSITION;
+	Vector2f TEXTURE;
+	Vector2i BONES;
+	Vector2f WEIGHTS;
 
 	pospack6_c16tex1_bone2_type_h() = default;
-	pospack6_c16tex1_bone2_type_h(const glm::vec4& _p, const glm::vec2& _t, const glm::ivec2& _b, const glm::vec2& _w) :
+	pospack6_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2i& _b, const Vector2f& _w) :
 		POSITION(_p), TEXTURE(_t),  BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -274,14 +276,14 @@ typedef struct pospack6_c16tex1_bone2_type_h
 
 typedef struct pospack6_c16tex2_bone2_type_h
 {
-	glm::vec4 POSITION;
-	glm::vec2 TEXTURE;
-	glm::vec2 TEXTURE2;
-	glm::ivec2 BONES;
-	glm::vec2 WEIGHTS;
+	Vector4f POSITION;
+	Vector2f TEXTURE;
+	Vector2f TEXTURE2;
+	Vector2i BONES;
+	Vector2f WEIGHTS;
 
 	pospack6_c16tex2_bone2_type_h() = default;
-	pospack6_c16tex2_bone2_type_h(const glm::vec4& _p, const glm::vec2& _t, const glm::vec2& _t2, const glm::ivec2& _b, const glm::vec2& _w) :
+	pospack6_c16tex2_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2f& _t2, const Vector2i& _b, const Vector2f& _w) :
 		POSITION(_p), TEXTURE(_t), TEXTURE2(_t2), BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -336,24 +338,22 @@ typedef struct pospack6_c16tex2_bone2_type_h
 
 } Vertex_PosPack6_C16Tex2_Bone2;
 
-
-
 #pragma pack(push, 2)
 typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 {
-	glm::u8vec2  BONES;
-	glm::u8vec2  WEIGHTS;
+	Vector2uc BONES;
+	Vector2uc WEIGHTS;
 	int NORMAL;
-	glm::i16vec2 TEXTURE;
-	glm::i16vec3 POSITION;
+	Vector2s TEXTURE;
+	Vector3s POSITION;
 
 	cpospack6_cnorm_c16tex1_bone2_type_h() = default;
 	cpospack6_cnorm_c16tex1_bone2_type_h(
-		const glm::i16vec3& _p,
-		const glm::i16vec2& _t,
-		const int& _n,
-		const glm::u8vec2& _b,
-		const glm::u8vec2& _w)
+		const Vector3s& _p,
+		const Vector2s& _t,
+		const int _n,
+		const Vector2uc& _b,
+		const Vector2uc& _w)
 		: POSITION(_p), TEXTURE(_t), NORMAL(_n), BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -390,7 +390,7 @@ typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 	}
 
 } CVertex_PosPack6_CNorm_C16Tex1_Bone2;
-
+#pragma pack(pop)
 
 // ==============================
 // PosPack6 + C16Tex1 + Bone2
@@ -398,17 +398,17 @@ typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 
 typedef struct cpospack6_c16tex1_bone2_type_h
 {
-	glm::u8vec2  BONES;
-	glm::u8vec2  WEIGHTS;
-	glm::i16vec2 TEXTURE;
-	glm::i16vec3 POSITION;
+	Vector2uc  BONES;
+	Vector2uc  WEIGHTS;
+	Vector2s TEXTURE;
+	Vector3s POSITION;
 
 	cpospack6_c16tex1_bone2_type_h() = default;
 	cpospack6_c16tex1_bone2_type_h(
-		const glm::i16vec3& _p,
-		const glm::i16vec2& _t,
-		const glm::u8vec2& _b,
-		const glm::u8vec2& _w)
+		const Vector3s& _p,
+		const Vector2s& _t,
+		const Vector2uc& _b,
+		const Vector2uc& _w)
 		: POSITION(_p), TEXTURE(_t), BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -447,16 +447,16 @@ typedef struct cpospack6_c16tex1_bone2_type_h
 
 typedef struct cpospack6_c16tex2_bone2_type_h
 {
-	glm::u8vec2 BONES;
-	glm::u8vec2 WEIGHTS;
-	glm::i16vec2 TEXTURE;
-	glm::i16vec2 TEXTURE2;
-	glm::i16vec3 POSITION;
+	Vector2uc BONES;
+	Vector2uc WEIGHTS;
+	Vector2s TEXTURE;
+	Vector2s TEXTURE2;
+	Vector3s POSITION;
 	
 	
 
 	cpospack6_c16tex2_bone2_type_h() = default;
-	cpospack6_c16tex2_bone2_type_h(const glm::i16vec3& _p, const glm::i16vec2& _t, const glm::i16vec2& _t2, const glm::u8vec2& _b, const glm::u8vec2& _w) :
+	cpospack6_c16tex2_bone2_type_h(const Vector3s& _p, const Vector2s& _t, const Vector2s& _t2, const Vector2uc& _b, const Vector2uc& _w) :
 		POSITION(_p), TEXTURE(_t), TEXTURE2(_t2), BONES(_b), WEIGHTS(_w)
 	{
 	}
@@ -510,5 +510,3 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 	}
 
 } CVertex_PosPack6_C16Tex2_Bone2;
-
-#pragma pack(pop)

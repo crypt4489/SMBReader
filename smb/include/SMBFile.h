@@ -3,8 +3,7 @@
 #include <string>
 #include <vector>
 #include "FileManager.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "MathTypes.h"
 
 #define BEGINNINGSMBChunk 0xa77e4dfa
 #define ENDTAG 0xbeef1234
@@ -102,8 +101,8 @@ enum SMBVertexTypes
 
 struct AxisBox
 {
-	glm::vec4 min;
-	glm::vec4 max;
+	Vector4f min;
+	Vector4f max;
 };
 
 struct SMBGeoChunk

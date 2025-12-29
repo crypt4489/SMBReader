@@ -179,7 +179,7 @@ void Exporter::ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& out
 		throw std::runtime_error("Cannot open file for OBJ export " + outputFile);
 	}
 
-
+	/*
 	auto& fileStream = handle->streamHandle;
 
 	for (const auto& vert : vertices) {
@@ -193,6 +193,7 @@ void Exporter::ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& out
 	for (const auto& vert : vertices) {
 		fileStream << "vn " << vert.NORMAL;
 	}
+	*/
 
 	FileManager::RemoveOpenFile(fileRet.value());
 }

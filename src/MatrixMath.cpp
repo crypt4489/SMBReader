@@ -1,17 +1,16 @@
 #include "MathTypes.h"
 
-glm::mat3 CreateRotationMatrix(const glm::vec3& up, float angle)
+glm::mat3 CreateRotationMatrix(const Vector3f& up, float angle)
 {
+
 	glm::mat3 ret = glm::identity<glm::mat3>();
 
 	float s = sinf(angle);
 	float c = cosf(angle);
 
-	glm::vec3 upLN = up;
-
-	float x = upLN[0];
-	float y = upLN[1];
-	float z = upLN[2];
+	float x = up.x;
+	float y = up.y;
+	float z = up.z;
 
 	float invC = 1 - c;
 
@@ -35,18 +34,16 @@ glm::mat3 CreateRotationMatrix(const glm::vec3& up, float angle)
 
 }
 
-glm::mat4 CreateRotationMatrixMat4(const glm::vec3& up, float angle)
+glm::mat4 CreateRotationMatrixMat4(const Vector3f& up, float angle)
 {
 	glm::mat4 ret = glm::identity<glm::mat4>();
 
 	float s = sinf(angle);
 	float c = cosf(angle);
 
-	glm::vec3 upLN = up;
-
-	float x = upLN[0];
-	float y = upLN[1];
-	float z = upLN[2];
+	float x = up.x;
+	float y = up.y;
+	float z = up.z;
 
 	float invC = 1 - c;
 

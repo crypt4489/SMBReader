@@ -132,7 +132,7 @@ void TextManager::DestroyTextManager()
 
 //Text
 
-Text::Text(std::string& text, Font& _f, float x, float y, glm::vec4 color, size_t _buffersize)
+Text::Text(std::string& text, Font& _f, float x, float y, Vector4f color, size_t _buffersize)
 	: font(_f), mainText(text), bufferReserved(_buffersize), textColor(color)
 	, startX(x), startY(y)
 {
@@ -161,6 +161,8 @@ void Text::CreateVertices(std::string& text, float x, float y, size_t startingSt
 	float lasty = actualY;
 
 	uint32_t LETTERSPERROW = font.pictureWidth / font.cellWidth;
+
+	Vector4f color = { textColor.x, textColor.y, textColor.z, textColor.w };
 
 	for (auto& c : text.substr(startingString, text.size()))
 	{
@@ -194,10 +196,10 @@ void Text::CreateVertices(std::string& text, float x, float y, size_t startingSt
 		float top = actualY;
 		float bottom = actualY + (static_cast<float>(font.cellHeight) / static_cast<float>(font.pictureHeight));;
 
-		textVertices.emplace_back(glm::vec2(left, top), glm::vec2(s1, t1), textColor);
-		textVertices.emplace_back(glm::vec2(left, bottom), glm::vec2(s1, t2), textColor);
-		textVertices.emplace_back(glm::vec2(right, top), glm::vec2(s2, t1), textColor);
-		textVertices.emplace_back(glm::vec2(right, bottom), glm::vec2(s2, t2), textColor);
+		textVertices.emplace_back(Vector2f(left, top), Vector2f(s1, t1), color);
+		textVertices.emplace_back(Vector2f(left, bottom), Vector2f(s1, t2),color);
+		textVertices.emplace_back(Vector2f(right, top), Vector2f(s2, t1), color);
+		textVertices.emplace_back(Vector2f(right, bottom), Vector2f(s2, t2), color);
 
 		lastx = right;
 	}
