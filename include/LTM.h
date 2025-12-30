@@ -7,77 +7,77 @@
 
 struct LTM
 {
-	glm::vec3 GetPos() const {
-		return glm::vec3(LTM[3]);
+	Vector3f GetPos() const {
+		return Vector3f(LTM.translate.x, LTM.translate.y, LTM.translate.z);
 	}
 
-	glm::vec3 GetForward() const {
-		return glm::vec3(LTM[2]);
+	Vector3f GetForward() const {
+		return Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
 	}
 
-	glm::vec3 GetUp() const {
-		return glm::vec3(LTM[1]);
+	Vector3f GetUp() const {
+		return Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
 	}
 
-	glm::vec3 GetRight() const {
-		return glm::vec3(LTM[0]);
+	Vector3f GetRight() const {
+		return Vector3f(LTM.right.x, LTM.right.y, LTM.right.z);
 	}
 
-	glm::vec3 GetScale() const {
-		return glm::vec3(LTM[0][3], LTM[1][3], LTM[2][3]);
+	Vector3f GetScale() const {
+		return Vector3f(LTM.right.w, LTM.up.w, LTM.forward.w);
 	}
 
-	void SetPos(const glm::vec4& _pos)
+	void SetPos(const Vector4f& _pos)
 	{
-		LTM[3] = _pos;
+		LTM.translate = _pos;
 	}
 
-	void SetPos(const glm::vec3& _pos)
+	void SetPos(const Vector3f& _pos)
 	{
-		LTM[3][0] = _pos[0];
-		LTM[3][1] = _pos[1];
-		LTM[3][2] = _pos[2];
+		LTM[3][0] = _pos.x;
+		LTM[3][1] = _pos.y;
+		LTM[3][2] = _pos.z;
 	}
 
-	void SetForward(const glm::vec3& _forward)
+	void SetForward(const Vector3f& _forward)
 	{
-		LTM[2][0] = _forward[0];
-		LTM[2][1] = _forward[1];
-		LTM[2][2] = _forward[2];
+		LTM[2][0] = _forward.x;
+		LTM[2][1] = _forward.y;
+		LTM[2][2] = _forward.z;
 	}
 
-	void SetUp(const glm::vec3& _up)
+	void SetUp(const Vector3f& _up)
 	{
-		LTM[1][0] = _up[0];
-		LTM[1][1] = _up[1];
-		LTM[1][2] = _up[2];
+		LTM[1][0] = _up.x;
+		LTM[1][1] = _up.y;
+		LTM[1][2] = _up.z;
 	}
 
-	void SetRight(const glm::vec3& _right)
+	void SetRight(const Vector3f& _right)
 	{
-		LTM[0][0] = _right[0];
-		LTM[0][1] = _right[1];
-		LTM[0][2] = _right[2];
+		LTM[0][0] = _right.x;
+		LTM[0][1] = _right.y;
+		LTM[0][2] = _right.z;
 	}
 
-	void SetScale(const glm::vec3& _scale)
+	void SetScale(const Vector3f& _scale)
 	{
-		LTM[0][3] = _scale[0];
-		LTM[1][3] = _scale[1];
-		LTM[2][3] = _scale[2];
+		LTM[0][3] = _scale.x;
+		LTM[1][3] = _scale.y;
+		LTM[2][3] = _scale.z;
 	}
 
-	void MoveForward(const glm::vec3& _delta)
+	void MoveForward(const Vector3f& _delta)
 	{
 		SetPos(GetPos() + (GetForward() * _delta));
 	}
 
-	void MoveRight(const glm::vec3& _delta)
+	void MoveRight(const Vector3f& _delta)
 	{
 		SetPos(GetPos() + (GetRight() * _delta));
 	}
 
-	void MoveUp(const glm::vec3& _delta)
+	void MoveUp(const Vector3f& _delta)
 	{
 		SetPos(GetPos() + (GetUp() * _delta));
 	}
@@ -99,28 +99,48 @@ struct LTM
 
 	void RotateAroundUp(double angle)
 	{
-		glm::mat3 rot = CreateRotationMatrix(Vector3f(0.0, 1.0f, 0.0f), static_cast<float>(glm::radians(angle)));
+		Matrix3f rot = CreateRotationMatrix(Vector3f(0.0, 1.0f, 0.0f), DegToRad(static_cast<float>(angle)));
 
-		LTM[0] = glm::vec4(glm::vec3(LTM[0]) * rot, LTM[0][3]);
-		LTM[1] = glm::vec4(glm::vec3(LTM[1]) * rot, LTM[1][3]);
-		LTM[2] = glm::vec4(glm::normalize(glm::vec3(LTM[2]) * rot), LTM[2][3]);
+
+		Vector3f right = Vector3f(LTM.right.x, LTM.right.y, LTM.right.z);
+		Vector3f up = Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
+		Vector3f forward = Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
+
+		right = right * rot;
+		up = up * rot;
+
+	
+		forward = forward * rot;
+		
+	 	forward = Normalize(forward);
+
+		LTM.right = Vector4f(right.x, right.y, right.z, LTM[0][3]);
+		LTM.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
+		LTM.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
 
 	}
 
 	void PitchLTM(double angle)
 	{
 
-		Vector3f rightAxis = { LTM[0].x, LTM[0].y, LTM[0].z };
+		Vector3f right = { LTM.right.x, LTM.right.y, LTM.right.z };
 
-		glm::mat3 rot = CreateRotationMatrix(rightAxis, static_cast<float>(glm::radians(angle)));
+		Vector3f up = Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
+		Vector3f forward = Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
 
-		LTM[1] = glm::vec4(glm::vec3(LTM[1] * rot), LTM[1][3]);
-		
-		auto temp = glm::normalize(glm::vec3(LTM[2]) * rot);
+		Matrix3f rot = CreateRotationMatrix(right, DegToRad(static_cast<float>(angle)));
 
-		LTM[2] = glm::vec4(temp, LTM[2][3]);
+		up = up * rot;
+
+
+		forward = forward * rot;
+
+		forward = Normalize(forward);
+
+		LTM.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
+		LTM.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
 	}
 
-	glm::mat4 LTM;
+	Matrix4f LTM;
 };
 

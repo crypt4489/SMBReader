@@ -1,6 +1,7 @@
 #pragma once
 
 #include "LTM.h"
+#include <cmath>
 struct Camera
 {
 
@@ -17,34 +18,34 @@ struct Camera
 
 		Vector3f camUp = Cross(camLook, camRight);
 
-		LTM.SetPos(glm::vec4(pos.x, pos.y, pos.z, 1.0f));
-		LTM.SetForward(glm::vec3(camLook.x, camLook.y, camLook.z));
-		LTM.SetRight(glm::vec3(camRight.x, camRight.y, camRight.z));
-		LTM.SetUp(glm::vec3(camUp.x, camUp.y, camUp.z));
+		LTM.SetPos(Vector4f(pos.x, pos.y, pos.z, 1.0f));
+		LTM.SetForward(camLook);
+		LTM.SetRight(camRight);
+		LTM.SetUp(camUp);
 	}
 
 	void UpdateCamera()
 	{
 		float x, y, z;
 
-		glm::vec3 lPos = LTM.GetPos(), lRight = LTM.GetRight(), lUp = LTM.GetUp(), lForward = LTM.GetForward();
+		Vector3f lPos = LTM.GetPos(), lRight = LTM.GetRight(), lUp = LTM.GetUp(), lForward = LTM.GetForward();
 
-		x = -glm::dot(lRight, lPos);
-		y = -glm::dot(lUp, lPos);
-		z = -glm::dot(lForward, lPos);
+		x = -Dot(lRight, lPos);
+		y = -Dot(lUp, lPos);
+		z = -Dot(lForward, lPos);
 
 
-		View[0][0] = lRight[0];
-		View[1][0] = lRight[1];
-		View[2][0] = lRight[2];
+		View[0][0] = lRight.x;
+		View[1][0] = lRight.y;
+		View[2][0] = lRight.z;
 		
-		View[0][1] = lUp[0];
-		View[1][1] = lUp[1];
-		View[2][1] = lUp[2];
+		View[0][1] = lUp.x;
+		View[1][1] = lUp.y;
+		View[2][1] = lUp.z;
 		
-		View[0][2] = lForward[0];
-		View[1][2] = lForward[1];
-		View[2][2] = lForward[2];
+		View[0][2] = lForward.x;
+		View[1][2] = lForward.y;
+		View[2][2] = lForward.z;
 
 
 		View[3][0] = x;
@@ -57,12 +58,12 @@ struct Camera
 	void CreateProjectionMatrix(float aspect, float n, float f, float angle)
 	{
 		float FoyYDiv2 = angle * 0.5f;
-		float cotFov = 1.0f / (glm::tan(FoyYDiv2));
+		float cotFov = 1.0f / (tanf(FoyYDiv2));
 
 		float w = cotFov / aspect;
 		float h = cotFov;
 
-		Projection = glm::identity<glm::mat4>();
+		Projection = Identity4f();
 
 		Projection[0][0] = w;
 		Projection[1][1] = -h;
@@ -73,8 +74,8 @@ struct Camera
 	}
 
 	LTM LTM;
-	glm::mat4 View;
-	glm::mat4 Projection;
+	Matrix4f View;
+	Matrix4f Projection;
 	
 };
 

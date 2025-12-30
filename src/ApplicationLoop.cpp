@@ -9,9 +9,6 @@
 #include "SMBTexture.h"
 #include "AppAllocator.h"
 
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 ApplicationLoop* loop;
 
@@ -30,7 +27,7 @@ struct Handles
 	int stride;
 	int pad;
 	int handles[12];
-	glm::mat4 m;
+	Matrix4f m;
 	AxisBox minMaxBox;
 };
 
@@ -167,7 +164,7 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 
 	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-	handles->m[3] = glm::vec4(pos.x, pos.y, pos.z, 1.0f);
+	handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
 	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
@@ -189,7 +186,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-		handles->m[3] = glm::vec4(pos.x, pos.y, pos.z, 1.0f);
+		handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 	}
@@ -337,7 +334,7 @@ void ApplicationLoop::CreateTexturePools()
 }
 
 int instanceAlloc;
-std::array<glm::mat4, 64 * 64> instanceMatrices;
+std::array<Matrix4f, 64 * 64> instanceMatrices;
 
 static EntryHandle storageBuffer;
 
@@ -347,7 +344,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
-	instanceAlloc = rendInst->GetAllocFromDeviceBuffer(sizeof(instanceMatrices), alignof(glm::mat4), STATIC);
+	instanceAlloc = rendInst->GetAllocFromDeviceBuffer(sizeof(instanceMatrices), alignof(Matrix4f), STATIC);
 
 	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM, GetPoolIndexByFormat(R8G8B8A8_UNORM));
 
@@ -384,10 +381,10 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	for (int i = 0; i < 4096; i++)
 	{
-		instanceMatrices[i] = glm::identity<glm::mat4>();
-		instanceMatrices[i][3].y = offsetY;
-		instanceMatrices[i][3].x = offsetX;
-		instanceMatrices[i][3].z = offsetZ;
+		instanceMatrices[i] = Identity4f();
+		instanceMatrices[i][3][1] = offsetY;
+		instanceMatrices[i][3][0] = offsetX;
+		instanceMatrices[i][3][2] = offsetZ;
 		offsetX += 15.0f;
 		if ((i & 7) == 7)
 		{
@@ -480,7 +477,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
 	
-	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(glm::mat4) * 2, 0, 0, frame);
+	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(Matrix4f) * 2, 0, 0, frame);
 	
 }
 
@@ -539,15 +536,19 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	geom->geometryInstanceLocalMemoryCount = 1;
 
-	glm::mat4 *geomSpecificData = (glm::mat4*)geometryObjectSpecificAlloc.Allocate(sizeof(glm::mat4));
+	Matrix4f *geomSpecificData = (Matrix4f*)geometryObjectSpecificAlloc.Allocate(sizeof(Matrix4f));
 
 	geom->geometryInstanceLocalMemoryStart = geometryObjectData.Allocate(geomSpecificData);
 
-	*geomSpecificData = glm::translate(glm::scale(glm::identity<glm::mat4>(), glm::vec3(10.0f, 10.0f, 10.0f)), glm::vec3(xLoc, 0.f, 0.f));
+	*geomSpecificData = Identity4f();
+		
+	*geomSpecificData = *geomSpecificData * 10.0f;
+		
+	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
 
-	glm::mat4 rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), glm::radians(90.0f));
+	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
-	*geomSpecificData *= rotation;
+	*geomSpecificData = *geomSpecificData * rotation;
 
 	for (int i = 0; i<count; i++)
 	{
@@ -692,7 +693,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		}
 
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
-		memcpy(&handles->m, geomSpecificData, sizeof(glm::mat4));
+		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
 
 		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles));
 
@@ -704,7 +705,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 
 
-		int smallSliceOfHeaven = rendInst->GetAllocFromUniformBuffer(sizeof(uint32_t), alignof(glm::mat4), PERFRAME);
+		int smallSliceOfHeaven = rendInst->GetAllocFromUniformBuffer(sizeof(uint32_t), alignof(Matrix4f), PERFRAME);
 
 		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, smallSliceOfHeaven, 0);
 
@@ -908,11 +909,11 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(glm::mat4) * 2, alignof(glm::mat4), PERFRAME);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(Matrix4f) * 2, alignof(Matrix4f), PERFRAME);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(glm::mat4), PERFRAME);;
+	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(Matrix4f), PERFRAME);;
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0);
 
@@ -925,7 +926,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	c.UpdateCamera();
 
-	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, glm::radians(45.0f));
+	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 	
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 }

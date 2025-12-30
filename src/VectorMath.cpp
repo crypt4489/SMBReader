@@ -1,5 +1,5 @@
 #include "MathTypes.h"
-
+#include <cmath>
 Vector2f Add(Vector2f a, Vector2f b)
 {
 	return { a.x + b.x, a.y + b.y };
@@ -165,15 +165,33 @@ Vector4f operator/(Vector4f v, float s)
 	return Divide(v, s);
 }
 
+float Length(Vector2f v)
+{
+	float mag = sqrtf(v.x * v.x + v.y * v.y);
+	return mag;
+}
+
+float Length(Vector3f v)
+{
+	float mag = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z);
+	return mag;
+}
+
+float Length(Vector4f v)
+{
+	float mag = sqrtf(v.x * v.x + v.y * v.y + v.z * v.z + v.w + v.w);
+	return mag;
+}
+
 Vector2f Normalize(Vector2f a)
 {
-	float mag = a.x + a.y;
+	float mag = Length(a);
 	return Divide(a, mag);
 }
 
 Vector3f Normalize(Vector3f a)
 {
-	float mag = a.x + a.y + a.z;
+	float mag = Length(a);
 	return Divide(a, mag);
 }
 
@@ -184,6 +202,21 @@ Vector3f Cross(Vector3f a, Vector3f b)
 
 Vector4f Normalize(Vector4f a)
 {
-	float mag = a.x + a.y + a.z + a.w;
+	float mag = Length(a);
 	return Divide(a, mag);
+}
+
+float Dot(Vector2f a, Vector2f b)
+{
+	return a.x * b.x + a.y * b.y;
+}
+
+float Dot(Vector3f a, Vector3f b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+float Dot(Vector4f a, Vector4f b)
+{
+	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }

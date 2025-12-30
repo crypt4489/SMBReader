@@ -6,7 +6,6 @@
 #include "RenderInstance.h"
 #include "VertexTypes.h"
 
-#include <glm/glm.hpp>
 
 struct Font
 {

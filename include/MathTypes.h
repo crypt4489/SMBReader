@@ -1,12 +1,21 @@
 #pragma once
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 #ifdef _MSC_VER
 #define VEC_ALIGN //__declspec(align(16))
 #define PACKED_BEGIN __pragma(pack(push, 1))
 #define PACKED_END __pragma(pack(pop))
 #endif
+
+#define TWOPI 6.283185307179586476925286766559f
+#define PI 3.1415926535897932384626433832795f
+#define PIHALF 1.5707963267948966192313216916398f
+#define PIDIV4 0.78539816339744830961566084581988f
+
+
+inline float DegToRad(float Deg)
+{
+	return (Deg / 180.0f) * PI;
+}
 
 
 
@@ -490,6 +499,8 @@ Vector2f Scale(Vector2f v, float s);
 Vector2f Divide(Vector2f v, float s);
 Vector2f Splat2f(float s);
 Vector2f Normalize(Vector2f a);
+float Dot(Vector2f a, Vector2f b);
+float Length(Vector2f v);
 
 Vector3f Add(Vector3f a, Vector3f b);
 Vector3f Sub(Vector3f a, Vector3f b);
@@ -499,6 +510,8 @@ Vector3f Divide(Vector3f v, float s);
 Vector3f Splat3f(float s);
 Vector3f Normalize(Vector3f a);
 Vector3f Cross(Vector3f a, Vector3f b);
+float Dot(Vector3f a, Vector3f b);
+float Length(Vector3f v);
 
 Vector4f Add(Vector4f a, Vector4f b);
 Vector4f Sub(Vector4f a, Vector4f b);
@@ -507,6 +520,8 @@ Vector4f Scale(Vector4f v, float s);
 Vector4f Divide(Vector4f v, float s);
 Vector4f Splat4f(float s);
 Vector4f Normalize(Vector4f a);
+float Dot(Vector4f a, Vector4f b);
+float Length(Vector4f v);
 
 Vector2f operator+(Vector2f a, Vector2f b);
 Vector2f operator-(Vector2f a, Vector2f b);
@@ -899,6 +914,187 @@ Vector4us operator*(Vector4us v, unsigned short s);
 Vector4us operator/(Vector4us v, unsigned short s);
 
 
-glm::mat3 CreateRotationMatrix(const Vector3f& up, float angle);
 
-glm::mat4 CreateRotationMatrixMat4(const Vector3f& up, float angle);
+struct Matrix2f
+{
+	Matrix2f() = default;
+	Matrix2f(Vector2f _x, Vector2f _y)
+	{
+		x = _x;
+		y = _y;
+	}
+
+	Matrix2f(const Matrix2f& old) {
+		x = old.x;
+		y = old.y;
+	};
+
+	float* operator[](int x)
+	{
+		return &comp[x * 2];
+	}
+
+
+	union {
+		struct {
+			Vector2f x;
+			Vector2f y;
+		};
+
+		float comp[4];
+	};
+};
+
+
+struct Matrix3f
+{
+
+	Matrix3f() = default;
+	Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z)
+	{
+		x = _x;
+		y = _y;
+		z = _z;
+	}
+
+	Matrix3f(const Matrix3f& old) {
+		x = old.x;
+		y = old.y;
+		z = old.z;
+	};
+
+	float* operator[](int x)
+	{
+		return &comp[x * 3];
+	}
+
+	union {
+		struct {
+			Vector3f right;
+			Vector3f up;
+			Vector3f forward;
+		};
+
+		struct {
+			Vector3f x;
+			Vector3f y;
+			Vector3f z;
+		};
+
+		float comp[9];
+	};
+};
+
+struct Matrix4f
+{
+	Matrix4f() = default;
+	Matrix4f(Vector4f _x, Vector4f _y, Vector4f _z, Vector4f _w)
+	{
+		x = _x;
+		y = _y;
+		z = _z;
+		w = _w;
+	}
+
+	Matrix4f(const Matrix4f& old) {
+		x = old.x;
+		y = old.y;
+		z = old.z;
+		w = old.w;
+	};
+
+	float* operator[](int x)
+	{
+		return &comp[x * 4];
+	}
+
+	union {
+		struct {
+			Vector4f right;
+			Vector4f up;
+			Vector4f forward;
+			Vector4f translate;
+		};
+
+		struct {
+			Vector4f x;
+			Vector4f y;
+			Vector4f z;
+			Vector4f w;
+		};
+
+		float comp[16];
+	};
+};
+
+
+Matrix2f Add(Matrix2f a, Matrix2f b);
+Matrix2f Sub(Matrix2f a, Matrix2f b);
+Matrix2f Scale(Matrix2f m, float s);
+
+
+Matrix2f Multiply(Matrix2f a, Matrix2f b);    
+Vector2f Multiply(Matrix2f m, Vector2f v); 
+Vector2f Multiply(Vector2f v, Matrix2f m);
+Matrix2f Transpose(Matrix2f m);
+float    Determinant(Matrix2f m);
+Matrix2f Inverse(Matrix2f m);
+Matrix2f Identity2f();
+
+
+Matrix2f operator+(Matrix2f a, Matrix2f b);
+Matrix2f operator-(Matrix2f a, Matrix2f b);
+Matrix2f operator*(Matrix2f a, Matrix2f b);
+Vector2f operator*(Matrix2f m, Vector2f v);
+Vector2f operator*(Vector2f v, Matrix2f m);
+Matrix2f operator*(Matrix2f m, float s);
+
+
+
+Matrix3f Add(Matrix3f a, Matrix3f b);
+Matrix3f Sub(Matrix3f a, Matrix3f b);
+Matrix3f Scale(Matrix3f m, float s);
+
+
+Matrix3f Multiply(Matrix3f a, Matrix3f b);    
+Vector3f Multiply(Matrix3f m, Vector3f v); 
+Vector3f Multiply(Vector3f v, Matrix3f m);
+Matrix3f Transpose(Matrix3f m);
+float    Determinant(Matrix3f m);
+Matrix3f Inverse(Matrix3f m);
+Matrix3f Identity3f();
+
+
+Matrix3f operator+(Matrix3f a, Matrix3f b);
+Matrix3f operator-(Matrix3f a, Matrix3f b);
+Matrix3f operator*(Matrix3f a, Matrix3f b);
+Vector3f operator*(Matrix3f m, Vector3f v);
+Vector3f operator*(Vector3f v, Matrix3f m);
+Matrix3f operator*(Matrix3f m, float s);
+
+
+
+Matrix4f Add(Matrix4f a, Matrix4f b);
+Matrix4f Sub(Matrix4f a, Matrix4f b);
+Matrix4f Scale(Matrix4f m, float s);
+
+
+Matrix4f Multiply(Matrix4f a, Matrix4f b);   
+Vector4f Multiply(Matrix4f m, Vector4f v); 
+Vector4f Multiply(Vector4f v, Matrix4f m);
+Matrix4f Transpose(Matrix4f m);
+Matrix4f Inverse(Matrix4f m);                 
+Matrix4f Identity4f();
+
+
+Matrix4f operator+(Matrix4f a, Matrix4f b);
+Matrix4f operator-(Matrix4f a, Matrix4f b);
+Matrix4f operator*(Matrix4f a, Matrix4f b);
+Vector4f operator*(Matrix4f m, Vector4f v);
+Vector4f operator*(Vector4f v, Matrix4f m);
+Matrix4f operator*(Matrix4f m, float s);
+
+
+Matrix3f CreateRotationMatrix(const Vector3f& up, float angle);
+
+Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle);

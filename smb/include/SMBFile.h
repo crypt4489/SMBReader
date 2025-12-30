@@ -31,38 +31,6 @@ enum SMBImageFormat : uint32_t
 
 //Second part is I think the GeometryDef
 
-/*
-struct GEOBaseChunk
-{
-	uint32_t numLods;
-	uint32_t geometryFlags;
-	uint32_t lopSpecs[6];
-	glm::vec4 sphere;
-	glm::vec3 boxecorner;
-};
-
-struct GEOResourceChunk
-{
-	uint32_t unknown[2];
-	uint32_t resourceType;
-	uint32_t unknown2[2];
-};
-
-struct GEOGeometryBase
-{
-	uint32_t materialSize;
-	uint32_t collidableSize;
-	uint32_t renderablesize;
-	uint32_t numberofinstances;
-
-	uint32_t numberofskels;
-	uint32_t numskinnedcollidables;
-	uint32_t rigidrenderables;
-	uint32_t skinnedRenderables;
-
-	uint32_t rigidcollidables;
-}; */
-
 #define MaterialDefSize 136 //bytes
 #define GeometryBaseDefSize 72 //bytes
 

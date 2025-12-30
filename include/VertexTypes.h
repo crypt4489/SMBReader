@@ -1,7 +1,6 @@
 #pragma once
 #include <array>
 #include "MathTypes.h"
-#include "glm/glm.hpp"
 #include "VKUtilities.h"
 typedef struct text_vertex_t
 {
