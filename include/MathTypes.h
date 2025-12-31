@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef _MSC_VER
-#define VEC_ALIGN //__declspec(align(16))
+#define VEC_ALIGN 
 #define PACKED_BEGIN __pragma(pack(push, 1))
 #define PACKED_END __pragma(pack(pop))
 #endif
@@ -75,7 +75,6 @@ struct Vector3f
 
 };
 
-VEC_ALIGN
 struct Vector4f
 {
 	union {
@@ -914,7 +913,7 @@ Vector4us operator*(Vector4us v, unsigned short s);
 Vector4us operator/(Vector4us v, unsigned short s);
 
 
-
+PACKED_BEGIN
 struct Matrix2f
 {
 	Matrix2f() = default;
@@ -1026,7 +1025,7 @@ struct Matrix4f
 		float comp[16];
 	};
 };
-
+PACKED_END
 
 Matrix2f Add(Matrix2f a, Matrix2f b);
 Matrix2f Sub(Matrix2f a, Matrix2f b);

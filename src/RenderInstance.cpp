@@ -564,10 +564,10 @@ void RenderInstance::CreatePipelines()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	std::array<std::string, 4> layouts = {
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\3DTexturedLayout.xml",
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\TextLayout.xml",
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\InterpolateMeshLayout.xml",
-		"C:\\Users\\dflet\\Documents\\Visual Studio Projects\\SMBReader\\shaders\\layouts\\PolynomialLayout.xml"
+		"3DTexturedLayout.xml",
+		"TextLayout.xml",
+		"InterpolateMeshLayout.xml",
+		"PolynomialLayout.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;

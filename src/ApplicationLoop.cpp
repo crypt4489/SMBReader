@@ -241,7 +241,11 @@ void ApplicationLoop::Execute()
 
 		InitializeRuntime();
 
-		ExecuteCommands("load", { args.inputFile.string() });
+		//ExecuteCommands("load", { args.inputFile.string() });
+
+		LoadObject(args.inputFile.string());
+
+
 
 		int i = 0, j = 1;
 
@@ -476,9 +480,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	
 	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(Matrix4f) * 2, 0, 0, frame);
-	
 }
 
 int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
@@ -575,7 +577,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		void* vertexData;
 
-		bool decompressed = false;
+		bool decompressed = true;
 
 		switch (type)
 		{

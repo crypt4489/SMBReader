@@ -73,9 +73,9 @@ struct Camera
 		Projection[3][3] = 0.0f;
 	}
 
-	LTM LTM;
-	Matrix4f View;
-	Matrix4f Projection;
+	LTM LTM{};
+	Matrix4f View{};
+	Matrix4f Projection{};
 	
 };
 
