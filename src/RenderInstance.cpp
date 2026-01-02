@@ -21,6 +21,7 @@
 #include "VKGraph.h"
 #include "VKPipelineBuilder.h"
 #include "VKPipelineObject.h"
+#include "VKOneTimeQueue.h"
 #include "VertexTypes.h"
 #include "WindowManager.h"
 
@@ -1238,7 +1239,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
 
-	
+	graphicsOTQ = majorDevice->CreateGraphicsOneTimeQueue(50);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -1323,6 +1324,12 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 
 EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 {
+	//TODO handle this better
+	if (descriptorManager.vkDescriptorSets[descriptorSet] != EntryHandle())
+	{
+		return descriptorManager.vkDescriptorSets[descriptorSet];
+	}
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
 	ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -1435,7 +1442,7 @@ int RenderInstance::GetBufferAllocationViaDescriptor(int descriptorSet, int bind
 }
 
 
-EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info)
+int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1465,7 +1472,7 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.vertexBufferOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset),
 			.vertexCount = info->vertexCount,
 			.pipelinename = EntryHandle(),
-			.descCount = 1,
+			.descCount = info->descCount,
 			.descriptorsetid = descHandles.data(),
 			.dynamicPerSet = offsetsPerSet.data(),
 			.maxDynCap = dynamicNumber,
@@ -1476,6 +1483,22 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			.instanceCount = info->instanceCount,
 			.indexSize = info->indexSize
 	};
+
+	int renderStateCount = maxMSAALevels;
+
+	auto pso = stateObjectHandles.Allocate();
+
+	int ret = pso.first;
+	PipelineHandle* posStruct = pso.second;
+
+	posStruct->graphIndex = graphIndices.AllocateN(renderStateCount);
+	posStruct->graphCount = renderStateCount;
+	posStruct->numHandles = renderStateCount;
+	posStruct->group = GRAPHICSO;
+	posStruct->indexForHandles = renderStateObjects.AllocateN(renderStateCount);
+
+	int pipeInsertIndex = posStruct->indexForHandles;
+	int graphInsertIndex = posStruct->graphIndex;
 
 	auto& ref = pipelinesIdentifier[info->pipelinename];
 
@@ -1512,10 +1535,11 @@ EntryHandle RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermedi
 			AddVulkanMemoryBarrier(VKGraphicsPipelineObject, info->descriptorsetid[i]);
 
 		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
-		graph->AddObject(pipelineIndex);
+		graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
+		renderStateObjects.Update(pipeInsertIndex++, pipelineIndex);
 	}
 
-	return EntryHandle();
+	return ret;
 }
 
 ShaderComputeLayout* RenderInstance::GetComputeLayout(int shaderGraphIndex)
@@ -1533,7 +1557,7 @@ void RenderInstance::SetActiveComputePipeline(uint32_t objectIndex, bool active)
 	graph->SetActive(objectIndex, active);
 }
 
-uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)
+int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1562,7 +1586,18 @@ uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPi
 		.pushRangeCount = info->pushRangeCount
 	};
 
+	auto pso = stateObjectHandles.Allocate();
+
+	int ret = pso.first;
+	PipelineHandle* posStruct = pso.second;
+
 	EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
+
+	
+	posStruct->graphCount = 1;
+	posStruct->numHandles = 1;
+	posStruct->group = COMPUTESO;
+	posStruct->indexForHandles = computeStateObjects.Allocate(pipelineIndex);
 
 	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
@@ -1591,7 +1626,8 @@ uint32_t RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPi
 		AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid[i]);
 	
 	auto graph = dev->GetComputeGraph(computeGraphIndex);
-	uint32_t ret = graph->AddObject(pipelineIndex);
+
+	posStruct->graphIndex = graphIndices.Allocate((int)graph->AddObject(pipelineIndex));
 
 	return ret;
 }
@@ -1768,7 +1804,11 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	rcb.SetScissorCommand(0, 0, rect->width, rect->height);
 
-	graph->DrawScene(&rcb, currentFrame);
+	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
+
+	//graph->DrawScene(&rcb, currentFrame);
+
+	queue->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 
@@ -1823,8 +1863,23 @@ void RenderInstance::EndFrame()
 
 	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
+	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
 	cGraph->UpdateLists();
 	graph->UpdateLists();
+	//queue->UpdateQueue();
+}
+
+
+void RenderInstance::AddPipelineToMainQueue(int psoIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
+
+	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
+
+	EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentMSAALevel];
+
+	queue->AddObject(ret);
 }
 

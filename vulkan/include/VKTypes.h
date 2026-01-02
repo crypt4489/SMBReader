@@ -24,3 +24,6 @@ struct VKComputePipelineBuilder;
 struct VKAllocationCB;
 struct VKComputeGraph;
 struct DeviceOwnedAllocator;
+struct VKOneTimeQueue;
+struct VKGraphicsOneTimeQueue;
+struct VKComputeOneTimeQueue;

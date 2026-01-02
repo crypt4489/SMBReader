@@ -9,6 +9,7 @@
 #include "VKRenderPassBuilder.h"
 #include "VKDescriptorLayoutBuilder.h"
 #include "VKDescriptorSetBuilder.h"
+#include "VKOneTimeQueue.h"
 #include "VKPipelineBuilder.h"
 #include "VKSwapChain.h"
 #include "VKTexture.h"
@@ -636,6 +637,18 @@ EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipe
 	return ret;
 }
 
+
+EntryHandle VKDevice::CreateComputeOneTimeQueue(uint32_t maxObjectCount)
+{
+	auto graph = reinterpret_cast<VKComputeOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKComputeOneTimeQueue)));
+
+	graph = std::construct_at(graph, &deviceDataAlloc,maxObjectCount, this);
+
+	EntryHandle ret = AddVkTypeToEntry(graph, VulkComputeOTQ);
+
+	return ret;
+}
+
 EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets)
 {
 	//std::shared_lock lock(deviceLock);
@@ -1233,7 +1246,16 @@ EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags 
 	return ret;
 }
 
+EntryHandle VKDevice::CreateGraphicsOneTimeQueue(uint32_t maxObjectCount)
+{
+	auto graph = reinterpret_cast<VKComputeOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKGraphicsOneTimeQueue)));
 
+	graph = std::construct_at(graph, &deviceDataAlloc, maxObjectCount, this);
+
+	EntryHandle ret = AddVkTypeToEntry(graph, VulkGraphicsOTQ);
+
+	return ret;
+}
 
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount)
 {
@@ -2138,6 +2160,26 @@ VKComputeGraph* VKDevice::GetComputeGraph(EntryHandle handle)
 		return VK_NULL_HANDLE;
 
 	return reinterpret_cast<VKComputeGraph*>(objHandle.memoryLocation);
+}
+
+VKComputeOneTimeQueue* VKDevice::GetComputeOTQ(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkComputeOTQ || !objHandle.memoryLocation)
+		return VK_NULL_HANDLE;
+
+	return reinterpret_cast<VKComputeOneTimeQueue*>(objHandle.memoryLocation);
+}
+
+VKGraphicsOneTimeQueue* VKDevice::GetGraphicsOTQ(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkGraphicsOTQ || !objHandle.memoryLocation)
+		return VK_NULL_HANDLE;
+
+	return reinterpret_cast<VKGraphicsOneTimeQueue*>(objHandle.memoryLocation);
 }
 
 VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle handle)

@@ -257,6 +257,8 @@ enum HandleType
 	VulkShaderHandle = 26,
 	VulkSwapChain = 27,
 	VulkQueueManager = 28,
+	VulkGraphicsOTQ = 29,
+	VulkComputeOTQ = 30,
 	VulkMaxEnum
 };
 
@@ -284,6 +286,8 @@ struct VKDevice
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
 	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t maxFramesInFlight);
+
+	EntryHandle CreateComputeOneTimeQueue(uint32_t maxObjectCount);
 
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
@@ -344,6 +348,8 @@ struct VKDevice
 		size_t driverPerCache
 	);
 
+	EntryHandle CreateGraphicsOneTimeQueue(uint32_t maxObjectCount);
+
 	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount);
 	
 	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numberOfDescriptors, uint32_t pushConstantRangeCount);
@@ -361,6 +367,8 @@ struct VKDevice
 	EntryHandle CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, VkImageLayout oldLayout, VkImageLayout newLayout, EntryHandle imageIndex, VkImageSubresourceRange subresourceRange);
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
+
+	
 
 	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount);
 
@@ -407,6 +415,10 @@ struct VKDevice
 	VkCommandPool GetCommandPool(EntryHandle handle);
 
 	VKComputeGraph* GetComputeGraph(EntryHandle handle);
+
+	VKComputeOneTimeQueue* GetComputeOTQ(EntryHandle handle);
+
+	VKGraphicsOneTimeQueue* GetGraphicsOTQ(EntryHandle handle);
 
 	VkDescriptorPool GetDescriptorPool(EntryHandle handle);
 

@@ -155,6 +155,18 @@ ApplicationLoop::~ApplicationLoop() {
 	delete mainWindow; 
 }
 
+void ApplicationLoop::UpdateThisThing()
+{
+	Geometry* geom = geometryInstanceData.Update(0);
+	int meshCount = geom->meshCount;
+	int meshStart = geom->meshStart;
+	for (int i = 0; i < meshCount; i++)
+	{
+		Mesh* mesh = meshInstanceData.Update(meshStart + i);
+		VKRenderer::gRenderInstance->AddPipelineToMainQueue(mesh->drawableIndex);
+	}
+}
+
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
@@ -275,6 +287,8 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
+		UpdateThisThing();
+
 		while (running)
 		{
 			mainWindow->PollEvents();
@@ -290,6 +304,8 @@ void ApplicationLoop::Execute()
 				VKRenderer::gRenderInstance->RecreateSwapChain();
 				continue;
 			}
+
+			
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
@@ -577,7 +593,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		void* vertexData;
 
-		bool decompressed = true;
+		bool decompressed = false;
 
 		switch (type)
 		{
@@ -719,8 +735,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 
-		
-
+		std::array<int, 3> descs = {
+			globalBufferDescriptor,
+			globalTexturesDescriptor,
+			graphicDesc,
+			
+		};
 		
 
 
@@ -729,8 +749,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			.vertexBufferIndex = vertexMemory,
 			.vertexCount = (uint32_t)vertexCount,
 			.pipelinename = GENERIC,
-			.descCount = 1,
-			.descriptorsetid = &graphicDesc,
+			.descCount = 3,
+			.descriptorsetid = descs.data(),
 			.indexBufferHandle = indexMemory,
 			.indexCount = (uint32_t)indexCount,
 			.pushRangeCount = 0,
@@ -738,7 +758,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			.indexSize = 2
 		};
 
-		mesh->drawableIndex = (int)rendInst->CreateGraphicsVulkanPipelineObject(&create);
+		mesh->drawableIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create);
 	}
 }
 

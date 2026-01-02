@@ -1,5 +1,5 @@
 #pragma once
-
+#include "IndexTypes.h"
 #include <type_traits>
 #include <utility>
 #include <atomic>
@@ -52,10 +52,10 @@ struct DeviceSlabAllocator
 
 
 template <typename T_Type>
-concept ValueType = (std::is_integral_v<T_Type> || std::is_pointer<T_Type>::value);
+concept ValueType = (std::is_integral_v<T_Type> || std::is_pointer<T_Type>::value || std::is_same_v<T_Type, EntryHandle>);
 
 template <typename T_Type>
-concept ClassType = !(std::is_integral_v<T_Type> || std::is_pointer<T_Type>::value);
+concept ClassType = !(std::is_integral_v<T_Type> || std::is_pointer<T_Type>::value || std::is_same_v<T_Type, EntryHandle>);
 
 template <typename T_Type, int T_Count>
 struct ArrayAllocator

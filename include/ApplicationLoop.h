@@ -71,6 +71,8 @@ public:
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
+	void UpdateThisThing();
+
 	ProgramArgs& args;
 	Semaphore queueSema;
 	std::queue<std::vector<std::string>> commands;

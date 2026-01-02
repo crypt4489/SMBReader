@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 
 #include "AppTypes.h"
+#include "AppAllocator.h"
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "ResourceDependencies.h"
@@ -258,9 +259,9 @@ public:
 
 	uint32_t GetSwapChainWidth();
 
-	EntryHandle CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info);
+	int CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info);
 
-	uint32_t CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
+	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
 	void CreateRenderTargetData(int* desc, int descCount);
 
@@ -300,6 +301,8 @@ public:
 
 	void EndFrame();
 
+	void AddPipelineToMainQueue(int psoIndex);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -308,6 +311,7 @@ public:
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
+	EntryHandle graphicsOTQ;
 
 	uint32_t currentMSAALevel = 0;
 	uint32_t maxMSAALevels = 0;
@@ -342,6 +346,29 @@ public:
 	std::atomic<int> shaderDetailAlloc = 0;
 
 	RenderAllocationHolder<50> allocations{};
+
+	ArrayAllocator<EntryHandle, 50> renderStateObjects{};
+
+	ArrayAllocator<EntryHandle, 50> computeStateObjects{};
+
+	ArrayAllocator<int, 50> graphIndices{};
+
+	enum
+	{
+		COMPUTESO,
+		GRAPHICSO,
+	};
+
+	struct PipelineHandle
+	{
+		int group;
+		int indexForHandles;
+		int numHandles;
+		int graphIndex;
+		int graphCount;
+	};
+
+	ArrayAllocator<PipelineHandle, 100> stateObjectHandles{};
 
 	int width = 0; 
 	int height = 0;
