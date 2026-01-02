@@ -59,7 +59,6 @@ namespace TexUtils
 
 struct TextureDetails
 {
-
 	ImageFormat type;
 	uint32_t dataSize;
 	uint32_t width, height, miplevels;

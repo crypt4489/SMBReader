@@ -70,7 +70,13 @@ if (WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE shaderc_combined vulkan-1 vklib)
     endif()
 
+    target_compile_definitions(${PROJECT_NAME}
+        PRIVATE
+            _WIN32_WINNT=0x0A00
+    )
+
     set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+
 
     set_source_files_properties(${PROJECT_SHADERS} PROPERTIES VS_TOOL_OVERRIDE "EmbeddedResource")
 

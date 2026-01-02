@@ -278,6 +278,61 @@ Matrix4f operator*(Matrix4f m, float s)
 	return Scale(m, s);
 }
 
+Matrix2f::Matrix2f(Vector2f _x, Vector2f _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Matrix2f::Matrix2f(const Matrix2f& old) {
+	x = old.x;
+	y = old.y;
+};
+
+float* Matrix2f::operator[](int x)
+{
+	return &comp[x * 2];
+}
+
+Matrix3f::Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z)
+{
+	x = _x;
+	y = _y;
+	z = _z;
+}
+
+Matrix3f::Matrix3f(const Matrix3f& old) {
+	x = old.x;
+	y = old.y;
+	z = old.z;
+};
+
+float* Matrix3f::operator[](int x)
+{
+	return &comp[x * 3];
+}
+
+
+Matrix4f::Matrix4f(Vector4f _x, Vector4f _y, Vector4f _z, Vector4f _w)
+{
+	x = _x;
+	y = _y;
+	z = _z;
+	w = _w;
+}
+
+Matrix4f::Matrix4f(const Matrix4f& old) {
+	x = old.x;
+	y = old.y;
+	z = old.z;
+	w = old.w;
+};
+
+float* Matrix4f::operator[](int x)
+{
+	return &comp[x * 4];
+}
+
 
 Matrix3f CreateRotationMatrix(const Vector3f& up, float angle)
 {

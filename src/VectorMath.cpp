@@ -1,5 +1,7 @@
 #include "MathTypes.h"
 #include <cmath>
+
+
 Vector2f Add(Vector2f a, Vector2f b)
 {
 	return { a.x + b.x, a.y + b.y };
@@ -220,3 +222,152 @@ float Dot(Vector4f a, Vector4f b)
 {
 	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
+
+Vector2f::Vector2f(float _x, float _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Vector2f::Vector2f(const Vector2f& old)
+{
+	x = old.x;
+	y = old.y;
+}
+
+bool Vector2f::operator==(const Vector2f& compare) const
+{
+	return (x == compare.x) && (y == compare.y);
+}
+
+
+Vector3f::Vector3f(float _x, float _y, float _z)
+{
+	x = _x;
+	y = _y;
+	z = _z;
+}
+
+Vector3f::Vector3f(const Vector3f& old)
+{
+	x = old.x;
+	y = old.y;
+	z = old.z;
+}
+
+bool Vector3f::operator==(const Vector3f& compare) const
+{
+	return (x == compare.x) && (y == compare.y) && (z == compare.z);
+}
+
+
+Vector4f::Vector4f(float _x, float _y, float _z, float _w)
+{
+	x = _x;
+	y = _y;
+	z = _z;
+	w = _w;
+}
+
+Vector4f::Vector4f(const Vector4f& old)
+{
+	x = old.x;
+	y = old.y;
+	z = old.z;
+	w = old.w;
+}
+
+bool Vector4f::operator==(const Vector4f& compare) const
+{
+	return (x == compare.x) && (y == compare.y) && (z == compare.z) && (w == compare.w);
+}
+
+Vector2c::Vector2c(char _x, char _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Vector2c::Vector2c(const Vector2c& old)
+{
+	x = old.x;
+	y = old.y;
+}
+
+bool Vector2c::operator==(const Vector2c& compare) const
+{
+	return (x == compare.x) && (y == compare.y);
+}
+
+
+Vector2uc::Vector2uc(unsigned char _x, unsigned char _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Vector2uc::Vector2uc(const Vector2uc& old)
+{
+	x = old.x;
+	y = old.y;
+}
+
+bool Vector2uc::operator==(const Vector2uc& compare) const
+{
+	return (x == compare.x) && (y == compare.y);
+}
+
+
+Vector2s::Vector2s(short _x, short _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Vector2s::Vector2s(const Vector2s& old)
+{
+	x = old.x;
+	y = old.y;
+}
+
+bool Vector2s::operator==(const Vector2s& compare) const
+{
+	return (x == compare.x) && (y == compare.y);
+}
+
+Vector3s::Vector3s(short _x, short _y, short _z)
+{
+	x = _x;
+	y = _y;
+	z = _z;
+}
+
+Vector3s::Vector3s(const Vector3s& old)
+{
+	x = old.x;
+	y = old.y;
+	z = old.z;
+}
+
+bool Vector3s::operator==(const Vector3s& compare) const
+{
+	return (x == compare.x) && (y == compare.y) && (z == compare.z);
+}
+
+Vector2i::Vector2i(int _x, int _y)
+{
+	x = _x;
+	y = _y;
+}
+
+Vector2i::Vector2i(const Vector2i& old)
+{
+	x = old.x;
+	y = old.y;
+}
+
+bool Vector2i::operator==(const Vector2i& compare) const
+{
+	return (x == compare.x) && (y == compare.y);
+}
+

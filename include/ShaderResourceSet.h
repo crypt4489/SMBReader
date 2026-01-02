@@ -258,20 +258,11 @@ struct ShaderDetails
 	int shaderNameSize;
 	int shaderDataSize;
 
-	ShaderDetails* GetNext()
-	{
-		return (ShaderDetails*)((uintptr_t)this + sizeof(ShaderDetails) + shaderDataSize + shaderNameSize);
-	}
+	ShaderDetails* GetNext();
 
-	char* GetString()
-	{
-		return (char*)((uintptr_t)this + sizeof(ShaderDetails));
-	}
+	char* GetString();
 
-	void* GetShaderData()
-	{
-		return (void*)((uintptr_t)this + sizeof(ShaderDetails) + shaderNameSize);
-	}
+	void* GetShaderData();
 };
 
 #define KB 1024
@@ -311,10 +302,6 @@ struct ShaderGraphReader
 	{
 		int resourceCount;
 	};
-
-
-
-
 
 	static constexpr unsigned long
 		hash(char* str);

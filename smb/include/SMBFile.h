@@ -51,15 +51,6 @@ enum RenderableFlags
 	PBIVRENDERABLE = 1
 };
 
-extern int VertexCompressedSizes[3];
-
-enum SMBVertexSize
-{
-	PosPack6_CNorm_C16Tex1_Bone2_Size = 0,
-	PosPack6_C16Tex2_Bone2_Size = 1,
-	PosPack6_C16Tex1_Bone2_Size = 2,
-};
-
 enum SMBVertexTypes
 {
 	PosPack6_CNorm_C16Tex1_Bone2 = 122,
@@ -91,52 +82,9 @@ struct SMBGeoChunk
 	AxisBox axialBox;
 
 	SMBGeoChunk() = delete;
-	SMBGeoChunk(int _numRenderables, int _numMaterials)
-	{
-		memset(this, 0, sizeof(SMBGeoChunk));
-		numRenderables = _numRenderables;
-		int chunkSize = _numRenderables * 9 * sizeof(int);
-		chunkSize += (sizeof(int) * _numMaterials);
+	SMBGeoChunk(int _numRenderables, int _numMaterials);
 
-		int* chunkPtr = (int*)malloc(chunkSize);
-		int* cP = chunkPtr;
-
-		if (chunkPtr)
-		{
-
-			renderablesTypes = chunkPtr;
-			chunkPtr += (_numRenderables);
-			vertexTypes = (SMBVertexTypes*)chunkPtr;
-			chunkPtr += (_numRenderables);
-			indicesCount = chunkPtr;
-			chunkPtr += (_numRenderables);
-			indexOffsetInArchive = chunkPtr;
-			chunkPtr += (_numRenderables);
-			verticesCount = chunkPtr;
-			chunkPtr += (_numRenderables);
-			vertexOffsetInArchive = chunkPtr;
-			chunkPtr += (_numRenderables);
-			primitiveTypes = chunkPtr;
-			chunkPtr += (_numRenderables);
-			materialsCount = chunkPtr;
-			chunkPtr += (_numRenderables);
-			materialsId = chunkPtr;
-			chunkPtr += (_numMaterials);
-			materialStart = chunkPtr;
-			chunkPtr += (_numRenderables);
-
-			memset(&axialBox, 0, sizeof(AxisBox));
-			memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
-			memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
-		}
-
-	
-	}
-
-	~SMBGeoChunk()
-	{
-		free(renderablesTypes);
-	}
+	~SMBGeoChunk();
 	
 };
 

@@ -3,6 +3,22 @@ char ShaderGraphReader::readerMemBuffer[16 * MB];
 int ShaderGraphReader::readerMemBufferAllocate = 0;
 
 
+ShaderDetails* ShaderDetails::GetNext()
+{
+	return (ShaderDetails*)((uintptr_t)this + sizeof(ShaderDetails) + shaderDataSize + shaderNameSize);
+}
+
+char* ShaderDetails::GetString()
+{
+	return (char*)((uintptr_t)this + sizeof(ShaderDetails));
+}
+
+void* ShaderDetails::GetShaderData()
+{
+	return (void*)((uintptr_t)this + sizeof(ShaderDetails) + shaderNameSize);
+}
+
+
 
 constexpr unsigned long
 ShaderGraphReader::hash(char* str)

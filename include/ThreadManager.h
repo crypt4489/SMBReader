@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 
+/*
 struct SharedExclusiveFlag
 {
     std::atomic_flag exclusiveFlag;
@@ -83,6 +84,7 @@ struct SharedExclusiveFlag
         return true;
     }
 };
+*/
 
 struct Semaphore
 {

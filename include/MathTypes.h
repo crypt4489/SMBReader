@@ -28,22 +28,11 @@ struct Vector2f
 	};
 
 	Vector2f() = default;
-	Vector2f(float _x, float _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Vector2f(float _x, float _y);
 
-	Vector2f(const Vector2f& old)
-	{
-		x = old.x;
-		y = old.y;
-	}
+	Vector2f(const Vector2f& old);
 
-	bool operator==(const Vector2f& compare) const
-	{
-		return (x == compare.x) && (y == compare.y);
-	}
+	bool operator==(const Vector2f& compare) const;
 };
 
 struct Vector3f
@@ -54,24 +43,11 @@ struct Vector3f
 	};
 
 	Vector3f() = default;
-	Vector3f(float _x, float _y, float _z)
-	{
-		x = _x;
-		y = _y;
-		z = _z;
-	}
+	Vector3f(float _x, float _y, float _z);
 
-	Vector3f(const Vector3f& old)
-	{
-		x = old.x;
-		y = old.y;
-		z = old.z;
-	}
+	Vector3f(const Vector3f& old);
 
-	bool operator==(const Vector3f& compare) const
-	{
-		return (x == compare.x) && (y == compare.y) && (z == compare.z);
-	}
+	bool operator==(const Vector3f& compare) const;
 
 };
 
@@ -83,26 +59,11 @@ struct Vector4f
 	};
 
 	Vector4f() = default;
-	Vector4f(float _x, float _y, float _z, float _w)
-	{
-		x = _x;
-		y = _y;
-		z = _z;
-		w = _w;
-	}
+	Vector4f(float _x, float _y, float _z, float _w);
 
-	Vector4f(const Vector4f& old)
-	{
-		x = old.x;
-		y = old.y;
-		z = old.z;
-		w = old.w;
-	}
+	Vector4f(const Vector4f& old);
 
-	bool operator==(const Vector4f& compare) const
-	{
-		return (x == compare.x) && (y == compare.y) && (z == compare.z) && (w == compare.w);
-	}
+	bool operator==(const Vector4f& compare) const;
 
 };
 
@@ -115,22 +76,11 @@ struct Vector2c
 	};
 
 	Vector2c() = default;
-	Vector2c(char _x, char _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Vector2c(char _x, char _y);
 
-	Vector2c(const Vector2c& old)
-	{
-		x = old.x;
-		y = old.y;
-	}
+	Vector2c(const Vector2c& old);
 
-	bool operator==(const Vector2c& compare) const
-	{
-		return (x == compare.x) && (y == compare.y);
-	}
+	bool operator==(const Vector2c& compare) const;
 };
 
 
@@ -164,22 +114,11 @@ struct Vector2uc
 
 
 	Vector2uc() = default;
-	Vector2uc(unsigned char _x, unsigned char _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Vector2uc(unsigned char _x, unsigned char _y);
 
-	Vector2uc(const Vector2uc& old)
-	{
-		x = old.x;
-		y = old.y;
-	}
+	Vector2uc(const Vector2uc& old);
 
-	bool operator==(const Vector2uc& compare) const
-	{
-		return (x == compare.x) && (y == compare.y);
-	}
+	bool operator==(const Vector2uc& compare) const;
 };
 
 
@@ -209,22 +148,10 @@ struct Vector2s
 	};
 
 	Vector2s() = default;
-	Vector2s(short _x, short _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Vector2s(short _x, short _y);
+	Vector2s(const Vector2s& old);
 
-	Vector2s(const Vector2s& old)
-	{
-		x = old.x;
-		y = old.y;
-	}
-
-	bool operator==(const Vector2s& compare) const
-	{
-		return (x == compare.x) && (y == compare.y);
-	}
+	bool operator==(const Vector2s& compare) const;
 
 };
 
@@ -237,24 +164,10 @@ struct Vector3s
 	};
 
 	Vector3s() = default;
-	Vector3s(short _x, short _y, short _z)
-	{
-		x = _x;
-		y = _y;
-		z = _z;
-	}
+	Vector3s(short _x, short _y, short _z);
 
-	Vector3s(const Vector3s& old)
-	{
-		x = old.x;
-		y = old.y;
-		z = old.z;
-	}
-
-	bool operator==(const Vector3s& compare) const
-	{
-		return (x == compare.x) && (y == compare.y) && (z == compare.z);
-	}
+	Vector3s(const Vector3s& old);
+	bool operator==(const Vector3s& compare) const;
 };
 
 
@@ -304,22 +217,10 @@ struct Vector2i
 	};
 
 	Vector2i() = default;
-	Vector2i(int _x, int _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Vector2i(int _x, int _y);
 
-	Vector2i(const Vector2i& old)
-	{
-		x = old.x;
-		y = old.y;
-	}
-
-	bool operator==(const Vector2i& compare) const
-	{
-		return (x == compare.x) && (y == compare.y);
-	}
+	Vector2i(const Vector2i& old);
+	bool operator==(const Vector2i& compare) const;
 };
 
 
@@ -917,21 +818,11 @@ PACKED_BEGIN
 struct Matrix2f
 {
 	Matrix2f() = default;
-	Matrix2f(Vector2f _x, Vector2f _y)
-	{
-		x = _x;
-		y = _y;
-	}
+	Matrix2f(Vector2f _x, Vector2f _y);
 
-	Matrix2f(const Matrix2f& old) {
-		x = old.x;
-		y = old.y;
-	};
+	Matrix2f(const Matrix2f& old);
 
-	float* operator[](int x)
-	{
-		return &comp[x * 2];
-	}
+	float* operator[](int x);
 
 
 	union {
@@ -949,23 +840,11 @@ struct Matrix3f
 {
 
 	Matrix3f() = default;
-	Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z)
-	{
-		x = _x;
-		y = _y;
-		z = _z;
-	}
+	Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z);
 
-	Matrix3f(const Matrix3f& old) {
-		x = old.x;
-		y = old.y;
-		z = old.z;
-	};
+	Matrix3f(const Matrix3f& old);
 
-	float* operator[](int x)
-	{
-		return &comp[x * 3];
-	}
+	float* operator[](int x);
 
 	union {
 		struct {
@@ -987,25 +866,11 @@ struct Matrix3f
 struct Matrix4f
 {
 	Matrix4f() = default;
-	Matrix4f(Vector4f _x, Vector4f _y, Vector4f _z, Vector4f _w)
-	{
-		x = _x;
-		y = _y;
-		z = _z;
-		w = _w;
-	}
+	Matrix4f(Vector4f _x, Vector4f _y, Vector4f _z, Vector4f _w);
 
-	Matrix4f(const Matrix4f& old) {
-		x = old.x;
-		y = old.y;
-		z = old.z;
-		w = old.w;
-	};
+	Matrix4f(const Matrix4f& old);
 
-	float* operator[](int x)
-	{
-		return &comp[x * 4];
-	}
+	float* operator[](int x);
 
 	union {
 		struct {

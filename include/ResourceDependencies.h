@@ -125,10 +125,7 @@ struct ShaderMap
 	int shaderReference;
 
 
-	int GetMapSize() const
-	{
-		return sizeof(ShaderMap);
-	}
+	int GetMapSize() const;
 };
 
 struct ShaderGraph
@@ -137,33 +134,13 @@ struct ShaderGraph
 	int resourceSetCount;
 	int resourceCount;
 
-	uintptr_t GetSet(int setIndex)
-	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (setIndex * sizeof(ShaderSetLayout));
-		return head;
-	}
+	uintptr_t GetSet(int setIndex);
 
-	uintptr_t GetResource(int resourceIndex)
-	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (shaderMapCount * sizeof(ShaderMap));
+	uintptr_t GetResource(int resourceIndex);
 
-		head += (sizeof(ShaderResource) * resourceIndex);
+	uintptr_t GetMap(int mapIndex);
 
-		return head;
-	}
-
-	uintptr_t GetMap(int mapIndex)
-	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (mapIndex * sizeof(ShaderMap));
-	
-		return head;
-	}
-
-	int GetGraphSize() const
-	{
-		int size = sizeof(ShaderGraph) + (resourceSetCount * sizeof(ShaderSetLayout)) + (shaderMapCount * sizeof(ShaderMap)) + (resourceCount * sizeof(ShaderResource));
-		return size;
-	}
+	int GetGraphSize() const;
 };
 
 template <int N, int M>
