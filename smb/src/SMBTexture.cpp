@@ -23,15 +23,15 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 	id = chunk.chunkId;
 	auto fileHandle = FileManager::GetFile(smb.id);
 
-	auto& file = fileHandle->streamHandle;
-	std::streamoff offset = chunk.offsetInHeader + 21LL;
-	file.seekg(offset, std::ios_base::beg);
+	int offset = chunk.offsetInHeader + 21;
 
-	file.read(reinterpret_cast<char*>(this), 4 * 4);
+	OSSeekFile(fileHandle, offset, BEGIN);
+
+	OSReadFile(fileHandle, 4 * 4, reinterpret_cast<char*>(this));
 
 	imageSizes = new uint32_t[miplevels];
 
-	file.seekg(chunk.contigOffset + smb.fileOffset, std::ios_base::beg);
+	OSSeekFile(fileHandle, chunk.contigOffset + smb.fileOffset, BEGIN);
 
 	int writeWidth = width;
 	int	writeHeight = height;
@@ -79,7 +79,9 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-		file.read((char*)readHead, imageSizes[i]);
+
+		OSReadFile(fileHandle, imageSizes[i], (char*)readHead);
+
 		readHead += imageSizes[i];
 	}
 

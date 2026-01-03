@@ -618,11 +618,11 @@ void RenderInstance::CreatePipelines()
 
 		if (FileManager::FileExists(shaderNameString + ".spv")) {
 
-			auto ret = FileManager::ReadFileInFull(shaderNameString + ".spv", buffer, std::ios::binary);
+			auto ret = FileManager::ReadFileInFull(shaderNameString + ".spv", buffer);
 		}
 		else
 		{
-			auto ret = FileManager::ReadFileInFull(shaderNameString, buffer, std::ios::binary);
+			auto ret = FileManager::ReadFileInFull(shaderNameString, buffer);
 
 			if (buffer.back() != '\0') buffer.push_back('\0');
 		}
@@ -1867,7 +1867,7 @@ void RenderInstance::EndFrame()
 
 	cGraph->UpdateLists();
 	graph->UpdateLists();
-	//queue->UpdateQueue();
+	queue->UpdateQueue();
 }
 
 

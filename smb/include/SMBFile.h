@@ -165,11 +165,11 @@ public:
 
 
 private:
-	void ReadHeader(std::fstream& fh);
+	void ReadHeader(OSFileHandle* fh);
 
-	void ReadChunk(std::fstream& fh, SMBChunk& chunk);
+	void ReadChunk(OSFileHandle* fh, SMBChunk& chunk);
 
-	void ProcessFile(std::fstream& fh);
+	void ProcessFile(OSFileHandle* fh);
 };
 
 

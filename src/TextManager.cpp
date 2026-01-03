@@ -240,14 +240,14 @@ Font::Font(const std::string& imageName, const std::string& dataName)
 	}
 
 	std::vector<char> imageData;
-	int ret = FileManager::ReadFileInFull(imageName, imageData, std::ios::binary);
+	int ret = FileManager::ReadFileInFull(imageName, imageData);
 	if (ret)
 	{
 		throw std::runtime_error("Cannot open Font image data");
 	}
 
 	std::vector<char> fontData;
-	ret = FileManager::ReadFileInFull(dataName, fontData, std::ios::binary);
+	ret = FileManager::ReadFileInFull(dataName, fontData);
 
 	if (ret)
 	{

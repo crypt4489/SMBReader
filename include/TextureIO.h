@@ -1,5 +1,6 @@
 #pragma once
 #include "AppTypes.h"
+#include "OSFile.h"
 #include <vector>
 
 #include <cstdint>
@@ -46,13 +47,16 @@ namespace TexUtils
 		static_assert(sizeof(BitmapFileHeader) == 14);
 		static_assert(sizeof(BitmapInfoHeader) == 40);
 
-		inline void WriteOutBMPHeaders(std::fstream& stream, uint32_t width, uint32_t height)
+		inline void WriteOutBMPHeaders(OSFileHandle* handle, uint32_t width, uint32_t height)
 		{
 			BitmapFileHeader fileheader{ 0x4d42, sizeof(BitmapFileHeader) + sizeof(BitmapInfoHeader) + (width * height * 4), 0, 0, 0x36 };
 			BitmapInfoHeader infoheader{ sizeof(BitmapInfoHeader), width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 
-			stream.write(reinterpret_cast<char*>(&fileheader.bfType), sizeof(BitmapFileHeader));
-			stream.write(reinterpret_cast<char*>(&infoheader.biSize), sizeof(BitmapInfoHeader));
+			OSReadFile(handle, sizeof(BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType));
+			
+
+			OSReadFile(handle, sizeof(BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize));
+	
 		}
 	}
 }

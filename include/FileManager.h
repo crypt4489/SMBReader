@@ -8,6 +8,7 @@
 #include <regex>
 #include <utility>
 
+#include "OSFile.h"
 
 struct FileID
 {
@@ -30,36 +31,18 @@ struct FileID
 	uint32_t ID;
 };
 
-struct FileHandle
-{
-	FileHandle(std::fstream& stream, std::ios::openmode _flags) : streamHandle(std::move(stream)), flags(_flags) 
-	{
-		if (flags & std::ios::in)
-		{
-			size = static_cast<uint64_t>(streamHandle.tellg());
-			streamHandle.seekg(0);
-		}
-		else 
-		{
-			size = 0;
-		}
-	};
-	std::fstream streamHandle;
-	std::ios::openmode flags;
-	uint64_t size;
-};
 
 struct FileManager
 {
 public:
 
-	static std::optional<FileID> OpenFile(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle);
+	static std::optional<FileID> OpenFile(const std::string& name, OSFileFlags flags);
 
-	static std::optional<FileID> OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle*& outHandle);
+	static std::optional<FileID> OpenFile(const std::filesystem::path name, OSFileFlags flags);
 
-	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer, std::ios::openmode flags);
+	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer);
 
-	static FileHandle* GetFile(const FileID& id);
+	static OSFileHandle* GetFile(const FileID& id);
 
 	static void RemoveOpenFile(const FileID& id);
 
@@ -84,9 +67,11 @@ public:
 
 	static uint32_t FindAvailableHandle();
 
-	static std::optional<FileID> HandleOpening(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle);
+	static int HandleOpening(const std::string& name, OSFileFlags flags, OSFileHandle* outHandle);
 
-	static std::array<FileHandle*, MAXFILES> filesopen;
+	static int ReadBytes(const FileID& id, int numBytes, char* buffer);
+
+	static std::array<OSFileHandle, MAXFILES> filesopen;
 	static std::filesystem::path currDir;
 	static std::regex filenamePattern;
 };

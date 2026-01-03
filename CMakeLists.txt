@@ -16,6 +16,7 @@ set (PROJECT_INCLUDES "include/"
 "smb/include/" 
 "vulkan/include/" 
 "C:/VulkanSDK/1.3.290.0/Include/"
+"platform/"
 )
 
 set (PROJECT_LIBRARY_PATHS
@@ -24,9 +25,9 @@ set (PROJECT_LIBRARY_PATHS
  "lib/windows/"
 )
 
-file(GLOB PROJECT_SOURCES "src/*.cpp" "smb/src/*.cpp" "main.cpp") 
+file(GLOB PROJECT_SOURCES "platform/windows/src/*.cpp" "src/*.cpp" "smb/src/*.cpp" "main.cpp") 
 
-file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h")
+file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h")
 
 file(GLOB PROJECT_SHADERS "shaders/layouts/*" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
 
@@ -77,6 +78,7 @@ if (WIN32)
 
     set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
 
+    set_property(TARGET ${PROJECT_NAME} PROPERTY VS_DEBUGGER_COMMAND_ARGUMENTS "-d \"${CMAKE_CURRENT_SOURCE_DIR}/steefnew.smb\"")
 
     set_source_files_properties(${PROJECT_SHADERS} PROPERTIES VS_TOOL_OVERRIDE "EmbeddedResource")
 

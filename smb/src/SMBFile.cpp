@@ -65,58 +65,68 @@ SMBFile::~SMBFile()
 
 FileID SMBFile::LoadFile(const std::filesystem::path& path)
 {
-	FileHandle* handle;
+	OSFileHandle* handle;
 
-	auto ret = FileManager::OpenFile(path, std::ios::binary | std::ios::in, handle);
+	auto ret = FileManager::OpenFile(path, READ);
 
 	if (!ret)
 	{
 		throw std::runtime_error("SMB file is unable to be opened");
 	}
 
-	ProcessFile(handle->streamHandle);
+	OSFileHandle* fh = FileManager::GetFile(ret.value());
+
+	ProcessFile(fh);
 
 	return std::move(ret.value());
 }
 
 FileID SMBFile::LoadFile(const std::string& name)
 {
-	FileHandle* handle;
+	OSFileHandle* handle;
 
-	auto ret = FileManager::OpenFile(name, std::ios::binary | std::ios::in, handle);
+	auto ret = FileManager::OpenFile(name, READ);
 
 	if (!ret)
 	{
 		throw std::runtime_error("SMB file is unable to be opened");
 	}
 
-	ProcessFile(handle->streamHandle);
+	OSFileHandle* fh = FileManager::GetFile(ret.value());
+
+	ProcessFile(fh);
 
 	return std::move(ret.value());
 }
 
-void SMBFile::ReadHeader(std::fstream& fh)
+void SMBFile::ReadHeader(OSFileHandle* fh)
 {
-	fh.read(reinterpret_cast<char*>(&magic), 8);
+	OSReadFile(fh, 8, reinterpret_cast<char*>(&magic));
+
 	int stringsize = 0;
-	fh.read(reinterpret_cast<char*>(&stringsize), 4);
+	OSReadFile(fh, 4, reinterpret_cast<char*>(&stringsize));
+
 	name.resize(stringsize);
-	fh.read(name.data(), stringsize);
-	fh.read(reinterpret_cast<char*>(&fileOffset), 36);
+	OSReadFile(fh, stringsize, name.data());
+
+	OSReadFile(fh, 36, reinterpret_cast<char*>(&fileOffset));
+
 	chunks.resize(numResources);
 }
 
-void SMBFile::ReadChunk(std::fstream& fh, SMBChunk& chunk)
+void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk)
 {
+	OSReadFile(fh, 44, reinterpret_cast<char*>(&chunk.magic));
 
-	fh.read(reinterpret_cast<char*>(&chunk.magic), 44);
 	chunk.fileName.resize(chunk.stringsize);
-	fh.read(chunk.fileName.data(), chunk.stringsize);
-	chunk.offsetInHeader = fh.tellg();
-	std::streamoff offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16LL));
+	OSReadFile(fh, chunk.stringsize, chunk.fileName.data());
+
+	chunk.offsetInHeader = fh->filePointer;
+	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
 	chunk.headerSize = offset;
-	std::streamoff next = chunk.offsetInHeader + offset;
-	fh.seekg(next, std::ios_base::beg);
+	int next = chunk.offsetInHeader + offset;
+
+	OSSeekFile(fh, next, BEGIN);
 
 	if (chunk.chunkId != chunk.chunkIdCopy)
 	{
@@ -124,7 +134,7 @@ void SMBFile::ReadChunk(std::fstream& fh, SMBChunk& chunk)
 	}
 }
 
-void SMBFile::ProcessFile(std::fstream& fh)
+void SMBFile::ProcessFile(OSFileHandle* fh)
 {
 	ReadHeader(fh);
 
@@ -354,9 +364,9 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed)
 {
-	FileHandle* handle = FileManager::GetFile(file.id);
+	OSFileHandle* handle = FileManager::GetFile(file.id);
 
-	handle->streamHandle.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->vertexOffsetInArchive[renderableIndex]);
+	OSSeekFile(handle, geoDefinition->vertexAndIndicesInfo + geoDefinition->vertexOffsetInArchive[renderableIndex], BEGIN);
 
 	SMBVertexTypes type = geoDefinition->vertexTypes[renderableIndex];
 
@@ -378,7 +388,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 
 	std::vector<char> data(vertexSize);
 
-	handle->streamHandle.read(data.data(), vertexSize);
+	OSReadFile(handle, vertexSize, data.data());
 
 	
 	int vSize = geoDefinition->verticesCount[renderableIndex];
@@ -517,15 +527,18 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 	
 	int iCount = geoDefinition->indicesCount[renderableIndex];
 
-	FileHandle* handle = FileManager::GetFile(file.id);
+	OSFileHandle* handle = FileManager::GetFile(file.id);
+
+	
 
 	uint16_t* indices = (uint16_t*)indexDataOut;
 
-	auto& stream = handle->streamHandle;
 
 	if (renderableType == PBIVRENDERABLE)
 	{
-		stream.seekg(geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex]);
+
+		OSSeekFile(handle, geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex], BEGIN);
+		
 
 		int iter = 0;
 
@@ -534,17 +547,16 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 			uint32_t god;
 
-			stream.read((char*)&god, 4);
+			OSReadFile(handle, 4, (char*)&god);
 
 			uint32_t stride = (god >> 0x12) & 0x7ff;
 			uint32_t indexType = (god & 0x3ffff);
 
 			if (indexType == 0x1800)
 			{
-				stream.read(
-					(char*)indices,
-					stride * 4
-				);
+
+
+				OSReadFile(handle, stride * 4, (char*)indices);
 
 				indices += (stride * 2);
 
@@ -553,7 +565,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 			else if (indexType == 0x1808)
 			{
-				stream.read((char*)indices, 2);
+				OSReadFile(handle, 2, (char*)indices);
 				iCount--;
 			}
 			else if (indexType == 0x17fc) {
@@ -564,9 +576,9 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 	} 
 	else if (renderableType == IVRENDERABLE)
 	{
-		stream.seekg(geoDefinition->indexOffsetInArchive[renderableIndex]);
+		OSSeekFile(handle, geoDefinition->indexOffsetInArchive[renderableIndex], BEGIN);
 
-		stream.read((char*)indices, iCount * 2);
+		OSReadFile(handle, iCount * 4, (char*)indices);
 	}
 
 	

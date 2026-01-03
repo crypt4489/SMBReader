@@ -1,67 +1,108 @@
 #include "FileManager.h"
 
 
+
 // Initialize static members
-std::array<FileHandle*, FileManager::MAXFILES> FileManager::filesopen;
+std::array<OSFileHandle, FileManager::MAXFILES> FileManager::filesopen{};
 std::filesystem::path FileManager::currDir = std::filesystem::current_path();
 
 std::regex FileManager::filenamePattern{"([0-9A-Za-z_]+)\\."};
 
 
 
-std::optional<FileID> FileManager::OpenFile(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle)
+std::optional<FileID> FileManager::OpenFile(const std::string& name, OSFileFlags flags)
 {
-	return HandleOpening(name, flags, outHandle);
+	uint32_t index = FindAvailableHandle();
+
+	if (index == NOHANDLE)
+	{
+		return std::nullopt;
+	}
+
+	OSFileHandle* outHandle = &filesopen[index];
+
+	int nRet = HandleOpening(name, flags, outHandle);
+
+	if (nRet)
+	{
+		return std::nullopt;
+	}
+
+	return FileID(index);
 }
 
-std::optional<FileID> FileManager::OpenFile(const std::filesystem::path name, std::ios::openmode flags, FileHandle*& outHandle)
+std::optional<FileID> FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags)
 {
-	return HandleOpening(name.string(), flags, outHandle);
+
+	uint32_t index = FindAvailableHandle();
+
+	if (index == NOHANDLE)
+	{
+		return std::nullopt;
+	}
+
+	OSFileHandle* outHandle = &filesopen[index];
+
+	int nRet = HandleOpening(name.string(), flags, outHandle);
+
+	if (nRet)
+	{
+		return std::nullopt;
+	}
+
+	return FileID(index);
 }
 
-int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buffer, std::ios::openmode flags)
+int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buffer)
 {
-	std::fstream stream;
+	OSFileFlags openingFlags = READ;
 
-	stream.open(name, flags | std::ios::in | std::ios::ate);
+	OSFileHandle outHandle{};
 
-	if (!stream.is_open())
+	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
+
+	if (nRet)
 	{
 		return 1;
 	}
 
-	std::streampos fileEnd = stream.tellg();
+	int size = outHandle.fileLength;
 
-	buffer.resize(fileEnd);
+	buffer.resize(size);
 
-	stream.seekg(0);
+	OSReadFile(&outHandle, size, buffer.data());
 
-	stream.read(buffer.data(), fileEnd);
-
-	stream.close();
+	OSCloseFile(&outHandle);
 
 	return 0;
 }
 
-FileHandle* FileManager::GetFile(const FileID& id)
+OSFileHandle* FileManager::GetFile(const FileID& id)
 {
 	if (id() >= MAXFILES) throw std::invalid_argument("You did what?");
-	return filesopen[id()];
+
+	OSFileHandle* handle = &filesopen[id()];
+
+	if (handle->osDataHandle == -1)
+	{
+		return nullptr;
+	}
+
+	return handle;
 }
 
 void FileManager::RemoveOpenFile(const FileID& id)
 {
-	FileHandle* ret = GetFile(id);
+	OSFileHandle* ret = GetFile(id);
 
-	if (!ret)
-		return;
+	if (!ret) return;
 
-	if (ret->streamHandle.is_open())
+	if (OSCloseFile(ret) != OS_SUCCESS)
 	{
-		ret->streamHandle.close();
+		throw std::runtime_error("Closing unopened file");
 	}
-	delete ret;
-	filesopen[id()] = nullptr;
+		
+	return;
 }
 
 std::filesystem::path FileManager::SetupDirectory(std::string& nameOfDir)
@@ -142,40 +183,38 @@ uint32_t FileManager::FindAvailableHandle()
 {
 	uint32_t i = 0;
 	for (; i < MAXFILES; i++) {
-		if (filesopen[i] == nullptr)
+		if (filesopen[i].osDataHandle == -1)
 			break;
 	}
 	return i;
 }
 
-std::optional<FileID> FileManager::HandleOpening(const std::string& name, std::ios::openmode flags, FileHandle*& outHandle)
+int FileManager::HandleOpening(const std::string& name, OSFileFlags flags, OSFileHandle* outHandle)
 {
-	uint32_t index = FindAvailableHandle();
+	
 
-	if (index == NOHANDLE)
+	OSFileFlags openingFlags = flags;
+
+	int nRet = OSOpenFile(name.c_str(), openingFlags, outHandle);
+
+	/*if (nRet != OS_SUCCESS)
 	{
 		return std::nullopt;
-	}
+	} */
 
-	std::fstream stream;
+	return nRet;
+}
 
-	std::ios::openmode openingFlags = flags;
+int FileManager::ReadBytes(const FileID& id, int numBytes, char* buffer)
+{
+	OSFileHandle* handle = &filesopen[id()];
 
-	if (flags & std::ios::in)
+	if (handle->osDataHandle == -1)
 	{
-		openingFlags |= std::ios::ate;
+		return -1;
 	}
 
-	stream.open(name, openingFlags);
+	int ret = OSReadFile(handle, numBytes, buffer);
 
-	if (!stream.is_open())
-	{
-		return std::nullopt;
-	}
-
-	FileHandle* handle = new FileHandle(stream, flags);
-
-	filesopen[index] = outHandle = handle;
-
-	return FileID(index);
+	return ret;
 }

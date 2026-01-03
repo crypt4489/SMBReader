@@ -52,19 +52,17 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			
 
-			FileHandle* handle = FileManager::GetFile(smb.id);
-
-			auto& geoChunk = handle->streamHandle;
+			OSFileHandle* handle = FileManager::GetFile(smb.id);
 
 			size_t seekpos = chunk[j].offsetInHeader;
 
-			geoChunk.seekg(seekpos);
+			OSSeekFile(handle, seekpos, BEGIN);
 
-			std::vector<char> data2(chunk[j].headerSize);
+			std::vector<char> geomHeader(chunk[j].headerSize);
 
-			geoChunk.read(data2.data(), chunk[j].headerSize);
+			OSReadFile(handle, chunk[j].headerSize, geomHeader.data());
 
-			SMBGeoChunk* geoDef = ProcessGeometryClass(data2.data(), 0);
+			SMBGeoChunk* geoDef = ProcessGeometryClass(geomHeader.data(), 0);
 
 			geoDef->vertexAndIndicesInfo = chunk[j].contigOffset + smb.fileOffset;
 
@@ -105,9 +103,9 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 		uint32_t writeWidth = tex.width >> i;
 		uint32_t writeHeight = tex.height >> i;
 
-		FileHandle* handle;
+		OSFileHandle* handle;
 
-		auto outputfilehandle = FileManager::OpenFile(writePath, std::ios::binary | std::ios::out, handle);
+		auto outputfilehandle = FileManager::OpenFile(writePath, WRITE);
 
 		if (!outputfilehandle)
 		{
@@ -115,9 +113,9 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 			return;
 		}
 
-		auto& outputFile = handle->streamHandle;
+		handle = FileManager::GetFile(outputfilehandle.value());
 
-		TexUtils::BMP::WriteOutBMPHeaders(outputFile, writeWidth, writeHeight);
+		TexUtils::BMP::WriteOutBMPHeaders(handle, writeWidth, writeHeight);
 
 		std::byte* bgra = ptr;
 
@@ -156,7 +154,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			outputFile.write(input.data() + offset, bpr);
+			//outputFile.write(input.data() + offset, bpr);
 			offset -= bpr;
 		}
 
@@ -168,9 +166,10 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 void Exporter::ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& outputFile)
 {
+	/*
 	using ExportHelper::operator<<;
 
-	FileHandle* handle;
+	//FileHandle* handle;
 
 	auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out, handle);
 
@@ -193,7 +192,8 @@ void Exporter::ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& out
 	for (const auto& vert : vertices) {
 		fileStream << "vn " << vert.NORMAL;
 	}
-	*/
+	
 
 	FileManager::RemoveOpenFile(fileRet.value());
+	*/
 }

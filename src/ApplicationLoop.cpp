@@ -287,7 +287,7 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		UpdateThisThing();
+	
 
 		while (running)
 		{
@@ -305,7 +305,7 @@ void ApplicationLoop::Execute()
 				continue;
 			}
 
-			
+			UpdateThisThing();
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
@@ -784,17 +784,16 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			
 			SMBGeoChunk** geoDef = &geoDefs[totalMeshCount++];
 
-			FileHandle* handle = FileManager::GetFile(file.id);
+			OSFileHandle* handle = FileManager::GetFile(file.id);
 
-			auto& geoChunk = handle->streamHandle;
 
 			size_t seekpos = chunk[i].offsetInHeader;
 
-			geoChunk.seekg(seekpos);
+			OSSeekFile(handle, seekpos, BEGIN);
 
 			std::vector<char> geomHeader(chunk[i].headerSize);
 
-			geoChunk.read(geomHeader.data(), chunk[i].headerSize);
+			OSReadFile(handle, chunk[i].headerSize, geomHeader.data());
 
 			*geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
 
