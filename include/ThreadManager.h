@@ -1,125 +1,48 @@
 #pragma once
 #include <algorithm>
 #include <atomic>
-#include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <thread>
 #include <vector>
 
-/*
+#include "OSMutex.h"
+
+
 struct SharedExclusiveFlag
 {
-    std::atomic_flag exclusiveFlag;
-    std::atomic<int> sharedCount;
+    OSSharedExclusive osse;
 
+    void lock() noexcept;
 
-    void lock() noexcept
-    {
-        while (exclusiveFlag.test_and_set(std::memory_order_acquire))
-        {
-            exclusiveFlag.wait(true, std::memory_order_relaxed);
-        }
+    bool try_lock() noexcept;
 
-        while (true) {
-            int count = sharedCount.load(std::memory_order_acquire);
-            if (count == 0)
-                break;
-            sharedCount.wait(count, std::memory_order_relaxed); // wait until it changes
-        }
-    }
+    void unlock() noexcept;
 
-    bool try_lock() noexcept
-    {
-        return !exclusiveFlag.test_and_set(std::memory_order_acquire);
-    }
-
-    void unlock() noexcept
-    {
-        exclusiveFlag.clear(std::memory_order_release);
-        exclusiveFlag.notify_all();
-    }
-
-    void lock_shared()
-    {
-        while (true) {
-            while (exclusiveFlag.test(std::memory_order_acquire)) {
-                exclusiveFlag.wait(true, std::memory_order_relaxed);
-            }
-
-            sharedCount.fetch_add(1, std::memory_order_acquire);
-
-            if (!exclusiveFlag.test(std::memory_order_acquire)) {
-                break;
-            }
-
-            sharedCount.fetch_sub(1, std::memory_order_release);
-        }
-    }
+    void lock_shared();
     
-    void unlock_shared() noexcept
-    {
-        int prev = sharedCount.fetch_sub(1, std::memory_order_release);
-        if (prev == 1)
-        {
-            sharedCount.notify_all();
-        }
-    }
+    void unlock_shared() noexcept;
 
-    bool try_lock_shared()
-    {
-        if (exclusiveFlag.test(std::memory_order_acquire)) {
-            return false;
-        }
-
-        sharedCount.fetch_add(1, std::memory_order_acquire);
-
-        if (exclusiveFlag.test(std::memory_order_acquire)) {
-            sharedCount.fetch_sub(1, std::memory_order_release);
-            return false;
-        }
-
-        return true;
-    }
+    bool try_lock_shared();
 };
-*/
 
 struct Semaphore
 {
-    explicit Semaphore(int c = 1) : count(c) {};
+    Semaphore() = default;
+
+    ~Semaphore();
+
+    void Create(int c = 1);
 
     void Wait();
 
-    bool Wait(std::chrono::milliseconds timeout);
+    bool Wait(int timeout);
     
     void Notify();
 
-    int count;
-    std::mutex lock;
-    std::condition_variable cv;
+    OSSemaphore semaphore;
 };
 
-struct SPSC
-{
-public:
-    explicit SPSC(bool c = false) : count(c) {};
-
-    void Wait(); //both used by producer
-
-    bool Wait(std::chrono::milliseconds timeout);
-
-    bool Wait(std::chrono::milliseconds timeout, std::stop_token &token);
-
-    void Wait(std::stop_token& token);
-
-    void Notify(); //used by consumer
-
-    bool count;
-    std::mutex lock;
-    std::condition_variable_any cv;
-};
 
 struct SemaphoreGuard
 {

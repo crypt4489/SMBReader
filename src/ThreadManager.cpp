@@ -19,75 +19,65 @@ void ThreadManager::DestroyThreadManager()
     backgroundTasks.clear();
 }
 
-void Semaphore::Wait()
+
+void Semaphore::Create(int c)
 {
-    std::unique_lock guard(lock);
-    cv.wait(guard, [this]() { return count > 0; });
-    count--;
+    CreateOSSemaphore(&semaphore, c);
 }
 
-bool Semaphore::Wait(std::chrono::milliseconds timeout)
+void Semaphore::Wait()
 {
-    std::unique_lock guard(lock);
-    if (!cv.wait_for(guard, timeout, [this]() { return count > 0; }))
-    {
-        return false;
-    }
-    count--;
-    return true;
+    int ret = WaitOSSemaphore(&semaphore, OS_INFINITE_TIMEOUT);
+}
+
+bool Semaphore::Wait(int timeout)
+{
+    int ret = WaitOSSemaphore(&semaphore, timeout);
+
+    return (ret ? false : true);
 }
 
 void Semaphore::Notify()
 {
-    {
-        std::unique_lock guard(lock);
-        count++;
-    }
-    cv.notify_one();
+    int ret = NotifyOSSemaphore(&semaphore);
+}
+
+Semaphore::~Semaphore()
+{
+    DeleteOSSemaphore(&semaphore);
 }
 
 
-void SPSC::Wait()
+void SharedExclusiveFlag::lock() noexcept
 {
-    std::unique_lock guard(lock);
-    cv.wait(guard, [this]() { return count == false; });
-    count = true;
+    ExclusiveAcquireOSSharedExclusive(&osse);
 }
 
-bool SPSC::Wait(std::chrono::milliseconds timeout)
+bool SharedExclusiveFlag::try_lock() noexcept
 {
-    std::unique_lock guard(lock);
-    if (!cv.wait_for(guard, timeout, [this]() { return count == false; }))
-    {
-        return false;
-    }
-    count = true;
-    return true;
+    int ret = TryExclusiveAcquireOSSharedExclusive(&osse);
+
+    return (ret ? false : true);
 }
 
-bool SPSC::Wait(std::chrono::milliseconds timeout, std::stop_token& token)
+void SharedExclusiveFlag::unlock() noexcept
 {
-    std::unique_lock guard(lock);
-    if (!cv.wait_for(guard, token, timeout, [this]() { return count == false; }))
-    {
-        return false;
-    }
-    count = true;
-    return true;
+    ExclusiveReleaseOSSharedExclusive(&osse);
 }
 
-void SPSC::Wait(std::stop_token& token)
+void SharedExclusiveFlag::lock_shared()
 {
-    std::unique_lock guard(lock);
-    cv.wait(guard, token, [this]() { return count == false; });
-    count = true;
+    SharedAcquireOSSharedExclusive(&osse);
 }
 
-void SPSC::Notify()
+void SharedExclusiveFlag::unlock_shared() noexcept
 {
-    {
-        std::unique_lock guard(lock);
-        count = false;
-    }
-    cv.notify_one();
+    SharedReleaseOSSharedExclusive(&osse);
+}
+
+bool SharedExclusiveFlag::try_lock_shared()
+{
+    int ret = TrySharedAcquireOSSharedExclusive(&osse);
+
+    return (ret ? false : true);
 }

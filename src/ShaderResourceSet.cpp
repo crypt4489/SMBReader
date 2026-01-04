@@ -248,8 +248,6 @@ int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocati
 
 	unsigned long hashl = 5381;
 
-	
-
 	while (currentLocation + count < size)
 	{
 		if (std::isspace(data[count]) && hashl == 5381)
@@ -261,7 +259,8 @@ int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocati
 		if (data[count] != '<' && hashl == 5381)
 			throw std::runtime_error("malformed xml tag");
 
-		if (data[count] == '\n' || data[count] == ' ' || data[count] == '>') {
+		if (data[count] == '\n' || data[count] == ' ' || data[count] == '>') 
+		{
 			count++;
 			break;
 		}
@@ -329,8 +328,6 @@ int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocatio
 #define MAX_ATTRIBUTE_LEN 50
 int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
 {
-	int memCounter = 0;
-	
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
 
@@ -355,11 +352,8 @@ int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int curren
 		if (std::isspace(c))
 			continue;
 
-		if (memCounter == MAX_ATTRIBUTE_LEN)
+		if (count  == MAX_ATTRIBUTE_LEN + currentLocation)
 			throw std::runtime_error("malformed xml attribute");
-
-	
-		memCounter++;
 
 		hashl = ((hashl << 5) + hashl) + c;
 
@@ -372,7 +366,6 @@ int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int curren
 
 int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
 {
-	int memCounter = 0;
 	int count = 0;
 	char* data = fileData.data() + currentLocation;
 
@@ -392,7 +385,7 @@ int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int c
 
 		if (std::isspace(c))
 		{
-			if (memCounter == 0)
+			if (hashl == 5381)
 				continue;
 			else
 				break;
@@ -401,11 +394,9 @@ int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int c
 		if (c == '\"' || c == '\'')
 			continue;
 
-		if (memCounter == MAX_ATTRIBUTE_LEN) {
+		if (count == MAX_ATTRIBUTE_LEN+currentLocation) {
 			throw std::runtime_error("malformed xml attribute");
 		}
-
-		memCounter++;
 
 		hashl = ((hashl << 5) + hashl) + c;
 
@@ -498,14 +489,12 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 
 	*stackSize = count;
 
-	c = data[++ret];
-
 	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
 	{
-		c = data[++ret];
+		c = data[ret++];
 	}
 
-	return ret+1;
+	return ret;
 }
 
 

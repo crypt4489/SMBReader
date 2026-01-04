@@ -278,7 +278,7 @@ void ApplicationLoop::Execute()
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
-					printf("%f\n", FPS);
+					//printf("%f\n", FPS);
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}
@@ -912,6 +912,9 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 void ApplicationLoop::InitializeRuntime()
 {
+
+	queueSema.Create();
+
 	ThreadManager::LaunchBackgroundThread(
 			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
 				this, std::placeholders::_1));
