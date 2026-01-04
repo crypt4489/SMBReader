@@ -17,6 +17,7 @@ set (PROJECT_INCLUDES "include/"
 "vulkan/include/" 
 "C:/VulkanSDK/1.3.290.0/Include/"
 "platform/"
+"platform/windows/include"
 )
 
 set (PROJECT_LIBRARY_PATHS
@@ -27,7 +28,7 @@ set (PROJECT_LIBRARY_PATHS
 
 file(GLOB PROJECT_SOURCES "platform/windows/src/*.cpp" "src/*.cpp" "smb/src/*.cpp" "main.cpp") 
 
-file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h")
+file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h" "platform/windows/include/*.h")
 
 file(GLOB PROJECT_SHADERS "shaders/layouts/*" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
 

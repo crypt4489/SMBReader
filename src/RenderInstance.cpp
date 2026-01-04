@@ -1115,7 +1115,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	vkInstance->SetInstanceDataAndSize(800 * KB, 256 * KB);
 	vkInstance->CreateRenderInstance(WINDOWS);
-	vkInstance->CreateWindowedSurface(windowMan->hInstance, window->hWndMain);
+
+	OSWindowInternalData data;
+
+	windowMan->GetInternalData(&data);
+
+	vkInstance->CreateWindowedSurface(data.inst, data.wnd);
 
 	physicalIndex = vkInstance->CreatePhysicalDevice(1);
 	VKDevice* majorDevice = vkInstance->CreateLogicalDevice(physicalIndex, &deviceIndex);

@@ -295,11 +295,11 @@ void ApplicationLoop::Execute()
 
 			if (mainWindow->ShouldCloseWindow()) break;
 
-			ProcessKeys(mainWindow->windowInfo.actions);
+			ProcessKeys(mainWindow->windowData.info.actions);
 
 			MoveCamera(FPS);
 
-			if (mainWindow->windowInfo.HandleResizeRequested())
+			if (mainWindow->windowData.info.HandleResizeRequested())
 			{
 				VKRenderer::gRenderInstance->RecreateSwapChain();
 				continue;
@@ -925,7 +925,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainWindow = new WindowManager();
 
-	mainWindow->CreateWindowsWindow();
+	mainWindow->CreateMainWindow();
 
 	VKRenderer::gRenderInstance = new RenderInstance();
 
