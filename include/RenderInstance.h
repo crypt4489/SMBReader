@@ -22,91 +22,6 @@ namespace API {
 	VkPrimitiveTopology ConvertTopology(PrimitiveType type);
 }
 
-
-/*
-template <int N>
-struct ThreadedRecordBuffer
-{
-	std::array<EntryHandle, N> buffers; //indices
-	uint32_t currentBuffer = N-1; // current good buffer
-	Semaphore currentGuard{};
-	SPSC invalidate{};
-	uint32_t frameInFlight;
-	std::function<void(EntryHandle, uint32_t)> drawingFunction;
-
-	std::atomic<bool> ready = false;
-
-	bool CheckReady() const
-	{
-		return ready.load();
-	}
-	
-	EntryHandle GetCurrentBuffer()
-	{
-		if (!ready.load()) return EntryHandle();
-		currentGuard.Wait();
-		return buffers[currentBuffer];
-	}
-
-	void ReleaseCurrentCommandBuffer()
-	{
-		currentGuard.Notify();
-	}
-
-	void Invalidate()
-	{
-		invalidate.Notify();
-	}
-
-	void Reset()
-	{
-		ready.store(false);
-		invalidate.Notify();
-	}
-
-	void DrawLoop(std::stop_token stoken)
-	{
-		while (true)
-		{
-			invalidate.Wait(stoken);
-
-			if (stoken.stop_requested()) {
-				break;
-			}
-
-			DrawMain(false);
-
-			if (!ready.load())
-				ready.store(true);
-		}
-	}
-
-
-	void DrawMain(bool wait = true)
-	{
-		if (wait) {
-			invalidate.Wait();
-		}
-
-	
-		uint32_t next = (currentBuffer + 1) % N;
-
-		EntryHandle recordBuffer = buffers[next];
-
-		//do stuff
-
-		drawingFunction(recordBuffer, frameInFlight);
-
-		{
-			SemaphoreGuard guard(currentGuard);
-			currentBuffer = next;
-		}
-
-		
-	}
-}; */
-
-
 struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
@@ -155,7 +70,41 @@ struct RenderAllocation
 	AllocationType allocType;
 };
 
+struct HostTransferRegion
+{
+	uint32_t offsetinstaging;
+	size_t size;
+	int copyCount;
+};
 
+
+struct HostDriverTransferPool
+{
+	char stagingbuffer[8192];
+	std::array<HostTransferRegion, 50> transferRegions;
+	int currentTransferRegionsRead = 0;
+	int currentTransferRegionsWrite = 0;
+	int currentStagingBufferRead = 0;
+	int currentStagingBufferWrite = 0;
+
+	void Create(void* data, size_t size, int allocationIndex, int copyCount)
+	{
+		if ((currentStagingBufferWrite + size) >= 8192)
+		{
+			return;
+		}
+
+		memcpy(stagingbuffer + currentStagingBufferWrite, data, size);
+
+
+		HostTransferRegion* region = &transferRegions[allocationIndex];
+		region->copyCount = copyCount;
+		region->offsetinstaging = currentStagingBufferWrite;
+		region->size = size;
+
+		currentStagingBufferWrite += size;
+	}
+};
 
 
 template <int N>
@@ -196,9 +145,28 @@ enum PipelineLabels
 	POLY = 3,
 };
 
+
+
+
+/*
+struct TransferRegion
+{
+	int hostordevice;
+	uint32_t offsetinstaging;
+	size_t size;
+	size_t offsetindriverbuffer;
+};
+
+struct TransferPool
+{
+	std::array<EntryHandle, 3> stagingBuffer; //each frame in flight loads data into staging buffer
+	std::array<TransferRegion, 50> transferRegions;
+	int currentTransferRegionsCount = 0;
+};
+*/
+
 struct RenderInstance
 {
-public:
 
 	RenderInstance();
 
@@ -332,8 +300,6 @@ public:
 
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
-
-	//std::array<ThreadedRecordBuffer<MAX_FRAMES_IN_FLIGHT>, MAX_FRAMES_IN_FLIGHT> threadedRecordBuffers;
 
 	ShaderGraphsHolder<4, 6> vulkanShaderGraphs{};
 	

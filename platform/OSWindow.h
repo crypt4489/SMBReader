@@ -101,3 +101,5 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
 int PollOSWindowEvents(OSWindow* window);
 
 int GetInternalOSData(OSWindow* window, void* internalDataStruct);
+
+int SetOSWindowText(OSWindow* window, const char* text);

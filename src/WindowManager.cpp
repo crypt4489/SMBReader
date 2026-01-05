@@ -30,3 +30,8 @@ void WindowManager::GetInternalData(OSWindowInternalData* data)
 {
    GetInternalOSData(&windowData, data);
 }
+
+void WindowManager::SetWindowTitle(const std::string& text)
+{
+    SetOSWindowText(&windowData, text.c_str());
+}

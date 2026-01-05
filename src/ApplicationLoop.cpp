@@ -268,7 +268,7 @@ void ApplicationLoop::Execute()
 		uint64_t frameCounter = 0;
 		double FPS = 60.0f;
 
-		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS]()
+		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS, this]()
 			{
 				double elapsed;
 				QueryPerformanceCounter(&currentTime);
@@ -279,6 +279,9 @@ void ApplicationLoop::Execute()
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
 					//printf("%f\n", FPS);
+					mainWindow->SetWindowTitle(std::format("FPS: {:2f}", FPS));
+				
+
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 				}

@@ -44,7 +44,7 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
 
     hwnd = CreateWindowEx(exStyle,
         TEXT(name),
-        NULL,
+        TEXT(name),
         style,
         CW_USEDEFAULT,
         CW_USEDEFAULT,
@@ -61,7 +61,7 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
         return OPEN_WINDOW_FAILED;
     }
 
-
+    SetWindowText(hwnd, TEXT(name));
     ShowWindow(hwnd, 1);
     UpdateWindow(hwnd);
 
@@ -329,5 +329,12 @@ int GetInternalOSData(OSWindow* window, void* internalDataStruct)
     data->inst = hInstMain;
     data->wnd = hWndMain;
 
+    return 0;
+}
+
+int SetOSWindowText(OSWindow* window, const char* text)
+{
+    HWND hwnd = windowPtrs[window->internalOSHandle];
+    SetWindowText(hwnd, TEXT(text));
     return 0;
 }
