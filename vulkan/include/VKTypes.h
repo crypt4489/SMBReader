@@ -16,6 +16,7 @@ struct VKRenderPassBuilder;
 struct RecordingBufferObject;
 struct VKGraphicsPipelineObjectCreateInfo;
 struct VKComputePipelineObjectCreateInfo;
+struct VKIndirectPipelineObjectCreateInfo;
 struct DescriptorSetLayoutBuilder;
 struct DescriptorSetBuilder;
 struct PipelineCacheObject;

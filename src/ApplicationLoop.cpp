@@ -44,6 +44,8 @@ static int globalIndexBufferSize = 256 * KB;
 static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 256 * KB;
 
+static int globalIndirectPipeline = 0;
+
 static int computeMemory;
 static int computeObjIndex;
 
@@ -170,19 +172,12 @@ ApplicationLoop::~ApplicationLoop() {
 	{ 
 		CleanupRuntime(); 
 	} 
-	delete mainWindow; 
+	delete mainWindow;
 }
 
 void ApplicationLoop::UpdateThisThing()
 {
-	Geometry* geom = geometryInstanceData.Update(0);
-	int meshCount = geom->meshCount;
-	int meshStart = geom->meshStart;
-	for (int i = 0; i < meshCount; i++)
-	{
-		Mesh* mesh = meshInstanceData.Update(meshStart + i);
-		VKRenderer::gRenderInstance->AddPipelineToMainQueue(mesh->drawableIndex);
-	}
+	VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalIndirectPipeline);
 }
 
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
@@ -679,12 +674,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			vertexFlags |= COMPRESSED;
 		}
 
-		
-
-
-		int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
-
-		mesh->meshDescriptor = graphicDesc;
+	
 
 		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
 
@@ -746,47 +736,17 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
 
-
-
-		int smallSliceOfHeaven = rendInst->GetAllocFromUniformBuffer(sizeof(uint32_t), alignof(Matrix4f), PERFRAME);
-
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, smallSliceOfHeaven, 0, 0);
-
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 1, 0);
-
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 2, 0);
-
-		rendInst->UpdateAllocation(&meshIndex, smallSliceOfHeaven, 4, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
-
-		
-
-		std::array<int, 3> descs = {
-			globalBufferDescriptor,
-			globalTexturesDescriptor,
-			graphicDesc,
-			
-		};
-		
-
-
-		GraphicsIntermediaryPipelineInfo create = {
-			.drawType = 0,
-			.vertexBufferIndex = ~0,
-			.vertexCount = 0,
-			.pipelinename = GENERIC,
-			.descCount = 3,
-			.descriptorsetid = descs.data(),
-			.indexBufferHandle = globalIndexBuffer,
-			.indexCount = (uint32_t)indexCount,
-			.pushRangeCount = 0,
-			.instanceCount = 1,
-			.indexSize = 2,
-			.indexOffset = (uint32_t)indexAlloc,
-			.vertexOffset = 0,
-			
+		struct Command {
+			uint32_t    indexCount;
+			uint32_t    instanceCount;
+			uint32_t    firstIndex;
+			int32_t     vertexOffset;
+			uint32_t    firstInstance;
 		};
 
-		mesh->drawableIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create);
+		Command com = { .indexCount = (uint32_t)indexCount, .instanceCount = 1, .firstIndex = (uint32_t)indexAlloc / mesh->indexSize, .vertexOffset = 0, .firstInstance = 0 };
+
+		rendInst->UpdateAllocation(&com, indirectCommandBuffer, sizeof(Command), i*sizeof(Command), 0, 1);
 	}
 }
 
@@ -975,11 +935,44 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 10, alignof(VkDrawIndirectCommand), PERFRAME);
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 10, alignof(VkDrawIndirectCommand), STATIC);
 	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
+
+	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 0, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 1, 0);
+
+	std::array<int, 3> descs = {
+			globalBufferDescriptor,
+			globalTexturesDescriptor,
+			graphicDesc,
+
+	};
+
+
+	IndirectIntermediaryPipelineInfo create = {
+		.drawType = 0,
+		.vertexBufferIndex = ~0,
+		.vertexCount = 0,
+		.pipelinename = GENERIC,
+		.descCount = 3,
+		.descriptorsetid = descs.data(),
+		.indexBufferHandle = globalIndexBuffer,
+		.pushRangeCount = 0,
+		.indexSize = 2,
+		.indexOffset = 0,
+		.vertexOffset = 0,
+		.indirectAllocation = indirectCommandBuffer,
+		.indirectDrawCount = 10
+	};
+
+	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create);
+
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

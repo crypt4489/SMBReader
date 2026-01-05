@@ -1,5 +1,6 @@
-#version 450
+#version 460
 #extension GL_EXT_shader_8bit_storage : enable
+#extension GL_ARB_shader_draw_parameters : require
 
 const uint POSITION = 1u;
 const uint TEXTURES1 = 2u;
@@ -39,21 +40,19 @@ struct PerModel
 
 
 layout(location = 0) out vec2 texCoords;
+layout(location = 1) flat out uint modelIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
 } gs;
 
-layout(set = 2, binding = 0) uniform ModelIndex {
-    uint modelIndex;
-} modelI;
 
-layout(set = 2, binding = 1) readonly buffer PMBuffer {
+layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
 
-layout(set = 2, binding = 2) readonly buffer InputVertices {
+layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
@@ -115,7 +114,9 @@ vec3 pack6decomp(uint offset, PerModel model)
 
 void main() {
     
-    PerModel modelData = perModelBuffer.objects[modelI.modelIndex];
+    PerModel modelData = perModelBuffer.objects[gl_DrawID];
+
+    modelIndex = gl_DrawID;
 
 
     uint comp = modelData.vertexComponents;

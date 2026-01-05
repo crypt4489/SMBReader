@@ -1297,6 +1297,19 @@ EntryHandle VKDevice::CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreat
 	return ret;
 }
 
+EntryHandle VKDevice::CreateIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* info)
+{
+	EntryHandle ret;
+
+	VKIndirectPipelineObject* objLoc = reinterpret_cast<VKIndirectPipelineObject*>(AllocFromPerDeviceData(sizeof(VKIndirectPipelineObject)));
+
+	objLoc = std::construct_at(objLoc, info, &deviceDataAlloc);
+
+	ret = AddVkTypeToEntry(objLoc, VulkIndirectPipeline);
+
+	return ret;
+}
+
 
 EntryHandle VKDevice::CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
 {
@@ -2405,7 +2418,7 @@ VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle handle)
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
-	if ((objHandle.type != VulkComputePipeline && objHandle.type != VulkGraphicsPipeline) || !objHandle.memoryLocation)
+	if ((objHandle.type != VulkComputePipeline && objHandle.type != VulkGraphicsPipeline && objHandle.type != VulkIndirectPipeline) || !objHandle.memoryLocation)
 		return nullptr;
 
 	return reinterpret_cast<VKPipelineObject*>(objHandle.memoryLocation);

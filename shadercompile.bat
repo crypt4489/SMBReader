@@ -107,7 +107,7 @@ IF EXIST %OutputFile% (
 ) 
 
 :WRITEOUT
-glslc.exe --target-spv=spv1.6 %1 -o %OutputFile%
+glslc.exe --target-env=vulkan1.2 --target-spv=spv1.6 %1 -o %OutputFile%
 
 GOTO :eof
 

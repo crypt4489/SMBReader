@@ -1141,6 +1141,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	feature12.descriptorBindingVariableDescriptorCount = VK_TRUE;
 	feature12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 	feature12.storageBuffer8BitAccess = VK_TRUE;
+	//feature12.d
 
 	VkPhysicalDeviceFeatures2 features2{};
 	features2.pNext = &feature12;
@@ -1150,7 +1151,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	features2.features.tessellationShader = VK_TRUE;
 	features2.features.samplerAnisotropy = VK_TRUE;
 	features2.features.multiDrawIndirect = VK_TRUE;
-
 
 	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
 		vkInstance->instanceLayerCount,
@@ -1643,6 +1643,116 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	auto graph = dev->GetComputeGraph(computeGraphIndex);
 
 	posStruct->graphIndex = graphIndices.Allocate((int)graph->AddObject(pipelineIndex));
+
+	return ret;
+}
+
+int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	uint32_t dynamicNumber = 0;
+	std::vector<EntryHandle> descHandles(info->descCount);
+	std::vector<uint32_t> offsetsPerSet(info->descCount);
+	std::vector<uint32_t> dynamicOffsets;
+
+	for (uint32_t i = 0; i < info->descCount; i++)
+	{
+		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
+		dynamicNumber += offsetsPerSet[i];
+		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
+	}
+
+	EntryHandle indexBufferHandle = EntryHandle();
+	uint32_t indexOffset = ~0ui32;
+
+	EntryHandle vertexBufferHandle = EntryHandle();
+	uint32_t vertexOffset = ~0ui32;
+
+	if (info->indexBufferHandle != ~0)
+	{
+		indexBufferHandle = allocations[info->indexBufferHandle].memIndex;
+		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
+	}
+
+	if (info->vertexBufferIndex != ~0)
+	{
+		vertexBufferHandle = allocations[info->vertexBufferIndex].memIndex;
+		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset) + info->vertexOffset;
+	}
+
+	VKIndirectPipelineObjectCreateInfo create = {
+			.vertexBufferIndex = vertexBufferHandle,
+			.vertexBufferOffset = vertexOffset,
+			.vertexCount = info->vertexCount,
+			.pipelinename = EntryHandle(),
+			.descCount = info->descCount,
+			.descriptorsetid = descHandles.data(),
+			.dynamicPerSet = offsetsPerSet.data(),
+			.maxDynCap = dynamicNumber,
+			.indexBufferHandle = indexBufferHandle,
+			.indexBufferOffset = indexOffset,
+			.pushRangeCount = info->pushRangeCount,
+			.indexSize = info->indexSize,
+			.indirectDrawCount = (uint32_t)info->indirectDrawCount,
+			.indirectBufferHandle = allocations[info->indirectAllocation].memIndex,
+			.indirectBufferOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset)
+	};
+
+	int renderStateCount = maxMSAALevels;
+
+	auto pso = stateObjectHandles.Allocate();
+
+	int ret = pso.first;
+	PipelineHandle* posStruct = pso.second;
+
+	posStruct->graphIndex = graphIndices.AllocateN(renderStateCount);
+	posStruct->graphCount = renderStateCount;
+	posStruct->numHandles = renderStateCount;
+	posStruct->group = INDIRECTSO;
+	posStruct->indexForHandles = renderStateObjects.AllocateN(renderStateCount);
+
+	int pipeInsertIndex = posStruct->indexForHandles;
+	int graphInsertIndex = posStruct->graphIndex;
+
+	auto& ref = pipelinesIdentifier[info->pipelinename];
+
+	for (uint32_t i = 0; i < maxMSAALevels; i++) {
+
+		create.pipelinename = ref[i];
+
+		EntryHandle pipelineIndex = dev->CreateIndirectPipelineObject(&create);
+
+		VKPipelineObject* VKGraphicsPipelineObject = dev->GetPipelineObject(pipelineIndex);
+
+		for (uint32_t i = 0; i < dynamicNumber; i++)
+		{
+			VKGraphicsPipelineObject->SetPerObjectData(dynamicOffsets[i]);
+		}
+
+		int constantBufferPerSet = 0;
+
+		for (uint32_t i = 0; i < info->pushRangeCount; i++)
+		{
+			ShaderResourceConstantBuffer* pushArgs = nullptr;
+			uint32_t j = 0;
+			do {
+				pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet);
+				constantBufferPerSet++;
+			} while (!pushArgs && ((++j) < info->descCount) && !(constantBufferPerSet = 0));
+
+			if (pushArgs) {
+				VKGraphicsPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+			}
+		}
+
+		for (uint32_t i = 0; i < info->descCount; i++)
+			AddVulkanMemoryBarrier(VKGraphicsPipelineObject, info->descriptorsetid[i]);
+
+		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
+		graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
+		renderStateObjects.Update(pipeInsertIndex++, pipelineIndex);
+	}
 
 	return ret;
 }

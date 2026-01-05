@@ -1,6 +1,8 @@
-#version 450
+#version 460
+#extension GL_ARB_shader_draw_parameters : require
 
 layout(location = 0) in vec2 texCoords;
+layout(location = 1) flat in uint modelIdx;
 
 layout(location = 0) out vec4 outColor;
 
@@ -28,17 +30,13 @@ struct PerModel
 
 layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
 
-layout(set = 2, binding = 0) uniform ModelIndex {
-    uint modelIndex;
-} modelI;
-
-layout(set = 2, binding = 1) readonly buffer PMBuffer {
+layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
 
 void main() {
 
-    PerModel modelData = perModelBuffer.objects[modelI.modelIndex];
+    PerModel modelData = perModelBuffer.objects[modelIdx];
 
     uint textureIndex = modelData.textureHandles[0];
 

@@ -51,6 +51,23 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t pushRangeCount;
 };
 
+struct IndirectIntermediaryPipelineInfo
+{
+	uint32_t drawType;
+	int vertexBufferIndex;
+	uint32_t vertexCount;
+	uint32_t pipelinename;
+	uint32_t descCount;
+	int* descriptorsetid;
+	int indexBufferHandle;
+	uint32_t pushRangeCount;
+	uint32_t indexSize;
+	uint32_t indexOffset;
+	uint32_t vertexOffset;
+	int indirectAllocation;
+	int indirectDrawCount;
+};
+
 
 #define FULL_ALLOCATION_SIZE 0
 #define ABSOLUTE_ALLOCATION_OFFSET 0
@@ -233,6 +250,8 @@ struct RenderInstance
 
 	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
+	int CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info);
+
 	void CreateRenderTargetData(int* desc, int descCount);
 
 	void DrawScene(uint32_t imageIndex);
@@ -325,6 +344,7 @@ struct RenderInstance
 	{
 		COMPUTESO,
 		GRAPHICSO,
+		INDIRECTSO,
 	};
 
 	struct PipelineHandle

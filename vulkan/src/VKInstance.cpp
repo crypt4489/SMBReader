@@ -311,13 +311,15 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 	memset(devices, 0, sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1));
 
-	deviceExtCount = 2;
+	deviceExtCount = 3;
 
 	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
 
 	deviceExtensions[0] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
 	
 	deviceExtensions[1] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+
+	deviceExtensions[2] = VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME;
 
 	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
 

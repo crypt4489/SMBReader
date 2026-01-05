@@ -6,13 +6,14 @@
 
 #include <array>
 
-VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle _pid, EntryHandle* _dsid, uint32_t *_dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount)
+VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle _pid, EntryHandle* _dsid, uint32_t *_dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, 
+	uint32_t memBarrierCount, PipelineObjectType type)
 	: 
 	pipelineID(_pid),
 	maxObjectCapacity(moc), 
 	objectCount(0U), 
 	pushConstantCount(pcrCount), memBarrierCapacity(memBarrierCount),
-	memBarrierCounter(0), descriptorCount(descCount)
+	memBarrierCounter(0), descriptorCount(descCount), type(type)
 
 {
 	objectData = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * moc));
@@ -30,7 +31,7 @@ VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* allocator)
 	:
-	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0),
+	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0, GRAPHICSPO),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
@@ -78,14 +79,14 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 
 VKIndirectPipelineObject::VKIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc)
 : 
-	VKPipelineObject(alloc, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0),
+	VKPipelineObject(alloc, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0, INDIRECTPO),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferHandle(createinfo->vertexBufferIndex),
 	indexBufferHandle(createinfo->indexBufferHandle),
 	indexBufferOffset(createinfo->indexBufferOffset),
 	drawCount(createinfo->indirectDrawCount),
-	indirectBufferHandle(createinfo->indexBufferHandle),
-	indirectBufferOffset(createinfo->indexBufferOffset)
+	indirectBufferHandle(createinfo->indirectBufferHandle),
+	indirectBufferOffset(createinfo->indirectBufferOffset)
 {
 	if (createinfo->indexSize == 4)
 	{
@@ -137,7 +138,7 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 
 VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceOwnedAllocator* allocator)
 	: 
-	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount),
+	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount, COMPUTEPO),
 	x(info->x),
 	y(info->y),
 	z(info->z)

@@ -68,7 +68,8 @@ struct PushConstantArguments
 enum PipelineObjectType
 {
 	GRAPHICSPO = 0,
-	COMPUTEPO = 1
+	COMPUTEPO = 1,
+	INDIRECTPO = 2
 };
 
 enum VKBarrierType
@@ -98,6 +99,7 @@ struct VkBarrierInfo
 
 struct VKPipelineObject
 {
+	PipelineObjectType type;
 	uint32_t* objectData;
 	uint32_t maxObjectCapacity, objectCount;
 
@@ -114,7 +116,7 @@ struct VKPipelineObject
 	uint32_t memBarrierCounter;
 
 	VKPipelineObject() = delete;
-	VKPipelineObject(DeviceOwnedAllocator* alloc, EntryHandle _pid, EntryHandle* _dsid, uint32_t* dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount);
+	VKPipelineObject(DeviceOwnedAllocator* alloc, EntryHandle _pid, EntryHandle* _dsid, uint32_t* dynamicPerSet, uint32_t descCount, uint32_t moc, uint32_t pcrCount, uint32_t memBarrierCount, PipelineObjectType type);
 
 	~VKPipelineObject() = default;
 

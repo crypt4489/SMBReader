@@ -47,8 +47,18 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
 		}
 
-		VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-		obj->Draw(rbo, frameNum, descriptorCount);
+
+		if (objHeader->type == GRAPHICS)
+		{
+			VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
+			obj->Draw(rbo, frameNum, descriptorCount);
+		}
+		else if (objHeader->type == INDIRECTPO)
+		{
+			VKIndirectPipelineObject* obj = (VKIndirectPipelineObject*)objHeader;
+			obj->Draw(rbo, frameNum, descriptorCount);
+		}
+		
 	}
 
 	currentPipeline = EntryHandle();

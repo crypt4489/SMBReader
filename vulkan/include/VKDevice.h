@@ -261,6 +261,7 @@ enum HandleType
 	VulkQueueManager = 28,
 	VulkGraphicsOTQ = 29,
 	VulkComputeOTQ = 30,
+	VulkIndirectPipeline = 31,
 	VulkMaxEnum
 };
 
@@ -361,6 +362,8 @@ struct VKDevice
 	EntryHandle CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
 
 	EntryHandle CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
+
+	EntryHandle CreateIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* info);
 
 	EntryHandle CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst);
 
