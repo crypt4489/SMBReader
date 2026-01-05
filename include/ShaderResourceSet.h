@@ -37,6 +37,7 @@ struct ShaderResourceSamplerBindless : public ShaderResourceHeader
 struct ShaderResourceBuffer : public ShaderResourceHeader
 {
 	int allocation;
+	int offset;
 };
 
 struct ShaderResourceBufferView : public ShaderResourceHeader
@@ -89,7 +90,7 @@ struct ShaderResourceManager
 		return indexRet;
 	}
 
-	void BindBufferToShaderResource(int descriptorSet, int allocationIndex, int bindingIndex)
+	void BindBufferToShaderResource(int descriptorSet, int allocationIndex, int bindingIndex, int offset)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -101,6 +102,7 @@ struct ShaderResourceManager
 			return;
 
 		header->allocation = allocationIndex;
+		header->offset = offset;
 	}
 
 	void BindSampledImageToShaderResource(int descriptorSet, EntryHandle index, int bindingIndex)

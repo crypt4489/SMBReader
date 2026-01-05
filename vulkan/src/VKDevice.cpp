@@ -336,6 +336,13 @@ void RecordingBufferObject::BindingIndirectDrawCmd(EntryHandle indirectBufferInd
 	vkCmdDrawIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndirectCommand));
 }
 
+void RecordingBufferObject::BindingIndexedIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset)
+{
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(indirectBufferIndex);
+	vkCmdDrawIndexedIndirect(cbBufferHandler.buffer, buffer, indirectBufferOffset, drawCount, sizeof(VkDrawIndexedIndirectCommand));
+}
+
+
 void RecordingBufferObject::EndRenderPassCommand()
 {
 	vkCmdEndRenderPass(cbBufferHandler.buffer);

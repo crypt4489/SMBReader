@@ -47,7 +47,7 @@ struct DeviceSlabAllocator
 	{
 
 	}
-	int Allocate(int _allocSize);
+	int Allocate(int _allocSize, int alignment);
 };
 
 

@@ -143,15 +143,15 @@ struct ShaderGraph
 	int GetGraphSize() const;
 };
 
-template <int N, int M>
+template <int T_ShaderGraphCount, int T_ShaderCount>
 struct ShaderGraphsHolder
 {
 	int graphCount;
 
 	uintptr_t shaderGraphs;
 	size_t shaderGraphOffset;
-	std::array<ShaderGraph*, N> shaderGraphPtrs;
-	std::array<EntryHandle, M> shaders;
+	std::array<ShaderGraph*, T_ShaderGraphCount> shaderGraphPtrs;
+	std::array<EntryHandle, T_ShaderCount> shaders;
 	
 
 	uintptr_t GetGraph(int graphIndex)

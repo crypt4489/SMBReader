@@ -564,18 +564,19 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 4> layouts = {
+	std::array<std::string, 5> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
-		"PolynomialLayout.xml"
+		"PolynomialLayout.xml",
+		"IndirectCull.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < 5; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -1313,7 +1314,7 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 		{
 			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
 			auto alloc = allocations[buffer->allocation];
-			dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset));
+			dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset + buffer->offset));
 			size++;
 			break;
 		}
@@ -1466,15 +1467,24 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	EntryHandle indexBufferHandle = EntryHandle();
 	uint32_t indexOffset = ~0ui32;
 
-	if (info->indexBufferHandle)
+	EntryHandle vertexBufferHandle = EntryHandle();
+	uint32_t vertexOffset = ~0ui32;
+
+	if (info->indexBufferHandle != ~0)
 	{
 		indexBufferHandle = allocations[info->indexBufferHandle].memIndex;
-		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset);
+		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
+	}
+
+	if (info->vertexBufferIndex != ~0)
+	{
+		vertexBufferHandle = allocations[info->vertexBufferIndex].memIndex;
+		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset) + info->vertexOffset;
 	}
 
 	VKGraphicsPipelineObjectCreateInfo create = {
-			.vertexBufferIndex = allocations[info->vertexBufferIndex].memIndex,
-			.vertexBufferOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset),
+			.vertexBufferIndex = vertexBufferHandle,
+			.vertexBufferOffset = vertexOffset,
 			.vertexCount = info->vertexCount,
 			.pipelinename = EntryHandle(),
 			.descCount = info->descCount,
@@ -1742,7 +1752,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 			EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0, allocations[bufferBarrier->allocation].memIndex,
 				allocations[bufferBarrier->allocation].deviceAllocSize,
-				allocations[bufferBarrier->allocation].offset);
+				allocations[bufferBarrier->allocation].offset + (VkDeviceSize)bufferBarrier->offset);
 
 
 			vkPipelineObject->AddBufferMemoryBarrier(

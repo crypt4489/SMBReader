@@ -75,12 +75,32 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 	}
 }
 
-/*
-void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
+
+VKIndirectPipelineObject::VKIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc)
+: 
+	VKPipelineObject(alloc, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0),
+	vertexBufferOffset(createinfo->vertexBufferOffset),
+	vertexBufferHandle(createinfo->vertexBufferIndex),
+	indexBufferHandle(createinfo->indexBufferHandle),
+	indexBufferOffset(createinfo->indexBufferOffset),
+	drawCount(createinfo->indirectDrawCount),
+	indirectBufferHandle(createinfo->indexBufferHandle),
+	indirectBufferOffset(createinfo->indexBufferOffset)
+{
+	if (createinfo->indexSize == 4)
+	{
+		indexType = VK_INDEX_TYPE_UINT32;
+	}
+	else if (createinfo->indexSize == 2) {
+		indexType = VK_INDEX_TYPE_UINT16;
+	}
+}
+
+void VKIndirectPipelineObject::Draw(
 	RecordingBufferObject *rbo,
-	uint32_t drawCount,
 	uint32_t frame,
-	uint32_t firstSet)
+	uint32_t firstSet
+)
 {
 
 	uint32_t offset = 0;
@@ -90,13 +110,24 @@ void VKGraphicsPipelineObject::DrawIndirectOneBuffer(
 		offset += dynamicPerSet[i];
 	}
 
-	if (vertexBufferIndex != ~0ui64)
+	if (vertexBufferHandle != ~0ui64)
 	{
-		rbo->BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
+		rbo->BindVertexBuffer(vertexBufferHandle, 0, 1, &vertexBufferOffset);
 	}
 
-	rbo->BindingIndirectDrawCmd(indirectBufferIndex, drawCount, indirectBufferOffset);
-} */
+	if (indexBufferHandle != ~0ui64)
+	{
+		rbo->BindIndexBuffer(indexBufferHandle, indexBufferOffset, indexType);
+		rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset);
+	}
+	else 
+	{
+		rbo->BindingIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset);
+	}
+
+
+	
+} 
 
 
 void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)

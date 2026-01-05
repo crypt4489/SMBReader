@@ -27,11 +27,15 @@ struct PerModel
     uint vertexComponents;
     uint numHandles;
     uint vertexStride;
-    uint unused;
-    uint textureHandles[12];
+    uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+    uint firstVertex;
+    uint textureHandles[9];
     mat4 m;
     AABB minMaxBox;
 };
+
 
 
 layout(location = 0) out vec2 texCoords;
@@ -119,7 +123,7 @@ void main() {
 
     uint stride = modelData.vertexStride;
 
-    uint offset = stride * gl_VertexIndex;
+    uint offset = (stride * gl_VertexIndex) + modelData.firstVertex;
 
     
 

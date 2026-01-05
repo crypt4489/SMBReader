@@ -38,6 +38,25 @@ struct VKGraphicsPipelineObjectCreateInfo
 	uint32_t indexSize;
 };
 
+struct VKIndirectPipelineObjectCreateInfo
+{
+	EntryHandle vertexBufferIndex;
+	uint32_t vertexBufferOffset;
+	uint32_t vertexCount;
+	EntryHandle pipelinename;
+	uint32_t descCount;
+	EntryHandle* descriptorsetid;
+	uint32_t* dynamicPerSet;
+	uint32_t maxDynCap;
+	EntryHandle indexBufferHandle;
+	uint32_t indexBufferOffset;
+	uint32_t pushRangeCount;
+	uint32_t indexSize;
+	uint32_t indirectDrawCount;
+	EntryHandle indirectBufferHandle;
+	uint32_t indirectBufferOffset;
+};
+
 struct PushConstantArguments
 {
 	VkShaderStageFlags stage;
@@ -142,20 +161,23 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 struct VKIndirectPipelineObject : public VKPipelineObject
 {
 	VKIndirectPipelineObject() = delete;
-	VKIndirectPipelineObject(VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc);
+	VKIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc);
 
 	~VKIndirectPipelineObject() = default;
 
-	void DrawIndirect(
+	void Draw(
 		RecordingBufferObject* rbo,
 		uint32_t frame,
 		uint32_t firstSet
 	);
 
-	EntryHandle vertexBufferIndex, indirectBufferIndex, indexBufferHandle;
+	EntryHandle vertexBufferHandle, indirectBufferHandle, indexBufferHandle;
 
 	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
+	
 	uint32_t drawCount;
+	VkIndexType indexType;
+
 };
 
 

@@ -35,6 +35,8 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t pushRangeCount;
 	uint32_t instanceCount;
 	uint32_t indexSize;
+	uint32_t indexOffset;
+	uint32_t vertexOffset;
 };
 
 struct ComputeIntermediaryPipelineInfo
@@ -301,13 +303,13 @@ struct RenderInstance
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
-	ShaderGraphsHolder<4, 6> vulkanShaderGraphs{};
+	ShaderGraphsHolder<6, 10> vulkanShaderGraphs{};
 	
 	ShaderResourceManager<50> descriptorManager{};
 
 	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier{};
 	std::array<EntryHandle, 10> vulkanDescriptorLayouts{};
-	std::array<ShaderDetails*, 6> shaderDetails{};
+	std::array<ShaderDetails*, 10> shaderDetails{};
 	char* shaderDetailsData;
 	std::atomic<int> shaderDetailAlloc = 0;
 

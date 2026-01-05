@@ -16,11 +16,15 @@ struct PerModel
     uint vertexComponents;
     uint numHandles;
     uint vertexStride;
-    uint unused;
-    uint textureHandles[12];
+    uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+    uint firstVertex;
+    uint textureHandles[9];
     mat4 m;
     AABB minMaxBox;
 };
+
 
 layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
 

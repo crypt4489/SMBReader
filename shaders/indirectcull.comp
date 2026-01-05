@@ -1,0 +1,59 @@
+#version 450
+
+struct IndexedIndirectCommand
+{
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int vertexOffset;
+	uint firstInstance;
+};
+
+struct AABB
+{
+    vec4 min;
+    vec4 max;
+};
+
+layout(push_constant) uniform GlobalContext {
+    uint indirectDrawCount;
+} gs;
+
+layout(set = 0, binding = 0) buffer Commands {
+	IndexedIndirectCommand commands[];
+} cmdBuffer;
+
+struct PerModel
+{
+    uint vertexComponents;
+    uint numHandles;
+    uint vertexStride;
+    uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+    uint vertexByteOffset;
+    uint textureHandles[9];
+    mat4 m;
+    AABB minMaxBox;
+};
+
+
+layout(set = 0, binding = 1) readonly buffer PMBuffer {
+    PerModel objects[];
+} perModelBuffer;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint index = gl_GlobalInvocationID.x;
+
+    PerModel modelData = perModelBuffer.objects[index];
+
+    cmdBuffer.commands[index].instanceCount = 1;
+    cmdBuffer.commands[index].firstIndex = modelData.firstIndex;
+    cmdBuffer.commands[index].indexCount = modelData.indexCount;
+    cmdBuffer.commands[index].firstInstance = 0;
+    cmdBuffer.commands[index].vertexOffset = 0;
+
+}

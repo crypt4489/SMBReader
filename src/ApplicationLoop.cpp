@@ -25,11 +25,24 @@ struct Handles
 	int vertexFlags;
 	int numHandles;
 	int stride;
-	int pad;
-	int handles[12];
+	int indexCount;
+	int instanceCount;
+	int firstIndex;
+	int vertexByteOffset;
+	int handles[9];
 	Matrix4f m;
 	AxisBox minMaxBox;
 };
+
+
+static int indirectCommandBuffer = 0;
+static int indirectCommandCount = 0;
+static int indirectCommandDescriptor = 0;
+static int indirectCommandPipeline = 0;
+static int globalIndexBuffer = 0;
+static int globalIndexBufferSize = 256 * KB;
+static int globalVertexBuffer = 0;
+static int globalVertexBufferSize = 256 * KB;
 
 static int computeMemory;
 static int computeObjIndex;
@@ -53,6 +66,11 @@ static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertex
 static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
 static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
 static DeviceSlabAllocator meshDeviceSpecificAlloc(globalMeshSize);
+
+
+static DeviceSlabAllocator indexBufferAlloc(globalIndexBufferSize);
+
+static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
 
 static TextureDictionary mainDictionary;
 
@@ -375,7 +393,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 
 	computeMemory = rendInst->GetAllocFromUniformBuffer(64, 64, STATIC);
 
-	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, 0);
+	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, 0, 0);
 	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, storageBuffer, 1);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 0, BEGINNING_OF_PIPE, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
 	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
@@ -666,11 +684,10 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int graphicDesc = rendInst->AllocateShaderResourceSet(0, 2, frames);
 
-		int indexMemory = 0;
-
 		mesh->meshDescriptor = graphicDesc;
-		
-		int vertexMemory = rendInst->GetAllocFromDeviceStorageBuffer(vertexSize * vertexCount, 16, STATIC);
+
+		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
+
 
 		
 		mesh->indexSize = 2;
@@ -681,14 +698,11 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		SMBCopyIndices(geoDef, i, file, indices);
 
-		indexMemory = rendInst->GetAllocFromDeviceBuffer(sizeof(uint16_t) * indexCount, 64, STATIC);
+		int indexAlloc = indexBufferAlloc.Allocate(sizeof(uint16_t) * indexCount, 1);
 
-		mesh->deviceIndices = indexMemory;
+		rendInst->UpdateAllocation(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount, indexAlloc, 0, 1);
 
-		rendInst->UpdateAllocation(indices, indexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
-		
-	
-		mesh->deviceVertices = vertexMemory;
+		rendInst->UpdateAllocation(vertexData, globalVertexBuffer, vertexSize * vertexCount, vertexAlloc, 0, 1);
 		 
 		mesh->meshInstanceLocalMemoryCount = 1;
 
@@ -703,8 +717,16 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->texturesStart = meshTextureHandles.AllocateN(handles->numHandles);
 		mesh->texuresCount = handles->numHandles;
 
+		mesh->vertexId = globalVertexBuffer;
+		mesh->indexId = globalIndexBuffer;
+
 		handles->vertexFlags = vertexFlags;
 		handles->stride = vertexSize;
+
+		handles->indexCount = mesh->indicesCount;
+		handles->instanceCount = 1;
+		handles->firstIndex = indexAlloc/mesh->indexSize;
+		handles->vertexByteOffset = vertexAlloc;
 
 		for (int ii = 0; ii < handles->numHandles; ii++)
 		{
@@ -716,7 +738,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
 		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
 
-		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles));
+		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
 
 		mesh->meshInstanceDeviceMemoryCount = 1;
 		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
@@ -728,15 +750,15 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int smallSliceOfHeaven = rendInst->GetAllocFromUniformBuffer(sizeof(uint32_t), alignof(Matrix4f), PERFRAME);
 
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, smallSliceOfHeaven, 0);
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, smallSliceOfHeaven, 0, 0);
 
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 1);
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 1, 0);
 
-		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, vertexMemory, 2);
+		rendInst->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 2, 0);
 
 		rendInst->UpdateAllocation(&meshIndex, smallSliceOfHeaven, 4, 0, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
-		rendInst->UpdateAllocation(vertexData, vertexMemory, FULL_ALLOCATION_SIZE, ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
+		
 
 		std::array<int, 3> descs = {
 			globalBufferDescriptor,
@@ -749,16 +771,19 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		GraphicsIntermediaryPipelineInfo create = {
 			.drawType = 0,
-			.vertexBufferIndex = vertexMemory,
-			.vertexCount = (uint32_t)vertexCount,
+			.vertexBufferIndex = ~0,
+			.vertexCount = 0,
 			.pipelinename = GENERIC,
 			.descCount = 3,
 			.descriptorsetid = descs.data(),
-			.indexBufferHandle = indexMemory,
+			.indexBufferHandle = globalIndexBuffer,
 			.indexCount = (uint32_t)indexCount,
 			.pushRangeCount = 0,
 			.instanceCount = 1,
-			.indexSize = 2
+			.indexSize = 2,
+			.indexOffset = (uint32_t)indexAlloc,
+			.vertexOffset = 0,
+			
 		};
 
 		mesh->drawableIndex = rendInst->CreateGraphicsVulkanPipelineObject(&create);
@@ -937,17 +962,24 @@ void ApplicationLoop::InitializeRuntime()
 	CreateTexturePools();
 
 	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(Matrix4f) * 2, alignof(Matrix4f), PERFRAME);
+	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalIndexBufferSize, 16, STATIC);
+	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, STATIC);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(Matrix4f), PERFRAME);;
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 10, alignof(VkDrawIndirectCommand), PERFRAME);
+	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

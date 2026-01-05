@@ -105,6 +105,8 @@ struct RecordingBufferObject
 
 	void BindingIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
 
+	void BindingIndexedIndirectDrawCmd(EntryHandle indirectBufferIndex, uint32_t drawCount, size_t indirectBufferOffset);
+
 	void BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 		VkSubpassContents contents,
 		VkRect2D rect,
