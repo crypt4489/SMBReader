@@ -62,9 +62,9 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 
 			OSReadFile(handle, chunk[j].headerSize, geomHeader.data());
 
-			SMBGeoChunk* geoDef = ProcessGeometryClass(geomHeader.data(), 0);
+			SMBGeoChunk geoDef{};
+			ProcessGeometryClass(geomHeader.data(), 0, &geoDef, chunk[j].contigOffset + smb.fileOffset, chunk[j].fileOffset + smb.numContiguousBytes + smb.fileOffset);
 
-			geoDef->vertexAndIndicesInfo = chunk[j].contigOffset + smb.fileOffset;
 
 			break;
 		}

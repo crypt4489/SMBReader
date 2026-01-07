@@ -11,6 +11,7 @@ enum BarrierActionBits
 	READ_SHADER_RESOURCE = 2,
 	READ_UNIFORM_BUFFER = 4,
 	READ_VERTEX_INPUT = 8,
+	READ_INDIRECT_COMMAND = 16
 };
 
 enum BarrierStageBits
@@ -19,7 +20,8 @@ enum BarrierStageBits
 	VERTEX_INPUT_BARRIER = 2,
 	COMPUTE_BARRIER = 4,
 	FRAGMENT_BARRIER = 8,
-	BEGINNING_OF_PIPE = 16
+	BEGINNING_OF_PIPE = 16,
+	INDIRECT_DRAW_BARRIER = 32,
 };
 
 typedef int BarrierAction;
@@ -41,6 +43,7 @@ inline VkAccessFlags ConvertResourceActionToVulkan(BarrierAction action)
 	flags |= (VK_ACCESS_SHADER_READ_BIT) * ((action & READ_SHADER_RESOURCE) != 0);
 	flags |= (VK_ACCESS_UNIFORM_READ_BIT) * ((action & READ_UNIFORM_BUFFER) != 0);
 	flags |= (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) * ((action & READ_VERTEX_INPUT) != 0);
+	flags |= (VK_ACCESS_INDIRECT_COMMAND_READ_BIT) & ((action & READ_INDIRECT_COMMAND) != 0);
 	return flags;
 }
 
@@ -52,6 +55,7 @@ inline VkPipelineStageFlags ConvertResourceStageToVulkan(BarrierStage sourceStag
 	flags |= (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT) * ((sourceStage & COMPUTE_BARRIER) != 0);
 	flags |= (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) * ((sourceStage & BEGINNING_OF_PIPE) != 0);
 	flags |= (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT) * ((sourceStage & FRAGMENT_BARRIER) != 0);
+	flags |= (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT) * ((sourceStage & INDIRECT_DRAW_BARRIER) != 0);
 	return flags;
 }
 

@@ -40,11 +40,12 @@ static int indirectCommandCount = 0;
 static int indirectCommandDescriptor = 0;
 static int indirectCommandPipeline = 0;
 static int globalIndexBuffer = 0;
-static int globalIndexBufferSize = 256 * KB;
+static int globalIndexBufferSize = 1024 * KB;
 static int globalVertexBuffer = 0;
-static int globalVertexBufferSize = 256 * KB;
+static int globalVertexBufferSize = 1024 * KB;
 
-static int globalIndirectPipeline = 0;
+static int globalCullPipeline = 0;
+
 
 static int computeMemory;
 static int computeObjIndex;
@@ -177,7 +178,7 @@ ApplicationLoop::~ApplicationLoop() {
 
 void ApplicationLoop::UpdateThisThing()
 {
-	VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalIndirectPipeline);
+	VKRenderer::gRenderInstance->AddPipelineToMainQueue(indirectCommandPipeline, 1);
 }
 
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
@@ -292,7 +293,7 @@ void ApplicationLoop::Execute()
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
 					//printf("%f\n", FPS);
-					mainWindow->SetWindowTitle(std::format("FPS: {:2f}", FPS));
+					mainWindow->SetWindowTitle(std::format("FPS: {:.2f}", FPS));
 				
 
 					frameCounter = 0;
@@ -303,7 +304,9 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-	
+		VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalCullPipeline, 0);
+
+		int commandCountPrev = indirectCommandCount;
 
 		while (running)
 		{
@@ -313,7 +316,15 @@ void ApplicationLoop::Execute()
 
 			ProcessKeys(mainWindow->windowData.info.actions);
 
-			MoveCamera(FPS);
+			
+
+			bool cameraMove = MoveCamera(FPS);;
+
+			if (cameraMove || commandCountPrev != indirectCommandCount)
+			{
+				commandCountPrev = indirectCommandCount;
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalCullPipeline, 0);
+			}
 
 			if (mainWindow->windowData.info.HandleResizeRequested())
 			{
@@ -340,6 +351,8 @@ void ApplicationLoop::Execute()
 			fps();
 
 			frameCounter++;
+
+			
 		}
 	}
 }
@@ -440,7 +453,7 @@ void ApplicationLoop::CreateGlobalStorageImage()
 	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
 }
 
-void ApplicationLoop::MoveCamera(double fps)
+bool ApplicationLoop::MoveCamera(double fps)
 {
 	bool moved = false;
 
@@ -497,10 +510,8 @@ void ApplicationLoop::MoveCamera(double fps)
 	}
 
 	if (moved) UpdateCameraMatrix();
-}
-static bool what = imageVisible;
-void ApplicationLoop::UpdateRenderables()
-{
+
+	return moved;
 }
 
 void ApplicationLoop::UpdateCameraMatrix()
@@ -558,7 +569,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	int count = geoDef->numRenderables;
 
-	float xLoc = UpdateAtomic(geoX, 5.0f, 0.0f);
+	float xLoc = UpdateAtomic(geoX, 50.0f, 0.0f);
 
 	
 
@@ -734,20 +745,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 		
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
-
-
-		struct Command {
-			uint32_t    indexCount;
-			uint32_t    instanceCount;
-			uint32_t    firstIndex;
-			int32_t     vertexOffset;
-			uint32_t    firstInstance;
-		};
-
-		Command com = { .indexCount = (uint32_t)indexCount, .instanceCount = 1, .firstIndex = (uint32_t)indexAlloc / mesh->indexSize, .vertexOffset = 0, .firstInstance = 0 };
-
-		rendInst->UpdateAllocation(&com, indirectCommandBuffer, sizeof(Command), i*sizeof(Command), 0, 1);
 	}
+
+	indirectCommandCount += count;
 }
 
 
@@ -761,7 +761,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	auto& chunk = file.chunks;
 
-	std::array<SMBGeoChunk*, 10> geoDefs{};
+	std::array<SMBGeoChunk, 10> geoDefs{};
 
 	for (size_t i = 0; i<chunk.size(); i++)
 	{
@@ -770,7 +770,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		case GEO:
 		{
 			
-			SMBGeoChunk** geoDef = &geoDefs[totalMeshCount++];
+			SMBGeoChunk* geoDef = &geoDefs[totalMeshCount++];
 
 			OSFileHandle* handle = FileManager::GetFile(file.id);
 
@@ -783,25 +783,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 			OSReadFile(handle, chunk[i].headerSize, geomHeader.data());
 
-			*geoDef = ProcessGeometryClass(geomHeader.data(), totalTextureCount);
-
-			int renderableCount = (*geoDef)->numRenderables;
-
-			int *renderableType = (*geoDef)->renderablesTypes;
-
-			(*geoDef)->vertexAndIndicesInfo = chunk[i].contigOffset + file.fileOffset;
-
-			for (int ii = 0; ii<renderableCount; ii++)
-			{
-				if (renderableType[ii] == IVRENDERABLE)
-				{
-					(*geoDef)->indexOffsetInArchive[ii] += chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset;
-				}
-			}
-
-			
-		
-
+		    ProcessGeometryClass(geomHeader.data(), totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset);
+	
 			break;
 		}
 		case TEXTURE:
@@ -856,7 +839,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 	
 	for (int i = 0; i < totalMeshCount; i++)
 	{
-		SMBGeoChunk* geoDef = geoDefs[i];
+		SMBGeoChunk* geoDef = &geoDefs[i];
 
 		int base = 0;
 
@@ -889,8 +872,6 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		}
 
 		SMBGeometricalObject(geoDef, file);
-
-		delete geoDef;
 	}
 	
 
@@ -935,11 +916,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 10, alignof(VkDrawIndirectCommand), STATIC);
-	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(VkDrawIndexedIndirectCommand) * 50, alignof(VkDrawIndirectCommand), STATIC);
+	
 
 	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -968,10 +946,38 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = indirectCommandBuffer,
-		.indirectDrawCount = 10
+		.indirectDrawCount = 50
 	};
 
 	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create);
+
+
+
+	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	
+	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
+
+	std::array computeDescriptors = { indirectCommandDescriptor };
+
+	ComputeIntermediaryPipelineInfo create2 = {
+			.x = 32 / layout->x,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 4,
+			.descCount = 1,
+			.descriptorsetid = computeDescriptors.data(),
+			.barrierCount = 1,
+			.pushRangeCount = 1
+	};
+
+	globalCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create2);
+
 
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));

@@ -290,7 +290,7 @@ struct RenderInstance
 
 	void EndFrame();
 
-	void AddPipelineToMainQueue(int psoIndex);
+	void AddPipelineToMainQueue(int psoIndex, int computeorgraphics);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
@@ -300,7 +300,7 @@ struct RenderInstance
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
-	EntryHandle graphicsOTQ;
+	EntryHandle graphicsOTQ, computeOTQ;
 
 	uint32_t currentMSAALevel = 0;
 	uint32_t maxMSAALevels = 0;
@@ -326,7 +326,7 @@ struct RenderInstance
 	
 	ShaderResourceManager<50> descriptorManager{};
 
-	std::array<std::vector<EntryHandle>, 4> pipelinesIdentifier{};
+	std::array<std::vector<EntryHandle>, 10> pipelinesIdentifier{};
 	std::array<EntryHandle, 10> vulkanDescriptorLayouts{};
 	std::array<ShaderDetails*, 10> shaderDetails{};
 	char* shaderDetailsData;

@@ -3,7 +3,7 @@
 #include "VertexTypes.h"
 
 
-SMBGeoChunk::SMBGeoChunk(int _numRenderables, int _numMaterials)
+void SMBGeoChunk::Create(int _numRenderables, int _numMaterials)
 {
 	memset(this, 0, sizeof(SMBGeoChunk));
 	numRenderables = _numRenderables;
@@ -145,7 +145,7 @@ void SMBFile::ProcessFile(OSFileHandle* fh)
 	}
 }
 
-SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
+void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int contiguousOffset, int systemOffset)
 {
 	char* iter = data;
 
@@ -174,32 +174,33 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 	if (numRenderables <= 0 || numRenderables > 15)
 	{
-		return nullptr;
+		return;
 	}
 
-	SMBGeoChunk* geoChunk = new SMBGeoChunk(numRenderables, 15);
+	chunk->Create(numRenderables, 15);
 
 	char* axialBox = iter + axialBoxOffset;
-	memcpy(&geoChunk->axialBox.min, axialBox, sizeof(float) * 3);
-	memcpy(&geoChunk->axialBox.max, axialBox + sizeof(float) * 3, sizeof(float) * 3);
+	memcpy(&chunk->axialBox.min, axialBox, sizeof(float) * 3);
+	memcpy(&chunk->axialBox.max, axialBox + sizeof(float) * 3, sizeof(float) * 3);
 
 	char* material = iter + geometryTypeDefSize;
 
 	int renderableIndex = 0;
 
-	int* lMaterialCount = geoChunk->materialsCount;
+	int* lMaterialCount = chunk->materialsCount;
 
-	int* lMaterialId = geoChunk->materialsId;
+	int* lMaterialId = chunk->materialsId;
+
 
 	while (true)
 	{
 		int header = *((int*)material);
 
-		
+
 
 		if (header != 737893)
 		{
-			
+
 			break;
 		}
 
@@ -213,12 +214,12 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
 			int indexOffset = *((int*)(renderable + (18 + 16 + 16 + 8)));
 			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
-			geoChunk->indicesCount[renderableIndex] = indexCount;
-			geoChunk->verticesCount[renderableIndex] = vertexCount;
-			geoChunk->renderablesTypes[renderableIndex] = PBIVRENDERABLE;
-			geoChunk->vertexTypes[renderableIndex] = vertexType;
-			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
-			geoChunk->indexOffsetInArchive[renderableIndex] = indexOffset;
+			chunk->indicesCount[renderableIndex] = indexCount;
+			chunk->verticesCount[renderableIndex] = vertexCount;
+			chunk->renderablesTypes[renderableIndex] = PBIVRENDERABLE;
+			chunk->vertexTypes[renderableIndex] = vertexType;
+			chunk->vertexOffsetInArchive[renderableIndex] = vertexOffset+ contiguousOffset;
+			chunk->indexOffsetInArchive[renderableIndex] = indexOffset + contiguousOffset;
 			material += (64 + 26);
 			renderableIndex++;
 		}
@@ -227,22 +228,22 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 			char* renderable = material + 4 + 8 + 8;
 			int vertexCount = *((int*)(renderable + (18 + 16)));
 			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
-			int indexCount = *((int*)(renderable + (18 + 16 + 16+4)));
-			int indexOffset = *((int*)(renderable + (18 + 16 + 16+8)));
+			int indexCount = *((int*)(renderable + (18 + 16 + 16 + 4)));
+			int indexOffset = *((int*)(renderable + (18 + 16 + 16 + 8)));
 			SMBVertexTypes vertexType = *((SMBVertexTypes*)(renderable + (18 + 16 + 8)));
-			
-			geoChunk->verticesCount[renderableIndex] = vertexCount;
-			geoChunk->renderablesTypes[renderableIndex] = IVRENDERABLE;
-			geoChunk->vertexTypes[renderableIndex] = vertexType;
-			geoChunk->vertexOffsetInArchive[renderableIndex] = vertexOffset;
-			geoChunk->indicesCount[renderableIndex] = indexCount;
-			geoChunk->indexOffsetInArchive[renderableIndex] = indexOffset;
+
+			chunk->verticesCount[renderableIndex] = vertexCount;
+			chunk->renderablesTypes[renderableIndex] = IVRENDERABLE;
+			chunk->vertexTypes[renderableIndex] = vertexType;
+			chunk->vertexOffsetInArchive[renderableIndex] = vertexOffset + contiguousOffset;
+			chunk->indicesCount[renderableIndex] = indexCount ;
+			chunk->indexOffsetInArchive[renderableIndex] = indexOffset+ systemOffset;
 			material += (64 + 18);
 			renderableIndex++;
 		}
 		else {
 
-			int type = *((int*)(material+4));
+			int type = *((int*)(material + 4));
 
 			if (type == -1373022986)
 			{
@@ -253,7 +254,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 			}
 
 
-			
+
 
 			material += MaterialDefSize;
 
@@ -266,7 +267,7 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 				copy = *((int*)material);
 			}
 
-			
+
 
 			int iter = *lMaterialCount;
 
@@ -294,9 +295,9 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 			{
 				renderableIndex = 0;
 				int numberMinMaxes = *((int*)material);
-				
-				material += ((198 * numberMinMaxes)+8);
-				
+
+				material += ((198 * numberMinMaxes) + 8);
+
 			}
 
 			copy = *((int*)material);
@@ -309,8 +310,8 @@ SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials)
 
 		}
 	}
-	return geoChunk;
 }
+
 
 static Vector2f converttexcoords16(int16_t* huh)
 {
@@ -366,7 +367,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 {
 	OSFileHandle* handle = FileManager::GetFile(file.id);
 
-	OSSeekFile(handle, geoDefinition->vertexAndIndicesInfo + geoDefinition->vertexOffsetInArchive[renderableIndex], BEGIN);
+	OSSeekFile(handle, geoDefinition->vertexOffsetInArchive[renderableIndex], BEGIN);
 
 	SMBVertexTypes type = geoDefinition->vertexTypes[renderableIndex];
 
@@ -533,12 +534,10 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 	uint16_t* indices = (uint16_t*)indexDataOut;
 
+	OSSeekFile(handle, geoDefinition->indexOffsetInArchive[renderableIndex], BEGIN);
 
 	if (renderableType == PBIVRENDERABLE)
 	{
-
-		OSSeekFile(handle, geoDefinition->vertexAndIndicesInfo + geoDefinition->indexOffsetInArchive[renderableIndex], BEGIN);
-		
 
 		int iter = 0;
 
@@ -576,8 +575,6 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 	} 
 	else if (renderableType == IVRENDERABLE)
 	{
-		OSSeekFile(handle, geoDefinition->indexOffsetInArchive[renderableIndex], BEGIN);
-
 		OSReadFile(handle, iCount * 4, (char*)indices);
 	}
 

@@ -10,19 +10,19 @@ namespace ExportHelper
 {
 	inline std::ostream& operator<<(std::ostream& os, const Vector4f& vec)
 	{
-		os << std::vformat("{:6f} {:6f} {:6f} {:6f}\n", std::make_format_args(vec.x, vec.y, vec.z, vec.w));
+		os << std::vformat("{:.6f} {:.6f} {:.6f} {:.6f}\n", std::make_format_args(vec.x, vec.y, vec.z, vec.w));
 		return os;
 	}
 
 	inline std::ostream& operator<<(std::ostream& os, const Vector3f& vec)
 	{
-		os << std::vformat("{:6f} {:6f} {:6f}\n", std::make_format_args(vec.x, vec.y, vec.z));
+		os << std::vformat("{:.6f} {:.6f} {:.6f}\n", std::make_format_args(vec.x, vec.y, vec.z));
 		return os;
 	}
 
 	inline std::ostream& operator<<(std::ostream& os, const Vector2f& vec)
 	{
-		os << std::vformat("{:6f} {:6f}\n", std::make_format_args(vec.x, vec.y));
+		os << std::vformat("{:.6f} {:.6f}\n", std::make_format_args(vec.x, vec.y));
 		return os;
 	}
 }

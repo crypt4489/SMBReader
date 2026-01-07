@@ -645,6 +645,14 @@ void RenderInstance::CreatePipelines()
 
 	pipelinesIdentifier[POLY].push_back(CreateVulkanComputePipelineTemplate(polyPipeline, vulkanShaderGraphs.shaderGraphPtrs[3]));
 
+
+	auto computePipeline2 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline2->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[4].push_back(CreateVulkanComputePipelineTemplate(computePipeline2, vulkanShaderGraphs.shaderGraphPtrs[4]));
+
+
 	std::vector<EntryHandle> l(maxMSAALevels);
 	std::vector<EntryHandle> r(maxMSAALevels);
 
@@ -1018,7 +1026,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 		if (resource->binding != ~0)
 			desc->binding = resource->binding;
 		else
-			desc->binding = constantCount--;
+			desc->binding = --constantCount;
 
 		desc->type = resource->type;
 		desc->action = resource->action;
@@ -1035,11 +1043,11 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			if (resource->action & SHADERWRITE)
 			{
 				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
-				barriers->dstStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->dstStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers->dstAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
 
-				barriers[1].srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers[1].srcStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers[1].srcAction = WRITE_SHADER_RESOURCE;
 				barriers[1].type = memBarrierType;
 
@@ -1054,7 +1062,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			if (resource->action & SHADERWRITE)
 			{
 				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
-				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
 				ptr += (sizeof(ImageShaderResourceBarrier));
@@ -1073,7 +1081,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			ShaderResourceConstantBuffer* constants = (ShaderResourceConstantBuffer*)ptr;
 			constants->size = 4;
 			constants->offset = 0;
-			constants->stage = resource->type;
+			constants->stage = resource->stages;
 			ptr += sizeof(ShaderResourceConstantBuffer);
 			break;
 		}
@@ -1085,7 +1093,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			if (resource->action & SHADERWRITE)
 			{
 				ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
-				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->type);
+				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
 				ptr += (sizeof(ShaderResourceBarrier));
@@ -1218,7 +1226,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	globalIndex = majorDevice->CreateHostBuffer
 	(
-		128'000'000, true,
+		128 * MB, true,
 		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -1230,7 +1238,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	);
 
-	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(32'000'000,
+	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(64 * MB,
 		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -1246,6 +1254,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
 
 	graphicsOTQ = majorDevice->CreateGraphicsOneTimeQueue(50);
+
+	computeOTQ = majorDevice->CreateComputeOneTimeQueue(50);
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -1913,11 +1923,15 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	auto rcb = dev->GetRecordingBufferObject(cbindex);
 
+	VKComputeOneTimeQueue* queue2 = dev->GetComputeOTQ(computeOTQ);
+
 	rcb.ResetCommandPoolForBuffer();
 
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	cGraph->DispatchWork(&rcb, currentFrame);
+//	cGraph->DispatchWork(&rcb, currentFrame);
+
+	queue2->DispatchWork(&rcb, currentFrame);
 
 	VkExtent2D* rect = &swc->swapChainExtent;
 
@@ -1989,22 +2003,38 @@ void RenderInstance::EndFrame()
 	auto graph = dev->GetRenderGraph(swapchainRenderTargets[currentMSAALevel]);
 	auto cGraph = dev->GetComputeGraph(computeGraphIndex);
 	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
+	VKComputeOneTimeQueue* queue2 = dev->GetComputeOTQ(computeOTQ);
 
 	cGraph->UpdateLists();
 	graph->UpdateLists();
 	queue->UpdateQueue();
+	queue2->UpdateQueue();
 }
 
 
-void RenderInstance::AddPipelineToMainQueue(int psoIndex)
+void RenderInstance::AddPipelineToMainQueue(int psoIndex, int computeorgraphics)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
 	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
 
-	EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentMSAALevel];
+	if (computeorgraphics)
+	{
+		EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentMSAALevel];
 
-	queue->AddObject(ret);
+		VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
+
+		queue->AddObject(ret);
+	} 
+	else
+	{
+		EntryHandle ret = computeStateObjects.dataArray[handle->indexForHandles];
+
+		VKComputeOneTimeQueue* queue = dev->GetComputeOTQ(computeOTQ);
+
+		queue->AddObject(ret);
+	}
+
+
 }
 

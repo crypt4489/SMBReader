@@ -49,13 +49,11 @@ public:
 
 	void ScanSTDIN(std::stop_token stoken);
 
-	void UpdateRenderables();
-
 	void UpdateCameraMatrix();
 
 	void WriteCameraMatrix(uint32_t frame);
 
-	void MoveCamera(double fps);
+	bool MoveCamera(double fps);
 
 	void CreateGlobalStorageImage();
 

@@ -66,7 +66,6 @@ struct AxisBox
 
 struct SMBGeoChunk
 {
-	int vertexAndIndicesInfo;
 	int numRenderables;
 	int numMaterials;
 	int* renderablesTypes;
@@ -81,8 +80,8 @@ struct SMBGeoChunk
 	int* materialsId;
 	AxisBox axialBox;
 
-	SMBGeoChunk() = delete;
-	SMBGeoChunk(int _numRenderables, int _numMaterials);
+	SMBGeoChunk() = default;
+	void Create(int _numRenderables, int _numMaterials);
 
 	~SMBGeoChunk();
 	
@@ -173,7 +172,7 @@ private:
 };
 
 
-SMBGeoChunk* ProcessGeometryClass(char* data, int numMaterials);
+void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int contiguousOffset, int systemOffset);
 
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
