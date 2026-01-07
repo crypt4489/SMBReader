@@ -2,7 +2,7 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
 		indirectcull.comp
-		<ComputeLayout x="32" y="1" z="1">
+		<ComputeLayout x="1" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
@@ -11,6 +11,8 @@
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="uniform" used="c" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 

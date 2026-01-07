@@ -182,6 +182,8 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 	char* axialBox = iter + axialBoxOffset;
 	memcpy(&chunk->axialBox.min, axialBox, sizeof(float) * 3);
 	memcpy(&chunk->axialBox.max, axialBox + sizeof(float) * 3, sizeof(float) * 3);
+	chunk->axialBox.min.w = 1.0f;
+	chunk->axialBox.max.w = 1.0f;
 
 	char* material = iter + geometryTypeDefSize;
 

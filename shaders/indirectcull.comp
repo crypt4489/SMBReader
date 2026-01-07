@@ -15,6 +15,25 @@ struct AABB
     vec4 max;
 };
 
+struct Plane
+{
+	vec4 pointInPlane;
+	vec4 planeEquation;
+};
+
+struct Frustrum
+{
+	Plane nearplane;
+	Plane farplane;
+	Plane topplane;
+	Plane bottomplane;
+	Plane rightplane;
+	Plane leftplane;
+	float nearwidth;
+	float nearheight;
+	float farDistance;
+};
+
 layout(push_constant) uniform GlobalContext {
     uint indirectDrawCount;
 } gs;
@@ -42,13 +61,21 @@ layout(set = 0, binding = 1) readonly buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
 
+layout(set = 0, binding = 2) readonly buffer CameraData {
+     mat4 view;
+     mat4 proj;
+     Frustrum f;
+} cData;
+
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
 	uint index = gl_GlobalInvocationID.x;
 
-    if (index >= gs.indirectDrawCount) return;
+    if (index >= gs.indirectDrawCount)  {
+        return;
+    }
 
     PerModel modelData = perModelBuffer.objects[index];
 

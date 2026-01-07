@@ -10,9 +10,11 @@ struct Camera
 
 	void CreateProjectionMatrix(float aspect, float n, float f, float angle);
 
+	void CreateCameraFrustrum(float _angle, float aspect, float far);
+
 	LTM LTM{};
 	Matrix4f View{};
 	Matrix4f Projection{};
-	
+	Frustrum camFrustrum{};
 };
 

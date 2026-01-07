@@ -37,6 +37,25 @@ struct PerModel
     AABB minMaxBox;
 };
 
+struct Plane
+{
+	vec4 pointInPlane;
+	vec4 planeEquation;
+};
+
+struct Frustrum
+{
+	Plane nearplane;
+	Plane farplane;
+	Plane topplane;
+	Plane bottomplane;
+	Plane rightplane;
+	Plane leftplane;
+	float nearwidth;
+	float nearheight;
+	float farDistance;
+};
+
 
 
 layout(location = 0) out vec2 texCoords;
@@ -45,6 +64,7 @@ layout(location = 1) flat out uint modelIndex;
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
+    Frustrum f;
 } gs;
 
 

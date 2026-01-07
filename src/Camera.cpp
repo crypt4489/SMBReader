@@ -68,4 +68,71 @@ void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)
 	Projection[2][3] = -1.0f;
 	Projection[3][2] = -(2 * f * n) / (f - n);
 	Projection[3][3] = 0.0f;
+
+	CreateCameraFrustrum(angle, aspect, f);
+}
+
+void Camera::CreateCameraFrustrum(float _angle, float aspect, float far)
+{
+	float angle = DegToRad(_angle) * .5f;
+	float tanAngle = tanf(angle);
+
+	float nh;
+
+	nh = 1.0f * tanAngle;
+
+	float nw;
+
+	nw = (aspect * 1.0f);
+
+	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, far);
+}
+
+
+void Plane::ComputePlane(const Vector4f& point, const Vector4f& normal)
+{
+	float d = -Dot(point, normal);
+	planeEquation = Vector4f(normal.x, normal.y, normal.z, d);
+	pointInPlane = point;
+}
+
+void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, const Vector4f& right, float _nearwidth, float _nearheight, float _far)
+{
+	nearwidth = _nearwidth;
+	nearheight = _nearheight;
+	farDistance = _far;
+
+
+	Vector4f farCenter = forward * _far;
+	Vector4f nearCenter = forward;
+
+	planes[0].ComputePlane(nearCenter, forward * -1.0);
+	planes[1].ComputePlane(farCenter, forward);
+
+	Vector4f upTop = (up * _nearheight) + nearCenter;
+
+	Vector4f upNomral = Normalize(upTop);
+
+	planes[2].ComputePlane(upTop, Cross( upTop, right));
+	
+	Vector4f upBottom = nearCenter - (up * _nearheight);
+
+	Vector4f bottomNormal = Normalize(upBottom);
+
+	planes[3].ComputePlane(upBottom, Cross(right, bottomNormal));
+
+
+	Vector4f rightSide =  nearCenter - (right * _nearheight);
+
+	Vector4f rightNormal = Normalize(rightSide);
+
+	planes[4].ComputePlane(rightSide, Cross(rightNormal, up));
+
+	Vector4f leftSide = (right * _nearheight) + nearCenter;
+
+	Vector4f leftNormal = Normalize(leftSide);
+
+	planes[5].ComputePlane(leftSide, Cross(up, leftNormal));
+
+
 }

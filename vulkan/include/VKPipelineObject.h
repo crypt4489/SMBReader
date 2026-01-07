@@ -55,6 +55,7 @@ struct VKIndirectPipelineObjectCreateInfo
 	uint32_t indirectDrawCount;
 	EntryHandle indirectBufferHandle;
 	uint32_t indirectBufferOffset;
+	uint32_t indirectBufferFrames;
 };
 
 struct PushConstantArguments
@@ -95,6 +96,7 @@ struct VkBarrierInfo
 	EntryHandle barrierIndex;
 	struct VkBarrierInfo* next;
 	struct VkBarrierInfo* child;
+	uint32_t perFrameOffset;
 };
 
 struct VKPipelineObject
@@ -126,7 +128,7 @@ struct VKPipelineObject
 
 	void AddBufferMemoryBarrier(
 		EntryHandle index, VKBarrierLocation location,
-		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
+		VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, uint32_t perFrameOffset
 	);
 
 	void AddImageMemoryBarrier(
@@ -135,7 +137,7 @@ struct VKPipelineObject
 
 	VkBarrierInfo* GetNextBarrierInfo(VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
 
-	void CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location);
+	void CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location, uint32_t frame);
 	
 	void AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, 
 		EntryHandle barrierIndex, VKBarrierLocation location, uint16_t barrierType);
@@ -179,6 +181,8 @@ struct VKIndirectPipelineObject : public VKPipelineObject
 	
 	uint32_t drawCount;
 	VkIndexType indexType;
+
+	uint32_t indirectFrames;
 
 };
 

@@ -304,7 +304,7 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalCullPipeline, 0);
+		int updatedCommand = 3;
 
 		int commandCountPrev = indirectCommandCount;
 
@@ -320,11 +320,16 @@ void ApplicationLoop::Execute()
 
 			bool cameraMove = MoveCamera(FPS);;
 
-			if (cameraMove || commandCountPrev != indirectCommandCount)
+			if (cameraMove || commandCountPrev != indirectCommandCount || updatedCommand > 0)
 			{
+				if (!updatedCommand || cameraMove) updatedCommand = 3;
 				commandCountPrev = indirectCommandCount;
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalCullPipeline, 0);
+				updatedCommand--;
 			}
+
+			
+
 
 			if (mainWindow->windowData.info.HandleResizeRequested())
 			{
@@ -332,7 +337,7 @@ void ApplicationLoop::Execute()
 				continue;
 			}
 
-			UpdateThisThing();
+			//UpdateThisThing();
 
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
@@ -386,72 +391,6 @@ int instanceAlloc;
 std::array<Matrix4f, 64 * 64> instanceMatrices;
 
 static EntryHandle storageBuffer;
-
-
-void ApplicationLoop::CreateGlobalStorageImage()
-{
-
-	auto rendInst = VKRenderer::gRenderInstance;
-
-	instanceAlloc = rendInst->GetAllocFromDeviceBuffer(sizeof(instanceMatrices), alignof(Matrix4f), STATIC);
-
-	storageBuffer = rendInst->CreateStorageImage(512, 512, 1, R8G8B8A8_UNORM, GetPoolIndexByFormat(R8G8B8A8_UNORM));
-
-	int computeDesc = rendInst->AllocateShaderResourceSet(3, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
-
-	computeMemory = rendInst->GetAllocFromUniformBuffer(64, 64, STATIC);
-
-	rendInst->descriptorManager.BindBufferToShaderResource(computeDesc, computeMemory, 0, 0);
-	rendInst->descriptorManager.BindSampledImageToShaderResource(computeDesc, storageBuffer, 1);
-	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 0, BEGINNING_OF_PIPE, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL, false);
-	rendInst->descriptorManager.BindImageBarrier(computeDesc, 1, 1, FRAGMENT_BARRIER, READ_SHADER_RESOURCE, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
-
-	ShaderComputeLayout* layout = rendInst->GetComputeLayout(3);
-
-	std::array computeDescriptors = { computeDesc };
-
-	ComputeIntermediaryPipelineInfo create2 = {
-			.x = 512 / layout->x,
-			.y = 512 / layout->y,
-			.z = 1,
-			.pipelinename = POLY,
-			.descCount = 1,
-			.descriptorsetid = computeDescriptors.data(),
-			.barrierCount = 2,
-			.pushRangeCount = 0
-	};
-
-	//computeObjIndex = rendInst->CreateComputeVulkanPipelineObject(&create2);
-
-
-	float offsetX = 4 * -15.0f;
-	float offsetY = 4 * -15.0f;
-	float offsetZ = 0.0f;
-
-	for (int i = 0; i < 4096; i++)
-	{
-		instanceMatrices[i] = Identity4f();
-		instanceMatrices[i][3][1] = offsetY;
-		instanceMatrices[i][3][0] = offsetX;
-		instanceMatrices[i][3][2] = offsetZ;
-		offsetX += 15.0f;
-		if ((i & 7) == 7)
-		{
-			offsetX = 4 * -15.0f;
-			offsetY += 15.0f;
-		}
-
-		if ((i & 63) == 63)
-		{
-			offsetZ -= 15.0f;
-			offsetX = 4 * -15.0f;
-			offsetY = 4 * -15.0f;
-		}
-
-	}
-
-	rendInst->UpdateAllocation(instanceMatrices.data(), instanceAlloc, sizeof(instanceMatrices), ABSOLUTE_ALLOCATION_OFFSET, 0, 1);
-}
 
 bool ApplicationLoop::MoveCamera(double fps)
 {
@@ -523,7 +462,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, sizeof(Matrix4f) * 2, 0, 0, frame);
+	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 2) + sizeof(Frustrum), 0, 0, frame);
 }
 
 int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
@@ -902,7 +841,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(Matrix4f) * 2, alignof(Matrix4f), PERFRAME);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 2) + sizeof(Frustrum), alignof(Matrix4f), PERFRAME);
 	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalIndexBufferSize, 16, STATIC);
 	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, STATIC);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -916,7 +855,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(VkDrawIndexedIndirectCommand) * 50, alignof(VkDrawIndirectCommand), STATIC);
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
 	
 
 	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -926,8 +865,8 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 1, 0);
 
 	std::array<int, 3> descs = {
-			globalBufferDescriptor,
-			globalTexturesDescriptor,
+			//globalBufferDescriptor,
+			//globalTexturesDescriptor,
 			graphicDesc,
 
 	};
@@ -938,7 +877,7 @@ void ApplicationLoop::InitializeRuntime()
 		.vertexBufferIndex = ~0,
 		.vertexCount = 0,
 		.pipelinename = GENERIC,
-		.descCount = 3,
+		.descCount = 1,
 		.descriptorsetid = descs.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.pushRangeCount = 0,
@@ -946,7 +885,7 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = indirectCommandBuffer,
-		.indirectDrawCount = 50
+		.indirectDrawCount = 32
 	};
 
 	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create);
@@ -957,9 +896,10 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND, sizeof(VkDrawIndexedIndirectCommand) * 64);
 	
 	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
 

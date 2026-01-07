@@ -13,12 +13,15 @@ VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle 
 	maxObjectCapacity(moc), 
 	objectCount(0U), 
 	pushConstantCount(pcrCount), memBarrierCapacity(memBarrierCount),
-	memBarrierCounter(0), descriptorCount(descCount), type(type)
+	memBarrierCounter(0), descriptorCount(descCount), type(type),
+	infos(nullptr), pushArgs(nullptr)
 
 {
 	objectData = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * moc));
-	pushArgs = reinterpret_cast<PushConstantArguments*>(allocator->Alloc(sizeof(PushConstantArguments) * pushConstantCount));
-	infos = reinterpret_cast<VkBarrierInfo*>(allocator->Alloc(sizeof(VkBarrierInfo) * memBarrierCount));
+	if (pushConstantCount)
+		pushArgs = reinterpret_cast<PushConstantArguments*>(allocator->Alloc(sizeof(PushConstantArguments) * pushConstantCount));
+	if (memBarrierCount)
+		infos = reinterpret_cast<VkBarrierInfo*>(allocator->Alloc(sizeof(VkBarrierInfo) * memBarrierCount));
 	descriptorSetId = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * descCount));
 	dynamicPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
 	for (uint32_t i = 0; i < descCount; i++) {
@@ -86,7 +89,8 @@ VKIndirectPipelineObject::VKIndirectPipelineObject(VKIndirectPipelineObjectCreat
 	indexBufferOffset(createinfo->indexBufferOffset),
 	drawCount(createinfo->indirectDrawCount),
 	indirectBufferHandle(createinfo->indirectBufferHandle),
-	indirectBufferOffset(createinfo->indirectBufferOffset)
+	indirectBufferOffset(createinfo->indirectBufferOffset),
+	indirectFrames(createinfo->indirectBufferFrames)
 {
 	if (createinfo->indexSize == 4)
 	{
@@ -116,10 +120,19 @@ void VKIndirectPipelineObject::Draw(
 		rbo->BindVertexBuffer(vertexBufferHandle, 0, 1, &vertexBufferOffset);
 	}
 
+	uint32_t perFrameOffset = 0;
+	
+
 	if (indexBufferHandle != ~0ui64)
 	{
 		rbo->BindIndexBuffer(indexBufferHandle, indexBufferOffset, indexType);
-		rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset);
+
+		if (indirectFrames > 0)
+		{
+			perFrameOffset = indirectFrames * frame;
+		}
+
+		rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset+perFrameOffset);
 	}
 	else 
 	{
@@ -146,7 +159,7 @@ VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateIn
 
 }
 
-void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location)
+void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarrierLocation location, uint32_t frame)
 {
 
 	std::array<VkBufferMemoryBarrier, 5> lbuffMemBarriers{};
@@ -154,6 +167,10 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 	std::array<VkImageMemoryBarrier, 5> limageMemBarriers{};
 
 	uint32_t bmbC = 0, mbC = 0, imbC = 0, i = 0;
+
+	if (!infos) return;
+
+
 	VkBarrierInfo* info = &infos[0];
 
 	while (i < memBarrierCapacity)
@@ -176,6 +193,7 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
 					lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					lbuffMemBarriers[bmbC].offset += (info->perFrameOffset * frame);
 					bmbC++;
 					break;
 				case IMAGEBARRIER:
@@ -234,11 +252,11 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 		offset += dynamicPerSet[i];
 	}
 	
-	CreatePipelineBarriers(rbo, BEFORE);
+	CreatePipelineBarriers(rbo, BEFORE, frame);
 
 	rbo->DispatchCommand(x, y, z);
 
-	CreatePipelineBarriers(rbo, AFTER);
+	CreatePipelineBarriers(rbo, AFTER, frame);
 }
 
 
@@ -259,10 +277,12 @@ void VKPipelineObject::AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags 
 
 void VKPipelineObject::AddBufferMemoryBarrier(
 	EntryHandle index, VKBarrierLocation location,
-	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage
+	VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, uint32_t perFrameOffset
 )
 {
-	AddInfoBarrier(GetNextBarrierInfo(srcStage, dstStage), srcStage, dstStage, index, location, BUFFBARRIER);
+	VkBarrierInfo* info = GetNextBarrierInfo(srcStage, dstStage);
+	AddInfoBarrier(info, srcStage, dstStage, index, location, BUFFBARRIER);
+	info->perFrameOffset = perFrameOffset;
 }
 
 VkBarrierInfo* VKPipelineObject::GetNextBarrierInfo(VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)

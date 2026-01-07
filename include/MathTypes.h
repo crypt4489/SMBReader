@@ -19,6 +19,7 @@ inline float DegToRad(float Deg)
 
 
 
+
 PACKED_BEGIN
 struct Vector2f
 {
@@ -418,6 +419,7 @@ Vector4f Sub(Vector4f a, Vector4f b);
 Vector4f Multiply(Vector4f a, Vector4f b);
 Vector4f Scale(Vector4f v, float s);
 Vector4f Divide(Vector4f v, float s);
+Vector4f Cross(Vector4f a, Vector4f b);
 Vector4f Splat4f(float s);
 Vector4f Normalize(Vector4f a);
 float Dot(Vector4f a, Vector4f b);
@@ -962,3 +964,22 @@ Matrix4f operator*(Matrix4f m, float s);
 Matrix3f CreateRotationMatrix(const Vector3f& up, float angle);
 
 Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle);
+
+
+struct Plane
+{
+	Vector4f pointInPlane;
+	Vector4f planeEquation;
+	Plane() = default;
+	void ComputePlane(const Vector4f& pointInPlane, const Vector4f& normal);
+};
+
+struct Frustrum
+{
+	Frustrum() = default;
+	Plane planes[6]{};
+	float nearwidth;
+	float nearheight;
+	float farDistance;
+	void CreateFrustrumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float _far);
+};

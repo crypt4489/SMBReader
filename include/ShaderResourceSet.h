@@ -70,6 +70,11 @@ struct ImageShaderResourceBarrier : public ShaderResourceBarrier
 	VkImageAspectFlags imageType;
 };
 
+struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
+{
+	int perFrameOffset;
+};
+
 template <int N>
 struct ShaderResourceManager
 {
@@ -148,7 +153,7 @@ struct ShaderResourceManager
 		header->bufferViewHandle = bufferViewHandle;
 	}
 
-	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
+	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action, uint32_t perFrameOffset)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -164,20 +169,28 @@ struct ShaderResourceManager
 		{
 		case IMAGESTORE2D:
 		case SAMPLER:
+		{
 			head += sizeof(ShaderResourceImage);
+			ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)head;
 
-			break;
-		case STORAGE_BUFFER:
-		case UNIFORM_BUFFER:
-
-			head += sizeof(ShaderResourceBuffer);
+			barrier->dstAction = action;
+			barrier->dstStage = stage;
 			break;
 		}
+		case STORAGE_BUFFER:
+		case UNIFORM_BUFFER:
+		{
 
-		ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)head;
+			head += sizeof(ShaderResourceBuffer);
+			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
+			barrier->dstStage = stage;
+			barrier->dstAction = action;
+			barrier->perFrameOffset = perFrameOffset;
+			break;
+		}
+		}
 
-		barrier->dstAction = action;
-		barrier->dstStage = stage;
+		
 	}
 
 	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, VkImageLayout oldLayout, VkImageLayout dstLayout, bool location)

@@ -827,7 +827,7 @@ int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, A
 	allocations.allocations[index].deviceAllocSize = allocSize;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
-
+	allocations.allocations[index].allocType = allocType;
 	return index;
 }
 
@@ -856,7 +856,7 @@ int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, Al
 	allocations.allocations[index].deviceAllocSize = allocSize;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
-
+	allocations.allocations[index].allocType = allocType;
 	return index;
 }
 
@@ -894,7 +894,7 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 	allocations.allocations[index].deviceAllocSize = allocSize;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
-
+	allocations.allocations[index].allocType = allocType;
 	return index;
 }
 
@@ -1096,7 +1096,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
-				ptr += (sizeof(ShaderResourceBarrier));
+				ptr += (sizeof(ShaderResourceBufferBarrier));
 			}
 			break;
 		}
@@ -1706,7 +1706,8 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 			.indexSize = info->indexSize,
 			.indirectDrawCount = (uint32_t)info->indirectDrawCount,
 			.indirectBufferHandle = allocations[info->indirectAllocation].memIndex,
-			.indirectBufferOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset)
+			.indirectBufferOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset),
+			.indirectBufferFrames = static_cast<uint32_t>(allocations[info->indirectAllocation].requestedSize),
 	};
 
 	int renderStateCount = maxMSAALevels;
@@ -1863,23 +1864,34 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 		case UNIFORM_BUFFER:
 		{
 			ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
-			ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)(bufferBarrier + 1);
+			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
 			VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
 			VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
 			VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
 			VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
 
-			EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0, allocations[bufferBarrier->allocation].memIndex,
-				allocations[bufferBarrier->allocation].deviceAllocSize,
-				allocations[bufferBarrier->allocation].offset + (VkDeviceSize)bufferBarrier->offset);
+			size_t size = allocations[bufferBarrier->allocation].deviceAllocSize;
+
+			if (allocations[bufferBarrier->allocation].allocType == PERFRAME)
+			{
+				size = barrier->perFrameOffset;
+			}
+
+
+			EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0, 
+				allocations[bufferBarrier->allocation].memIndex,	
+				allocations[bufferBarrier->allocation].offset + (VkDeviceSize)bufferBarrier->offset,
+				size
+			);
 
 
 			vkPipelineObject->AddBufferMemoryBarrier(
 				barrierIndex,
 				AFTER,
 				srcStage,
-				dstStage
+				dstStage,
+				barrier->perFrameOffset
 			);
 
 			break;
@@ -1945,9 +1957,9 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
-	//graph->DrawScene(&rcb, currentFrame);
+	graph->DrawScene(&rcb, currentFrame);
 
-	queue->DrawScene(&rcb, currentFrame);
+	//queue->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 

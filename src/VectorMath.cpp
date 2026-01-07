@@ -202,6 +202,11 @@ Vector3f Cross(Vector3f a, Vector3f b)
 	return { a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x };
 }
 
+Vector4f Cross(Vector4f a, Vector4f b)
+{
+	return { a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x, 0.0f };
+}
+
 Vector4f Normalize(Vector4f a)
 {
 	float mag = Length(a);
