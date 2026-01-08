@@ -462,7 +462,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 2) + sizeof(Frustrum), 0, 0, frame);
+	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
 }
 
 int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
@@ -526,7 +526,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = Identity4f();
 		
-	*geomSpecificData = *geomSpecificData * 10.0f;
+	*geomSpecificData = *geomSpecificData * 5.0f;
 		
 	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
 
@@ -841,7 +841,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 2) + sizeof(Frustrum), alignof(Matrix4f), PERFRAME);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), PERFRAME);
 	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalIndexBufferSize, 16, STATIC);
 	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, STATIC);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);

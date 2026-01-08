@@ -65,6 +65,7 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
     Frustrum f;
+    mat4 world;
 } gs;
 
 
@@ -128,7 +129,7 @@ vec3 pack6decomp(uint offset, PerModel model)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-	return mix(model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
+	return mix( model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
 }
 
 

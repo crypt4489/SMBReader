@@ -45,6 +45,8 @@ struct LTM
 
 	void PitchLTM(double angle);
 
+	Matrix4f GetWorldMatrix();
+
 	Matrix4f LTM;
 };
 

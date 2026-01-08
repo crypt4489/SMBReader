@@ -48,6 +48,8 @@ void Camera::UpdateCamera()
 	View[3][2] = z;
 	View[3][3] = 1.0f;
 
+	World = LTM.GetWorldMatrix();
+
 }
 
 void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)
@@ -74,7 +76,7 @@ void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)
 
 void Camera::CreateCameraFrustrum(float _angle, float aspect, float far)
 {
-	float angle = DegToRad(_angle) * .5f;
+	float angle = _angle * .5f;
 	float tanAngle = tanf(angle);
 
 	float nh;
@@ -83,7 +85,7 @@ void Camera::CreateCameraFrustrum(float _angle, float aspect, float far)
 
 	float nw;
 
-	nw = (aspect * 1.0f);
+	nw = (aspect * nh);
 
 	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, far);
 }
@@ -106,33 +108,67 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 	Vector4f farCenter = forward * _far;
 	Vector4f nearCenter = forward;
 
+	
+
 	planes[0].ComputePlane(nearCenter, forward * -1.0);
 	planes[1].ComputePlane(farCenter, forward);
 
+	
+
 	Vector4f upTop = (up * _nearheight) + nearCenter;
 
-	Vector4f upNomral = Normalize(upTop);
+	Vector3f xTop(upTop.x, upTop.y, upTop.z);
 
-	planes[2].ComputePlane(upTop, Cross( upTop, right));
+	xTop = Normalize(xTop);
+
+	upTop.x = xTop.x;
+	upTop.y = xTop.y;
+	upTop.z = xTop.z;
+
+	planes[2].ComputePlane(upTop, Cross(upTop, right));
 	
 	Vector4f upBottom = nearCenter - (up * _nearheight);
 
-	Vector4f bottomNormal = Normalize(upBottom);
+	Vector3f xBottom(upBottom.x, upBottom.y, upBottom.z);
 
-	planes[3].ComputePlane(upBottom, Cross(right, bottomNormal));
+	xBottom = Normalize(xBottom);
+
+	upBottom.x = xBottom.x;
+	upBottom.y = xBottom.y;
+	upBottom.z = xBottom.z;
+
+	planes[3].ComputePlane(upBottom, Cross(right, upBottom));
 
 
-	Vector4f rightSide =  nearCenter - (right * _nearheight);
+	Vector4f rightSide =  nearCenter - (right * _nearwidth);
 
-	Vector4f rightNormal = Normalize(rightSide);
+	Vector3f xRight(rightSide.x, rightSide.y, rightSide.z);
 
-	planes[4].ComputePlane(rightSide, Cross(rightNormal, up));
+	xRight = Normalize(xRight);
 
-	Vector4f leftSide = (right * _nearheight) + nearCenter;
+	rightSide.x = xRight.x;
+	rightSide.y = xRight.y;
+	rightSide.z = xRight.z;
 
-	Vector4f leftNormal = Normalize(leftSide);
+	planes[4].ComputePlane(rightSide, Cross(rightSide, up));
 
-	planes[5].ComputePlane(leftSide, Cross(up, leftNormal));
+	Vector4f leftSide = (right * _nearwidth) + nearCenter;
 
+	Vector3f xleft(leftSide.x, leftSide.y, leftSide.z);
+
+	xleft = Normalize(xleft);
+
+	leftSide.x = xleft.x;
+	leftSide.y = xleft.y;
+	leftSide.z = xleft.z;
+
+	planes[5].ComputePlane(leftSide, Cross(up, leftSide));
+
+	planes[0].pointInPlane.w = 1.0f;
+	planes[1].pointInPlane.w = 1.0f;
+	planes[2].pointInPlane.w = 1.0f;
+	planes[3].pointInPlane.w = 1.0f;
+	planes[4].pointInPlane.w = 1.0f;
+	planes[5].pointInPlane.w = 1.0f;
 
 }

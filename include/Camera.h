@@ -16,5 +16,6 @@ struct Camera
 	Matrix4f View{};
 	Matrix4f Projection{};
 	Frustrum camFrustrum{};
+	Matrix4f World{};
 };
 

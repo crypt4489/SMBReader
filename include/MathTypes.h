@@ -965,7 +965,7 @@ Matrix3f CreateRotationMatrix(const Vector3f& up, float angle);
 
 Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle);
 
-
+PACKED_BEGIN
 struct Plane
 {
 	Vector4f pointInPlane;
@@ -981,5 +981,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
+	float pad;
 	void CreateFrustrumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float _far);
 };
+PACKED_END

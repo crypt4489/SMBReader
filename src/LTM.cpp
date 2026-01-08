@@ -132,3 +132,29 @@ void LTM::PitchLTM(double angle)
 	LTM.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
 	LTM.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
 }
+
+Matrix4f LTM::GetWorldMatrix()
+{
+	
+	Matrix4f ret = Identity4f();
+
+	ret[0][0] = LTM[0][0];
+	ret[0][1] = LTM[0][1];
+	ret[0][2] = LTM[0][2];
+	ret[0][3] = 0.0;
+	ret[1][0] = LTM[1][0];
+	ret[1][1] = LTM[1][1];
+	ret[1][2] = LTM[1][2];
+	ret[1][3] = 0.0;
+	ret[2][0] = LTM[2][0];
+	ret[2][1] = LTM[2][1];
+	ret[2][2] = LTM[2][2];
+	ret[2][3] = 0.0;
+
+	ret[3][0] = LTM[3][0];
+	ret[3][1] = LTM[3][1];
+	ret[3][2] = LTM[3][2];
+	ret[3][3] = 1.0;
+
+	return ret;
+}
