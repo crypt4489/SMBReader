@@ -19,6 +19,8 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="v">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
 

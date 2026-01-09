@@ -78,6 +78,7 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
+
 vec4 ReconstructVEC4(uint offset)
 {
    uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
@@ -136,10 +137,9 @@ vec3 pack6decomp(uint offset, PerModel model)
 
 void main() {
     
-    PerModel modelData = perModelBuffer.objects[gl_DrawID];
-
     modelIndex = gl_DrawID;
 
+    PerModel modelData = perModelBuffer.objects[modelIndex];
 
     uint comp = modelData.vertexComponents;
     texCoords = vec2(0.0, 0.0);

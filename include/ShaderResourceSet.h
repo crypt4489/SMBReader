@@ -44,6 +44,8 @@ struct ShaderResourceBuffer : public ShaderResourceHeader
 struct ShaderResourceBufferView : public ShaderResourceHeader
 {
 	EntryHandle bufferViewHandle;
+	uint32_t subAllocations;
+	int allocationIndex;
 };
 
 
@@ -139,7 +141,7 @@ struct ShaderResourceManager
 		header->textureCount = texCount;
 	}
 
-	void BindBufferView(int descriptorSet, EntryHandle bufferViewHandle, int bindingIndex)
+	void BindBufferView(int descriptorSet, int allocationIndex, EntryHandle bufferViewHandle, int bindingIndex, int subAllocations)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -151,6 +153,8 @@ struct ShaderResourceManager
 			return;
 
 		header->bufferViewHandle = bufferViewHandle;
+		header->subAllocations = subAllocations;
+		header->allocationIndex = allocationIndex;
 	}
 
 	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
@@ -175,6 +179,14 @@ struct ShaderResourceManager
 
 			barrier->dstAction = action;
 			barrier->dstStage = stage;
+			break;
+		}
+		case BUFFER_VIEW:
+		{
+			head += sizeof(ShaderResourceBufferView);
+			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
+			barrier->dstStage = stage;
+			barrier->dstAction = action;
 			break;
 		}
 		case STORAGE_BUFFER:
@@ -271,7 +283,7 @@ struct ShaderResourceManager
 		while (iter >= 0)
 		{
 			ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[iter--]);
-			if (ret->type == CONSTANT_BUFFER) count++;
+			if (ret->type & CONSTANT_BUFFER) count++;
 			else break;
 		}
 

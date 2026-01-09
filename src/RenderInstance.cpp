@@ -663,6 +663,7 @@ void RenderInstance::CreatePipelines()
 
 		UsePipelineBuilders(genericBuilder, textBuilder, (VkSampleCountFlagBits)(1<<i));
 
+
 		r[i] = CreateVulkanGraphicPipelineTemplate(genericBuilder, vulkanShaderGraphs.shaderGraphPtrs[0]);
 
 		l[i] = CreateVulkanGraphicPipelineTemplate(textBuilder, vulkanShaderGraphs.shaderGraphPtrs[1]);
@@ -1108,6 +1109,15 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 		{
 			memBarrierType = BUFFER_BARRIER;
 			ptr += sizeof(ShaderResourceBufferView);
+			if (resource->action & SHADERWRITE)
+			{
+				ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
+				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
+				barriers->srcAction = WRITE_SHADER_RESOURCE;
+				barriers->type = memBarrierType;
+				ptr += (sizeof(ShaderResourceBufferBarrier));
+				set->barrierCount++;
+			}
 			break;
 		}
 		}
@@ -1411,14 +1421,22 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case BUFFER_VIEW:
 			{
 				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
-				VkBufferView handle = dev->GetBufferView(bufferView->bufferViewHandle);
-				if (bufferView->action == SHADERREAD)
+
+				if (bufferView->subAllocations)
 				{
-					builder->AddUniformBufferView(handle, bufferView->binding, frames);
-				}
-				else if (bufferView->action == SHADERWRITE)
-				{
-					builder->AddStorageBufferView(handle, bufferView->binding, frames);
+					for (uint32_t i = 0; i < bufferView->subAllocations; i++)
+					{
+
+						VkBufferView handle = dev->GetBufferView(bufferView->bufferViewHandle, i);
+						if (bufferView->action == SHADERREAD)
+						{
+							builder->AddUniformBufferViewPerFrame(handle, bufferView->binding, i);
+						}
+						else if (bufferView->action == SHADERWRITE)
+						{
+							builder->AddStorageBufferViewPerFrame(handle, bufferView->binding, i);
+						}
+					}
 				}
 			}
 		}
@@ -1869,6 +1887,44 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 			break;
 		}
+		case BUFFER_VIEW:
+		{
+			ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
+			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
+
+			VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
+			VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
+			VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
+			VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
+
+			size_t size = allocations[bufferBarrier->allocationIndex].deviceAllocSize;
+			uint32_t pfo = 0;
+
+			if (allocations[bufferBarrier->allocationIndex].allocType == PERFRAME)
+			{
+				size = (allocations[bufferBarrier->allocationIndex].requestedSize + allocations[bufferBarrier->allocationIndex].alignment - 1) & ~(allocations[bufferBarrier->allocationIndex].alignment - 1);
+				pfo = static_cast<uint32_t>(size);
+			}
+
+
+
+			EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
+				allocations[bufferBarrier->allocationIndex].memIndex,
+				allocations[bufferBarrier->allocationIndex].offset,
+				size
+			);
+
+
+			vkPipelineObject->AddBufferMemoryBarrier(
+				barrierIndex,
+				AFTER,
+				srcStage,
+				dstStage,
+				pfo
+			);
+
+			break;
+		}
 		case STORAGE_BUFFER:
 		case UNIFORM_BUFFER:
 		{
@@ -2009,7 +2065,17 @@ EntryHandle RenderInstance::CreateBufferView(int allocationIndex, VkFormat buffe
 
 	auto alloc = allocations[allocationIndex];
 
-	EntryHandle ret = dev->CreateBufferView(alloc.memIndex, bufferViewFormat, alloc.deviceAllocSize, alloc.offset);
+	uint32_t allocs = 1;
+
+	size_t size = alloc.deviceAllocSize;
+
+	if (alloc.allocType == PERFRAME)
+	{
+		allocs = MAX_FRAMES_IN_FLIGHT;
+		size = (alloc.requestedSize + (alloc.alignment - 1)) & ~(alloc.alignment - 1);
+	}
+
+	EntryHandle ret = dev->CreateBufferView(alloc.memIndex, bufferViewFormat, size, alloc.offset, allocs);
 
 	return ret;
 }

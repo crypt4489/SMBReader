@@ -282,7 +282,7 @@ struct VKDevice
 
 	EntryHandle CompileShader(char* data, VkShaderStageFlags flags);
 
-	EntryHandle CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset);
+	EntryHandle CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset, uint32_t numberOfAllocs);
 
 	EntryHandle CreateBufferViewFromImagePool(EntryHandle imagePoolIndex, VkFormat format, size_t rangeSize, size_t offset);
 
@@ -411,7 +411,7 @@ struct VKDevice
 
 	//GETTERS
 
-	VkBufferView GetBufferView(EntryHandle handle);
+	VkBufferView GetBufferView(EntryHandle handle, uint32_t index);
 
 	VKCommandBuffer* GetCommandBuffer(EntryHandle handle);
 

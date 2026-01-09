@@ -118,19 +118,26 @@ layout(set = 0, binding = 2) uniform CameraData {
      mat4 world;
 } cData;
 
-Frustrum transformFrustrum;
 
-void CalculateFrustrum()
+layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
+
+
+
+Frustrum CalculateFrustrum()
 {
+    Frustrum transformFrustrum;
+
     transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
     transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
     transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
     transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
     transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
     transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
+
+    return transformFrustrum;
 }
 
-bool CheckAllPlanesAgainstAABB(uint index)
+bool CheckAllPlanesAgainstAABB(uint index, Frustrum transformFrustrum)
 {
      mat4 modelM = perModelBuffer.objects[index].m;
     vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
@@ -254,6 +261,9 @@ bool CheckAllPlanesAgainstSphere(uint index)
     
 }
 
+//shared uint visibleIndex;
+//shared uint inVisibleIndex;
+
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -264,22 +274,29 @@ void main()
         return;
     }
 
-    CalculateFrustrum();
+    Frustrum transformFrustrum = CalculateFrustrum();
 
-    bool visible = CheckAllPlanesAgainstAABB(index);
+    bool visible = CheckAllPlanesAgainstAABB(index, transformFrustrum);
 
     if (!visible)
     {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
+        //uint oldValue = atomicAdd(inVisibleIndex, 1u);
+       // cmdBuffer.commands[index].instanceCount = 0;
+       // return;
+    }
+    
+    int oldValue = int(index);
+
+    if (oldValue < 1)
+    {
+        imageStore(globalMeshIndices, 0, uvec4(0, 0, 0, 0));
     }
    
-   
-    cmdBuffer.commands[index].instanceCount = 1;
-    cmdBuffer.commands[index].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[index].indexCount = perModelBuffer.objects[index].indexCount;
-    cmdBuffer.commands[index].firstInstance = 0;
-    cmdBuffer.commands[index].vertexOffset = 0;
+    cmdBuffer.commands[oldValue].instanceCount = 1;
+    cmdBuffer.commands[oldValue].firstIndex = perModelBuffer.objects[index].firstIndex;
+    cmdBuffer.commands[oldValue].indexCount = perModelBuffer.objects[index].indexCount;
+    cmdBuffer.commands[oldValue].firstInstance = 0;
+    cmdBuffer.commands[oldValue].vertexOffset = 0;
     
 
 }

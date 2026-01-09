@@ -555,9 +555,20 @@ struct TexelBufferView
 	EntryHandle viewHandle;
 };
 
-EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset)
+struct BufferView
 {
-	VkBufferView view;
+	uint32_t count;
+	VkBufferView* views;
+};
+
+EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset, uint32_t numberOfAllocs)
+{
+
+
+	BufferView* viewsHandles = (BufferView*)AllocFromPerDeviceData(sizeof(BufferView));
+	viewsHandles->views = (VkBufferView*)AllocFromPerDeviceData(sizeof(VkBufferView) * numberOfAllocs);
+	viewsHandles->count = numberOfAllocs;
+
 	VkBuffer buffer = GetBufferHandle(bufferHandle);
 	VkBufferViewCreateInfo info{};
 	info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
@@ -566,11 +577,17 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 	info.range = rangeSize;
 	info.format = format;
 
-	if (vkCreateBufferView(device, &info, nullptr, &view) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create buffer view!");
+	for (uint32_t i = 0; i < numberOfAllocs; i++)
+	{
+
+		if (vkCreateBufferView(device, &info, nullptr, &viewsHandles->views[i]) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create buffer view!");
+		}
+		info.offset += rangeSize;
+
 	}
 
-	EntryHandle poolIndex = AddVkTypeToEntry(view, VulkBufferView);
+	EntryHandle poolIndex = AddVkTypeToEntry(viewsHandles, VulkBufferView);
 
 	return poolIndex;
 }
@@ -601,7 +618,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 	EntryHandle buffHandle = AddVkTypeToEntry(buffer, VulkBuffer);
 
-	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, offset);
+	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, offset, 1);
 
 	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
 
@@ -1694,9 +1711,13 @@ void VKDevice::DestroyBufferView(EntryHandle handle)
 	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
 		return;
 
-	VkBufferView view = reinterpret_cast<VkBufferView>(objHandle.memoryLocation);
 
-	vkDestroyBufferView(device, view, nullptr);
+	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
+
+	for (uint32_t i = 0; i < viewHandles->count; i++)
+	{
+		vkDestroyBufferView(device, viewHandles->views[i], nullptr);
+	}
 	entries[handle()].memoryLocation = 0;
 	entries[handle()].type = VulkMaxEnum;
 }
@@ -2129,7 +2150,7 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 
 //GETTERS
 
-VkBufferView VKDevice::GetBufferView(EntryHandle handle)
+VkBufferView VKDevice::GetBufferView(EntryHandle handle, uint32_t index)
 {
 	//std::shared_lock lock(deviceLock);
 
@@ -2138,7 +2159,9 @@ VkBufferView VKDevice::GetBufferView(EntryHandle handle)
 	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
 		return VK_NULL_HANDLE;
 
-	return reinterpret_cast<VkBufferView>(objHandle.memoryLocation);
+	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
+
+	return viewHandles->views[index];
 }
 
 VKCommandBuffer* VKDevice::GetCommandBuffer(EntryHandle handle)

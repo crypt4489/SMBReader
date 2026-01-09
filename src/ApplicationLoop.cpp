@@ -309,6 +309,8 @@ void ApplicationLoop::Execute()
 
 		int commandCountPrev = indirectCommandCount;
 
+		VKRenderer::gRenderInstance->EndFrame();
+
 		while (running)
 		{
 			mainWindow->PollEvents();
@@ -860,16 +862,55 @@ void ApplicationLoop::InitializeRuntime()
 	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
 	
 
+	
+
+	
+
+
+
+	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	int globalMeshIDs = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
+
+	EntryHandle bufferView = VKRenderer::gRenderInstance->CreateBufferView(globalMeshIDs, VK_FORMAT_R32_UINT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(indirectCommandDescriptor, globalMeshIDs, bufferView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	
+	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
+
+	std::array computeDescriptors = { indirectCommandDescriptor };
+
+	ComputeIntermediaryPipelineInfo create2 = {
+			.x = 4096 / layout->x,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 4,
+			.descCount = 1,
+			.descriptorsetid = computeDescriptors.data()
+	};
+
+	globalCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create2);
+
 	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 0, 0);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 1, 0);
 
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(graphicDesc, globalMeshIDs, bufferView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
 	std::array<int, 3> descs = {
-			//globalBufferDescriptor,
-			//globalTexturesDescriptor,
-			graphicDesc,
+		//globalBufferDescriptor,
+		//globalTexturesDescriptor,
+		graphicDesc,
 
 	};
 
@@ -890,34 +931,6 @@ void ApplicationLoop::InitializeRuntime()
 	};
 
 	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create);
-
-
-
-	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
-	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-	
-	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
-
-	std::array computeDescriptors = { indirectCommandDescriptor };
-
-	ComputeIntermediaryPipelineInfo create2 = {
-			.x = 4096 / layout->x,
-			.y = 1,
-			.z = 1,
-			.pipelinename = 4,
-			.descCount = 1,
-			.descriptorsetid = computeDescriptors.data()
-	};
-
-	globalCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create2);
-
-
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

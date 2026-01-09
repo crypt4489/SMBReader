@@ -14,6 +14,8 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="uniform" used="c" rw="read">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="write">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 
 </ShaderGraph>
