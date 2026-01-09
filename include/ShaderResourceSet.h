@@ -13,6 +13,7 @@ struct ShaderResourceSet
 	int bindingCount;
 	int layoutHandle;
 	int setCount;
+	int barrierCount;
 };
 
 struct ShaderResourceHeader
@@ -72,7 +73,6 @@ struct ImageShaderResourceBarrier : public ShaderResourceBarrier
 
 struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
 {
-	int perFrameOffset;
 };
 
 template <int N>
@@ -153,7 +153,7 @@ struct ShaderResourceManager
 		header->bufferViewHandle = bufferViewHandle;
 	}
 
-	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action, uint32_t perFrameOffset)
+	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -185,7 +185,6 @@ struct ShaderResourceManager
 			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
 			barrier->dstStage = stage;
 			barrier->dstAction = action;
-			barrier->perFrameOffset = perFrameOffset;
 			break;
 		}
 		}
@@ -257,6 +256,33 @@ struct ShaderResourceManager
 		if (ret->type != CONSTANT_BUFFER) return nullptr;
 
 		return ret;
+	}
+
+	int GetConstantBufferCount(int descriptorSet)
+	{
+		uintptr_t head = descriptorSets[descriptorSet];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+		int iter = set->bindingCount - 1;
+
+		int count = 0;
+
+		while (iter >= 0)
+		{
+			ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[iter--]);
+			if (ret->type == CONSTANT_BUFFER) count++;
+			else break;
+		}
+
+		return count;
+	}
+
+	int GetBarrierCount(int descriptorSet)
+	{
+		uintptr_t head = descriptorSets[descriptorSet];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		return set->barrierCount;
 	}
 
 };

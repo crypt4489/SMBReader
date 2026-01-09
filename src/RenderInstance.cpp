@@ -1006,6 +1006,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
     set->bindingCount = resourceSet->bindingCount;
     set->layoutHandle = resourceSet->vkDescriptorLayout;
     set->setCount = setCount;
+	set->barrierCount = 0;
 
     uintptr_t* offset = (uintptr_t*)ptr;
 
@@ -1052,6 +1053,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 				barriers[1].type = memBarrierType;
 
 				ptr += (sizeof(ImageShaderResourceBarrier) * 2);
+				set->barrierCount += 2;
 			}
 			break;
 		}
@@ -1066,6 +1068,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
 				ptr += (sizeof(ImageShaderResourceBarrier));
+				set->barrierCount++;
 			}
 			break;
 		}
@@ -1097,6 +1100,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
 				barriers->type = memBarrierType;
 				ptr += (sizeof(ShaderResourceBufferBarrier));
+				set->barrierCount++;
 			}
 			break;
 		}
@@ -1463,6 +1467,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	uint32_t dynamicNumber = 0;
+	uint32_t pushRangeCount = 0;
 	std::vector<EntryHandle> descHandles(info->descCount);
 	std::vector<uint32_t> offsetsPerSet(info->descCount);
 	std::vector<uint32_t> dynamicOffsets;
@@ -1472,6 +1477,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
 		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
+		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
 
 	EntryHandle indexBufferHandle = EntryHandle();
@@ -1486,10 +1492,10 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
 	}
 
-	if (info->vertexBufferIndex != ~0)
+	if (info->vertexBufferHandle != ~0)
 	{
-		vertexBufferHandle = allocations[info->vertexBufferIndex].memIndex;
-		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferIndex].offset) + info->vertexOffset;
+		vertexBufferHandle = allocations[info->vertexBufferHandle].memIndex;
+		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferHandle].offset) + info->vertexOffset;
 	}
 
 	VKGraphicsPipelineObjectCreateInfo create = {
@@ -1504,7 +1510,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 			.indexBufferHandle = indexBufferHandle,
 			.indexBufferOffset = indexOffset,
 			.indexCount = info->indexCount,
-			.pushRangeCount = info->pushRangeCount,
+			.pushRangeCount = pushRangeCount,
 			.instanceCount = info->instanceCount,
 			.indexSize = info->indexSize
 	};
@@ -1542,7 +1548,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 		int constantBufferPerSet = 0;
 
-		for (uint32_t i = 0; i < info->pushRangeCount; i++)
+		for (uint32_t i = 0; i < pushRangeCount; i++)
 		{
 			ShaderResourceConstantBuffer* pushArgs = nullptr;
 			uint32_t j = 0;
@@ -1587,6 +1593,8 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	uint32_t dynamicNumber = 0;
+	uint32_t barrierCount = 0;
+	uint32_t pushRangeCount = 0;
 	std::vector<EntryHandle> descHandles(info->descCount);
 	std::vector<uint32_t> offsetsPerSet(info->descCount);
 	std::vector<uint32_t> dynamicOffsets;
@@ -1596,6 +1604,8 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
 		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
+		barrierCount += descriptorManager.GetBarrierCount(info->descriptorsetid[i]);
+		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
 
 	VKComputePipelineObjectCreateInfo create = {
@@ -1607,8 +1617,8 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 		.dynamicPerSet = offsetsPerSet.data(),
 		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
 		.maxDynCap = dynamicNumber,
-		.barrierCount = info->barrierCount,
-		.pushRangeCount = info->pushRangeCount
+		.barrierCount = barrierCount,
+		.pushRangeCount = pushRangeCount
 	};
 
 	auto pso = stateObjectHandles.Allocate();
@@ -1633,7 +1643,7 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 
 	int constantBufferPerSet = 0;
 
-	for (uint32_t i = 0; i < info->pushRangeCount; i++)
+	for (uint32_t i = 0; i < pushRangeCount; i++)
 	{
 		ShaderResourceConstantBuffer* pushArgs = nullptr;
 		uint32_t j = 0;
@@ -1662,6 +1672,7 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	uint32_t dynamicNumber = 0;
+	uint32_t pushRangeCount = 0;
 	std::vector<EntryHandle> descHandles(info->descCount);
 	std::vector<uint32_t> offsetsPerSet(info->descCount);
 	std::vector<uint32_t> dynamicOffsets;
@@ -1671,6 +1682,7 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets);
 		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
+		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
 
 	EntryHandle indexBufferHandle = EntryHandle();
@@ -1702,7 +1714,7 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 			.maxDynCap = dynamicNumber,
 			.indexBufferHandle = indexBufferHandle,
 			.indexBufferOffset = indexOffset,
-			.pushRangeCount = info->pushRangeCount,
+			.pushRangeCount = pushRangeCount,
 			.indexSize = info->indexSize,
 			.indirectDrawCount = (uint32_t)info->indirectDrawCount,
 			.indirectBufferHandle = allocations[info->indirectAllocation].memIndex,
@@ -1743,7 +1755,7 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 
 		int constantBufferPerSet = 0;
 
-		for (uint32_t i = 0; i < info->pushRangeCount; i++)
+		for (uint32_t i = 0; i < pushRangeCount; i++)
 		{
 			ShaderResourceConstantBuffer* pushArgs = nullptr;
 			uint32_t j = 0;
@@ -1756,9 +1768,6 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 				VKGraphicsPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
 			}
 		}
-
-		for (uint32_t i = 0; i < info->descCount; i++)
-			AddVulkanMemoryBarrier(VKGraphicsPipelineObject, info->descriptorsetid[i]);
 
 		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
 		graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
@@ -1872,10 +1881,16 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 			VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
 
 			size_t size = allocations[bufferBarrier->allocation].deviceAllocSize;
+			uint32_t pfo = 0;
 
 			if (allocations[bufferBarrier->allocation].allocType == PERFRAME)
 			{
-				size = barrier->perFrameOffset;
+				size = (allocations[bufferBarrier->allocation].requestedSize + allocations[bufferBarrier->allocation].alignment - 1) & ~(allocations[bufferBarrier->allocation].alignment - 1);
+				pfo = static_cast<uint32_t>(size);
+			}
+			else
+			{
+				size -= (VkDeviceSize)bufferBarrier->offset;
 			}
 
 
@@ -1891,7 +1906,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				AFTER,
 				srcStage,
 				dstStage,
-				barrier->perFrameOffset
+				pfo
 			);
 
 			break;

@@ -25,6 +25,7 @@ struct PerModel
     uint textureHandles[9];
     mat4 m;
     AABB minMaxBox;
+    vec4 sphere;
 };
 
 

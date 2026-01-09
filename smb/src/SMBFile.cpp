@@ -9,6 +9,7 @@ void SMBGeoChunk::Create(int _numRenderables, int _numMaterials)
 	numRenderables = _numRenderables;
 	int chunkSize = _numRenderables * 9 * sizeof(int);
 	chunkSize += (sizeof(int) * _numMaterials);
+	chunkSize += (sizeof(Vector4f) * +numRenderables);
 
 	int* chunkPtr = (int*)malloc(chunkSize);
 	int* cP = chunkPtr;
@@ -36,6 +37,7 @@ void SMBGeoChunk::Create(int _numRenderables, int _numMaterials)
 		chunkPtr += (_numMaterials);
 		materialStart = chunkPtr;
 		chunkPtr += (_numRenderables);
+		spheres = (Sphere*)chunkPtr;
 
 		memset(&axialBox, 0, sizeof(AxisBox));
 		memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
@@ -211,6 +213,7 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 		if (definitionID == RenderableByIndex)
 		{
 			char* renderable = material + 4 + 8 + 8;
+			memcpy(&chunk->spheres[renderableIndex], renderable + 8, sizeof(Vector4f));
 			int indexCount = *((int*)(renderable + (18 + 48)));
 			int vertexCount = *((int*)(renderable + (18 + 16)));
 			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
@@ -228,6 +231,7 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 		else if (definitionID == RenderableByIndexNonPB)
 		{
 			char* renderable = material + 4 + 8 + 8;
+			memcpy(&chunk->spheres[renderableIndex], renderable + 8, sizeof(Vector4f));
 			int vertexCount = *((int*)(renderable + (18 + 16)));
 			int vertexOffset = *((int*)(renderable + (18 + 16 + 16)));
 			int indexCount = *((int*)(renderable + (18 + 16 + 16 + 4)));

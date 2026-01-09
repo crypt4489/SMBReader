@@ -32,6 +32,7 @@ struct Handles
 	int handles[9];
 	Matrix4f m;
 	AxisBox minMaxBox;
+	Sphere sphere;
 };
 
 
@@ -677,6 +678,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
 		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
+		memcpy(&handles->sphere, &geoDef->spheres[i], sizeof(Vector4f));
 
 		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
 
@@ -842,7 +844,7 @@ void ApplicationLoop::InitializeRuntime()
 	CreateTexturePools();
 
 	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), PERFRAME);
-	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalIndexBufferSize, 16, STATIC);
+	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(globalIndexBufferSize, 16, STATIC);
 	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, STATIC);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -855,7 +857,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
 	
 
 	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -880,7 +882,6 @@ void ApplicationLoop::InitializeRuntime()
 		.descCount = 1,
 		.descriptorsetid = descs.data(),
 		.indexBufferHandle = globalIndexBuffer,
-		.pushRangeCount = 0,
 		.indexSize = 2,
 		.indexOffset = 0,
 		.vertexOffset = 0,
@@ -899,21 +900,19 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND, sizeof(VkDrawIndexedIndirectCommand) * 64);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 	
 	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
 
 	std::array computeDescriptors = { indirectCommandDescriptor };
 
 	ComputeIntermediaryPipelineInfo create2 = {
-			.x = 32 / layout->x,
+			.x = 4096 / layout->x,
 			.y = 1,
 			.z = 1,
 			.pipelinename = 4,
 			.descCount = 1,
-			.descriptorsetid = computeDescriptors.data(),
-			.barrierCount = 1,
-			.pushRangeCount = 1
+			.descriptorsetid = computeDescriptors.data()
 	};
 
 	globalCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create2);

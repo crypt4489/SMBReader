@@ -25,14 +25,13 @@ namespace API {
 struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
-	int vertexBufferIndex;
+	int vertexBufferHandle;
 	uint32_t vertexCount;
 	uint32_t pipelinename;
 	uint32_t descCount;
 	int *descriptorsetid;
 	int indexBufferHandle;
 	uint32_t indexCount;
-	uint32_t pushRangeCount;
 	uint32_t instanceCount;
 	uint32_t indexSize;
 	uint32_t indexOffset;
@@ -47,8 +46,6 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t pipelinename;
 	uint32_t descCount;
 	int* descriptorsetid;
-	uint32_t barrierCount;
-	uint32_t pushRangeCount;
 };
 
 struct IndirectIntermediaryPipelineInfo
@@ -60,7 +57,6 @@ struct IndirectIntermediaryPipelineInfo
 	uint32_t descCount;
 	int* descriptorsetid;
 	int indexBufferHandle;
-	uint32_t pushRangeCount;
 	uint32_t indexSize;
 	uint32_t indexOffset;
 	uint32_t vertexOffset;
@@ -89,6 +85,7 @@ struct RenderAllocation
 	AllocationType allocType;
 };
 
+/*
 struct HostTransferRegion
 {
 	uint32_t offsetinstaging;
@@ -124,7 +121,7 @@ struct HostDriverTransferPool
 		currentStagingBufferWrite += size;
 	}
 };
-
+*/
 
 template <int N>
 struct RenderAllocationHolder

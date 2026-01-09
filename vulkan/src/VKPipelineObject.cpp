@@ -191,8 +191,8 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 					break;
 				case BUFFBARRIER:
 					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
-					lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+					lbuffMemBarriers[bmbC].dstQueueFamilyIndex = 0;
+					lbuffMemBarriers[bmbC].srcQueueFamilyIndex = 0;
 					lbuffMemBarriers[bmbC].offset += (info->perFrameOffset * frame);
 					bmbC++;
 					break;

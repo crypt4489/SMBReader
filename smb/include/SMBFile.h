@@ -64,6 +64,11 @@ struct AxisBox
 	Vector4f max;
 };
 
+struct Sphere
+{
+	Vector4f sphere;
+};
+
 struct SMBGeoChunk
 {
 	int numRenderables;
@@ -79,6 +84,7 @@ struct SMBGeoChunk
 	int* materialStart;
 	int* materialsId;
 	AxisBox axialBox;
+	Sphere* spheres;
 
 	SMBGeoChunk() = default;
 	void Create(int _numRenderables, int _numMaterials);

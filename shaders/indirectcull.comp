@@ -51,52 +51,10 @@ Plane TransformPlane(mat4 transform, Plane inputPlane)
     return ComputePlane(tNormal, tPip);
 }
 
-
-vec3 FindPVert(vec4 topExtent, vec4 bottomExtent, vec3 normal)
+vec3 FindVert(vec4 lerpStart, vec4 lerpEnd, vec3 normal)
 {
-
-    vec3 pV = vec3(bottomExtent);
-
-    if (normal.x > 0)
-    {
-        pV.x = topExtent.x;
-    }
-
-    if (normal.y > 0)
-    {
-       pV.y = topExtent.y;
-    }
-
-    if (normal.z > 0)
-    {
-        pV.z = topExtent.z;
-    }
-
-    return pV;
-}
-
-
-vec3 FindNVert(vec4 topExtent, vec4 bottomExtent, vec3 normal)
-{
-
-    vec3 nV = vec3(topExtent);
-
-    if (normal.x > 0)
-    {
-        nV.x = bottomExtent.x;
-    }
-
-    if (normal.y > 0)
-    {
-       nV.y = bottomExtent.y;
-    }
-
-    if (normal.z > 0)
-    {
-        nV.z = bottomExtent.z;
-    }
-
-    return nV;
+   vec3 Vert = mix(lerpStart.xyz, lerpEnd.xyz,  greaterThan(normal, vec3(0.0)));
+   return Vert;
 }
 
 float DistanceFromPlane(vec4 planeNormal, vec3 point)
@@ -104,12 +62,32 @@ float DistanceFromPlane(vec4 planeNormal, vec3 point)
     return dot(planeNormal.xyz, point) + planeNormal.w;
 }
 
+bool CheckAABB(vec4 AABBMin, vec4 AABBMax, vec4 planeEquation)
+{
+    vec3 pVert = FindVert(AABBMin, AABBMax, planeEquation.xyz);
+
+    vec3 nVert = FindVert(AABBMax, AABBMin, planeEquation.xyz);
+
+    float pDist = DistanceFromPlane(planeEquation, pVert);
+
+    float nDist = DistanceFromPlane(planeEquation, nVert);
+
+    /*nDist < 0  */
+
+    if ( pDist < 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
 
 layout(push_constant) uniform GlobalContext {
     uint indirectDrawCount;
 } gs;
 
-layout(set = 0, binding = 0) buffer Commands {
+layout(set = 0, binding = 0) writeonly buffer Commands {
 	IndexedIndirectCommand commands[];
 } cmdBuffer;
 
@@ -125,6 +103,7 @@ struct PerModel
     uint textureHandles[9];
     mat4 m;
     AABB minMaxBox;
+    vec4 sphere;
 };
 
 
@@ -139,6 +118,142 @@ layout(set = 0, binding = 2) uniform CameraData {
      mat4 world;
 } cData;
 
+Frustrum transformFrustrum;
+
+void CalculateFrustrum()
+{
+    transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
+    transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
+    transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
+    transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
+    transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
+    transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
+}
+
+bool CheckAllPlanesAgainstAABB(uint index)
+{
+     mat4 modelM = perModelBuffer.objects[index].m;
+    vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
+    vec4 maxBox = perModelBuffer.objects[index].minMaxBox.max;
+
+    vec4 transAABBMin =  modelM * minBox;
+    vec4 transAABBMax =  modelM * maxBox;
+
+    vec4 AABBMin = min(transAABBMin, transAABBMax);
+    vec4 AABBMax = max(transAABBMin, transAABBMax);
+
+    bool check = CheckAABB(AABBMin, AABBMax, transformFrustrum.nearplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+
+    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.farplane.planeEquation);
+
+    if (check)
+    {
+        return false;
+    }
+    
+    
+    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.topplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.bottomplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    
+    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.rightplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.leftplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    return true;
+}
+
+bool CheckAllPlanesAgainstSphere(uint index)
+{
+    mat4 modelM = perModelBuffer.objects[index].m;
+    vec4 sphere = perModelBuffer.objects[index].sphere;
+    float r = sphere.w;
+
+    vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
+
+
+
+    Plane planeTNear = TransformPlane(cData.world, cData.f.nearplane);
+    Plane planeTFar = TransformPlane(cData.world, cData.f.farplane);
+    Plane planeTTop = TransformPlane(cData.world, cData.f.topplane);
+    Plane planeTBottom = TransformPlane(cData.world, cData.f.bottomplane);
+    Plane planeTRight = TransformPlane(cData.world, cData.f.rightplane);
+    Plane planeTLeft = TransformPlane(cData.world, cData.f.leftplane);
+
+   float dist = DistanceFromPlane(planeTNear.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+
+    dist = DistanceFromPlane(planeTFar.planeEquation, transPosition);
+
+    if (dist >= -r)
+    {
+        return false;
+    }
+    
+    
+    dist = DistanceFromPlane(planeTTop.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+    
+    dist = DistanceFromPlane(planeTBottom.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+    
+    
+    dist = DistanceFromPlane(planeTRight.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+    
+    dist = DistanceFromPlane(planeTLeft.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+
+    return true;
+    
+}
+
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -149,117 +264,22 @@ void main()
         return;
     }
 
-    PerModel modelData = perModelBuffer.objects[index];
+    CalculateFrustrum();
 
+    bool visible = CheckAllPlanesAgainstAABB(index);
 
-    vec4 transAABBMin =  modelData.m * modelData.minMaxBox.min;
-    vec4 transAABBMax =  modelData.m * modelData.minMaxBox.max;
-
-    vec4 AABBMin = min(transAABBMin, transAABBMax);
-    vec4 AABBMax = max(transAABBMin, transAABBMax);
-
-
-    Plane planeTNear = TransformPlane(cData.world, cData.f.nearplane);
-    Plane planeTFar = TransformPlane(cData.world, cData.f.farplane);
-    Plane planeTTop = TransformPlane(cData.world, cData.f.topplane);
-    Plane planeTBottom = TransformPlane(cData.world, cData.f.bottomplane);
-    Plane planeTRight = TransformPlane(cData.world, cData.f.rightplane);
-    Plane planeTLeft = TransformPlane(cData.world, cData.f.leftplane);
-
-    vec3 pVert = FindPVert(AABBMax, AABBMin, planeTNear.planeEquation.xyz);
-
-    vec3 nVert = FindNVert(AABBMax, AABBMin, planeTNear.planeEquation.xyz);
-
-    float pDist = DistanceFromPlane(planeTNear.planeEquation, pVert);
-
-    float nDist = DistanceFromPlane(planeTNear.planeEquation, nVert);
-
-    if (/* nDist < 0  ||*/ pDist < 0)
+    if (!visible)
     {
         cmdBuffer.commands[index].instanceCount = 0;
         return;
     }
-
-     
-    pVert = FindPVert(AABBMax, AABBMin, planeTFar.planeEquation.xyz);
-
-    nVert = FindNVert(AABBMax, AABBMin, planeTFar.planeEquation.xyz);
-
-    pDist = DistanceFromPlane(planeTFar.planeEquation, pVert);
-
-    nDist = DistanceFromPlane(planeTFar.planeEquation, nVert);
-
-    if (pDist > 0 /*|| nDist > 0*/)
-    {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
-    }
-    
-    
-    pVert = FindPVert(AABBMax, AABBMin, planeTTop.planeEquation.xyz); 
-
-    nVert = FindNVert(AABBMax, AABBMin, planeTTop.planeEquation.xyz); 
-
-    pDist = DistanceFromPlane(planeTTop.planeEquation, pVert); 
-
-    nDist = DistanceFromPlane(planeTTop.planeEquation, nVert);
-
-    if (pDist < 0 /*||  nDist < 0 */)
-    {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
-    }
-
-
-    
-    pVert = FindPVert(AABBMax, AABBMin, planeTBottom.planeEquation.xyz);
-
-    nVert = FindNVert(AABBMax, AABBMin, planeTBottom.planeEquation.xyz);
-
-    pDist = DistanceFromPlane(planeTBottom.planeEquation, pVert);
-
-    nDist = DistanceFromPlane(planeTBottom.planeEquation, nVert);
-    
-    if (pDist < 0 /*||  nDist < 0 */)
-    {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
-    }
-    
-    
-    pVert = FindPVert(AABBMax, AABBMin, planeTRight.planeEquation.xyz);
-
-    nVert = FindNVert(AABBMax, AABBMin, planeTRight.planeEquation.xyz);
-
-    pDist = DistanceFromPlane(planeTRight.planeEquation, pVert);
-
-    nDist = DistanceFromPlane(planeTRight.planeEquation, nVert);
-    
-    if (pDist < 0 /*|| nDist < 0 */)
-    {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
-    }
-    
-    pVert = FindPVert(AABBMax, AABBMin, planeTLeft.planeEquation.xyz);
-
-    nVert = FindNVert(AABBMax, AABBMin, planeTLeft.planeEquation.xyz);
-
-    pDist = DistanceFromPlane(planeTLeft.planeEquation, pVert);
-
-    nDist = DistanceFromPlane(planeTLeft.planeEquation, nVert);
-    
-    if (pDist < 0 /*||  nDist < 0 */)
-    {
-        cmdBuffer.commands[index].instanceCount = 0;
-        return;
-    }
-    
-
+   
+   
     cmdBuffer.commands[index].instanceCount = 1;
-    cmdBuffer.commands[index].firstIndex = modelData.firstIndex;
-    cmdBuffer.commands[index].indexCount = modelData.indexCount;
+    cmdBuffer.commands[index].firstIndex = perModelBuffer.objects[index].firstIndex;
+    cmdBuffer.commands[index].indexCount = perModelBuffer.objects[index].indexCount;
     cmdBuffer.commands[index].firstInstance = 0;
     cmdBuffer.commands[index].vertexOffset = 0;
+    
 
 }
