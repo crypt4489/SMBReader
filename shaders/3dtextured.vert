@@ -78,6 +78,7 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
+layout(set = 2, binding = 2) uniform usamplerBuffer globalMeshIndices;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -137,7 +138,8 @@ vec3 pack6decomp(uint offset, PerModel model)
 
 void main() {
     
-    modelIndex = gl_DrawID;
+
+    modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
 
     PerModel modelData = perModelBuffer.objects[modelIndex];
 

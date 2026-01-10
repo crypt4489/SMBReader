@@ -849,7 +849,7 @@ int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, Al
 		break;
 	}
 
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalDeviceBufIndex;
@@ -887,7 +887,7 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 
 
 
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, size, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalDeviceBufIndex;

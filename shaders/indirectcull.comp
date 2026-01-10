@@ -121,23 +121,19 @@ layout(set = 0, binding = 2) uniform CameraData {
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
 
+Frustrum transformFrustrum;
 
-
-Frustrum CalculateFrustrum()
+void CalculateFrustrum()
 {
-    Frustrum transformFrustrum;
-
     transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
     transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
     transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
     transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
     transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
     transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
-
-    return transformFrustrum;
 }
 
-bool CheckAllPlanesAgainstAABB(uint index, Frustrum transformFrustrum)
+bool CheckAllPlanesAgainstAABB(uint index)
 {
      mat4 modelM = perModelBuffer.objects[index].m;
     vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
@@ -261,8 +257,8 @@ bool CheckAllPlanesAgainstSphere(uint index)
     
 }
 
-//shared uint visibleIndex;
-//shared uint inVisibleIndex;
+shared uint visibleIndex;
+shared uint inVisibleIndex;
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -274,23 +270,20 @@ void main()
         return;
     }
 
-    Frustrum transformFrustrum = CalculateFrustrum();
+    CalculateFrustrum();
 
-    bool visible = CheckAllPlanesAgainstAABB(index, transformFrustrum);
+    bool visible = CheckAllPlanesAgainstAABB(index);
 
     if (!visible)
     {
-        //uint oldValue = atomicAdd(inVisibleIndex, 1u);
-       // cmdBuffer.commands[index].instanceCount = 0;
-       // return;
+        uint oldValue = atomicAdd(inVisibleIndex, 1u);
+        cmdBuffer.commands[gs.indirectDrawCount-1-oldValue].instanceCount = 0;
+        return;
     }
     
-    int oldValue = int(index);
+    uint oldValue = atomicAdd(visibleIndex, 1u);
 
-    if (oldValue < 1)
-    {
-        imageStore(globalMeshIndices, 0, uvec4(0, 0, 0, 0));
-    }
+    imageStore(globalMeshIndices, int(oldValue), uvec4(index, 0, 0, 0));
    
     cmdBuffer.commands[oldValue].instanceCount = 1;
     cmdBuffer.commands[oldValue].firstIndex = perModelBuffer.objects[index].firstIndex;
