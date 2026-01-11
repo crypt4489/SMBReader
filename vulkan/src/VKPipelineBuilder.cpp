@@ -69,13 +69,13 @@ void VKGraphicsPipelineBuilder::CreateViewportState(uint32_t viewportCount, uint
 	viewportState.viewportCount = viewportCount;
 	viewportState.scissorCount = scissorCount;
 }
-void VKGraphicsPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace)
+void VKGraphicsPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace, float lineWidth)
 {
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.lineWidth = 1.0f;
+	rasterizer.lineWidth = lineWidth;
 	rasterizer.cullMode = cullFlags;
 	rasterizer.frontFace = frontFace;
 	rasterizer.depthBiasEnable = VK_FALSE;

@@ -135,7 +135,7 @@ namespace API {
 		case TRIFAN:
 			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 			break;
-		case PrimitiveType::POINTSLIST:
+		case POINTSLIST:
 			top = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 			break;
 
@@ -564,19 +564,20 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 5> layouts = {
+	std::array<std::string, 6> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
 		"PolynomialLayout.xml",
-		"IndirectCull.xml"
+		"IndirectCull.xml",
+		"DebugDraw.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 6; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -655,18 +656,22 @@ void RenderInstance::CreatePipelines()
 
 	std::vector<EntryHandle> l(maxMSAALevels);
 	std::vector<EntryHandle> r(maxMSAALevels);
+	std::vector<EntryHandle> debug(maxMSAALevels);
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{
-		auto genericBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 2, 2, 0);
+		auto genericBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
 		auto textBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 1, 2, 0);
+		auto debugBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
 
-		UsePipelineBuilders(genericBuilder, textBuilder, (VkSampleCountFlagBits)(1<<i));
+		UsePipelineBuilders(genericBuilder, textBuilder, debugBuilder, (VkSampleCountFlagBits)(1<<i));
 
 
 		r[i] = CreateVulkanGraphicPipelineTemplate(genericBuilder, vulkanShaderGraphs.shaderGraphPtrs[0]);
 
 		l[i] = CreateVulkanGraphicPipelineTemplate(textBuilder, vulkanShaderGraphs.shaderGraphPtrs[1]);
+
+		debug[i] = CreateVulkanGraphicPipelineTemplate(debugBuilder, vulkanShaderGraphs.shaderGraphPtrs[5]);
 
 	}
 
@@ -674,7 +679,7 @@ void RenderInstance::CreatePipelines()
 	
 	pipelinesIdentifier[TEXT] = l;
 
-
+	pipelinesIdentifier[5] = debug;
 
 }
 
@@ -718,7 +723,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(VKComputePipelin
 }
 
 
-void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits flags)
+void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VkSampleCountFlagBits flags)
 {
 	std::array<VkDynamicState, 2> dynamicStates = {
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -727,38 +732,43 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 
 	generic->CreateDynamicStateInfo(dynamicStates.data(), 2);
 	text->CreateDynamicStateInfo(dynamicStates.data(), 2);
-
-	std::array<VkVertexInputBindingDescription, 1> bindings1 = { BasicVertex::getBindingDescription() };
-
-	auto ref1 = BasicVertex::getAttributeDescriptions();
+	debug->CreateDynamicStateInfo(dynamicStates.data(), 2);
 
 	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
-	generic->CreateVertexInput(bindings1.data(), 0, ref1.data(), 0);
+	generic->CreateVertexInput(nullptr, 0, nullptr, 0);
 	text->CreateVertexInput(bindings.data(), 1, ref.data(), static_cast<uint32_t>(ref.size()));
+	debug->CreateVertexInput(nullptr, 0, nullptr, 0);
 
 	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
+	debug->CreateInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
 
 	generic->CreateViewportState(1, 1);
 	text->CreateViewportState(1, 1);
+	debug->CreateViewportState(1, 1);
 
-	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
+	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
+	debug->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 5.0f);
 
 	generic->CreateMultiSampling(flags);
 	text->CreateMultiSampling(flags);
+	debug->CreateMultiSampling(flags);
 
 	generic->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 	text->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+	debug->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 
 	generic->CreateColorBlending(VK_LOGIC_OP_COPY);
 	text->CreateColorBlending(VK_LOGIC_OP_COPY);
+	debug->CreateColorBlending(VK_LOGIC_OP_COPY);
 
 	generic->CreateDepthStencil(VK_COMPARE_OP_LESS);
 	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS);
+	debug->CreateDepthStencil(VK_COMPARE_OP_LESS);
 }
 
 void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset, size_t frame, int copies)
@@ -1173,6 +1183,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	features2.features.tessellationShader = VK_TRUE;
 	features2.features.samplerAnisotropy = VK_TRUE;
 	features2.features.multiDrawIndirect = VK_TRUE;
+	features2.features.wideLines = VK_TRUE;
 
 	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
 		vkInstance->instanceLayerCount,
@@ -1685,7 +1696,7 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	return ret;
 }
 
-int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info)
+int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info, bool addToGraph)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1788,7 +1799,11 @@ int RenderInstance::CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipel
 		}
 
 		auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
-		graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
+
+		if (addToGraph)
+		{
+			graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
+		}
 		renderStateObjects.Update(pipeInsertIndex++, pipelineIndex);
 	}
 
@@ -2030,7 +2045,7 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	graph->DrawScene(&rcb, currentFrame);
 
-	//queue->DrawScene(&rcb, currentFrame);
+	queue->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 

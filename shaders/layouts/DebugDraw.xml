@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="vert">
+		DebugDraw.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		DebugDraw.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="uniform" used="v">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="storage" used="v">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

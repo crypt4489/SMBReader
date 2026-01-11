@@ -47,6 +47,25 @@ static int globalVertexBufferSize = 1024 * KB;
 
 static int globalCullPipeline = 0;
 
+struct DebugDrawStruct
+{
+	Vector4f center; // fourth component is radius for sphere type
+	Vector4f scale;
+	Vector4f color;
+	Vector4f halfExtents;
+};
+
+static int debugAllocBuffer = 0;
+static int debugAllocBufferSize = 2 * KB;
+static int debugIndirectCommandBuffer = 0;
+static int debugIndirectCommandCount = 0;
+static int debugIndirectCommandPipeline = 0;
+static int globalDebugPipeline = 0;
+
+static int globalDebugMeshIDs = 0;
+static int globalDebugTypes = 0;
+
+
 
 static int computeMemory;
 static int computeObjIndex;
@@ -345,6 +364,9 @@ void ApplicationLoop::Execute()
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
 			if (index != ~0ui32) {
+
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectCommandPipeline, 1);
+
 				VKRenderer::gRenderInstance->DrawScene(index);
 
 				VKRenderer::gRenderInstance->SubmitFrame(index);
@@ -529,7 +551,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = Identity4f();
 		
-	*geomSpecificData = *geomSpecificData * 5.0f;
+	//*geomSpecificData = *geomSpecificData * 5.0f;
 		
 	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
 
@@ -537,7 +559,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = *geomSpecificData * rotation;
 
-	for (int i = 0; i<count; i++)
+	for (int i = 0; i < count; i++)
 	{
 
 		SMBVertexTypes type = geoDef->vertexTypes[i];
@@ -545,7 +567,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		Mesh* mesh = nullptr;
 
 		uint32_t meshIndex;
-		
+
 		std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
 
 		geom->meshCount++;
@@ -557,7 +579,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->indicesCount = indexCount;
 
 		mesh->verticesCount = vertexCount;
-		
+
 		int vertexSize = 0;
 
 		void* vertexData;
@@ -586,19 +608,19 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			break;
 		}
 
-		
+
 
 		mesh->vertexSize = vertexSize;
 
-		
+
 
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
 		mesh->vertexId = meshVertexData.Allocate(vertexData);
-		
+
 		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
 
-		
+
 
 
 		int vertexFlags = POSITION | TEXTURES1;
@@ -606,13 +628,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		switch (type)
 		{
 		case PosPack6_CNorm_C16Tex1_Bone2:
-		{ 
+		{
 			vertexFlags = POSITION | TEXTURES1 | NORMAL | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex2_Bone2:
 		{
-			vertexFlags =  POSITION | TEXTURES1 | TEXTURES2 | BONES2;
+			vertexFlags = POSITION | TEXTURES1 | TEXTURES2 | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex1_Bone2:
@@ -627,12 +649,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			vertexFlags |= COMPRESSED;
 		}
 
-	
+
 
 		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
 
 
-		
+
 		mesh->indexSize = 2;
 
 		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
@@ -646,7 +668,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		rendInst->UpdateAllocation(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount, indexAlloc, 0, 1);
 
 		rendInst->UpdateAllocation(vertexData, globalVertexBuffer, vertexSize * vertexCount, vertexAlloc, 0, 1);
-		 
+
 		mesh->meshInstanceLocalMemoryCount = 1;
 
 		Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
@@ -668,14 +690,14 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		handles->indexCount = mesh->indicesCount;
 		handles->instanceCount = 1;
-		handles->firstIndex = indexAlloc/mesh->indexSize;
+		handles->firstIndex = indexAlloc / mesh->indexSize;
 		handles->vertexByteOffset = vertexAlloc;
 
 		for (int ii = 0; ii < handles->numHandles; ii++)
 		{
-			handles->handles[ii] = geoDef->materialsId[base+ii];
+			handles->handles[ii] = geoDef->materialsId[base + ii];
 			if (handles->handles[ii] == -1) handles->handles[ii] = 0;
-			meshTextureHandles.Update(mesh->texturesStart+ii, handles->handles[ii]);
+			meshTextureHandles.Update(mesh->texturesStart + ii, handles->handles[ii]);
 		}
 
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
@@ -686,8 +708,48 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->meshInstanceDeviceMemoryCount = 1;
 		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
-		
+
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
+
+		int addr = 0;
+		int tag = 2;
+
+		VKRenderer::gRenderInstance->UpdateAllocation(&addr, globalDebugMeshIDs, sizeof(uint32_t), 0, 0, frames);
+
+		VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
+
+		VkDrawIndirectCommand command = {
+		.vertexCount = 24 * 2,
+		.instanceCount = 1,
+		.firstVertex = 0,
+		.firstInstance = 0
+		};
+
+
+
+		VKRenderer::gRenderInstance->UpdateAllocation(&command, debugIndirectCommandBuffer, sizeof(command), sizeof(command) * debugIndirectCommandCount, 0, frames);
+
+		debugIndirectCommandCount++;
+
+		DebugDrawStruct drawStruct;
+		drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
+
+		drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
+		drawStruct.color = Vector4f(1.0, 0.0, 1.0, 0.0);
+
+
+		Vector4f half = ((geoDef->axialBox.max - geoDef->axialBox.min) * 0.5);
+		Vector3f half3 = Vector3f(half.x, half.y, half.z);
+
+		float r = Length(half3);
+
+		drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(24), 1.0, 1.0);
+
+
+
+		VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
+
+
 	}
 
 	indirectCommandCount += count;
@@ -859,7 +921,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
+	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), PERFRAME);
 	
 
 	
@@ -927,10 +989,75 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = indirectCommandBuffer,
-		.indirectDrawCount = 32
+		.indirectDrawCount = 64
 	};
 
-	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create);
+	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create, true);
+
+
+	
+
+	debugAllocBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(debugAllocBufferSize, alignof(Matrix4f), PERFRAME);
+
+	
+	
+	
+
+
+
+	debugIndirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
+
+
+	
+
+
+	
+	
+	globalDebugMeshIDs = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
+
+	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
+
+	
+
+	EntryHandle bufferView2 = VKRenderer::gRenderInstance->CreateBufferView(globalDebugMeshIDs, VK_FORMAT_R32_UINT);
+
+	EntryHandle bufferView3 = VKRenderer::gRenderInstance->CreateBufferView(globalDebugTypes, VK_FORMAT_R32_UINT);
+	
+	
+
+
+	int debugDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(5, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugDesc, debugAllocBuffer, 0, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugDesc, globalDebugMeshIDs, bufferView2, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugDesc, globalDebugTypes, bufferView3, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	std::array<int, 2> descs2 = {
+		globalBufferDescriptor,
+		debugDesc,
+
+	};
+
+	IndirectIntermediaryPipelineInfo create23 = {
+		.drawType = 0,
+		.vertexBufferIndex = ~0,
+		.vertexCount = 0,
+		.pipelinename = 5,
+		.descCount = 2,
+		.descriptorsetid = descs2.data(),
+		.indexBufferHandle = ~0,
+		.indexSize = 0,
+		.indexOffset = 0,
+		.vertexOffset = 0,
+		.indirectAllocation = debugIndirectCommandBuffer,
+		.indirectDrawCount = 64
+	};
+
+
+	 debugIndirectCommandPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create23, false);;
+	//static int globalDebugPipeline = 0;
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

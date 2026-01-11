@@ -121,38 +121,26 @@ layout(set = 0, binding = 2) uniform CameraData {
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
 
-Frustrum transformFrustrum;
-
-void CalculateFrustrum()
-{
-    transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
-    transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
-    transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
-    transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
-    transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
-    transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
-}
-
 bool CheckAllPlanesAgainstAABB(uint index)
 {
      mat4 modelM = perModelBuffer.objects[index].m;
     vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
     vec4 maxBox = perModelBuffer.objects[index].minMaxBox.max;
 
-    vec4 transAABBMin =  modelM * minBox;
-    vec4 transAABBMax =  modelM * maxBox;
+    vec4 transAABBMin =  cData.view * modelM * minBox;
+    vec4 transAABBMax =  cData.view * modelM * maxBox;
 
     vec4 AABBMin = min(transAABBMin, transAABBMax);
     vec4 AABBMax = max(transAABBMin, transAABBMax);
 
-    bool check = CheckAABB(AABBMin, AABBMax, transformFrustrum.nearplane.planeEquation);
+    bool check = CheckAABB(AABBMin, AABBMax, cData.f.nearplane.planeEquation);
 
     if (!check)
     {
         return false;
     }
 
-    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.farplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, cData.f.farplane.planeEquation);
 
     if (check)
     {
@@ -160,14 +148,14 @@ bool CheckAllPlanesAgainstAABB(uint index)
     }
     
     
-    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.topplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, cData.f.topplane.planeEquation);
 
     if (!check)
     {
         return false;
     }
     
-    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.bottomplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, cData.f.bottomplane.planeEquation);
 
     if (!check)
     {
@@ -175,14 +163,14 @@ bool CheckAllPlanesAgainstAABB(uint index)
     }
     
     
-    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.rightplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, cData.f.rightplane.planeEquation);
 
     if (!check)
     {
         return false;
     }
     
-    check = CheckAABB(AABBMin, AABBMax, transformFrustrum.leftplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, cData.f.leftplane.planeEquation);
 
     if (!check)
     {
@@ -198,25 +186,16 @@ bool CheckAllPlanesAgainstSphere(uint index)
     vec4 sphere = perModelBuffer.objects[index].sphere;
     float r = sphere.w;
 
-    vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
+    vec3 transPosition =  vec3(cData.view * modelM * vec4(sphere.xyz, 1.0));
 
-
-
-    Plane planeTNear = TransformPlane(cData.world, cData.f.nearplane);
-    Plane planeTFar = TransformPlane(cData.world, cData.f.farplane);
-    Plane planeTTop = TransformPlane(cData.world, cData.f.topplane);
-    Plane planeTBottom = TransformPlane(cData.world, cData.f.bottomplane);
-    Plane planeTRight = TransformPlane(cData.world, cData.f.rightplane);
-    Plane planeTLeft = TransformPlane(cData.world, cData.f.leftplane);
-
-   float dist = DistanceFromPlane(planeTNear.planeEquation, transPosition);
+   float dist = DistanceFromPlane(cData.f.nearplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
         return false;
     }
 
-    dist = DistanceFromPlane(planeTFar.planeEquation, transPosition);
+    dist = DistanceFromPlane(cData.f.farplane.planeEquation, transPosition);
 
     if (dist >= -r)
     {
@@ -224,14 +203,14 @@ bool CheckAllPlanesAgainstSphere(uint index)
     }
     
     
-    dist = DistanceFromPlane(planeTTop.planeEquation, transPosition);
+    dist = DistanceFromPlane(cData.f.topplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
         return false;
     }
     
-    dist = DistanceFromPlane(planeTBottom.planeEquation, transPosition);
+    dist = DistanceFromPlane(cData.f.bottomplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
@@ -239,14 +218,14 @@ bool CheckAllPlanesAgainstSphere(uint index)
     }
     
     
-    dist = DistanceFromPlane(planeTRight.planeEquation, transPosition);
+    dist = DistanceFromPlane(cData.f.rightplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
         return false;
     }
     
-    dist = DistanceFromPlane(planeTLeft.planeEquation, transPosition);
+    dist = DistanceFromPlane(cData.f.leftplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
@@ -270,26 +249,24 @@ void main()
         return;
     }
 
-    CalculateFrustrum();
-
     bool visible = CheckAllPlanesAgainstAABB(index);
 
     if (!visible)
     {
-        uint oldValue = atomicAdd(inVisibleIndex, 1u);
-        cmdBuffer.commands[gs.indirectDrawCount-1-oldValue].instanceCount = 0;
+        uint invisibleValue = atomicAdd(inVisibleIndex, 1u);
+        cmdBuffer.commands[gs.indirectDrawCount-1-invisibleValue].instanceCount = 0;
         return;
     }
     
-    uint oldValue = atomicAdd(visibleIndex, 1u);
+    uint visibleValue = atomicAdd(visibleIndex, 1u);
 
-    imageStore(globalMeshIndices, int(oldValue), uvec4(index, 0, 0, 0));
+    imageStore(globalMeshIndices, int(visibleValue), uvec4(index, 0, 0, 0));
    
-    cmdBuffer.commands[oldValue].instanceCount = 1;
-    cmdBuffer.commands[oldValue].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[oldValue].indexCount = perModelBuffer.objects[index].indexCount;
-    cmdBuffer.commands[oldValue].firstInstance = 0;
-    cmdBuffer.commands[oldValue].vertexOffset = 0;
+    cmdBuffer.commands[visibleValue].instanceCount = 1;
+    cmdBuffer.commands[visibleValue].firstIndex = perModelBuffer.objects[index].firstIndex;
+    cmdBuffer.commands[visibleValue].indexCount = perModelBuffer.objects[index].indexCount;
+    cmdBuffer.commands[visibleValue].firstInstance = 0;
+    cmdBuffer.commands[visibleValue].vertexOffset = 0;
     
 
 }

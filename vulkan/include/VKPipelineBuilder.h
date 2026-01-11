@@ -53,7 +53,7 @@ struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 
 	void CreateViewportState(uint32_t viewportCount, uint32_t scissorCount);
 
-	void CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace);
+	void CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace, float lineWidth);
 
 	void CreateMultiSampling(VkSampleCountFlagBits count);
 

@@ -196,7 +196,7 @@ struct RenderInstance
 
 	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
 
-	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VkSampleCountFlagBits sampleCount);
+	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VkSampleCountFlagBits flags);
 
 	EntryHandle CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipeline, ShaderGraph* graph);
 
@@ -247,7 +247,7 @@ struct RenderInstance
 
 	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
-	int CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info);
+	int CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info, bool addToGraph);
 
 	void CreateRenderTargetData(int* desc, int descCount);
 
