@@ -324,11 +324,15 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		int updatedCommand = 3;
+		int updatedCommand = 3, updatedDebugCommand = 3;
 
 		int commandCountPrev = indirectCommandCount;
 
+		int debugCommandCountPrev = debugIndirectCommandCount;
+
 		VKRenderer::gRenderInstance->EndFrame();
+
+		
 
 		while (running)
 		{
@@ -350,6 +354,13 @@ void ApplicationLoop::Execute()
 				updatedCommand--;
 			}
 
+			if (cameraMove || debugIndirectCommandCount != debugCommandCountPrev || updatedDebugCommand > 0)
+			{
+				if (!updatedDebugCommand || cameraMove) updatedDebugCommand = 3;
+				debugCommandCountPrev = debugIndirectCommandCount;
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalDebugPipeline, 0);
+				updatedDebugCommand--;
+			}
 			
 
 
@@ -711,46 +722,38 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
 
-		int addr = 0;
-		int tag = 2;
-
-		VKRenderer::gRenderInstance->UpdateAllocation(&addr, globalDebugMeshIDs, sizeof(uint32_t), 0, 0, frames);
-
-		VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
-
-		VkDrawIndirectCommand command = {
-		.vertexCount = 24 * 2,
-		.instanceCount = 1,
-		.firstVertex = 0,
-		.firstInstance = 0
-		};
+	
+		
 
 
 
-		VKRenderer::gRenderInstance->UpdateAllocation(&command, debugIndirectCommandBuffer, sizeof(command), sizeof(command) * debugIndirectCommandCount, 0, frames);
-
-		debugIndirectCommandCount++;
-
-		DebugDrawStruct drawStruct;
-		drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
-
-		drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
-		drawStruct.color = Vector4f(1.0, 0.0, 1.0, 0.0);
-
-
-		Vector4f half = ((geoDef->axialBox.max - geoDef->axialBox.min) * 0.5);
-		Vector3f half3 = Vector3f(half.x, half.y, half.z);
-
-		float r = Length(half3);
-
-		drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(24), 1.0, 1.0);
-
-
-
-		VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
+		
 
 
 	}
+
+	int tag = 2;
+
+	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
+
+
+	debugIndirectCommandCount++;
+
+	DebugDrawStruct drawStruct;
+	drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
+
+	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
+	drawStruct.color = Vector4f(1.0, 0.0, 1.0, 0.0);
+
+
+	Vector4f half = ((geoDef->axialBox.max - geoDef->axialBox.min) * 0.5);
+	Vector3f half3 = Vector3f(half.x, half.y, half.z);
+
+	float r = Length(half3);
+
+	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(24), 1.0, 1.0);
+
+	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
 
 	indirectCommandCount += count;
 }
@@ -1025,6 +1028,41 @@ void ApplicationLoop::InitializeRuntime()
 	
 	
 
+
+	int computeDebugDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, debugIndirectCommandBuffer, 0, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(computeDebugDesc, globalDebugMeshIDs, bufferView2, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(computeDebugDesc, globalDebugTypes, bufferView3, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, globalBufferLocation, 3, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, debugAllocBuffer, 4, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(computeDebugDesc, &debugIndirectCommandCount, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(computeDebugDesc, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(computeDebugDesc, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+
+	std::array computeDescriptors2 = { computeDebugDesc };
+
+	ShaderComputeLayout* layout2 = VKRenderer::gRenderInstance->GetComputeLayout(6);
+
+	ComputeIntermediaryPipelineInfo create4 = {
+			.x = 4096 / layout2->x,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 6,
+			.descCount = 1,
+			.descriptorsetid = computeDescriptors2.data()
+	};
+
+
+	globalDebugPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create4);
 
 	int debugDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(5, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 

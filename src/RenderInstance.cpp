@@ -564,20 +564,21 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 6> layouts = {
+	std::array<std::string, 7> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
 		"PolynomialLayout.xml",
 		"IndirectCull.xml",
-		"DebugDraw.xml"
+		"DebugDraw.xml",
+		"IndirectDebug.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 6; i++)
+	for (int i = 0; i < 7; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -652,6 +653,12 @@ void RenderInstance::CreatePipelines()
 	computePipeline2->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[4].push_back(CreateVulkanComputePipelineTemplate(computePipeline2, vulkanShaderGraphs.shaderGraphPtrs[4]));
+
+	auto computePipeline3 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline3->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[6].push_back(CreateVulkanComputePipelineTemplate(computePipeline3, vulkanShaderGraphs.shaderGraphPtrs[6]));
 
 
 	std::vector<EntryHandle> l(maxMSAALevels);

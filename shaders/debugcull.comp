@@ -2,11 +2,10 @@
 
 struct IndexedIndirectCommand
 {
-	uint indexCount;
-	uint instanceCount;
-	uint firstIndex;
-	int vertexOffset;
-	uint firstInstance;
+	uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
 };
 
 struct AABB
@@ -33,6 +32,14 @@ struct Frustrum
 	float nearheight;
 	float farDistance;
     float pad;
+};
+
+struct DebugDrawStruct
+{
+	vec4 center;
+	vec4 scale;
+    vec4 color;
+    vec4 halfExtents;
 };
 
 Plane ComputePlane(vec3 normal, vec4 pip)
@@ -91,44 +98,36 @@ layout(set = 0, binding = 0) writeonly buffer Commands {
 	IndexedIndirectCommand commands[];
 } cmdBuffer;
 
-struct PerModel
-{
-    uint vertexComponents;
-    uint numHandles;
-    uint vertexStride;
-    uint indexCount;
-	uint instanceCount;
-	uint firstIndex;
-    uint vertexByteOffset;
-    uint textureHandles[9];
-    mat4 m;
-    AABB minMaxBox;
-    vec4 sphere;
-};
+layout(set = 0, binding = 1, r32ui) uniform uimageBuffer globalDebugIndices;
 
+layout(set = 0, binding = 2) uniform usamplerBuffer globalDebugTypes;
 
-layout(set = 0, binding = 1) readonly buffer PMBuffer {
-    PerModel objects[];
-} perModelBuffer;
-
-layout(set = 0, binding = 2) uniform CameraData {
+layout(set = 0, binding = 3) uniform CameraData {
      mat4 view;
      mat4 proj;
      Frustrum f;
      mat4 world;
 } cData;
 
+layout(set = 0, binding = 4) readonly buffer DDSBuffer {
+    DebugDrawStruct objects[];
+} ddsbuffer;
 
-layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
+
 
 bool CheckAllPlanesAgainstAABB(uint index)
 {
-     mat4 modelM = perModelBuffer.objects[index].m;
-    vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
-    vec4 maxBox = perModelBuffer.objects[index].minMaxBox.max;
 
-    vec4 transAABBMin =  cData.view * modelM * minBox;
-    vec4 transAABBMax =  cData.view * modelM * maxBox;
+    DebugDrawStruct mainStruct = ddsbuffer.objects[index];
+
+    vec4 minBox = (mainStruct.center + (vec4(-1.0, -1.0, -1.0, 0.0) * mainStruct.halfExtents) * mainStruct.scale);
+
+    vec4 maxBox = (mainStruct.center + (vec4(1.0, 1.0, 1.0, 0.0) * mainStruct.halfExtents) * mainStruct.scale);
+    
+   
+
+    vec4 transAABBMin =  cData.view * minBox;
+    vec4 transAABBMax =  cData.view * maxBox;
 
     vec4 AABBMin = min(transAABBMin, transAABBMax);
     vec4 AABBMax = max(transAABBMin, transAABBMax);
@@ -182,15 +181,18 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
 bool CheckAllPlanesAgainstSphere(uint index)
 {
-    mat4 modelM = perModelBuffer.objects[index].m;
-    vec4 sphere = perModelBuffer.objects[index].sphere;
-    float r = sphere.w;
+    DebugDrawStruct mainStruct = ddsbuffer.objects[index];
 
-    vec3 transPosition =  vec3(cData.view * modelM * vec4(sphere.xyz, 1.0));
+
+    vec4 sphere = mainStruct.center;
+    
+    float r = mainStruct.halfExtents.x;
+
+    vec3 transPosition =  vec3(cData.view * vec4(sphere.xyz, 1.0));
 
    float dist = DistanceFromPlane(cData.f.nearplane.planeEquation, transPosition);
 
-    if (dist < -r)
+    if (dist <= r)
     {
         return false;
     }
@@ -236,6 +238,25 @@ bool CheckAllPlanesAgainstSphere(uint index)
     
 }
 
+
+bool CheckDebugDrawAgainstFrustrum(uint debugType, uint index)
+{
+    bool ret = false;
+    if (debugType == 1)
+    {
+       ret = CheckAllPlanesAgainstAABB(index);
+    }
+    else if (debugType == 2)
+    {
+        ret = CheckAllPlanesAgainstSphere(index);
+    }
+
+    return ret;
+
+}
+
+
+
 shared uint visibleIndex;
 shared uint inVisibleIndex;
 
@@ -243,6 +264,9 @@ layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
+
+
+
 	uint index = gl_GlobalInvocationID.x;
 
     if (index == 0)
@@ -258,7 +282,11 @@ void main()
         return;
     }
 
-    bool visible = CheckAllPlanesAgainstAABB(index);
+   
+
+    uint debugType = uint(texelFetch(globalDebugTypes, int(index)).r);
+
+    bool visible = CheckDebugDrawAgainstFrustrum(debugType, index);
 
     if (!visible)
     {
@@ -266,16 +294,25 @@ void main()
         cmdBuffer.commands[gs.indirectDrawCount-1-invisibleValue].instanceCount = 0;
         return;
     }
-    
+     
     uint visibleValue = atomicAdd(visibleIndex, 1u);
 
-    imageStore(globalMeshIndices, int(visibleValue), uvec4(index, 0, 0, 0));
-   
-    cmdBuffer.commands[visibleValue].instanceCount = 1;
-    cmdBuffer.commands[visibleValue].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[visibleValue].indexCount = perModelBuffer.objects[index].indexCount;
-    cmdBuffer.commands[visibleValue].firstInstance = 0;
-    cmdBuffer.commands[visibleValue].vertexOffset = 0;
-    
+    imageStore(globalDebugIndices, int(visibleValue), uvec4(index, 0, 0, 0));
 
+    if (debugType == 1)
+    {
+        cmdBuffer.commands[visibleValue].vertexCount = 24;
+        cmdBuffer.commands[visibleValue].instanceCount = 1;
+        cmdBuffer.commands[visibleValue].firstVertex = 0;
+        cmdBuffer.commands[visibleValue].firstInstance = 0;
+    }
+    else if (debugType == 2)
+    {
+        vec4 temp = ddsbuffer.objects[index].halfExtents;
+        uint numSlices = floatBitsToUint(temp.y);
+        cmdBuffer.commands[visibleValue].vertexCount = 2*numSlices;
+        cmdBuffer.commands[visibleValue].instanceCount = 1;
+        cmdBuffer.commands[visibleValue].firstVertex = 0;
+        cmdBuffer.commands[visibleValue].firstInstance = 0;
+    }
 }

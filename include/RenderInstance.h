@@ -319,7 +319,7 @@ struct RenderInstance
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
-	ShaderGraphsHolder<6, 10> vulkanShaderGraphs{};
+	ShaderGraphsHolder<15, 20> vulkanShaderGraphs{};
 	
 	ShaderResourceManager<50> descriptorManager{};
 

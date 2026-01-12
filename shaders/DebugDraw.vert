@@ -122,7 +122,7 @@ void main()
 
         mat4 billboardMat = CreateBillboardMatrix(gs.world[3].xyz, pos);
 
-        gl_Position = VP * billboardMat * pos;
+        gl_Position = VP  * pos;
 
     }
 }

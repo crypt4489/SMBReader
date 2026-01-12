@@ -121,22 +121,24 @@ void VKIndirectPipelineObject::Draw(
 	}
 
 	uint32_t perFrameOffset = 0;
+
+	if (indirectFrames > 0)
+	{
+		perFrameOffset = indirectFrames * frame;
+	}
 	
 
 	if (indexBufferHandle != ~0ui64)
 	{
 		rbo->BindIndexBuffer(indexBufferHandle, indexBufferOffset, indexType);
 
-		if (indirectFrames > 0)
-		{
-			perFrameOffset = indirectFrames * frame;
-		}
+		
 
 		rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset+perFrameOffset);
 	}
 	else 
 	{
-		rbo->BindingIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset);
+		rbo->BindingIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset + perFrameOffset);
 	}
 
 
