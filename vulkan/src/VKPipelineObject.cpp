@@ -259,6 +259,8 @@ void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t fram
 	rbo->DispatchCommand(x, y, z);
 
 	CreatePipelineBarriers(rbo, AFTER, frame);
+
+	
 }
 
 

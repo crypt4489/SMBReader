@@ -236,23 +236,15 @@ bool CheckAllPlanesAgainstSphere(uint index)
     
 }
 
-shared uint visibleIndex;
-shared uint inVisibleIndex;
+
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
-	uint index = gl_GlobalInvocationID.x;
+	uint index = (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
-    if (index == 0)
-    {
-        visibleIndex = 0;
-        inVisibleIndex = 0;
-    }
-
-    memoryBarrierShared();
-    barrier();
+   
 
     if (index >= gs.indirectDrawCount)  {
         return;
@@ -262,20 +254,19 @@ void main()
 
     if (!visible)
     {
-        uint invisibleValue = atomicAdd(inVisibleIndex, 1u);
-        cmdBuffer.commands[gs.indirectDrawCount-1-invisibleValue].instanceCount = 0;
+     
+        cmdBuffer.commands[index].instanceCount = 0;
         return;
     }
-    
-    uint visibleValue = atomicAdd(visibleIndex, 1u);
-
-    imageStore(globalMeshIndices, int(visibleValue), uvec4(index, 0, 0, 0));
    
-    cmdBuffer.commands[visibleValue].instanceCount = 1;
-    cmdBuffer.commands[visibleValue].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[visibleValue].indexCount = perModelBuffer.objects[index].indexCount;
-    cmdBuffer.commands[visibleValue].firstInstance = 0;
-    cmdBuffer.commands[visibleValue].vertexOffset = 0;
+
+    imageStore(globalMeshIndices, int(index), uvec4(index, 0, 0, 0));
+   
+    cmdBuffer.commands[index].instanceCount = 1;
+    cmdBuffer.commands[index].firstIndex = perModelBuffer.objects[index].firstIndex;
+    cmdBuffer.commands[index].indexCount = perModelBuffer.objects[index].indexCount;
+    cmdBuffer.commands[index].firstInstance = 0;
+    cmdBuffer.commands[index].vertexOffset = 0;
     
 
 }

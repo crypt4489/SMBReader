@@ -56,7 +56,7 @@ struct DebugDrawStruct
 };
 
 static int debugAllocBuffer = 0;
-static int debugAllocBufferSize = 2 * KB;
+static int debugAllocBufferSize = 10 * KB;
 static int debugIndirectCommandBuffer = 0;
 static int debugIndirectCommandCount = 0;
 static int debugIndirectCommandPipeline = 0;
@@ -141,6 +141,69 @@ static ArrayAllocator<Mesh, MAX_MESHES> meshInstanceData{};
 static ArrayAllocator<Geometry, MAX_GEOMETRY> geometryInstanceData{};
 
 static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
+
+struct UniformGrid
+{
+	Vector4f max;
+	Vector4f min;
+	int numberOfDivision;
+};
+
+
+UniformGrid mainGrid = {
+	.max = Vector4f(100.0f, 50.0f, -100.0f, 0.0),
+	.min = Vector4f(-100.0f, -50.0f, 100.0f, 0.0),
+	.numberOfDivision = 5
+};
+
+static void CreateUniformGrid()
+{
+	int tag = 1;
+	DebugDrawStruct drawStruct;
+	
+
+	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
+	drawStruct.color = Vector4f(1.0, 0.0, 0.0, 0.0);
+
+	float div = (float)(mainGrid.numberOfDivision);
+
+	int count = 5;
+
+	Vector4f extent = (mainGrid.max - mainGrid.min) / div;
+
+	float xMove = extent.x;
+	float yMove = extent.y;
+	float zMove = extent.z;
+
+	Vector4f min = mainGrid.max - (extent * 0.5);
+
+	Vector4f half = extent;
+
+
+	drawStruct.halfExtents = half;
+
+	for (int i = 0; i < count; i++)
+	{
+		for (int j = 0; j < count; j++)
+		{
+			for (int g = 0; g < count; g++)
+			{
+				drawStruct.center = Vector4f(min.x - (i * xMove), min.y - (j * yMove), min.z - (g * zMove), 1.0f);
+
+
+				VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t) * debugIndirectCommandCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+				VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectCommandCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+				debugIndirectCommandCount++;
+			}
+		}
+	}
+	
+	
+	
+
+}
 
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
 {
@@ -291,7 +354,7 @@ void ApplicationLoop::Execute()
 
 		LoadObject(args.inputFile.string());
 
-
+		CreateUniformGrid();
 
 		int i = 0, j = 1;
 
@@ -732,6 +795,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	}
 
+
 	int tag = 2;
 
 	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
@@ -939,6 +1003,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	EntryHandle bufferView = VKRenderer::gRenderInstance->CreateBufferView(globalMeshIDs, VK_FORMAT_R32_UINT);
 
+	int deviceMeshIndirectCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
+
+
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
@@ -1008,17 +1075,17 @@ void ApplicationLoop::InitializeRuntime()
 
 
 
-	debugIndirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * 64, alignof(VkDrawIndirectCommand), PERFRAME);
+	debugIndirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * 128, alignof(VkDrawIndirectCommand), PERFRAME);
 
 
 	
-
+	int deviceDebugCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
 
 	
 	
-	globalDebugMeshIDs = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
+	globalDebugMeshIDs = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), PERFRAME);
 
-	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
+	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), PERFRAME);
 
 	
 
@@ -1090,12 +1157,11 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = debugIndirectCommandBuffer,
-		.indirectDrawCount = 64
+		.indirectDrawCount = 128
 	};
 
 
-	 debugIndirectCommandPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create23, false);;
-	//static int globalDebugPipeline = 0;
+	 debugIndirectCommandPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create23, false);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

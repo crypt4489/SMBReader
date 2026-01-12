@@ -257,32 +257,19 @@ bool CheckDebugDrawAgainstFrustrum(uint debugType, uint index)
 
 
 
-shared uint visibleIndex;
-shared uint inVisibleIndex;
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
 
+	uint index = (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
-
-	uint index = gl_GlobalInvocationID.x;
-
-    if (index == 0)
+    if (index >= gs.indirectDrawCount)
     {
-        visibleIndex = 0;
-        inVisibleIndex = 0;
-    }
-
-    memoryBarrierShared();
-    barrier();
-
-    if (index >= gs.indirectDrawCount)  {
         return;
     }
 
-   
 
     uint debugType = uint(texelFetch(globalDebugTypes, int(index)).r);
 
@@ -290,29 +277,28 @@ void main()
 
     if (!visible)
     {
-        uint invisibleValue = atomicAdd(inVisibleIndex, 1u);
-        cmdBuffer.commands[gs.indirectDrawCount-1-invisibleValue].instanceCount = 0;
-        return;
-    }
-     
-    uint visibleValue = atomicAdd(visibleIndex, 1u);
 
-    imageStore(globalDebugIndices, int(visibleValue), uvec4(index, 0, 0, 0));
+        cmdBuffer.commands[index].instanceCount = 0;
+        return;
+    } 
+
+    imageStore(globalDebugIndices, int(index), uvec4(index, 0, 0, 0));
 
     if (debugType == 1)
     {
-        cmdBuffer.commands[visibleValue].vertexCount = 24;
-        cmdBuffer.commands[visibleValue].instanceCount = 1;
-        cmdBuffer.commands[visibleValue].firstVertex = 0;
-        cmdBuffer.commands[visibleValue].firstInstance = 0;
+        cmdBuffer.commands[index].vertexCount = 24;
+        cmdBuffer.commands[index].instanceCount = 1;
+        cmdBuffer.commands[index].firstVertex = 0;
+        cmdBuffer.commands[index].firstInstance = 0;
+
     }
     else if (debugType == 2)
     {
         vec4 temp = ddsbuffer.objects[index].halfExtents;
         uint numSlices = floatBitsToUint(temp.y);
-        cmdBuffer.commands[visibleValue].vertexCount = 2*numSlices;
-        cmdBuffer.commands[visibleValue].instanceCount = 1;
-        cmdBuffer.commands[visibleValue].firstVertex = 0;
-        cmdBuffer.commands[visibleValue].firstInstance = 0;
+        cmdBuffer.commands[index].vertexCount = 2*numSlices;
+        cmdBuffer.commands[index].instanceCount = 1;
+        cmdBuffer.commands[index].firstVertex = 0;
+        cmdBuffer.commands[index].firstInstance = 0;
     }
 }
