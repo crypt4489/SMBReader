@@ -47,6 +47,16 @@ static int globalVertexBufferSize = 1024 * KB;
 
 static int globalCullPipeline = 0;
 
+static int globalOffsetPipeline = 0;
+static int offsetSubDivide = 4080;
+static int offsetSubDivideSums = 2;
+static int globalOffsets = 0;
+static int globalSums = 0;
+static int globalSumsAfter = 0;
+static int globalSumsPipeline = 0;
+
+std::array<int, 4080> tempArr;
+
 struct DebugDrawStruct
 {
 	Vector4f center; // fourth component is radius for sphere type
@@ -387,7 +397,7 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		int updatedCommand = 3, updatedDebugCommand = 3;
+		int updatedCommand = 0, updatedDebugCommand = 0;
 
 		int commandCountPrev = indirectCommandCount;
 
@@ -408,6 +418,10 @@ void ApplicationLoop::Execute()
 			
 
 			bool cameraMove = MoveCamera(FPS);;
+
+			VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalOffsetPipeline, 0);
+
+			VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalSumsPipeline, 0);
 
 			if (cameraMove || commandCountPrev != indirectCommandCount || updatedCommand > 0)
 			{
@@ -447,6 +461,18 @@ void ApplicationLoop::Execute()
 			}
 			
 			VKRenderer::gRenderInstance->EndFrame();
+
+			VKRenderer::gRenderInstance->WaitOnRender();
+
+			int ugh[2];
+
+			VKRenderer::gRenderInstance->ReadData(globalOffsets, tempArr.data(), sizeof(tempArr), index * 8192);
+
+			VKRenderer::gRenderInstance->ReadData(globalSumsAfter, ugh, sizeof(ugh), 0);
+
+		
+
+			//tempArr[tempArr.size()-1] = ugh[]
 
 			ProcessCommands();
 
@@ -1162,6 +1188,80 @@ void ApplicationLoop::InitializeRuntime()
 
 
 	 debugIndirectCommandPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create23, false);
+
+
+
+
+
+
+
+	 int offsetsDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	 globalOffsets = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivide, alignof(uint32_t), PERFRAME);
+
+	 int globalCounts = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivide, alignof(uint32_t), PERFRAME);
+
+	 
+	 globalSums = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivideSums, alignof(uint32_t), PERFRAME);
+
+	 globalSumsAfter = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivideSums, alignof(uint32_t), PERFRAME);
+	
+
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalCounts, 0, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalOffsets, 1, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalSums, 2, 0);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(offsetsDescriptor, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(offsetsDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+
+	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(offsetsDescriptor, &offsetSubDivide, 0);
+
+	 ShaderComputeLayout* layout44 = VKRenderer::gRenderInstance->GetComputeLayout(7);
+
+	 std::array computeDescriptorsOffset = { offsetsDescriptor };
+
+	 ComputeIntermediaryPipelineInfo create445 = {
+			 .x = (uint32_t)offsetSubDivideSums,
+			 .y = 1,
+			 .z = 1,
+			 .pipelinename = 7,
+			 .descCount = 1,
+			 .descriptorsetid = computeDescriptorsOffset.data()
+	 };
+
+	 globalOffsetPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create445);
+
+
+	 int sumsDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSums, 0, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSumsAfter, 1, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSums, 2, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(sumsDescriptor, &offsetSubDivideSums, 0);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(sumsDescriptor, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(sumsDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	
+	 std::array computeDescriptorssum = { sumsDescriptor };
+
+	 ComputeIntermediaryPipelineInfo create446 = {
+			 .x = (uint32_t)1,
+			 .y = 1,
+			 .z = 1,
+			 .pipelinename = 7,
+			 .descCount = 1,
+			 .descriptorsetid = computeDescriptorssum.data()
+	 };
+
+	 globalSumsPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create446);
+
+	 for (int i = 0; i < tempArr.size(); i++)
+	 {
+		 tempArr[i] = 1;
+	 }
+
+	 VKRenderer::gRenderInstance->UpdateAllocation(tempArr.data(), globalCounts, sizeof(tempArr), 0, 0, 3);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

@@ -289,6 +289,8 @@ struct RenderInstance
 
 	void AddPipelineToMainQueue(int psoIndex, int computeorgraphics);
 
+	void ReadData(int handle, void* dest, int size, int offset);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -324,8 +326,8 @@ struct RenderInstance
 	ShaderResourceManager<50> descriptorManager{};
 
 	std::array<std::vector<EntryHandle>, 10> pipelinesIdentifier{};
-	std::array<EntryHandle, 10> vulkanDescriptorLayouts{};
-	std::array<ShaderDetails*, 10> shaderDetails{};
+	std::array<EntryHandle, 15> vulkanDescriptorLayouts{};
+	std::array<ShaderDetails*, 15> shaderDetails{};
 	char* shaderDetailsData;
 	std::atomic<int> shaderDetailAlloc = 0;
 

@@ -213,7 +213,7 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 			{
 				i++;
 				j = 0;
-				info = info->next;
+				info = (info->next ? info->next : info->child);
 				next = info;
 			}
 		}

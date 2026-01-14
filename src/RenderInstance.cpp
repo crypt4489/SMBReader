@@ -564,21 +564,22 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 7> layouts = {
+	std::array<std::string, 10> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
 		"PolynomialLayout.xml",
 		"IndirectCull.xml",
 		"DebugDraw.xml",
-		"IndirectDebug.xml"
+		"IndirectDebug.xml",
+		"PrefixSum.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 7; i++)
+	for (int i = 0; i < 8; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -659,6 +660,12 @@ void RenderInstance::CreatePipelines()
 	computePipeline3->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[6].push_back(CreateVulkanComputePipelineTemplate(computePipeline3, vulkanShaderGraphs.shaderGraphPtrs[6]));
+
+	auto computePipeline4 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline4->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[7].push_back(CreateVulkanComputePipelineTemplate(computePipeline4, vulkanShaderGraphs.shaderGraphPtrs[7]));
 
 
 	std::vector<EntryHandle> l(maxMSAALevels);
@@ -2050,9 +2057,9 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
-	graph->DrawScene(&rcb, currentFrame);
+	//graph->DrawScene(&rcb, currentFrame);
 
-	queue->DrawScene(&rcb, currentFrame);
+	//queue->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 
@@ -2150,6 +2157,23 @@ void RenderInstance::AddPipelineToMainQueue(int psoIndex, int computeorgraphics)
 		queue->AddObject(ret);
 	}
 
+
+}
+
+void RenderInstance::ReadData(int handle, void* dest, int size, int offset)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	
+	size_t intOffset = allocations[handle].offset;
+	
+
+	EntryHandle index = allocations[handle].memIndex;
+
+	if (index == globalIndex)
+		dev->ReadHostBuffer(dest, index, size, intOffset+offset);
+	//else if (index == globalDeviceBufIndex)
+		//dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, stride);
 
 }
 

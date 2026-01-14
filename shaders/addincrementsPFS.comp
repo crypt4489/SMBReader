@@ -1,0 +1,41 @@
+#version 450
+
+layout(push_constant) uniform GlobalContext {
+    uint count;
+} gs;
+
+
+layout(set = 0, binding = 0) buffer Offsets {
+	uint offsetAtN[];
+} offsets;
+
+layout(set = 0, binding = 1) readonly buffer Sums {
+	uint sumsAtN[];
+} sums;
+
+
+const int BlockSize = 1024;
+
+layout (local_size_x = BlockSize, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint globalIndex = (gl_WorkGroupID.x * BlockSize) + gl_LocalInvocationID.x;
+
+	uint n = gs.count;
+
+
+	if (2*globalIndex >= n)
+	{
+		return;
+	}
+	
+	offsets.offsetAtN[(2*globalIndex)] = offsets.offsetAtN[(2*globalIndex)] + sums.sumsAtN[gl_WorkGroupID.x];
+
+	if ((2*globalIndex)+1 < n) {
+		offsets.offsetAtN[(2*globalIndex)+1] = offsets.offsetAtN[(2*globalIndex)+1] + sums.sumsAtN[gl_WorkGroupID.x];
+	} 
+
+
+	return;
+}

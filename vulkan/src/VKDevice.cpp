@@ -3003,6 +3003,26 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 	vkUnmapMemory(device, deviceMem->memory);
 }
 
+
+void VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* deviceMem = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	void* datalocal;
+	vkMapMemory(device, deviceMem->memory, offset, size, 0, &datalocal);
+	
+
+	std::memcpy(dest, datalocal, size);
+	
+	
+	vkUnmapMemory(device, deviceMem->memory);
+}
+
 void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
 	//std::shared_lock lock(deviceLock);
