@@ -101,9 +101,9 @@ void VKComputeOneTimeQueue::DispatchWork(RecordingBufferObject* rbo, uint32_t fr
 
 		}
 
-		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
+		for (uint32_t ii = 0; ii < objHeader->pushConstantCount; ii++)
 		{
-			PushConstantArguments* args = &objHeader->pushArgs[i];
+			PushConstantArguments* args = &objHeader->pushArgs[ii];
 			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
 		}
 

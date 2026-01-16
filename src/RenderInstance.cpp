@@ -564,7 +564,7 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 10> layouts = {
+	std::array<std::string, 11> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
@@ -572,14 +572,17 @@ void RenderInstance::CreatePipelines()
 		"IndirectCull.xml",
 		"DebugDraw.xml",
 		"IndirectDebug.xml",
-		"PrefixSum.xml"
+		"PrefixSum.xml",
+		"PrefixSumAdd.xml",
+		"WorldObjectDivison.xml",
+		"MeshWorldAssignments.xml"
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 8; i++)
+	for (int i = 0; i < 11; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -666,6 +669,25 @@ void RenderInstance::CreatePipelines()
 	computePipeline4->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[7].push_back(CreateVulkanComputePipelineTemplate(computePipeline4, vulkanShaderGraphs.shaderGraphPtrs[7]));
+
+
+	auto computePipeline5 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline5->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[8].push_back(CreateVulkanComputePipelineTemplate(computePipeline5, vulkanShaderGraphs.shaderGraphPtrs[8]));
+
+	auto computePipeline6 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline6->AddPushConstantRange(0, 16+16+16, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[9].push_back(CreateVulkanComputePipelineTemplate(computePipeline6, vulkanShaderGraphs.shaderGraphPtrs[9]));
+
+	auto computePipeline7 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline7->AddPushConstantRange(0, 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[10].push_back(CreateVulkanComputePipelineTemplate(computePipeline7, vulkanShaderGraphs.shaderGraphPtrs[10]));
 
 
 	std::vector<EntryHandle> l(maxMSAALevels);
@@ -2057,9 +2079,9 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
-	//graph->DrawScene(&rcb, currentFrame);
+	graph->DrawScene(&rcb, currentFrame);
 
-	//queue->DrawScene(&rcb, currentFrame);
+	queue->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 

@@ -48,9 +48,9 @@ struct IndirectDrawData
 	EntryHandle indirectGlobalIDsView;
 };
 
-struct TempPrefixSum
+struct WorldSpaceGPUPartition
 {
-	int totalElementsCount;
+	int totalElementsCount; //total subdivisions
 	int totalSumsNeeded;
 	int deviceOffsetsAlloc;
 	int deviceSumsAlloc;
@@ -59,14 +59,24 @@ struct TempPrefixSum
 	int prefixSumPipeline;
 	int sumAfterDescriptors;
 	int sumAfterPipeline;
-};
+	int sumAppliedToBinDescriptors;
+	int sumAppliedToBinPipeline;
+	
+	int preWorldSpaceDivisionDescriptor; //for getting all the counts
+	int preWorldSpaceDivisionPipeline;
+
+	int postWorldSpaceDivisionDescriptor; //for assigning all the slots
+	int postWorldSpaceDivisionPipeline;
+	int worldSpaceDivisionAlloc; //where all the assignments go 
+	EntryHandle worldSpaceDivisonView;
+}; 
 
 
 static IndirectDrawData mainIndirectDrawData;
 
 static IndirectDrawData debugIndirectDrawData;
 
-static TempPrefixSum worldSpaceAssignment;
+static WorldSpaceGPUPartition worldSpaceAssignment;
 
 
 static int globalIndexBuffer = 0;
@@ -75,7 +85,7 @@ static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 1024 * KB;
 
 
-std::array<int, 4080> tempArr;
+std::array<int, 125> tempArr;
 
 struct DebugDrawStruct
 {
@@ -165,16 +175,18 @@ static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
 struct UniformGrid
 {
+	int numberOfDivision;
 	Vector4f max;
 	Vector4f min;
-	int numberOfDivision;
+	
 };
 
 
 UniformGrid mainGrid = {
+	.numberOfDivision = 5,
 	.max = Vector4f(100.0f, 50.0f, -100.0f, 0.0),
 	.min = Vector4f(-100.0f, -50.0f, 100.0f, 0.0),
-	.numberOfDivision = 5
+	
 };
 
 static void CreateUniformGrid()
@@ -198,7 +210,7 @@ static void CreateUniformGrid()
 
 	Vector4f min = mainGrid.max - (extent * 0.5);
 
-	Vector4f half = extent;
+	Vector4f half = extent/2.0;
 
 
 	drawStruct.halfExtents = half;
@@ -425,9 +437,19 @@ void ApplicationLoop::Execute()
 
 			bool cameraMove = MoveCamera(FPS);;
 
+			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
+
 			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
 
+
+			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
+
 			//VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.sumAfterPipeline, 0);
+
+			
+			//VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.sumAppliedToBinPipeline, 0);
+
+			
 
 			if (cameraMove || commandCountPrev != mainIndirectDrawData.commandBufferCount || updatedCommand > 0)
 			{
@@ -468,14 +490,9 @@ void ApplicationLoop::Execute()
 			
 			VKRenderer::gRenderInstance->EndFrame();
 
-			VKRenderer::gRenderInstance->WaitOnRender();
+		    VKRenderer::gRenderInstance->WaitOnRender();
 
-			int temp[2];
-
-			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.deviceOffsetsAlloc, tempArr.data(), sizeof(tempArr), 0);
-
-			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.deviceSumsAlloc, temp, sizeof(temp), 0);
-
+			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.worldSpaceDivisionAlloc, tempArr.data(), sizeof(tempArr), 0);
 
 			ProcessCommands();
 
@@ -1191,7 +1208,7 @@ void ApplicationLoop::InitializeRuntime()
 
 
 
-	worldSpaceAssignment.totalElementsCount = 4080;
+	worldSpaceAssignment.totalElementsCount = 125;
 	worldSpaceAssignment.totalSumsNeeded = (int)ceil(worldSpaceAssignment.totalElementsCount / 2048.0f);
 
 
@@ -1254,13 +1271,88 @@ void ApplicationLoop::InitializeRuntime()
 	 };
 
 	 worldSpaceAssignment.sumAfterPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&prefixSumComputePipeline);
-	 
-	 for (int i = 0; i < tempArr.size(); i++)
-	 {
-		 tempArr[i] = 1;
-	 }
+	
 
-	 VKRenderer::gRenderInstance->UpdateAllocation(tempArr.data(), worldSpaceAssignment.deviceCountsAlloc, sizeof(tempArr), 0, 0, 3);
+
+	 worldSpaceAssignment.sumAppliedToBinDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(8, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+
+
+
+	 std::array incrementSumsDescriptor = { worldSpaceAssignment.sumAppliedToBinDescriptors, };
+
+	 ComputeIntermediaryPipelineInfo incrementSumsComputePipeline = {
+			 .x = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / 2048.0f),
+			 .y = 1,
+			 .z = 1,
+			 .pipelinename = 8,
+			 .descCount = 1,
+			 .descriptorsetid = incrementSumsDescriptor.data()
+	 };
+
+	 worldSpaceAssignment.sumAppliedToBinPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
+
+
+	 int worldSpaceDivisionAlloc; //where all the assignments go 
+	 int preWorldSpaceDivisionDescriptor; //for getting all the counts
+	 int preWorldSpaceDivisionPipeline;
+
+
+	worldSpaceAssignment.worldSpaceDivisionAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), PERFRAME);
+
+	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(9, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+
+	std::array preWorldDivDescriptor = { worldSpaceAssignment.preWorldSpaceDivisionDescriptor, };
+
+	ComputeIntermediaryPipelineInfo preWorldDivComputePipeline = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 9,
+			.descCount = 1,
+			.descriptorsetid = preWorldDivDescriptor.data()
+	};
+
+	worldSpaceAssignment.preWorldSpaceDivisionPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&preWorldDivComputePipeline);
+
+
+	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(10, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
+
+	worldSpaceAssignment.worldSpaceDivisonView = VKRenderer::gRenderInstance->CreateBufferView(worldSpaceAssignment.worldSpaceDivisionAlloc, VK_FORMAT_R32_UINT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, worldSpaceAssignment.worldSpaceDivisonView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	//VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, 2, 0);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+
+	std::array postWorldDivDescriptor = { worldSpaceAssignment.postWorldSpaceDivisionDescriptor, };
+
+	ComputeIntermediaryPipelineInfo postWorldDivComputePipeline = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 10,
+			.descCount = 1,
+			.descriptorsetid = postWorldDivDescriptor.data()
+	};
+
+	worldSpaceAssignment.postWorldSpaceDivisionPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

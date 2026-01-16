@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="compute">
+		organize.comp
+		<ComputeLayout x="1" y="1" z="1">
+		</ComputeLayout>
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="c">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+
+</ShaderGraph>

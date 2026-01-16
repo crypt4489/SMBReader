@@ -1,5 +1,97 @@
 #version 450
+struct UniformGrid
+{
+	uint numberOfDivisions;
+};
+
+
+layout(push_constant) uniform GlobalContext {
+    UniformGrid grid;
+} gs;
+
+layout(set = 0, binding = 0) buffer Counts {
+	uint countsAtN[];
+} counts;
+
+struct AABB
+{
+    vec4 min;
+    vec4 max;
+};
+
+struct PerModel
+{
+    uint vertexComponents;
+    uint numHandles;
+    uint vertexStride;
+    uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+    uint vertexByteOffset;
+    uint textureHandles[9];
+    mat4 m;
+    AABB minMaxBox;
+    vec4 sphere;
+};
+
+
+layout(set = 0, binding = 1) readonly buffer PMBuffer {
+    PerModel objects[];
+} perModelBuffer;
+
+
+
+vec4 maxx = vec4(100.0f, 50.0f, -100.0f, 0.0);
+vec4 minn = vec4(-100.0f, -50.0f, 100.0f, 0.0);
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
 void main()
 {
+
+	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    AABB objBox = perModelBuffer.objects[lIndex].minMaxBox;
+    mat4 objWorld = perModelBuffer.objects[lIndex].m;
+
+    vec4 transformMin = objWorld * objBox.min;
+    vec4 transformMax = objWorld * objBox.max;
+
+    vec4 AABBMin = min(transformMin, transformMax);
+    vec4 AABBMax = max(transformMin, transformMax);
+    
+    vec4 range = maxx - minn;
+    vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
+
+    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-minn.xyz)/cellDiv ));
+    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-minn.xyz)/cellDiv ));
+ 
+ /*
+    counts.countsAtN[0] = cellsMin.x;
+    counts.countsAtN[1] = cellsMin.y;
+    counts.countsAtN[2] = cellsMin.z;
+    counts.countsAtN[3] = cellsMax.x;
+    counts.countsAtN[4] = cellsMax.y;
+    counts.countsAtN[5] = cellsMax.z;
+
+    */
+
+    
+
+    for (uint x = cellsMin.x; x<=cellsMax.x; x++)
+    {
+        for (uint y = cellsMin.y; y<=cellsMax.y; y++)
+        {
+            for (uint z = cellsMin.z; z<=cellsMax.z; z++)
+            {
+                uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
+                atomicAdd(counts.countsAtN[insertIndex], 1u);
+            }
+        }
+    }
+    
+
 	return;
 }

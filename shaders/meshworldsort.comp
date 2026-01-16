@@ -1,5 +1,90 @@
 #version 450
+struct UniformGrid
+{
+	uint numberOfDivisions;
+};
+
+
+layout(push_constant) uniform GlobalContext {
+    UniformGrid grid;
+} gs;
+
+layout(set = 0, binding = 0) buffer Offset {
+	uint offsetAtN[];
+} offsets;
+
+struct AABB
+{
+    vec4 min;
+    vec4 max;
+};
+
+struct PerModel
+{
+    uint vertexComponents;
+    uint numHandles;
+    uint vertexStride;
+    uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+    uint vertexByteOffset;
+    uint textureHandles[9];
+    mat4 m;
+    AABB minMaxBox;
+    vec4 sphere;
+};
+
+
+layout(set = 0, binding = 1) readonly buffer PMBuffer {
+    PerModel objects[];
+} perModelBuffer;
+
+layout(set = 0, binding = 2, r32ui) uniform uimageBuffer WorldAssignments;
+
+
+vec4 maxx = vec4(100.0f, 50.0f, -100.0f, 0.0);
+vec4 minn = vec4(-100.0f, -50.0f, 100.0f, 0.0);
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
 void main()
 {
+
+	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    AABB objBox = perModelBuffer.objects[lIndex].minMaxBox;
+    mat4 objWorld = perModelBuffer.objects[lIndex].m;
+
+    vec4 transformMin = objWorld * objBox.min;
+    vec4 transformMax = objWorld * objBox.max;
+
+    vec4 AABBMin = min(transformMin, transformMax);
+    vec4 AABBMax = max(transformMin, transformMax);
+    
+    vec4 range = maxx - minn;
+    vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
+
+    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-minn.xyz)/cellDiv ));
+    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-minn.xyz)/cellDiv ));
+ 
+
+    
+
+    for (uint x = cellsMin.x; x<=cellsMax.x; x++)
+    {
+        for (uint y = cellsMin.y; y<=cellsMax.y; y++)
+        {
+            for (uint z = cellsMin.z; z<=cellsMax.z; z++)
+            {
+                uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
+                uint index = atomicAdd(offsets.offsetAtN[insertIndex], 1u);
+                imageStore(WorldAssignments, int(index), uvec4(lIndex, 0, 0, 0));
+            }
+        }
+    }
+    
+
 	return;
 }

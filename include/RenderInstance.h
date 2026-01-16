@@ -325,7 +325,7 @@ struct RenderInstance
 	
 	ShaderResourceManager<50> descriptorManager{};
 
-	std::array<std::vector<EntryHandle>, 10> pipelinesIdentifier{};
+	std::array<std::vector<EntryHandle>, 25> pipelinesIdentifier{};
 	std::array<EntryHandle, 15> vulkanDescriptorLayouts{};
 	std::array<ShaderDetails*, 15> shaderDetails{};
 	char* shaderDetailsData;
