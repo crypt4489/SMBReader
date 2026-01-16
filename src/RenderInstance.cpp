@@ -679,13 +679,13 @@ void RenderInstance::CreatePipelines()
 
 	auto computePipeline6 = dev->CreateComputePipelineBuilder(1, 1);
 
-	computePipeline6->AddPushConstantRange(0, 16+16+16, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	computePipeline6->AddPushConstantRange(0, 16+16+4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[9].push_back(CreateVulkanComputePipelineTemplate(computePipeline6, vulkanShaderGraphs.shaderGraphPtrs[9]));
 
 	auto computePipeline7 = dev->CreateComputePipelineBuilder(1, 1);
 
-	computePipeline7->AddPushConstantRange(0, 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	computePipeline7->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[10].push_back(CreateVulkanComputePipelineTemplate(computePipeline7, vulkanShaderGraphs.shaderGraphPtrs[10]));
 
@@ -1129,8 +1129,8 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 		case CONSTANT_BUFFER:
 		{
 			ShaderResourceConstantBuffer* constants = (ShaderResourceConstantBuffer*)ptr;
-			constants->size = 4;
-			constants->offset = 0;
+			constants->size = resource->size;
+			constants->offset = resource->offset;
 			constants->stage = resource->stages;
 			ptr += sizeof(ShaderResourceConstantBuffer);
 			break;

@@ -349,6 +349,8 @@ struct ShaderGraphReader
 		ShaderResourceType resourceType;
 		ShaderResourceAction resourceAction;
 		int arrayCount;
+		int size;
+		int offset;
 	};
 
 	struct ShaderResourceSetXMLTag : ShaderXMLTag

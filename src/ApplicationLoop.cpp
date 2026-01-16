@@ -175,18 +175,18 @@ static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
 struct UniformGrid
 {
-	int numberOfDivision;
+	
 	Vector4f max;
 	Vector4f min;
-	
+	int numberOfDivision;
 };
 
 
 UniformGrid mainGrid = {
-	.numberOfDivision = 5,
+	
 	.max = Vector4f(100.0f, 50.0f, -100.0f, 0.0),
 	.min = Vector4f(-100.0f, -50.0f, 100.0f, 0.0),
-	
+	.numberOfDivision = 5,
 };
 
 static void CreateUniformGrid()
@@ -492,7 +492,7 @@ void ApplicationLoop::Execute()
 
 		    VKRenderer::gRenderInstance->WaitOnRender();
 
-			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.worldSpaceDivisionAlloc, tempArr.data(), sizeof(tempArr), 0);
+			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.deviceOffsetsAlloc, tempArr.data(), sizeof(tempArr), 0);
 
 			ProcessCommands();
 

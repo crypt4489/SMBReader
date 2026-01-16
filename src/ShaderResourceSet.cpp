@@ -217,6 +217,8 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 			resource->type = tag->resourceType;
 			resource->arrayCount = tag->arrayCount;
 			resource->set = i;
+			resource->size = tag->size;
+			resource->offset = tag->offset;
 			setLay->bindingCount++;
 
 
@@ -474,6 +476,8 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 			ret += ReadAttributeValueHash(fileData, currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
+		case hash("offset"):
+		case hash("size"):
 		case hash("count"):
 		case hash("x"):
 		case hash("y"):
@@ -667,6 +671,16 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 		case hash("count"):
 		{
 			tag->arrayCount = codeV;
+			break;
+		}
+		case hash("size"):
+		{
+			tag->size = codeV;
+			break;
+		}
+		case hash("offset"):
+		{
+			tag->offset = codeV;
 			break;
 		}
 		}

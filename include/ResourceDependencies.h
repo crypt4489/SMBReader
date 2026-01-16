@@ -121,6 +121,8 @@ struct ShaderResource
 	int set;
 	int binding;
 	int arrayCount;
+	int size;
+	int offset;
 };
 
 struct ShaderMap

@@ -1,6 +1,8 @@
 #version 450
 struct UniformGrid
 {
+    vec4 min;
+    vec4 max;
 	uint numberOfDivisions;
 };
 
@@ -40,17 +42,12 @@ layout(set = 0, binding = 1) readonly buffer PMBuffer {
 } perModelBuffer;
 
 
-
-vec4 maxx = vec4(100.0f, 50.0f, -100.0f, 0.0);
-vec4 minn = vec4(-100.0f, -50.0f, 100.0f, 0.0);
-
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
 
 	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
-
 	uint lIndex =  gl_LocalInvocationID.x;
 
     AABB objBox = perModelBuffer.objects[lIndex].minMaxBox;
@@ -62,11 +59,11 @@ void main()
     vec4 AABBMin = min(transformMin, transformMax);
     vec4 AABBMax = max(transformMin, transformMax);
     
-    vec4 range = maxx - minn;
+    vec4 range = gs.grid.max - gs.grid.min;
     vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
 
-    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-minn.xyz)/cellDiv ));
-    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-minn.xyz)/cellDiv ));
+    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-gs.grid.min.xyz)/cellDiv ));
+    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-gs.grid.min.xyz)/cellDiv ));
  
  /*
     counts.countsAtN[0] = cellsMin.x;
