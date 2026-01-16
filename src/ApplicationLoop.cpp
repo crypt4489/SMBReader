@@ -35,25 +35,45 @@ struct Handles
 	Sphere sphere;
 };
 
+struct IndirectDrawData
+{
+	int commandBufferAlloc;
+	int commandBufferCount;
+	int commandBufferSize;
+	int indirectDrawDescriptor;
+	int indirectDrawPipeline;
+	int indirectCullDescriptor;
+	int indirectCullPipeline;
+	int indirectGlobalIDsAlloc;
+	EntryHandle indirectGlobalIDsView;
+};
 
-static int indirectCommandBuffer = 0;
-static int indirectCommandCount = 0;
-static int indirectCommandDescriptor = 0;
-static int indirectCommandPipeline = 0;
+struct TempPrefixSum
+{
+	int totalElementsCount;
+	int totalSumsNeeded;
+	int deviceOffsetsAlloc;
+	int deviceSumsAlloc;
+	int deviceCountsAlloc;
+	int prefixSumDescriptors;
+	int prefixSumPipeline;
+	int sumAfterDescriptors;
+	int sumAfterPipeline;
+};
+
+
+static IndirectDrawData mainIndirectDrawData;
+
+static IndirectDrawData debugIndirectDrawData;
+
+static TempPrefixSum worldSpaceAssignment;
+
+
 static int globalIndexBuffer = 0;
 static int globalIndexBufferSize = 1024 * KB;
 static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 1024 * KB;
 
-static int globalCullPipeline = 0;
-
-static int globalOffsetPipeline = 0;
-static int offsetSubDivide = 4080;
-static int offsetSubDivideSums = 2;
-static int globalOffsets = 0;
-static int globalSums = 0;
-static int globalSumsAfter = 0;
-static int globalSumsPipeline = 0;
 
 std::array<int, 4080> tempArr;
 
@@ -67,18 +87,11 @@ struct DebugDrawStruct
 
 static int debugAllocBuffer = 0;
 static int debugAllocBufferSize = 10 * KB;
-static int debugIndirectCommandBuffer = 0;
-static int debugIndirectCommandCount = 0;
-static int debugIndirectCommandPipeline = 0;
-static int globalDebugPipeline = 0;
 
 static int globalDebugMeshIDs = 0;
 static int globalDebugTypes = 0;
 
 
-
-static int computeMemory;
-static int computeObjIndex;
 
 static int globalBufferLocation;
 static int globalBufferDescriptor;
@@ -86,8 +99,6 @@ static int globalTexturesDescriptor;
 
 static int globalMeshLocation;
 static int globalMeshSize = 24 * KB;
-
-static bool imageVisible = true;
 
 static char vertexAndIndicesMemory[16 * MB];
 static char meshObjectSpecificMemory[2 * MB];
@@ -200,12 +211,11 @@ static void CreateUniformGrid()
 			{
 				drawStruct.center = Vector4f(min.x - (i * xMove), min.y - (j * yMove), min.z - (g * zMove), 1.0f);
 
+				VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-				VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t) * debugIndirectCommandCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+				VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-				VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectCommandCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-				debugIndirectCommandCount++;
+				debugIndirectDrawData.commandBufferCount++;
 			}
 		}
 	}
@@ -269,10 +279,6 @@ ApplicationLoop::~ApplicationLoop() {
 	delete mainWindow;
 }
 
-void ApplicationLoop::UpdateThisThing()
-{
-	VKRenderer::gRenderInstance->AddPipelineToMainQueue(indirectCommandPipeline, 1);
-}
 
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 {
@@ -399,9 +405,9 @@ void ApplicationLoop::Execute()
 
 		int updatedCommand = 0, updatedDebugCommand = 0;
 
-		int commandCountPrev = indirectCommandCount;
+		int commandCountPrev = mainIndirectDrawData.commandBufferCount;
 
-		int debugCommandCountPrev = debugIndirectCommandCount;
+		int debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
 
 		VKRenderer::gRenderInstance->EndFrame();
 
@@ -419,23 +425,23 @@ void ApplicationLoop::Execute()
 
 			bool cameraMove = MoveCamera(FPS);;
 
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalOffsetPipeline, 0);
+			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
 
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalSumsPipeline, 0);
+			//VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.sumAfterPipeline, 0);
 
-			if (cameraMove || commandCountPrev != indirectCommandCount || updatedCommand > 0)
+			if (cameraMove || commandCountPrev != mainIndirectDrawData.commandBufferCount || updatedCommand > 0)
 			{
 				if (!updatedCommand || cameraMove) updatedCommand = 3;
-				commandCountPrev = indirectCommandCount;
-				VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalCullPipeline, 0);
+				commandCountPrev = mainIndirectDrawData.commandBufferCount;
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(mainIndirectDrawData.indirectCullPipeline, 0);
 				updatedCommand--;
 			}
 
-			if (cameraMove || debugIndirectCommandCount != debugCommandCountPrev || updatedDebugCommand > 0)
+			if (cameraMove || debugIndirectDrawData.commandBufferCount != debugCommandCountPrev || updatedDebugCommand > 0)
 			{
 				if (!updatedDebugCommand || cameraMove) updatedDebugCommand = 3;
-				debugCommandCountPrev = debugIndirectCommandCount;
-				VKRenderer::gRenderInstance->AddPipelineToMainQueue(globalDebugPipeline, 0);
+				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectCullPipeline, 0);
 				updatedDebugCommand--;
 			}
 			
@@ -453,7 +459,7 @@ void ApplicationLoop::Execute()
 
 			if (index != ~0ui32) {
 
-				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectCommandPipeline, 1);
+				//VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
 
 				VKRenderer::gRenderInstance->DrawScene(index);
 
@@ -464,15 +470,12 @@ void ApplicationLoop::Execute()
 
 			VKRenderer::gRenderInstance->WaitOnRender();
 
-			int ugh[2];
+			int temp[2];
 
-			VKRenderer::gRenderInstance->ReadData(globalOffsets, tempArr.data(), sizeof(tempArr), index * 8192);
+			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.deviceOffsetsAlloc, tempArr.data(), sizeof(tempArr), 0);
 
-			VKRenderer::gRenderInstance->ReadData(globalSumsAfter, ugh, sizeof(ugh), 0);
+			VKRenderer::gRenderInstance->ReadData(worldSpaceAssignment.deviceSumsAlloc, temp, sizeof(temp), 0);
 
-		
-
-			//tempArr[tempArr.size()-1] = ugh[]
 
 			ProcessCommands();
 
@@ -827,7 +830,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
 
 
-	debugIndirectCommandCount++;
+	debugIndirectDrawData.commandBufferCount++;
 
 	DebugDrawStruct drawStruct;
 	drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
@@ -845,7 +848,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
 
-	indirectCommandCount += count;
+	mainIndirectDrawData.commandBufferCount += count;
 }
 
 
@@ -1014,39 +1017,36 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
 
-	indirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), PERFRAME);
+	mainIndirectDrawData.commandBufferSize = 64;
+	mainIndirectDrawData.commandBufferCount = 0;
+
+	mainIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), PERFRAME);
 	
 
-	
+	mainIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	
+	mainIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * mainIndirectDrawData.commandBufferSize, alignof(uint32_t), PERFRAME);
 
+	mainIndirectDrawData.indirectGlobalIDsView = VKRenderer::gRenderInstance->CreateBufferView(mainIndirectDrawData.indirectGlobalIDsAlloc, VK_FORMAT_R32_UINT);
 
-
-	indirectCommandDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	int globalMeshIDs = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 64, alignof(uint32_t), PERFRAME);
-
-	EntryHandle bufferView = VKRenderer::gRenderInstance->CreateBufferView(globalMeshIDs, VK_FORMAT_R32_UINT);
-
-	int deviceMeshIndirectCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
+	//int deviceMeshIndirectCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
 
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, indirectCommandBuffer, 0, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalMeshLocation, 1, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(indirectCommandDescriptor, globalBufferLocation, 2, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(indirectCommandDescriptor, globalMeshIDs, bufferView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(indirectCommandDescriptor, &indirectCommandCount, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferAlloc, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalMeshLocation, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(indirectCommandDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 	
 	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
 
-	std::array computeDescriptors = { indirectCommandDescriptor };
+	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor };
 
-	ComputeIntermediaryPipelineInfo create2 = {
+	ComputeIntermediaryPipelineInfo mainCullComputeSetup = {
 			.x = 4096 / layout->x,
 			.y = 1,
 			.z = 1,
@@ -1055,40 +1055,38 @@ void ApplicationLoop::InitializeRuntime()
 			.descriptorsetid = computeDescriptors.data()
 	};
 
-	globalCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create2);
+	mainIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
 
-	int graphicDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	mainIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalMeshLocation, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(graphicDesc, globalVertexBuffer, 1, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(graphicDesc, globalMeshIDs, bufferView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	std::array<int, 3> descs = {
-		//globalBufferDescriptor,
-		//globalTexturesDescriptor,
-		graphicDesc,
+	std::array<int, 1> indirectDrawDescriptors = {
+		mainIndirectDrawData.indirectDrawDescriptor,
 
 	};
 
 
-	IndirectIntermediaryPipelineInfo create = {
+	IndirectIntermediaryPipelineInfo indirectDrawCreate = {
 		.drawType = 0,
 		.vertexBufferIndex = ~0,
 		.vertexCount = 0,
 		.pipelinename = GENERIC,
 		.descCount = 1,
-		.descriptorsetid = descs.data(),
+		.descriptorsetid = indirectDrawDescriptors.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.indexSize = 2,
 		.indexOffset = 0,
 		.vertexOffset = 0,
-		.indirectAllocation = indirectCommandBuffer,
-		.indirectDrawCount = 64
+		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
+		.indirectDrawCount = mainIndirectDrawData.commandBufferSize
 	};
 
-	indirectCommandPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create, true);
+	mainIndirectDrawData.indirectDrawPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDrawCreate, true);
 
 
 	
@@ -1097,171 +1095,172 @@ void ApplicationLoop::InitializeRuntime()
 
 	
 	
+	debugIndirectDrawData.commandBufferCount = 0;
+	debugIndirectDrawData.commandBufferSize = 128;
+
+
+
+	debugIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), PERFRAME);
+
+
+	
+//	int deviceDebugCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
+
+	
+	
+	debugIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), PERFRAME);
+
+	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), PERFRAME);
+
+	
+
+	debugIndirectDrawData.indirectGlobalIDsView = VKRenderer::gRenderInstance->CreateBufferView(debugIndirectDrawData.indirectGlobalIDsAlloc, VK_FORMAT_R32_UINT);
+
+	EntryHandle indirectDebugTypesView = VKRenderer::gRenderInstance->CreateBufferView(globalDebugTypes, VK_FORMAT_R32_UINT);
+	
 	
 
 
+	debugIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	debugIndirectCommandBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * 128, alignof(VkDrawIndirectCommand), PERFRAME);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferAlloc, 0, 0);
 
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, debugIndirectDrawData.indirectGlobalIDsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	
-	int deviceDebugCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), PERFRAME);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, globalDebugTypes, indirectDebugTypesView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	
-	
-	globalDebugMeshIDs = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), PERFRAME);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 3, 0);
 
-	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), PERFRAME);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugAllocBuffer, 4, 0);
 
-	
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCount, 0);
 
-	EntryHandle bufferView2 = VKRenderer::gRenderInstance->CreateBufferView(globalDebugMeshIDs, VK_FORMAT_R32_UINT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	EntryHandle bufferView3 = VKRenderer::gRenderInstance->CreateBufferView(globalDebugTypes, VK_FORMAT_R32_UINT);
-	
-	
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
 
-	int computeDebugDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	std::array debugCullDescriptors = { debugIndirectDrawData.indirectCullDescriptor };
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, debugIndirectCommandBuffer, 0, 0);
+	ShaderComputeLayout* debugCullDescriptorLayout = VKRenderer::gRenderInstance->GetComputeLayout(6);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(computeDebugDesc, globalDebugMeshIDs, bufferView2, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(computeDebugDesc, globalDebugTypes, bufferView3, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, globalBufferLocation, 3, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(computeDebugDesc, debugAllocBuffer, 4, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(computeDebugDesc, &debugIndirectCommandCount, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(computeDebugDesc, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(computeDebugDesc, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-
-	std::array computeDescriptors2 = { computeDebugDesc };
-
-	ShaderComputeLayout* layout2 = VKRenderer::gRenderInstance->GetComputeLayout(6);
-
-	ComputeIntermediaryPipelineInfo create4 = {
-			.x = 4096 / layout2->x,
+	ComputeIntermediaryPipelineInfo debugCullPipelineCreate = {
+			.x = 4096 / debugCullDescriptorLayout->x,
 			.y = 1,
 			.z = 1,
 			.pipelinename = 6,
 			.descCount = 1,
-			.descriptorsetid = computeDescriptors2.data()
+			.descriptorsetid = debugCullDescriptors.data()
 	};
 
 
-	globalDebugPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create4);
+	debugIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&debugCullPipelineCreate);
 
-	int debugDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(5, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	debugIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(5, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugDesc, debugAllocBuffer, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectDrawDescriptor, debugAllocBuffer, 0, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugDesc, globalDebugMeshIDs, bufferView2, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, debugIndirectDrawData.indirectGlobalIDsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugDesc, globalDebugTypes, bufferView3, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, globalDebugTypes, indirectDebugTypesView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	std::array<int, 2> descs2 = {
+	std::array<int, 2> indirectDebugDrawDescriptors = {
 		globalBufferDescriptor,
-		debugDesc,
+		debugIndirectDrawData.indirectDrawDescriptor,
 
 	};
 
-	IndirectIntermediaryPipelineInfo create23 = {
+	IndirectIntermediaryPipelineInfo indirectDebugDrawPipelineCreate = {
 		.drawType = 0,
 		.vertexBufferIndex = ~0,
 		.vertexCount = 0,
 		.pipelinename = 5,
 		.descCount = 2,
-		.descriptorsetid = descs2.data(),
+		.descriptorsetid = indirectDebugDrawDescriptors.data(),
 		.indexBufferHandle = ~0,
 		.indexSize = 0,
 		.indexOffset = 0,
 		.vertexOffset = 0,
-		.indirectAllocation = debugIndirectCommandBuffer,
-		.indirectDrawCount = 128
+		.indirectAllocation = debugIndirectDrawData.commandBufferAlloc,
+		.indirectDrawCount = debugIndirectDrawData.commandBufferSize
 	};
 
 
-	 debugIndirectCommandPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&create23, false);
+	debugIndirectDrawData.indirectDrawPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDebugDrawPipelineCreate, false);
 
 
 
 
+	worldSpaceAssignment.totalElementsCount = 4080;
+	worldSpaceAssignment.totalSumsNeeded = (int)ceil(worldSpaceAssignment.totalElementsCount / 2048.0f);
+
+
+	 worldSpaceAssignment.prefixSumDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	 worldSpaceAssignment.deviceOffsetsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), PERFRAME);
+
+	 worldSpaceAssignment.deviceCountsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), PERFRAME);
+	 
+	 worldSpaceAssignment.deviceSumsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), PERFRAME);
+	
+
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceOffsetsAlloc, 1, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceSumsAlloc, 2, 0);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+
+	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
 
 
 
-	 int offsetsDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	 std::array prefixSumDescriptor = { worldSpaceAssignment.prefixSumDescriptors };
 
-	 globalOffsets = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivide, alignof(uint32_t), PERFRAME);
-
-	 int globalCounts = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivide, alignof(uint32_t), PERFRAME);
+	 ComputeIntermediaryPipelineInfo worldAssignmentPrefix = {
+			 .x = (uint32_t)worldSpaceAssignment.totalSumsNeeded,
+			 .y = 1,
+			 .z = 1,
+			 .pipelinename = 7,
+			 .descCount = 1,
+			 .descriptorsetid = prefixSumDescriptor.data()
+	 };
 
 	 
-	 globalSums = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivideSums, alignof(uint32_t), PERFRAME);
 
-	 globalSumsAfter = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * offsetSubDivideSums, alignof(uint32_t), PERFRAME);
+	 worldSpaceAssignment.prefixSumPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&worldAssignmentPrefix);
+	 
+
+	 worldSpaceAssignment.sumAfterDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 0, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 2, 0);
+	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.totalSumsNeeded, 0);
+
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.sumAfterDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	
+	 std::array prefixSumOverflowDescriptor = { worldSpaceAssignment.sumAfterDescriptors, };
 
-
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalCounts, 0, 0);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalOffsets, 1, 0);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(offsetsDescriptor, globalSums, 2, 0);
-
-	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(offsetsDescriptor, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(offsetsDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-
-	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(offsetsDescriptor, &offsetSubDivide, 0);
-
-	 ShaderComputeLayout* layout44 = VKRenderer::gRenderInstance->GetComputeLayout(7);
-
-	 std::array computeDescriptorsOffset = { offsetsDescriptor };
-
-	 ComputeIntermediaryPipelineInfo create445 = {
-			 .x = (uint32_t)offsetSubDivideSums,
+	 ComputeIntermediaryPipelineInfo prefixSumComputePipeline = {
+			 .x = (uint32_t)ceil(worldSpaceAssignment.totalSumsNeeded/2048.0f),
 			 .y = 1,
 			 .z = 1,
 			 .pipelinename = 7,
 			 .descCount = 1,
-			 .descriptorsetid = computeDescriptorsOffset.data()
+			 .descriptorsetid = prefixSumOverflowDescriptor.data()
 	 };
 
-	 globalOffsetPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create445);
-
-
-	 int sumsDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSums, 0, 0);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSumsAfter, 1, 0);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(sumsDescriptor, globalSums, 2, 0);
-	 VKRenderer::gRenderInstance->descriptorManager.UploadConstant(sumsDescriptor, &offsetSubDivideSums, 0);
-
-	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(sumsDescriptor, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	 VKRenderer::gRenderInstance->descriptorManager.BindBarrier(sumsDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	
-	 std::array computeDescriptorssum = { sumsDescriptor };
-
-	 ComputeIntermediaryPipelineInfo create446 = {
-			 .x = (uint32_t)1,
-			 .y = 1,
-			 .z = 1,
-			 .pipelinename = 7,
-			 .descCount = 1,
-			 .descriptorsetid = computeDescriptorssum.data()
-	 };
-
-	 globalSumsPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&create446);
-
+	 worldSpaceAssignment.sumAfterPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&prefixSumComputePipeline);
+	 
 	 for (int i = 0; i < tempArr.size(); i++)
 	 {
 		 tempArr[i] = 1;
 	 }
 
-	 VKRenderer::gRenderInstance->UpdateAllocation(tempArr.data(), globalCounts, sizeof(tempArr), 0, 0, 3);
+	 VKRenderer::gRenderInstance->UpdateAllocation(tempArr.data(), worldSpaceAssignment.deviceCountsAlloc, sizeof(tempArr), 0, 0, 3);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
