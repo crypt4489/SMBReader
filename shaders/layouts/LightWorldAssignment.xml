@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="compute">
+		lightworldsort.comp
+		<ComputeLayout x="1" y="1" z="1">
+		</ComputeLayout>
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="c" size="36" offset="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="write">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+
+</ShaderGraph>

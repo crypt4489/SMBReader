@@ -1,8 +1,8 @@
 #version 450
 struct UniformGrid
 {
-    vec4 min;
     vec4 max;
+    vec4 min;
 	uint numberOfDivisions;
 };
 
@@ -58,24 +58,22 @@ void main()
 
     vec4 AABBMin = min(transformMin, transformMax);
     vec4 AABBMax = max(transformMin, transformMax);
+
+
+    vec3 clampedMin = max(AABBMin.xyz, gs.grid.min.xyz);
+    vec3 clampedMax = min(AABBMax.xyz, gs.grid.max.xyz);
+
+    if (any(lessThan(clampedMax, clampedMin)))
+        return;
     
     vec4 range = gs.grid.max - gs.grid.min;
     vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
 
-    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-gs.grid.min.xyz)/cellDiv ));
-    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-gs.grid.min.xyz)/cellDiv ));
- 
- /*
-    counts.countsAtN[0] = cellsMin.x;
-    counts.countsAtN[1] = cellsMin.y;
-    counts.countsAtN[2] = cellsMin.z;
-    counts.countsAtN[3] = cellsMax.x;
-    counts.countsAtN[4] = cellsMax.y;
-    counts.countsAtN[5] = cellsMax.z;
+    ivec3 cellsMin = ivec3(floor((clampedMin-gs.grid.min.xyz)/cellDiv ));
+    ivec3 cellsMax = ivec3(floor((clampedMax-gs.grid.min.xyz)/cellDiv ));  
 
-    */
-
-    
+    cellsMin = clamp(cellsMin, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    cellsMax = clamp(cellsMax, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
 
     for (uint x = cellsMin.x; x<=cellsMax.x; x++)
     {

@@ -1,8 +1,8 @@
 #version 450
 struct UniformGrid
 {
-    vec4 min;
     vec4 max;
+    vec4 min;
 	uint numberOfDivisions;
 };
 
@@ -50,7 +50,7 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
 
-	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+    //uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
 
 	uint lIndex =  gl_LocalInvocationID.x;
 
@@ -62,15 +62,22 @@ void main()
 
     vec4 AABBMin = min(transformMin, transformMax);
     vec4 AABBMax = max(transformMin, transformMax);
+
+
+    vec3 clampedMin = max(AABBMin.xyz, gs.grid.min.xyz);
+    vec3 clampedMax = min(AABBMax.xyz, gs.grid.max.xyz);
+
+    if (any(lessThan(clampedMax, clampedMin)))
+        return;
     
     vec4 range = gs.grid.max - gs.grid.min;
     vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
 
-    uvec3 cellsMin = uvec3(floor((AABBMin.xyz-gs.grid.min.xyz)/cellDiv ));
-    uvec3 cellsMax = uvec3(floor((AABBMax.xyz-gs.grid.min.xyz)/cellDiv ));
- 
+    ivec3 cellsMin = ivec3(floor((clampedMin-gs.grid.min.xyz)/cellDiv ));
+    ivec3 cellsMax = ivec3(floor((clampedMax-gs.grid.min.xyz)/cellDiv ));  
 
-    
+    cellsMin = clamp(cellsMin, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    cellsMax = clamp(cellsMax, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
 
     for (uint x = cellsMin.x; x<=cellsMax.x; x++)
     {
@@ -80,7 +87,7 @@ void main()
             {
                 uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
                 uint index = atomicAdd(offsets.offsetAtN[insertIndex], 1u);
-                imageStore(WorldAssignments, int(index), uvec4(insertIndex, 0, 0, 0));
+                imageStore(WorldAssignments, int(index), uvec4(lIndex, 0, 0, 0));
             }
         }
     }

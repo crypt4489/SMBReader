@@ -159,9 +159,9 @@ RenderInstance::RenderInstance()
 	descriptorManager{}
 {
 	vkInstance = new VKInstance();
-	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(2 * KB);
-	descriptorManager.hostResourceHeap = (uintptr_t)malloc(2 * KB);
-	shaderDetailsData = (char*)malloc(2 * KB);
+	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(5 * KB);
+	descriptorManager.hostResourceHeap = (uintptr_t)malloc(5 * KB);
+	shaderDetailsData = (char*)malloc(5 * KB);
 
 	if (!vulkanShaderGraphs.shaderGraphs || !descriptorManager.hostResourceHeap || !shaderDetailsData)
 	{
@@ -564,7 +564,7 @@ void RenderInstance::CreatePipelines()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	std::array<std::string, 11> layouts = {
+	std::array<std::string, 20> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
@@ -575,14 +575,17 @@ void RenderInstance::CreatePipelines()
 		"PrefixSum.xml",
 		"PrefixSumAdd.xml",
 		"WorldObjectDivison.xml",
-		"MeshWorldAssignments.xml"
+		"MeshWorldAssignments.xml",
+		"LightObjectDivision.xml",
+		"LightWorldAssignment.xml",
+		
 	};
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 11; i++)
+	for (int i = 0; i < 13; i++)
 	{
 
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
@@ -688,6 +691,19 @@ void RenderInstance::CreatePipelines()
 	computePipeline7->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[10].push_back(CreateVulkanComputePipelineTemplate(computePipeline7, vulkanShaderGraphs.shaderGraphPtrs[10]));
+
+
+	auto computePipeline8 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline8->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[11].push_back(CreateVulkanComputePipelineTemplate(computePipeline8, vulkanShaderGraphs.shaderGraphPtrs[11]));
+
+	auto computePipeline9 = dev->CreateComputePipelineBuilder(1, 1);
+
+	computePipeline9->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+
+	pipelinesIdentifier[12].push_back(CreateVulkanComputePipelineTemplate(computePipeline9, vulkanShaderGraphs.shaderGraphPtrs[12]));
 
 
 	std::vector<EntryHandle> l(maxMSAALevels);

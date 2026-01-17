@@ -1,0 +1,94 @@
+#version 450
+struct UniformGrid
+{
+    vec4 max;
+    vec4 min;
+	uint numberOfDivisions;
+};
+
+
+layout(push_constant) uniform GlobalContext {
+    UniformGrid grid;
+} gs;
+
+layout(set = 0, binding = 0) buffer Counts {
+	int countsAtN[];
+} counts;
+
+struct LightSource
+{
+	vec4 color; //w is theta
+	vec4 pos; //w is radius for point right
+};
+
+
+layout(set = 0, binding = 1) readonly buffer GLBuffer {
+    LightSource objects[];
+} lightBuffer;
+
+
+bool SphereIntersectsAABB(vec3 center, float r, vec3 minn, vec3 maxx)
+{
+    vec3 minnBound = minn - min(minn, center);
+    vec3 maxxBound = max(maxx, center)-maxx;
+
+    float d = dot(minnBound, minnBound) + dot(maxxBound, maxxBound);
+
+    return d <= r * r;
+}
+
+
+layout (local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+
+	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    vec4 posLoad = lightBuffer.objects[lIndex].pos;
+    vec3 posReal = posLoad.xyz;
+    float r = posLoad.w;
+
+
+
+    vec3 AABBMin = clamp(posReal - vec3(r), gs.grid.min.xyz, gs.grid.max.xyz);
+    vec3 AABBMax = clamp(posReal + vec3(r), gs.grid.min.xyz, gs.grid.max.xyz);
+
+
+    if (any(lessThan(AABBMax, AABBMin)))
+        return;
+
+    
+    vec4 range = gs.grid.max - gs.grid.min;
+    vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
+
+    ivec3 cellsMin = ivec3(floor((AABBMin - gs.grid.min.xyz) / cellDiv));
+    ivec3 cellsMax = ivec3(floor((AABBMax - gs.grid.min.xyz) / cellDiv));
+
+    cellsMin = clamp(cellsMin, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    cellsMax = clamp(cellsMax, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    
+    for (uint x = cellsMin.x; x<=cellsMax.x; x++)
+    {
+        for (uint y = cellsMin.y; y<=cellsMax.y; y++)
+        {
+            for (uint z = cellsMin.z; z<=cellsMax.z; z++)
+            {
+
+                vec3 gridMinPoints = (vec3(x, y, z) * cellDiv) + gs.grid.min.xyz;
+                vec3 gridMaxPoints = gridMinPoints + cellDiv;
+                
+                if (SphereIntersectsAABB(posReal, r, gridMinPoints, gridMaxPoints)) {
+                    uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
+                    atomicAdd(counts.countsAtN[insertIndex], 1);
+                } 
+                
+                
+            }
+        }
+    }
+   
+  
+	return;
+}

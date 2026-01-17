@@ -321,13 +321,13 @@ struct RenderInstance
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
-	ShaderGraphsHolder<15, 20> vulkanShaderGraphs{};
+	ShaderGraphsHolder<50, 60> vulkanShaderGraphs{};
 	
 	ShaderResourceManager<50> descriptorManager{};
 
 	std::array<std::vector<EntryHandle>, 25> pipelinesIdentifier{};
-	std::array<EntryHandle, 15> vulkanDescriptorLayouts{};
-	std::array<ShaderDetails*, 15> shaderDetails{};
+	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
+	std::array<ShaderDetails*, 70> shaderDetails{};
 	char* shaderDetailsData;
 	std::atomic<int> shaderDetailAlloc = 0;
 
