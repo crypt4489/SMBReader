@@ -21,8 +21,10 @@ struct PerModel
     uint indexCount;
 	uint instanceCount;
 	uint firstIndex;
-    uint firstVertex;
-    uint textureHandles[9];
+    uint vertexByteOffset;
+    uint lightCount;
+    uint textureHandles[4];
+    uint lightIndex[4];
     mat4 m;
     AABB minMaxBox;
     vec4 sphere;

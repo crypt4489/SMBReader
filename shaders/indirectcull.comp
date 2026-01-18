@@ -88,8 +88,16 @@ bool CheckAABB(vec4 AABBMin, vec4 AABBMax, vec4 planeEquation)
     return true;
 }
 
+struct UniformGrid
+{
+    vec4 max;
+    vec4 min;
+	uint numberOfDivisions;
+};
+
 
 layout(push_constant) uniform GlobalContext {
+    UniformGrid grid;
     uint indirectDrawCount;
 } gs;
 
@@ -106,14 +114,16 @@ struct PerModel
 	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint textureHandles[9];
+    uint lightCount;
+    uint textureHandles[4];
+    uint lightIndex[4];
     mat4 m;
     AABB minMaxBox;
     vec4 sphere;
 };
 
 
-layout(set = 0, binding = 1) readonly buffer PMBuffer {
+layout(set = 0, binding = 1) buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
 
@@ -308,6 +318,52 @@ void main()
     cmdBuffer.commands[index].indexCount = perModelBuffer.objects[index].indexCount;
     cmdBuffer.commands[index].firstInstance = 0;
     cmdBuffer.commands[index].vertexOffset = 0;
-    
 
+
+    vec4 sphere = perModelBuffer.objects[index].sphere;
+    float r = sphere.w;
+
+    mat4 worldM = perModelBuffer.objects[index].m;
+
+    vec3 sphereWPos = vec3(worldM * vec4(sphere.xyz, 1.0f));
+
+    vec4 range = gs.grid.max - gs.grid.min;
+    vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
+
+    vec3 posRelativeToGrid = sphereWPos-gs.grid.min.xyz;
+
+    ivec3 cells = ivec3(floor(posRelativeToGrid / cellDiv));
+
+    uint worldIndex = (cells.x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (cells.y * gs.grid.numberOfDivisions) + cells.z;
+    
+    uint lightOffsets =  texelFetch(globalLightOffsets, int(worldIndex)).r;
+    uint lightCounts =  texelFetch(globalLightCounts, int(worldIndex)).r;
+
+    uint lightMeshCount = 0;
+
+    for (uint i = 0; i<lightCounts&&lightMeshCount<4; i++)
+    {
+        uint lightIndex = texelFetch(globalLightAllocations, int(lightOffsets+i)).r;
+
+        vec4 posLoad = lightBuffer.objects[lightIndex].pos;
+
+        float lR = posLoad.w;
+        vec3 posTest = posLoad.xyz;
+
+        posTest = sphereWPos - posTest;
+
+        float totalRadius = lR + r;
+
+        float d = dot(posTest, posTest);
+
+        if (d <= totalRadius * totalRadius)
+        {
+            perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+            lightMeshCount++;
+
+        }
+
+    }
+
+    perModelBuffer.objects[index].lightCount = lightMeshCount;
 }
