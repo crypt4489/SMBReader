@@ -35,6 +35,12 @@ struct Frustrum
     float pad;
 };
 
+struct LightSource
+{
+	vec4 color; //w is theta
+	vec4 pos; //w is radius for point light
+};
+
 Plane ComputePlane(vec3 normal, vec4 pip)
 {
     float d = -dot(pip.xyz, normal);
@@ -121,14 +127,50 @@ layout(set = 0, binding = 2) uniform CameraData {
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
 
+layout(set = 1, binding = 0) uniform usamplerBuffer globalLightOffsets;
+layout(set = 1, binding = 1) uniform usamplerBuffer globalLightCounts;
+layout(set = 1, binding = 2) uniform usamplerBuffer globalLightAllocations;
+
+layout(set = 1, binding = 3) readonly buffer GLBuffer {
+    LightSource objects[];
+} lightBuffer;
+
+AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
+{
+    vec3 inMin = inputTransform.min.xyz;
+    vec3 inMax = inputTransform.max.xyz;
+
+    vec3 outMin = worldMatrix[3].xyz;
+    vec3 outMax = worldMatrix[3].xyz;
+
+    for (int i = 0; i<3; i++)
+    {
+        vec3 a = worldMatrix[i].xyz * inMin;
+        vec3 b = worldMatrix[i].xyz * inMax;
+
+        outMin += min(a, b);
+        outMax += max(a, b);
+    }
+
+    AABB outputAABB;
+
+    outputAABB.min = vec4(outMin, 1.0);
+    outputAABB.max = vec4(outMax, 1.0);
+
+    return outputAABB;
+}
+
 bool CheckAllPlanesAgainstAABB(uint index)
 {
-     mat4 modelM = perModelBuffer.objects[index].m;
-    vec4 minBox = perModelBuffer.objects[index].minMaxBox.min;
-    vec4 maxBox = perModelBuffer.objects[index].minMaxBox.max;
+    mat4 modelM = perModelBuffer.objects[index].m;
 
-    vec4 transAABBMin =  cData.view * modelM * minBox;
-    vec4 transAABBMax =  cData.view * modelM * maxBox;
+    AABB AABBTransform = perModelBuffer.objects[index].minMaxBox;
+
+
+    AABB outAABBTransform = TransformAABBArvo(modelM, AABBTransform);
+
+    vec4 transAABBMin =  cData.view * outAABBTransform.min;
+    vec4 transAABBMax =  cData.view * outAABBTransform.max;
 
     vec4 AABBMin = min(transAABBMin, transAABBMax);
     vec4 AABBMax = max(transAABBMin, transAABBMax);
@@ -254,7 +296,6 @@ void main()
 
     if (!visible)
     {
-     
         cmdBuffer.commands[index].instanceCount = 0;
         return;
     }

@@ -120,9 +120,9 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
     DebugDrawStruct mainStruct = ddsbuffer.objects[index];
 
-    vec4 minBox = (mainStruct.center + (vec4(-1.0, -1.0, -1.0, 0.0) * mainStruct.halfExtents) * mainStruct.scale);
+    vec4 minBox = ((mainStruct.center - mainStruct.halfExtents) * mainStruct.scale);
 
-    vec4 maxBox = (mainStruct.center + (vec4(1.0, 1.0, 1.0, 0.0) * mainStruct.halfExtents) * mainStruct.scale);
+    vec4 maxBox = ((mainStruct.center + mainStruct.halfExtents) * mainStruct.scale);
     
    
 

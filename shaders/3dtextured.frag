@@ -35,6 +35,16 @@ layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
 
+struct LightSource
+{
+	vec4 color; //w is theta
+	vec4 pos; //w is radius for point light
+};
+
+layout(set = 2, binding = 3) readonly buffer GLBuffer {
+    LightSource objects[];
+} lightBuffer;
+
 void main() {
 
     PerModel modelData = perModelBuffer.objects[modelIdx];
