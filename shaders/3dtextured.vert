@@ -61,9 +61,10 @@ struct Frustrum
 };
 
 
-
-layout(location = 0) out vec2 texCoords;
-layout(location = 1) flat out uint modelIndex;
+layout(location = 0) out vec3 position;
+layout(location = 1) out vec2 texCoords;
+layout(location = 2) out vec2 texCoords2;
+layout(location = 3) flat out uint modelIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -82,6 +83,8 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 } VertexData;
 
 layout(set = 2, binding = 2) uniform usamplerBuffer globalMeshIndices;
+
+
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -148,6 +151,7 @@ void main() {
 
     uint comp = modelData.vertexComponents;
     texCoords = vec2(0.0, 0.0);
+    texCoords2 = vec2(0.0, 0.0);
 
     uint stride = modelData.vertexStride;
 
@@ -170,6 +174,7 @@ void main() {
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
+            texCoords2 = converttexcoords16(offset);
             offset += 4;
         }
 
@@ -184,6 +189,7 @@ void main() {
             mat4 MVP = gs.proj * gs.view * modelData.m;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
             gl_Position = MVP * intPos;
+            position = intPos.xyz;
         }
 
     } 

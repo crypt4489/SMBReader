@@ -7,7 +7,7 @@
 		3dtextured.frag
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="uniform" used="v">
+		<ShaderResourceItem type="uniform" used="vf">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
@@ -15,11 +15,13 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="storage" used="vf">
+		<ShaderResourceItem type="storage" used="vf" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="v">
+		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="f" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

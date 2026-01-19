@@ -7,7 +7,7 @@
 		DebugDraw.frag
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="uniform" used="v">
+		<ShaderResourceItem type="uniform" used="vf">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>

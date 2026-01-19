@@ -1104,36 +1104,7 @@ void ApplicationLoop::InitializeRuntime()
 	
 	
 
-	mainIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	std::array<int, 1> indirectDrawDescriptors = {
-		mainIndirectDrawData.indirectDrawDescriptor,
-
-	};
-
-
-	IndirectIntermediaryPipelineInfo indirectDrawCreate = {
-		.drawType = 0,
-		.vertexBufferIndex = ~0,
-		.vertexCount = 0,
-		.pipelinename = GENERIC,
-		.descCount = 1,
-		.descriptorsetid = indirectDrawDescriptors.data(),
-		.indexBufferHandle = globalIndexBuffer,
-		.indexSize = 2,
-		.indexOffset = 0,
-		.vertexOffset = 0,
-		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
-		.indirectDrawCount = mainIndirectDrawData.commandBufferSize
-	};
-
-	mainIndirectDrawData.indirectDrawPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDrawCreate, true);
+	
 
 
 	
@@ -1557,9 +1528,43 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
 
+
+	mainIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
+
+	std::array<int, 1> indirectDrawDescriptors = {
+		mainIndirectDrawData.indirectDrawDescriptor,
+
+	};
+
+
+	IndirectIntermediaryPipelineInfo indirectDrawCreate = {
+		.drawType = 0,
+		.vertexBufferIndex = ~0,
+		.vertexCount = 0,
+		.pipelinename = GENERIC,
+		.descCount = 1,
+		.descriptorsetid = indirectDrawDescriptors.data(),
+		.indexBufferHandle = globalIndexBuffer,
+		.indexSize = 2,
+		.indexOffset = 0,
+		.vertexOffset = 0,
+		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
+		.indirectDrawCount = mainIndirectDrawData.commandBufferSize
+	};
+
+	mainIndirectDrawData.indirectDrawPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDrawCreate, true);
+
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(-6.0f, 0.0f, 0.0f, 9.0f) };
+	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(-6.0f, 5.0f, 5.0f, 15.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 

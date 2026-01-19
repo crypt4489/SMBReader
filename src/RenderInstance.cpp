@@ -644,66 +644,19 @@ void RenderInstance::CreatePipelines()
 		deats = deats->GetNext();
 	}
 
-	auto computePipeline = dev->CreateComputePipelineBuilder(1, 1);
+	std::array<int, 10> pipeIndices = { MESH_INTERPOLATE, POLY, 4, 6, 7, 8, 9, 10, 11, 12 };
 
-	computePipeline->AddPushConstantRange(0, sizeof(float), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	int computeIter = 0;
 
-	pipelinesIdentifier[MESH_INTERPOLATE].push_back(CreateVulkanComputePipelineTemplate(computePipeline, vulkanShaderGraphs.shaderGraphPtrs[2]));
-
-	auto polyPipeline = dev->CreateComputePipelineBuilder(1, 0);
-
-	pipelinesIdentifier[POLY].push_back(CreateVulkanComputePipelineTemplate(polyPipeline, vulkanShaderGraphs.shaderGraphPtrs[3]));
-
-
-	auto computePipeline2 = dev->CreateComputePipelineBuilder(2, 1);
-
-	computePipeline2->AddPushConstantRange(0, 40, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[4].push_back(CreateVulkanComputePipelineTemplate(computePipeline2, vulkanShaderGraphs.shaderGraphPtrs[4]));
-
-	auto computePipeline3 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline3->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[6].push_back(CreateVulkanComputePipelineTemplate(computePipeline3, vulkanShaderGraphs.shaderGraphPtrs[6]));
-
-	auto computePipeline4 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline4->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[7].push_back(CreateVulkanComputePipelineTemplate(computePipeline4, vulkanShaderGraphs.shaderGraphPtrs[7]));
-
-
-	auto computePipeline5 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline5->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[8].push_back(CreateVulkanComputePipelineTemplate(computePipeline5, vulkanShaderGraphs.shaderGraphPtrs[8]));
-
-	auto computePipeline6 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline6->AddPushConstantRange(0, 16+16+4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[9].push_back(CreateVulkanComputePipelineTemplate(computePipeline6, vulkanShaderGraphs.shaderGraphPtrs[9]));
-
-	auto computePipeline7 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline7->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[10].push_back(CreateVulkanComputePipelineTemplate(computePipeline7, vulkanShaderGraphs.shaderGraphPtrs[10]));
-
-
-	auto computePipeline8 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline8->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[11].push_back(CreateVulkanComputePipelineTemplate(computePipeline8, vulkanShaderGraphs.shaderGraphPtrs[11]));
-
-	auto computePipeline9 = dev->CreateComputePipelineBuilder(1, 1);
-
-	computePipeline9->AddPushConstantRange(0, 16 + 16 + 4, VK_SHADER_STAGE_COMPUTE_BIT, 0);
-
-	pipelinesIdentifier[12].push_back(CreateVulkanComputePipelineTemplate(computePipeline9, vulkanShaderGraphs.shaderGraphPtrs[12]));
+	for (int i = 0; i < 13; i++)
+	{
+		ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[i];
+		ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+		if (map->type == COMPUTESHADERSTAGE)
+		{
+			pipelinesIdentifier[pipeIndices[computeIter++]].push_back(CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[i]));
+		}
+	}
 
 
 	std::vector<EntryHandle> l(maxMSAALevels);
@@ -755,15 +708,43 @@ EntryHandle RenderInstance::CreateVulkanGraphicPipelineTemplate(VKGraphicsPipeli
 	return pipelineBuilder->CreateGraphicsPipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle.data(), graph->shaderMapCount);
 }
 
-EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(VKComputePipelineBuilder* pipelineBuilder, ShaderGraph* graph)
+EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* graph)
 {
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
 	std::vector<EntryHandle> layoutHandles(graph->resourceSetCount);
 	EntryHandle shaderHandle;
 
 	
 	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
 	shaderHandle = vulkanShaderGraphs.shaders[map->shaderReference];
-	
+
+
+	int j = graph->resourceCount;
+	int pushConstantSize = 0;
+	int g = 0;
+
+	while (g < j)
+	{
+		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
+		if (resource->type == CONSTANT_BUFFER)
+		{
+			pushConstantSize += resource->size;
+		}
+		else
+		{
+			break;
+		}
+		g++;
+	}
+
+	int pushRangeSize = (pushConstantSize ? 1 : 0);
+	int descriptorCount = graph->resourceSetCount;
+
+	VKComputePipelineBuilder* pipelineBuilder = dev->CreateComputePipelineBuilder(descriptorCount, pushRangeSize);
+
+	if (pushRangeSize)
+		pipelineBuilder->AddPushConstantRange(0, pushConstantSize, VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{

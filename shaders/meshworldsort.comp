@@ -56,8 +56,8 @@ AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
 
     for (int i = 0; i<3; i++)
     {
-        vec3 a = worldMatrix[i].xyz * inMin;
-        vec3 b = worldMatrix[i].xyz * inMax;
+        vec3 a = worldMatrix[i].xyz * inMin[i];
+        vec3 b = worldMatrix[i].xyz * inMax[i];
 
         outMin += min(a, b);
         outMax += max(a, b);

@@ -1,8 +1,11 @@
 #version 460
 #extension GL_ARB_shader_draw_parameters : require
 
-layout(location = 0) in vec2 texCoords;
-layout(location = 1) flat in uint modelIdx;
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texCoords;
+layout(location = 2) in vec2 texCoords2;
+
+layout(location = 3) flat in uint modelIdx;
 
 layout(location = 0) out vec4 outColor;
 
@@ -30,6 +33,31 @@ struct PerModel
     vec4 sphere;
 };
 
+struct Plane
+{
+	vec4 pointInPlane;
+	vec4 planeEquation;
+};
+
+struct Frustrum
+{
+	Plane nearplane;
+	Plane farplane;
+	Plane topplane;
+	Plane bottomplane;
+	Plane rightplane;
+	Plane leftplane;
+	float nearwidth;
+	float nearheight;
+	float farDistance;
+};
+
+layout(set = 0, binding = 0) uniform GlobalContext {
+    mat4 view;
+    mat4 proj;
+    Frustrum f;
+    mat4 world;
+} gs;
 
 layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
 
@@ -53,6 +81,31 @@ void main() {
 
     uint textureIndex = modelData.textureHandles[0];
 
-    outColor = texture(Textures[textureIndex], texCoords);
+    vec4 albedoColor = texture(Textures[textureIndex], texCoords);
+
+    if (modelData.numHandles > 1)
+    {
+        textureIndex = modelData.textureHandles[1];
+
+        vec3 normal = texture(Textures[textureIndex], texCoords2).xyz;
+
+        normal = normal * 2.0 - 1.0;
+        
+        normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
+
+        LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
+
+        vec3 lightDir = normalize(light.pos.xyz - position);
+
+        //vec3 viewDir = gs.world[2].xyz;
+
+        float diffuse = max(dot(normal, lightDir), 0.0);
+
+        float distance = length(light.pos.xyz - position);
+
+        albedoColor *= (vec4(229, 211, 191, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
+    }
+
+    outColor = albedoColor;
 
 }

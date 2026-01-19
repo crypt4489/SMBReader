@@ -200,7 +200,7 @@ struct RenderInstance
 
 	EntryHandle CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipeline, ShaderGraph* graph);
 
-	EntryHandle CreateVulkanComputePipelineTemplate(VKComputePipelineBuilder* pipeline, ShaderGraph* graph);
+	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
 	uint32_t BeginFrame();
 
