@@ -1272,7 +1272,7 @@ EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags 
 
 EntryHandle VKDevice::CreateGraphicsOneTimeQueue(uint32_t maxObjectCount)
 {
-	auto graph = reinterpret_cast<VKComputeOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKGraphicsOneTimeQueue)));
+	auto graph = reinterpret_cast<VKGraphicsOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKGraphicsOneTimeQueue)));
 
 	graph = std::construct_at(graph, &deviceDataAlloc, maxObjectCount, this);
 

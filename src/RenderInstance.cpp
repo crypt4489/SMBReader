@@ -655,9 +655,9 @@ void RenderInstance::CreatePipelines()
 	pipelinesIdentifier[POLY].push_back(CreateVulkanComputePipelineTemplate(polyPipeline, vulkanShaderGraphs.shaderGraphPtrs[3]));
 
 
-	auto computePipeline2 = dev->CreateComputePipelineBuilder(1, 1);
+	auto computePipeline2 = dev->CreateComputePipelineBuilder(2, 1);
 
-	computePipeline2->AddPushConstantRange(0, sizeof(uint32_t), VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	computePipeline2->AddPushConstantRange(0, 40, VK_SHADER_STAGE_COMPUTE_BIT, 0);
 
 	pipelinesIdentifier[4].push_back(CreateVulkanComputePipelineTemplate(computePipeline2, vulkanShaderGraphs.shaderGraphPtrs[4]));
 
@@ -1328,7 +1328,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	CreatePipelines();
 
-	computeGraphIndex = majorDevice->CreateComputeGraph(0, 5, 0);
+	computeGraphIndex = majorDevice->CreateComputeGraph(0, 50, 0);
 
 	graphicsOTQ = majorDevice->CreateGraphicsOneTimeQueue(50);
 

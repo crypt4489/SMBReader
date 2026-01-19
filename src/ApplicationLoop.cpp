@@ -29,7 +29,9 @@ struct Handles
 	int instanceCount;
 	int firstIndex;
 	int vertexByteOffset;
-	int handles[9];
+	int lightCount;
+	int handles[4];
+	int lightIndex[4];
 	Matrix4f m;
 	AxisBox minMaxBox;
 	Sphere sphere;
@@ -69,6 +71,8 @@ struct WorldSpaceGPUPartition
 	int postWorldSpaceDivisionPipeline;
 	int worldSpaceDivisionAlloc; //where all the assignments go 
 	EntryHandle worldSpaceDivisonView;
+	EntryHandle deviceOffsetsView;
+	EntryHandle deviceCountsView;
 }; 
 
 struct LightSource
@@ -434,11 +438,13 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		int updatedCommand = 0, updatedDebugCommand = 0;
+		int updatedCommand = 3, updatedDebugCommand = 3, updateLights = 3;
 
 		int commandCountPrev = mainIndirectDrawData.commandBufferCount;
 
 		int debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
+
+		int lightCountPrev = globalLightCount;
 
 		VKRenderer::gRenderInstance->EndFrame();
 
@@ -452,39 +458,48 @@ void ApplicationLoop::Execute()
 
 			ProcessKeys(mainWindow->windowData.info.actions);
 
-			
+			bool cameraMove = MoveCamera(FPS);
 
-			bool cameraMove = MoveCamera(FPS);;
+			if (lightCountPrev != globalLightCount || updateLights > 0)
+			{
+				if (!updateLights) updateLights = 3;
 
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.preWorldSpaceDivisionPipeline, 0);
 
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.prefixSumPipeline, 0);
 
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.postWorldSpaceDivisionPipeline, 0);
 
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
-
-
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.preWorldSpaceDivisionPipeline, 0);
-
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.prefixSumPipeline, 0);
-
-
-			VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.postWorldSpaceDivisionPipeline, 0);
-
-			//VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.sumAfterPipeline, 0);
-
-			
-			//VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.sumAppliedToBinPipeline, 0);
-
-			
+				updateLights--;
+			}
 
 			if (cameraMove || commandCountPrev != mainIndirectDrawData.commandBufferCount || updatedCommand > 0)
 			{
-				if (!updatedCommand || cameraMove) updatedCommand = 3;
-				commandCountPrev = mainIndirectDrawData.commandBufferCount;
-				VKRenderer::gRenderInstance->AddPipelineToMainQueue(mainIndirectDrawData.indirectCullPipeline, 0);
+				if (!updatedCommand || cameraMove) {
+					updatedCommand = 3;
+					
+				}
+
 				updatedCommand--;
+
+				if (commandCountPrev != mainIndirectDrawData.commandBufferCount && updatedCommand == 0)
+				{
+					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
+
+					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
+
+					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
+				}
+
+				
+
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(mainIndirectDrawData.indirectCullPipeline, 0);
+
+				
 			}
+
+
+		
 
 			if (cameraMove || debugIndirectDrawData.commandBufferCount != debugCommandCountPrev || updatedDebugCommand > 0)
 			{
@@ -508,18 +523,14 @@ void ApplicationLoop::Execute()
 
 			if (index != ~0ui32) {
 
-				//VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
 
 				VKRenderer::gRenderInstance->DrawScene(index);
 
 				VKRenderer::gRenderInstance->SubmitFrame(index);
 			}
 			
-			VKRenderer::gRenderInstance->EndFrame();
-
-		    VKRenderer::gRenderInstance->WaitOnRender();
-
-			VKRenderer::gRenderInstance->ReadData(lightAssignment.worldSpaceDivisionAlloc, tempArr.data(), sizeof(tempArr), 0);
+			VKRenderer::gRenderInstance->EndFrame();	
 
 			ProcessCommands();
 
@@ -1080,26 +1091,18 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalMeshLocation, 1, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 0);
+	
+	
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 	
-	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
-
-	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor };
-
-	ComputeIntermediaryPipelineInfo mainCullComputeSetup = {
-			.x = 4096 / layout->x,
-			.y = 1,
-			.z = 1,
-			.pipelinename = 4,
-			.descCount = 1,
-			.descriptorsetid = computeDescriptors.data()
-	};
-
-	mainIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
+	
 
 	mainIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1420,6 +1423,10 @@ void ApplicationLoop::InitializeRuntime()
 
 	lightAssignment.prefixSumPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&worldAssignmentPrefix2);
 
+
+
+
+
 	/*
 	lightAssignment.sumAfterDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1523,9 +1530,36 @@ void ApplicationLoop::InitializeRuntime()
 
 	lightAssignment.postWorldSpaceDivisionPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline2);
 
+	int cullLightDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	lightAssignment.deviceOffsetsView = VKRenderer::gRenderInstance->CreateBufferView(lightAssignment.deviceOffsetsAlloc, VK_FORMAT_R32_UINT);
+	lightAssignment.deviceCountsView = VKRenderer::gRenderInstance->CreateBufferView(lightAssignment.deviceCountsAlloc, VK_FORMAT_R32_UINT);
+	
+	
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.worldSpaceDivisionAlloc, lightAssignment.worldSpaceDivisonView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceOffsetsAlloc, lightAssignment.deviceOffsetsView, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceCountsAlloc, lightAssignment.deviceCountsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(cullLightDescriptor, globalLightBuffer, 3, 0);
+
+
+	ShaderComputeLayout* layout = VKRenderer::gRenderInstance->GetComputeLayout(4);
+
+	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor, cullLightDescriptor };
+
+	ComputeIntermediaryPipelineInfo mainCullComputeSetup = {
+			.x = 4096 / layout->x,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 4,
+			.descCount = 2,
+			.descriptorsetid = computeDescriptors.data()
+	};
+
+	mainIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
+
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 0.0f, 9.0f) };
+	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(-6.0f, 0.0f, 0.0f, 9.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 

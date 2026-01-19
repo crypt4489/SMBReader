@@ -304,6 +304,7 @@ VkBarrierInfo* VKPipelineObject::GetNextBarrierInfo(VkPipelineStageFlags srcStag
 				next = &(*next)->child;
 			}
 			*next = info;
+			nextPtr = nullptr;
 			break;
 		}
 		nextPtr = &infos[i];

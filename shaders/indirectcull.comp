@@ -93,12 +93,13 @@ struct UniformGrid
     vec4 max;
     vec4 min;
 	uint numberOfDivisions;
+    uint indirectDrawCount;
 };
 
 
 layout(push_constant) uniform GlobalContext {
     UniformGrid grid;
-    uint indirectDrawCount;
+    
 } gs;
 
 layout(set = 0, binding = 0) writeonly buffer Commands {
@@ -298,7 +299,7 @@ void main()
 
    
 
-    if (index >= gs.indirectDrawCount)  {
+    if (index >= gs.grid.indirectDrawCount)  {
         return;
     }
 
@@ -339,6 +340,8 @@ void main()
     uint lightOffsets =  texelFetch(globalLightOffsets, int(worldIndex)).r;
     uint lightCounts =  texelFetch(globalLightCounts, int(worldIndex)).r;
 
+    lightOffsets -= lightCounts;
+
     uint lightMeshCount = 0;
 
     for (uint i = 0; i<lightCounts&&lightMeshCount<4; i++)
@@ -362,7 +365,6 @@ void main()
             lightMeshCount++;
 
         }
-
     }
 
     perModelBuffer.objects[index].lightCount = lightMeshCount;
