@@ -71,10 +71,10 @@ void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)
 	Projection[3][2] = -(2 * f * n) / (f - n);
 	Projection[3][3] = 0.0f;
 
-	CreateCameraFrustrum(angle, aspect, f);
+	CreateCameraFrustrum(angle, aspect, n, f);
 }
 
-void Camera::CreateCameraFrustrum(float _angle, float aspect, float far)
+void Camera::CreateCameraFrustrum(float _angle, float aspect, float near, float far)
 {
 	float angle = _angle * .5f;
 	float tanAngle = tanf(angle);
@@ -87,7 +87,7 @@ void Camera::CreateCameraFrustrum(float _angle, float aspect, float far)
 
 	nw = (aspect * nh);
 
-	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, far);
+	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, near, far);
 }
 
 
@@ -98,20 +98,21 @@ void Plane::ComputePlane(const Vector4f& point, const Vector4f& normal)
 	pointInPlane = point;
 }
 
-void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, const Vector4f& right, float _nearwidth, float _nearheight, float _far)
+void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far)
 {
 	nearwidth = _nearwidth;
 	nearheight = _nearheight;
 	farDistance = _far;
+	nearDistance = near;
 
 
 	Vector4f farCenter = forward * _far;
-	Vector4f nearCenter = forward;
+	Vector4f nearCenter = forward * near;
 
 	
 
 	planes[0].ComputePlane(nearCenter, forward * -1.0);
-	planes[1].ComputePlane(farCenter, forward);
+	planes[1].ComputePlane(farCenter, forward * -1.0);
 
 	
 

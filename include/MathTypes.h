@@ -981,7 +981,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
-	float pad;
-	void CreateFrustrumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float _far);
+	float nearDistance;
+	void CreateFrustrumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far);
 };
 PACKED_END

@@ -709,7 +709,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = Identity4f();
 		
-	//*geomSpecificData = *geomSpecificData * 5.0f;
+	*geomSpecificData = *geomSpecificData * 5.0f;
 		
 	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
 
@@ -887,6 +887,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	debugIndirectDrawData.commandBufferCount++;
 
+
 	DebugDrawStruct drawStruct;
 	drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
 
@@ -904,6 +905,22 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
 
 	mainIndirectDrawData.commandBufferCount += count;
+
+	tag = 1;
+
+	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t), 0, frames);
+
+
+
+	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
+	drawStruct.color = Vector4f(0.5, 0.5, 1.0, 0.0);
+
+
+	drawStruct.halfExtents = (*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5;
+	//
+	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct) * 1, sizeof(DebugDrawStruct) , 0, frames);
+	debugIndirectDrawData.commandBufferCount++;
+	
 }
 
 
@@ -1577,7 +1594,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	c.UpdateCamera();
 
-	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
+	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 1.0f, 10000.0f, DegToRad(45.0f));
 	
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 }

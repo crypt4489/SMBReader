@@ -171,8 +171,23 @@ AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
     return outputAABB;
 }
 
+Frustrum transformFrustrum;
+
+void CalculateFrustrum()
+{
+    transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
+    transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
+    transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
+    transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
+    transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
+    transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
+}
+
 bool CheckAllPlanesAgainstAABB(uint index)
 {
+
+    CalculateFrustrum();
+
     mat4 modelM = perModelBuffer.objects[index].m;
 
     AABB AABBTransform = perModelBuffer.objects[index].minMaxBox;
@@ -180,35 +195,22 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
     AABB outAABBTransform = TransformAABBArvo(modelM, AABBTransform);
 
-    vec4 transAABBMin =  cData.view * outAABBTransform.min;
-    vec4 transAABBMax =  cData.view * outAABBTransform.max;
+    vec4 transAABBMin =  outAABBTransform.min;
+    vec4 transAABBMax =  outAABBTransform.max;
 
     vec4 AABBMin = min(transAABBMin, transAABBMax);
     vec4 AABBMax = max(transAABBMin, transAABBMax);
 
-    bool check = CheckAABB(AABBMin, AABBMax, cData.f.nearplane.planeEquation);
+    Frustrum testFrustrum = transformFrustrum; //cData.f
+
+    bool check = CheckAABB(AABBMin, AABBMax, testFrustrum.nearplane.planeEquation);
 
     if (!check)
     {
         return false;
     }
 
-    check = CheckAABB(AABBMin, AABBMax, cData.f.farplane.planeEquation);
-
-    if (check)
-    {
-        return false;
-    }
-    
-    
-    check = CheckAABB(AABBMin, AABBMax, cData.f.topplane.planeEquation);
-
-    if (!check)
-    {
-        return false;
-    }
-    
-    check = CheckAABB(AABBMin, AABBMax, cData.f.bottomplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, testFrustrum.farplane.planeEquation);
 
     if (!check)
     {
@@ -216,14 +218,29 @@ bool CheckAllPlanesAgainstAABB(uint index)
     }
     
     
-    check = CheckAABB(AABBMin, AABBMax, cData.f.rightplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, testFrustrum.topplane.planeEquation);
 
     if (!check)
     {
         return false;
     }
     
-    check = CheckAABB(AABBMin, AABBMax, cData.f.leftplane.planeEquation);
+    check = CheckAABB(AABBMin, AABBMax, testFrustrum.bottomplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    
+    check = CheckAABB(AABBMin, AABBMax, testFrustrum.rightplane.planeEquation);
+
+    if (!check)
+    {
+        return false;
+    }
+    
+    check = CheckAABB(AABBMin, AABBMax, testFrustrum.leftplane.planeEquation);
 
     if (!check)
     {
@@ -235,35 +252,24 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
 bool CheckAllPlanesAgainstSphere(uint index)
 {
+    CalculateFrustrum();
+
     mat4 modelM = perModelBuffer.objects[index].m;
     vec4 sphere = perModelBuffer.objects[index].sphere;
     float r = sphere.w;
 
-    vec3 transPosition =  vec3(cData.view * modelM * vec4(sphere.xyz, 1.0));
+    vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
 
-   float dist = DistanceFromPlane(cData.f.nearplane.planeEquation, transPosition);
+    Frustrum testFrustrum = transformFrustrum; //cData.f
 
-    if (dist < -r)
-    {
-        return false;
-    }
-
-    dist = DistanceFromPlane(cData.f.farplane.planeEquation, transPosition);
-
-    if (dist >= -r)
-    {
-        return false;
-    }
-    
-    
-    dist = DistanceFromPlane(cData.f.topplane.planeEquation, transPosition);
+   float dist = DistanceFromPlane(testFrustrum.nearplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
         return false;
     }
-    
-    dist = DistanceFromPlane(cData.f.bottomplane.planeEquation, transPosition);
+
+    dist = DistanceFromPlane(testFrustrum.farplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
@@ -271,14 +277,29 @@ bool CheckAllPlanesAgainstSphere(uint index)
     }
     
     
-    dist = DistanceFromPlane(cData.f.rightplane.planeEquation, transPosition);
+    dist = DistanceFromPlane(testFrustrum.topplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
         return false;
     }
     
-    dist = DistanceFromPlane(cData.f.leftplane.planeEquation, transPosition);
+    dist = DistanceFromPlane(testFrustrum.bottomplane.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+    
+    
+    dist = DistanceFromPlane(testFrustrum.rightplane.planeEquation, transPosition);
+
+    if (dist < -r)
+    {
+        return false;
+    }
+    
+    dist = DistanceFromPlane(testFrustrum.leftplane.planeEquation, transPosition);
 
     if (dist < -r)
     {
