@@ -137,6 +137,10 @@ struct RecordingBufferObject
 
 	void ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
 
+	void FillBuffer(EntryHandle bufferHandle, size_t size, size_t offset, uint32_t val);
+
+	void UpdateBuffer(EntryHandle bufferHandle, size_t size, size_t offset, void* val);
+
 	VKCommandBuffer cbBufferHandler;
 	VKDevice* vkDeviceHandle;
 	VkPipelineLayout currLayout;
@@ -604,6 +608,8 @@ struct VKDevice
 	void WaitOnDevice();
 
 	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
+
+	void WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies);
 
 	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
 

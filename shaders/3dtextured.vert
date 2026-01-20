@@ -64,6 +64,7 @@ struct Frustrum
 layout(location = 0) out vec3 position;
 layout(location = 1) out vec2 texCoords;
 layout(location = 2) out vec2 texCoords2;
+//layout(location = 3) out vec3 normal;
 layout(location = 3) flat out uint modelIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
@@ -152,6 +153,7 @@ void main() {
     uint comp = modelData.vertexComponents;
     texCoords = vec2(0.0, 0.0);
     texCoords2 = vec2(0.0, 0.0);
+  //  normal = vec3(0.0);
 
     uint stride = modelData.vertexStride;
 

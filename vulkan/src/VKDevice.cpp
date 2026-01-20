@@ -127,6 +127,7 @@ std::pair<VkDeviceSize, VkDeviceSize> VKMemoryAllocator::GetBestFit(VkDeviceSize
 		if (startingAddress & (alignment - 1))
 			makeup = alignment - (startingAddress & (alignment - 1));
 
+
 		startingAddress += (makeup); //make up for any alignment considerations
 
 
@@ -465,6 +466,18 @@ void RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint3
 	}
 
 	vkCmdExecuteCommands(cbBufferHandler.buffer, count, lbuffers);
+}
+
+void RecordingBufferObject::FillBuffer(EntryHandle bufferHandle, size_t size, size_t offset, uint32_t val)
+{
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferHandle);
+	vkCmdFillBuffer(cbBufferHandler.buffer, buffer, offset, size, val);
+}
+
+void RecordingBufferObject::UpdateBuffer(EntryHandle bufferHandle, size_t size, size_t offset, void* val)
+{
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferHandle);
+	vkCmdUpdateBuffer(cbBufferHandler.buffer, buffer, offset, size, val);
 }
 
 static size_t FindQueueManagerByCapapbilites(QueueManager* managers, size_t managerSize, uint32_t capabilities)
@@ -3003,6 +3016,25 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 	vkUnmapMemory(device, deviceMem->memory);
 }
 
+
+void VKDevice::WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* deviceMem = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	void* datalocal;
+	vkMapMemory(device, deviceMem->memory, minOffset, range, 0, reinterpret_cast<void**>(&datalocal));
+	uintptr_t iter = (uintptr_t)datalocal;
+	for (int i = 0; i < numCopies; i++)
+	{
+		std::memcpy((void*)(iter+offsets[i]), dataPoints[i], sizes[i]);
+	}
+	vkUnmapMemory(device, deviceMem->memory);
+}
 
 void VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset)
 {

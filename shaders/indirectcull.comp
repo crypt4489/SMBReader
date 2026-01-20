@@ -138,6 +138,11 @@ layout(set = 0, binding = 2) uniform CameraData {
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
 
+layout(set = 0, binding = 4) writeonly buffer commandCounts {
+    uint visibleCount;
+    uint invisibleCount;
+} cCounts;
+
 layout(set = 1, binding = 0) uniform usamplerBuffer globalLightOffsets;
 layout(set = 1, binding = 1) uniform usamplerBuffer globalLightCounts;
 layout(set = 1, binding = 2) uniform usamplerBuffer globalLightAllocations;
@@ -326,20 +331,23 @@ void main()
 
     bool visible = CheckAllPlanesAgainstAABB(index);
 
-    if (!visible)
+  if (!visible)
     {
-        cmdBuffer.commands[index].instanceCount = 0;
+        uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
+        cmdBuffer.commands[gs.grid.indirectDrawCount-(1+invisibleIndex)].instanceCount = 0;
         return;
-    }
+    } 
+
+    uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
    
 
-    imageStore(globalMeshIndices, int(index), uvec4(index, 0, 0, 0));
+    imageStore(globalMeshIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
    
-    cmdBuffer.commands[index].instanceCount = 1;
-    cmdBuffer.commands[index].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[index].indexCount = perModelBuffer.objects[index].indexCount;
-    cmdBuffer.commands[index].firstInstance = 0;
-    cmdBuffer.commands[index].vertexOffset = 0;
+    cmdBuffer.commands[visibleIndex].instanceCount = 1;
+    cmdBuffer.commands[visibleIndex].firstIndex = perModelBuffer.objects[index].firstIndex;
+    cmdBuffer.commands[visibleIndex].indexCount = perModelBuffer.objects[index].indexCount;
+    cmdBuffer.commands[visibleIndex].firstInstance = 0;
+    cmdBuffer.commands[visibleIndex].vertexOffset = 0;
 
 
     vec4 sphere = perModelBuffer.objects[index].sphere;

@@ -42,6 +42,7 @@ struct IndirectDrawData
 	int commandBufferAlloc;
 	int commandBufferCount;
 	int commandBufferSize;
+	int commandBufferCountAlloc;
 	int indirectDrawDescriptor;
 	int indirectDrawPipeline;
 	int indirectCullDescriptor;
@@ -214,7 +215,7 @@ UniformGrid mainGrid = {
 
 static void CreateUniformGrid()
 {
-	int tag = 1;
+
 	DebugDrawStruct drawStruct;
 	
 
@@ -238,6 +239,12 @@ static void CreateUniformGrid()
 
 	drawStruct.halfExtents = half;
 
+	std::vector<int> tags(count*count*count);
+
+	std::fill(tags.begin(), tags.end(), 1);
+
+	VKRenderer::gRenderInstance->transferPool.Create(tags.data(), sizeof(uint32_t) * tags.size(), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+
 	for (int i = 0; i < count; i++)
 	{
 		for (int j = 0; j < count; j++)
@@ -246,10 +253,8 @@ static void CreateUniformGrid()
 			{
 				drawStruct.center = Vector4f(min.x - (i * xMove), min.y - (j * yMove), min.z - (g * zMove), 1.0f);
 
-				VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-				VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
+				VKRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+				
 				debugIndirectDrawData.commandBufferCount++;
 			}
 		}
@@ -318,6 +323,7 @@ ApplicationLoop::~ApplicationLoop() {
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 {
 	auto rendInst = VKRenderer::gRenderInstance;
+
 	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
 	Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
 
@@ -326,7 +332,7 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 
 	handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-	rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
+	rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 
 }
 
@@ -341,14 +347,14 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 	for (int i = 0; i < meshCount; i++)
 	{
 		Mesh* mesh = &meshInstanceData.dataArray[meshStart + i];
-		Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
 
+		Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
 		handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
+		rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 	}
 
 }
@@ -448,8 +454,6 @@ void ApplicationLoop::Execute()
 
 		VKRenderer::gRenderInstance->EndFrame();
 
-		
-
 		while (running)
 		{
 			mainWindow->PollEvents();
@@ -464,6 +468,8 @@ void ApplicationLoop::Execute()
 			{
 				if (!updateLights) updateLights = 3;
 
+				lightCountPrev = globalLightCount;
+
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.preWorldSpaceDivisionPipeline, 0);
 
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.prefixSumPipeline, 0);
@@ -477,20 +483,19 @@ void ApplicationLoop::Execute()
 			{
 				if (!updatedCommand || cameraMove) {
 					updatedCommand = 3;
-					
+					VKRenderer::gRenderInstance->transferCommandPool.Create(8, mainIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					//VKRenderer::gRenderInstance->transferCommandPool.Create(4, mainIndirectDrawData.commandBufferCountAlloc, 4, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
 				}
 
 				updatedCommand--;
+				 
+				commandCountPrev = mainIndirectDrawData.commandBufferCount;
+				
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
 
-				if (commandCountPrev != mainIndirectDrawData.commandBufferCount && updatedCommand == 0)
-				{
-					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
 
-					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
-
-					VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
-				}
-
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
 				
 
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(mainIndirectDrawData.indirectCullPipeline, 0);
@@ -503,7 +508,12 @@ void ApplicationLoop::Execute()
 
 			if (cameraMove || debugIndirectDrawData.commandBufferCount != debugCommandCountPrev || updatedDebugCommand > 0)
 			{
-				if (!updatedDebugCommand || cameraMove) updatedDebugCommand = 3;
+				if (!updatedDebugCommand || cameraMove)
+				{
+					VKRenderer::gRenderInstance->transferCommandPool.Create(8, debugIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					//VKRenderer::gRenderInstance->transferCommandPool.Create(4, debugIndirectDrawData.commandBufferCountAlloc, 4, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
+					updatedDebugCommand = 3;
+				}
 				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectCullPipeline, 0);
 				updatedDebugCommand--;
@@ -522,6 +532,8 @@ void ApplicationLoop::Execute()
 			auto index = VKRenderer::gRenderInstance->BeginFrame();
 
 			if (index != ~0ui32) {
+
+				
 
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
 
@@ -645,7 +657,8 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
+	//VKRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
+	VKRenderer::gRenderInstance->transferPool.Create(&c.View, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), globalBufferLocation, 0, TransferType::MEMORY);
 }
 
 int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
@@ -867,7 +880,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		mesh->meshInstanceDeviceMemoryCount = 1;
 		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 
-		rendInst->UpdateAllocation(handles, globalMeshLocation, sizeof(Handles), meshSpecificAlloc, 0, rendInst->MAX_FRAMES_IN_FLIGHT);
+		rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
 
 	
 		
@@ -882,10 +895,10 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	int tag = 2;
 
-	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), 0, 0, frames);
+	VKRenderer::gRenderInstance->transferPool.Create(&tag, sizeof(uint32_t), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 
-	debugIndirectDrawData.commandBufferCount++;
+	
 
 
 	DebugDrawStruct drawStruct;
@@ -902,25 +915,27 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(24), 1.0, 1.0);
 
-	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct), 0, 0, frames);
+
+	VKRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	mainIndirectDrawData.commandBufferCount += count;
 
+	debugIndirectDrawData.commandBufferCount++;
+
+
 	tag = 1;
 
-	VKRenderer::gRenderInstance->UpdateAllocation(&tag, globalDebugTypes, sizeof(uint32_t), sizeof(uint32_t), 0, frames);
-
-
+	VKRenderer::gRenderInstance->transferPool.Create(&tag, sizeof(uint32_t), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
 	drawStruct.color = Vector4f(0.5, 0.5, 1.0, 0.0);
 
 
 	drawStruct.halfExtents = (*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5;
-	//
-	VKRenderer::gRenderInstance->UpdateAllocation(&drawStruct, debugAllocBuffer, sizeof(DebugDrawStruct) * 1, sizeof(DebugDrawStruct) , 0, frames);
+
+	VKRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+
 	debugIndirectDrawData.commandBufferCount++;
-	
 }
 
 
@@ -1094,6 +1109,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), PERFRAME);
 	
+	mainIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), PERFRAME);
 
 	mainIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1108,7 +1124,7 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalMeshLocation, 1, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferCountAlloc, 4, 0);
 	
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
@@ -1119,7 +1135,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 	
-	
+	//VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 4, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
 	
 
@@ -1153,7 +1169,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	EntryHandle indirectDebugTypesView = VKRenderer::gRenderInstance->CreateBufferView(globalDebugTypes, VK_FORMAT_R32_UINT);
 	
-	
+	debugIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), PERFRAME);
 
 
 	debugIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -1168,11 +1184,15 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugAllocBuffer, 4, 0);
 
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferCountAlloc, 5, 0);
+
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCount, 0);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+	//VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
 
 	std::array debugCullDescriptors = { debugIndirectDrawData.indirectCullDescriptor };
@@ -1585,10 +1605,10 @@ void ApplicationLoop::InitializeRuntime()
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 
-	VKRenderer::gRenderInstance->UpdateAllocation(&source1, globalLightBuffer, sizeof(LightSource), sizeof(LightSource)* globalLightCount++, 0, 3);
-	VKRenderer::gRenderInstance->UpdateAllocation(&source2, globalLightBuffer, sizeof(LightSource), sizeof(LightSource)* globalLightCount++, 0, 3);
-	VKRenderer::gRenderInstance->UpdateAllocation(&source3, globalLightBuffer, sizeof(LightSource), sizeof(LightSource)* globalLightCount++, 0, 3);
-	VKRenderer::gRenderInstance->UpdateAllocation(&source4, globalLightBuffer, sizeof(LightSource), sizeof(LightSource)* globalLightCount++, 0, 3);
+	VKRenderer::gRenderInstance->transferPool.Create(&source1, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	VKRenderer::gRenderInstance->transferPool.Create(&source2, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	VKRenderer::gRenderInstance->transferPool.Create(&source4, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 

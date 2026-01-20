@@ -113,6 +113,12 @@ layout(set = 0, binding = 4) readonly buffer DDSBuffer {
     DebugDrawStruct objects[];
 } ddsbuffer;
 
+layout(set = 0, binding = 5) writeonly buffer commandCounts {
+    uint visibleCount;
+    uint invisibleCount;
+} cCounts;
+
+
 Frustrum transformFrustrum;
 
 void CalculateFrustrum()
@@ -291,28 +297,30 @@ void main()
 
     if (!visible)
     {
-
-        cmdBuffer.commands[index].instanceCount = 0;
+        uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
+        cmdBuffer.commands[gs.indirectDrawCount-(1+invisibleIndex)].instanceCount = 0;
         return;
     } 
 
-    imageStore(globalDebugIndices, int(index), uvec4(index, 0, 0, 0));
+    uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
+
+    imageStore(globalDebugIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
 
     if (debugType == 1)
     {
-        cmdBuffer.commands[index].vertexCount = 24;
-        cmdBuffer.commands[index].instanceCount = 1;
-        cmdBuffer.commands[index].firstVertex = 0;
-        cmdBuffer.commands[index].firstInstance = 0;
+        cmdBuffer.commands[visibleIndex].vertexCount = 24;
+        cmdBuffer.commands[visibleIndex].instanceCount = 1;
+        cmdBuffer.commands[visibleIndex].firstVertex = 0;
+        cmdBuffer.commands[visibleIndex].firstInstance = 0;
 
     }
     else if (debugType == 2)
     {
         vec4 temp = ddsbuffer.objects[index].halfExtents;
         uint numSlices = floatBitsToUint(temp.y);
-        cmdBuffer.commands[index].vertexCount = 2*numSlices;
-        cmdBuffer.commands[index].instanceCount = 1;
-        cmdBuffer.commands[index].firstVertex = 0;
-        cmdBuffer.commands[index].firstInstance = 0;
+        cmdBuffer.commands[visibleIndex].vertexCount = 2*numSlices;
+        cmdBuffer.commands[visibleIndex].instanceCount = 1;
+        cmdBuffer.commands[visibleIndex].firstVertex = 0;
+        cmdBuffer.commands[visibleIndex].firstInstance = 0;
     }
 }

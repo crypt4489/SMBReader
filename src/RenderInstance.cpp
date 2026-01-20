@@ -804,33 +804,25 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	debug->CreateDepthStencil(VK_COMPARE_OP_LESS);
 }
 
-void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, size_t offset, size_t frame, int copies)
+void RenderInstance::UpdateAllocation(void* data, int handle, size_t size, size_t offset, size_t frame, int copies)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	
 	size_t intSize = allocations[handle].requestedSize;
-	size_t intOffset = allocations[handle].offset + offset;
-	size_t stride = 0;
-
+	size_t rsize = intSize;
+	
 	if (size) 
 	{
 		intSize = size;
 	}
 
-	size_t rsize = allocations[handle].requestedSize;
 	size_t align = allocations[handle].alignment;
 
-	if (align - 1 & rsize) rsize = (rsize + (align - (align - 1 & rsize)));
+	rsize = (rsize + align - 1) & ~(align - 1);
 
-	if (frame)
-	{
-		intOffset = allocations[handle].offset + (frame*rsize) + offset;
-	}
+	size_t intOffset = allocations[handle].offset + (frame * rsize) + offset;
 
-	if (allocations[handle].allocType == PERFRAME && copies > 1)
-	{
-		stride = rsize;
-	}
+	size_t stride = rsize;
 
 	EntryHandle index = allocations[handle].memIndex;
 
@@ -840,17 +832,147 @@ void RenderInstance::UpdateAllocation(void* data, size_t handle, size_t size, si
 		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, stride);
 }
 
+std::array<void*, 1000> batchAddresses;
+std::array<size_t, 1000> batchSizes;
+std::array<size_t, 1000> batchOffsets;
+
+void RenderInstance::CopyHostRegions()
+{
+	
+	int memCount = transferPool.linkCount.load();
+
+	if (!memCount) return;
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	transferPool.SetupPop();
+	HostTransferRegion region;
+	TransferRegionLink* link = transferPool.linkHead;
+	
+	EntryHandle previousBuffer = allocations[link->region->allocationIndex].memIndex;
+	size_t previousMin = 0;
+	size_t previousMax = 0;
+	size_t batchCounter = 0;
+
+	while (link)
+	{
+		link = transferPool.PopLink(&region, link);
+
+		int handle = region.allocationIndex;
+
+		size_t intSize = region.size;
+		
+		size_t rsize = allocations[handle].requestedSize;
+		size_t align = allocations[handle].alignment;
+
+		rsize = (rsize + align-1) & ~(align - 1);
+
+		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.allocoffset;
+
+		EntryHandle index = allocations[handle].memIndex;
+
+		void* data = region.data;
+
+		if (index == previousBuffer)
+		{
+			batchAddresses[batchCounter] = data;
+			batchOffsets[batchCounter] = intOffset;
+			batchSizes[batchCounter] = intSize;
+			
+			batchCounter++;
+
+			previousMin = std::min(intOffset, previousMin);
+			previousMax = std::max(intOffset+intSize, previousMax);
+		}
+		else
+		{
+			if (index == globalIndex)
+				dev->WriteToHostBufferBatch(globalIndex, batchAddresses.data(), batchSizes.data(), batchOffsets.data(), previousMax - previousMin, previousMin, batchCounter);
+
+			previousBuffer = index;
+			previousMin = intOffset;
+			previousMax = intOffset;
+			batchCounter = 0;
+		}
+	}
+
+	if (batchCounter)
+	{
+		dev->WriteToHostBufferBatch(previousBuffer, batchAddresses.data(), batchSizes.data(), batchOffsets.data(), previousMax - previousMin, previousMin, batchCounter);
+	}
+}
+
+void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
+{
+	int memCount = transferCommandPool.linkCount.load();
+
+	if (!memCount) return;
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	transferCommandPool.SetupPop();
+	TransferCommand region;
+	TransferCommandLink* link = transferCommandPool.linkHead;
+
+	EntryHandle previousBuffer = allocations[link->command->allocationIndex].memIndex;
+	size_t previousMin = -1;
+	size_t previousMax = -1;
+	size_t batchCounter = 0;
+
+	while (link)
+	{
+		link = transferCommandPool.PopLink(&region, link);
+
+		int handle = region.allocationIndex;
+
+		size_t intSize = region.size;
+
+		size_t rsize = allocations[handle].requestedSize;
+		size_t align = allocations[handle].alignment;
+
+		rsize = (rsize + align - 1) & ~(align - 1);
+
+		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.offset;
+
+		EntryHandle index = allocations[handle].memIndex;
+
+		rbo->FillBuffer(index, intSize, intOffset, region.fillVal);
+
+		VkBufferMemoryBarrier lbuffMemBarriers{};
+
+		lbuffMemBarriers.buffer = dev->GetBufferHandle(index);
+		lbuffMemBarriers.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		lbuffMemBarriers.dstAccessMask = ConvertResourceActionToVulkan(region.dstAction);
+		lbuffMemBarriers.offset = intOffset;
+		lbuffMemBarriers.size = intSize;
+		lbuffMemBarriers.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		lbuffMemBarriers.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		lbuffMemBarriers.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+
+		RBOPipelineBarrierArgs args = {
+			.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
+			.dstStageMask = ConvertResourceStageToVulkan(region.dstStage),
+			.dependencyFlags = 0,
+			.memoryBarrierCount = 0,
+			.pMemoryBarriers = nullptr,
+			.bufferMemoryBarrierCount = 1,
+			.pBufferMemoryBarriers = &lbuffMemBarriers,
+			.imageMemoryBarrierCount = 0,
+			.pImageMemoryBarriers = nullptr
+		};
+	
+
+		rbo->BindPipelineBarrierCommand(&args);
+	}
+
+	
+}
+
 int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	size_t allocSize = size;
-
-	if (minUniformAlignment - 1 & alignment)
-		alignment = (alignment + (minUniformAlignment - ((minUniformAlignment - 1) & alignment)));
+	alignment = (alignment + minUniformAlignment - 1) & ~((size_t)minUniformAlignment - 1);
 	
-	if (minUniformAlignment - 1 & size)
-		allocSize = (size + (minUniformAlignment - (minUniformAlignment - 1 & size)));
+	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
 
 	switch (allocType)
 	{
@@ -908,14 +1030,9 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	size_t allocSize = size;
+	alignment = (alignment + minStorageAlignment - 1) & ~((size_t)minStorageAlignment - 1);
 
-	if (minStorageAlignment - 1 & alignment)
-		alignment = (alignment + (minStorageAlignment - ((minStorageAlignment - 1) & alignment)));
-
-	if (minStorageAlignment - 1 & size)
-		allocSize = (size + (minStorageAlignment - (minStorageAlignment - 1 & size)));
-
+	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
 
 	switch (allocType)
 	{
@@ -2044,6 +2161,8 @@ ShaderResourceHeader* RenderInstance::PopShaderResourceBarrier(int descriptorSet
 
 void RenderInstance::DrawScene(uint32_t imageIndex)
 {
+	CopyHostRegions();
+
 	EntryHandle cbindex = currentCBIndex[currentFrame];
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
@@ -2059,6 +2178,8 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 	rcb.ResetCommandPoolForBuffer();
 
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	InvokeTransferCommands(&rcb);
 
 //	cGraph->DispatchWork(&rcb, currentFrame);
 
