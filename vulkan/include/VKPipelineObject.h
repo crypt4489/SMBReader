@@ -3,8 +3,6 @@
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "vulkan/vulkan.h"
-#include <string>
-#include <vector>
 
 struct VKComputePipelineObjectCreateInfo
 {
@@ -36,26 +34,13 @@ struct VKGraphicsPipelineObjectCreateInfo
 	uint32_t pushRangeCount;
 	uint32_t instanceCount;
 	uint32_t indexSize;
-};
-
-struct VKIndirectPipelineObjectCreateInfo
-{
-	EntryHandle vertexBufferIndex;
-	uint32_t vertexBufferOffset;
-	uint32_t vertexCount;
-	EntryHandle pipelinename;
-	uint32_t descCount;
-	EntryHandle* descriptorsetid;
-	uint32_t* dynamicPerSet;
-	uint32_t maxDynCap;
-	EntryHandle indexBufferHandle;
-	uint32_t indexBufferOffset;
-	uint32_t pushRangeCount;
-	uint32_t indexSize;
 	uint32_t indirectDrawCount;
 	EntryHandle indirectBufferHandle;
 	uint32_t indirectBufferOffset;
 	uint32_t indirectBufferFrames;
+	EntryHandle indirectCountBufferHandle;
+	uint32_t indirectCountBufferOffset;
+	uint32_t indirectCountBufferStride;
 };
 
 struct PushConstantArguments
@@ -68,9 +53,8 @@ struct PushConstantArguments
 
 enum PipelineObjectType
 {
-	GRAPHICSPO = 0,
-	COMPUTEPO = 1,
-	INDIRECTPO = 2
+	GRAPHICSPIPELINETYPE = 0,
+	COMPUTEPIPELINETYPE = 1,
 };
 
 enum VKBarrierType
@@ -122,7 +106,9 @@ struct VKPipelineObject
 
 	~VKPipelineObject() = default;
 
-	void SetPerObjectData(uint32_t objectlocation);
+	void SetPerObjectData(uint32_t _dynamicOffset);
+
+	void SetPerObjectData(uint32_t* offsets, uint32_t count);
 
 	void AddPushConstant(void* _data, uint32_t size, uint32_t offset, uint32_t bindLocation, VkShaderStageFlags flags);
 
@@ -153,37 +139,15 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 
 	void Draw(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 
-	EntryHandle vertexBufferIndex, indexBufferHandle;
+	EntryHandle vertexBufferIndex, indexBufferHandle, indirectBufferHandle, indirectCountBufferHandle;
 
-	std::size_t vertexBufferOffset, indexBufferOffset;
-	std::size_t vertexCount, indexCount;
+	size_t vertexBufferOffset, indexBufferOffset, indirectBufferOffset, indirectCountBufferOffset;
+	size_t vertexCount, indexCount;
 	uint32_t instanceCount;
 	VkIndexType indexType;
-};
-
-
-struct VKIndirectPipelineObject : public VKPipelineObject
-{
-	VKIndirectPipelineObject() = delete;
-	VKIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc);
-
-	~VKIndirectPipelineObject() = default;
-
-	void Draw(
-		RecordingBufferObject* rbo,
-		uint32_t frame,
-		uint32_t firstSet
-	);
-
-	EntryHandle vertexBufferHandle, indirectBufferHandle, indexBufferHandle;
-
-	std::size_t vertexBufferOffset, indirectBufferOffset, indexBufferOffset;
-	
-	uint32_t drawCount;
-	VkIndexType indexType;
-
-	uint32_t indirectFrames;
-
+	uint32_t indirectCommandStride;
+	uint32_t indirectCountStride;
+	uint32_t indirectDrawCount;
 };
 
 

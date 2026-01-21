@@ -36,6 +36,9 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t indexSize;
 	uint32_t indexOffset;
 	uint32_t vertexOffset;
+	int indirectAllocation;
+	int indirectDrawCount;
+	int indirectCountAllocation;
 };
 
 struct ComputeIntermediaryPipelineInfo
@@ -48,21 +51,6 @@ struct ComputeIntermediaryPipelineInfo
 	int* descriptorsetid;
 };
 
-struct IndirectIntermediaryPipelineInfo
-{
-	uint32_t drawType;
-	int vertexBufferIndex;
-	uint32_t vertexCount;
-	uint32_t pipelinename;
-	uint32_t descCount;
-	int* descriptorsetid;
-	int indexBufferHandle;
-	uint32_t indexSize;
-	uint32_t indexOffset;
-	uint32_t vertexOffset;
-	int indirectAllocation;
-	int indirectDrawCount;
-};
 
 
 #define FULL_ALLOCATION_SIZE 0
@@ -462,23 +450,6 @@ enum PipelineLabels
 
 
 
-/*
-struct TransferRegion
-{
-	int hostordevice;
-	uint32_t offsetinstaging;
-	size_t size;
-	size_t offsetindriverbuffer;
-};
-
-struct TransferPool
-{
-	std::array<EntryHandle, 3> stagingBuffer; //each frame in flight loads data into staging buffer
-	std::array<TransferRegion, 50> transferRegions;
-	int currentTransferRegionsCount = 0;
-};
-*/
-
 struct RenderInstance
 {
 
@@ -543,11 +514,9 @@ struct RenderInstance
 
 	uint32_t GetSwapChainWidth();
 
-	int CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info);
+	int CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
 
 	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
-
-	int CreateIndirectVulkanPipelineObject(IndirectIntermediaryPipelineInfo* info, bool addToGraph);
 
 	void CreateRenderTargetData(int* desc, int descCount);
 
@@ -569,9 +538,7 @@ struct RenderInstance
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);
 
-	ShaderResourceHeader* PopShaderResourceBarrier(int descriptorSet, int* counter);
-
-	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int descriptorid);
+	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int* descriptorid, int descriptorcount);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 

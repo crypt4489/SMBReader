@@ -3,8 +3,6 @@
 
 #include "RenderInstance.h"
 #include "VertexTypes.h"
-#include "VKPipelineObject.h"
-#include "VKDescriptorSetBuilder.h"
 size_t TextManager::bufferOffset = ~0ui64;
 Font* TextManager::fonts;
 size_t TextManager::vertexCount = 0;
@@ -27,23 +25,6 @@ void TextManager::CreatePipelineObject()
 
 	auto rendInst = VKRenderer::gRenderInstance;
 
-
-	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
-	//DescriptorSetBuilder *dsb = rendInst->CreateDescriptorSet(rendInst->descriptorLayouts[2], frames);
-	//dsb->AddPixelShaderImageDescription(rendInst->GetImageView(fonts->texture->vkImpl), rendInst->GetSampler(fonts->texture->vkImpl), 0, frames);
-	//descHandle = dsb->AddDescriptorsToCache();
-
-	VKGraphicsPipelineObjectCreateInfo create = {
-		//.drawType = 1,
-		.vertexBufferIndex = rendInst->allocations[vertexBufferIndex].memIndex,
-		.vertexBufferOffset = static_cast<uint32_t>(rendInst->allocations[vertexBufferIndex].offset),
-		.vertexCount = ~0U,
-		//.pipelinename = TEXT,
-		.descriptorsetid = &descHandle,
-		.maxDynCap = 0,
-	};
-	
-	//obj = new VKGraphicsPipelineObject(&create);
 }
 
 void TextManager::CreateTextBuffer()

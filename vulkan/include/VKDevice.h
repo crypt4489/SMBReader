@@ -141,6 +141,9 @@ struct RecordingBufferObject
 
 	void UpdateBuffer(EntryHandle bufferHandle, size_t size, size_t offset, void* val);
 
+	void BindingDrawIndirectCount(EntryHandle commandBufferIndex, EntryHandle countBufferIndex, size_t commandBufferOffset, size_t countBufferOffset, uint32_t maxDrawCount);
+	void BindingDrawIndexedIndirectCount(EntryHandle commandBufferIndex, EntryHandle countBufferIndex, size_t commandBufferOffset, size_t countBufferOffset, uint32_t maxDrawCount);
+
 	VKCommandBuffer cbBufferHandler;
 	VKDevice* vkDeviceHandle;
 	VkPipelineLayout currLayout;
@@ -163,10 +166,10 @@ struct RenderTarget
 
 enum VKQueueCapabilities
 {
-	GRAPHICS = 1,
-	TRANSFER = 2,
-	COMPUTE = 4,
-	PRESENT = 8
+	GRAPHICSQUEUE = 1,
+	TRANSFERQUEUE = 2,
+	COMPUTEQUEUE = 4,
+	PRESENTQUEUE = 8
 };
 
 struct QueueManager
@@ -367,7 +370,7 @@ struct VKDevice
 
 	EntryHandle CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
 
-	EntryHandle CreateIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* info);
+
 
 	EntryHandle CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst);
 
@@ -477,7 +480,15 @@ struct VKDevice
 		uint32_t famPropsCount,
 		uint32_t queueMask);
 
-	std::tuple<uint32_t, uint32_t, uint32_t, EntryHandle> GetQueueHandle(uint32_t capabilites);
+	struct QueueDetails
+	{
+		uint32_t managerIndex;
+		uint32_t queueIndex;
+		uint32_t queueFamilyIndex;
+		EntryHandle poolIndex;
+	};
+
+	QueueDetails GetQueueHandle(uint32_t capabilites);
 
 	RecordingBufferObject GetRecordingBufferObject(EntryHandle handle);
 

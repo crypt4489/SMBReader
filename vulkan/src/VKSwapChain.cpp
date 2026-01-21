@@ -130,7 +130,7 @@ void VKSwapChain::CreateSwapChain(
 	
 	
 	uint32_t* qfc = queueFamiliesCache;
-	uint32_t ret = device->GetFamiliesOfCapableQueues(&qfc, &queueFamiliesCacheCount, GRAPHICS | TRANSFER | PRESENT);
+	uint32_t ret = device->GetFamiliesOfCapableQueues(&qfc, &queueFamiliesCacheCount, GRAPHICSQUEUE | TRANSFERQUEUE | PRESENTQUEUE);
 	queueSharing = createInfo.imageSharingMode = (queueFamiliesCacheCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
 	createInfo.pQueueFamilyIndices = qfc;

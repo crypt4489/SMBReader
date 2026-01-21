@@ -34,14 +34,21 @@ VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle 
 VKGraphicsPipelineObject::VKGraphicsPipelineObject(
 	VKGraphicsPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* allocator)
 	:
-	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0, GRAPHICSPO),
+	VKPipelineObject(allocator, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0, GRAPHICSPIPELINETYPE),
 	vertexCount(createinfo->vertexCount),
 	vertexBufferOffset(createinfo->vertexBufferOffset),
 	vertexBufferIndex(createinfo->vertexBufferIndex),
 	indexBufferHandle(createinfo->indexBufferHandle),
 	indexBufferOffset(createinfo->indexBufferOffset),
 	indexCount(createinfo->indexCount),
-	instanceCount(createinfo->instanceCount)
+	instanceCount(createinfo->instanceCount),
+	indirectDrawCount(createinfo->indirectDrawCount),
+	indirectBufferHandle(createinfo->indirectBufferHandle),
+	indirectCommandStride(createinfo->indirectBufferFrames),
+	indirectBufferOffset(createinfo->indirectBufferOffset),
+	indirectCountBufferHandle(createinfo->indirectCountBufferHandle),
+	indirectCountBufferOffset(createinfo->indirectCountBufferOffset),
+	indirectCountStride(createinfo->indirectCountBufferStride)
 {
 	if (createinfo->indexSize == 4)
 	{
@@ -64,86 +71,60 @@ void VKGraphicsPipelineObject::Draw(RecordingBufferObject* rbo, uint32_t frame, 
 		offset += dynamicPerSet[i];
 	}
 
-	if (vertexBufferIndex != ~0ui64)
+	if (vertexBufferIndex != EntryHandle())
 	{
 		rbo->BindVertexBuffer(vertexBufferIndex, 0, 1, &vertexBufferOffset);
 	}
 
-	if (indexBufferOffset != ~0ui32)
+	if (indirectBufferHandle != EntryHandle())
 	{
-		rbo->BindIndexBuffer(indexBufferHandle, static_cast<uint32_t>(indexBufferOffset), indexType);
-		rbo->BindingDrawIndexedCmd(static_cast<uint32_t>(indexCount), instanceCount, 0, 0, 0);
-	}
-	else {
-		rbo->BindingDrawCmd(0, drawSize, 0, instanceCount);
-	}
-}
-
-
-VKIndirectPipelineObject::VKIndirectPipelineObject(VKIndirectPipelineObjectCreateInfo* createinfo, DeviceOwnedAllocator* alloc)
-: 
-	VKPipelineObject(alloc, createinfo->pipelinename, createinfo->descriptorsetid, createinfo->dynamicPerSet, createinfo->descCount, createinfo->maxDynCap, createinfo->pushRangeCount, 0, INDIRECTPO),
-	vertexBufferOffset(createinfo->vertexBufferOffset),
-	vertexBufferHandle(createinfo->vertexBufferIndex),
-	indexBufferHandle(createinfo->indexBufferHandle),
-	indexBufferOffset(createinfo->indexBufferOffset),
-	drawCount(createinfo->indirectDrawCount),
-	indirectBufferHandle(createinfo->indirectBufferHandle),
-	indirectBufferOffset(createinfo->indirectBufferOffset),
-	indirectFrames(createinfo->indirectBufferFrames)
-{
-	if (createinfo->indexSize == 4)
-	{
-		indexType = VK_INDEX_TYPE_UINT32;
-	}
-	else if (createinfo->indexSize == 2) {
-		indexType = VK_INDEX_TYPE_UINT16;
-	}
-}
-
-void VKIndirectPipelineObject::Draw(
-	RecordingBufferObject *rbo,
-	uint32_t frame,
-	uint32_t firstSet
-)
-{
-
-	uint32_t offset = 0;
-	for (uint32_t i = 0; i < descriptorCount; i++)
-	{
-		rbo->BindDescriptorSets(descriptorSetId[i], frame, 1, firstSet + i, dynamicPerSet[i], &objectData[offset]);
-		offset += dynamicPerSet[i];
-	}
-
-	if (vertexBufferHandle != ~0ui64)
-	{
-		rbo->BindVertexBuffer(vertexBufferHandle, 0, 1, &vertexBufferOffset);
-	}
-
-	uint32_t perFrameOffset = 0;
-
-	if (indirectFrames > 0)
-	{
-		perFrameOffset = indirectFrames * frame;
-	}
-	
-
-	if (indexBufferHandle != ~0ui64)
-	{
-		rbo->BindIndexBuffer(indexBufferHandle, indexBufferOffset, indexType);
-
+		uint32_t perFrameCommandOffset = indirectCommandStride * frame;
 		
+		uint32_t perFrameCountOffset = indirectCountStride * frame;
+		
+		if (indexBufferHandle != EntryHandle())
+		{
+			rbo->BindIndexBuffer(indexBufferHandle, indexBufferOffset, indexType);
 
-		rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset+perFrameOffset);
+			if (indirectCountBufferHandle != EntryHandle())
+			{
+				rbo->BindingDrawIndexedIndirectCount(indirectBufferHandle, indirectCountBufferHandle, indirectBufferOffset + perFrameCommandOffset, indirectCountBufferOffset + perFrameCountOffset, indirectDrawCount);
+			}
+			else
+			{
+				rbo->BindingIndexedIndirectDrawCmd(indirectBufferHandle, indirectDrawCount, indirectBufferOffset + perFrameCommandOffset);
+			}
+		}
+		else
+		{
+			if (indirectCountBufferHandle != EntryHandle())
+			{
+				rbo->BindingDrawIndirectCount(indirectBufferHandle, indirectCountBufferHandle, indirectBufferOffset + perFrameCommandOffset, indirectCountBufferOffset + perFrameCountOffset, indirectDrawCount);
+			}
+			else
+			{
+				rbo->BindingIndirectDrawCmd(indirectBufferHandle, indirectDrawCount, indirectBufferOffset + perFrameCommandOffset);
+			}
+		}
 	}
-	else 
+	else
 	{
-		rbo->BindingIndirectDrawCmd(indirectBufferHandle, drawCount, indirectBufferOffset + perFrameOffset);
+		if (indexBufferOffset != ~0ui32)
+		{
+			rbo->BindIndexBuffer(indexBufferHandle, static_cast<uint32_t>(indexBufferOffset), indexType);
+			rbo->BindingDrawIndexedCmd(static_cast<uint32_t>(indexCount), instanceCount, 0, 0, 0);
+		}
+		else 
+		{
+			rbo->BindingDrawCmd(0, drawSize, 0, instanceCount);
+		}
 	}
 
 
 	
-} 
+}
+
+
 
 
 void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
@@ -151,9 +132,17 @@ void VKPipelineObject::SetPerObjectData(uint32_t _dynamicOffset)
 	objectData[objectCount++] = _dynamicOffset;
 }
 
+void VKPipelineObject::SetPerObjectData(uint32_t* offsets, uint32_t count)
+{
+	for (uint32_t i = 0; i < count; i++)
+	{
+		objectData[objectCount++] = offsets[i];
+	}
+}
+
 VKComputePipelineObject::VKComputePipelineObject(VKComputePipelineObjectCreateInfo* info, DeviceOwnedAllocator* allocator)
 	: 
-	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount, COMPUTEPO),
+	VKPipelineObject(allocator, info->pipelineId,  info->descriptorId, info->dynamicPerSet, info->descCount, info->maxDynCap, info->pushRangeCount, info->barrierCount, COMPUTEPIPELINETYPE),
 	x(info->x),
 	y(info->y),
 	z(info->z)

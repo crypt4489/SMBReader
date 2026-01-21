@@ -56,14 +56,9 @@ void VKGraphicsOneTimeQueue::DrawScene(RecordingBufferObject* rbo, uint32_t fram
 			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
 		}
 
-		if (objHeader->type == GRAPHICS)
+		if (objHeader->type == GRAPHICSPIPELINETYPE)
 		{
 			VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-			obj->Draw(rbo, frameNum, 0);
-		}
-		else if (objHeader->type == INDIRECTPO)
-		{
-			VKIndirectPipelineObject* obj = (VKIndirectPipelineObject*)objHeader;
 			obj->Draw(rbo, frameNum, 0);
 		}
 	}

@@ -48,14 +48,9 @@ void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 		}
 
 
-		if (objHeader->type == GRAPHICS)
+		if (objHeader->type == GRAPHICSPIPELINETYPE)
 		{
 			VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-			obj->Draw(rbo, frameNum, descriptorCount);
-		}
-		else if (objHeader->type == INDIRECTPO)
-		{
-			VKIndirectPipelineObject* obj = (VKIndirectPipelineObject*)objHeader;
 			obj->Draw(rbo, frameNum, descriptorCount);
 		}
 		

@@ -1225,9 +1225,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	};
 
-	IndirectIntermediaryPipelineInfo indirectDebugDrawPipelineCreate = {
+	GraphicsIntermediaryPipelineInfo indirectDebugDrawPipelineCreate = {
 		.drawType = 0,
-		.vertexBufferIndex = ~0,
+		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = 5,
 		.descCount = 2,
@@ -1237,11 +1237,12 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = debugIndirectDrawData.commandBufferAlloc,
-		.indirectDrawCount = debugIndirectDrawData.commandBufferSize
+		.indirectDrawCount = debugIndirectDrawData.commandBufferSize,
+		.indirectCountAllocation = debugIndirectDrawData.commandBufferCountAlloc
 	};
 
 
-	debugIndirectDrawData.indirectDrawPipeline =  VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDebugDrawPipelineCreate, false);
+	debugIndirectDrawData.indirectDrawPipeline =  VKRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDebugDrawPipelineCreate, false);
 
 
 
@@ -1582,9 +1583,9 @@ void ApplicationLoop::InitializeRuntime()
 	};
 
 
-	IndirectIntermediaryPipelineInfo indirectDrawCreate = {
+	GraphicsIntermediaryPipelineInfo indirectDrawCreate = {
 		.drawType = 0,
-		.vertexBufferIndex = ~0,
+		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = GENERIC,
 		.descCount = 1,
@@ -1594,10 +1595,11 @@ void ApplicationLoop::InitializeRuntime()
 		.indexOffset = 0,
 		.vertexOffset = 0,
 		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
-		.indirectDrawCount = mainIndirectDrawData.commandBufferSize
+		.indirectDrawCount = mainIndirectDrawData.commandBufferSize,
+		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
 	};
 
-	mainIndirectDrawData.indirectDrawPipeline = VKRenderer::gRenderInstance->CreateIndirectVulkanPipelineObject(&indirectDrawCreate, true);
+	mainIndirectDrawData.indirectDrawPipeline = VKRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, true);
 
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
