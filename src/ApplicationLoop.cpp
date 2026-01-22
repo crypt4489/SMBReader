@@ -1023,7 +1023,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				GetPoolIndexByFormat(format));
 	}
 
-	VKRenderer::gRenderInstance->UpdateSamplerBinding(globalTexturesDescriptor, 0, mainDictionary.textureHandles.data() + index, index, totalTextureCount);
+	BindlessSamplerUpdate update; 
+
+	update.samplercount = totalTextureCount;
+	update.begdestinationslot = index;
+	update.handles = mainDictionary.textureHandles.data() + index;
+
+	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, SAMPLERBINDLESS, &update);
 	
 	for (int i = 0; i < totalMeshCount; i++)
 	{
@@ -1135,7 +1141,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 	
-	//VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 4, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 4, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
 	
 
@@ -1192,7 +1198,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
-	//VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	VKRenderer::gRenderInstance->descriptorManager.BindBarrier(debugIndirectDrawData.indirectCullDescriptor, 5, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
 
 	std::array debugCullDescriptors = { debugIndirectDrawData.indirectCullDescriptor };

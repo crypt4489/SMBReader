@@ -727,14 +727,11 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 	while (g < j)
 	{
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
-		if (resource->type == CONSTANT_BUFFER)
-		{
-			pushConstantSize += resource->size;
-		}
-		else
+		if (resource->type != CONSTANT_BUFFER)
 		{
 			break;
 		}
+		pushConstantSize += resource->size;
 		g++;
 	}
 
@@ -836,7 +833,7 @@ std::array<void*, 1000> batchAddresses;
 std::array<size_t, 1000> batchSizes;
 std::array<size_t, 1000> batchOffsets;
 
-void RenderInstance::CopyHostRegions()
+void RenderInstance::UploadHostTransfers()
 {
 	
 	int memCount = transferPool.linkCount.load();
@@ -898,6 +895,50 @@ void RenderInstance::CopyHostRegions()
 	if (batchCounter)
 	{
 		dev->WriteToHostBufferBatch(previousBuffer, batchAddresses.data(), batchSizes.data(), batchOffsets.data(), previousMax - previousMin, previousMin, batchCounter);
+	}
+}
+
+void RenderInstance::UploadDescriptorsUpdates()
+{
+	int memCount = descriptorUpdatePool.linkCount.load();
+
+	if (!memCount) return;
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	descriptorUpdatePool.SetupPop();
+	
+	ShaderResourceUpdateLink* link = descriptorUpdatePool.linkHead;
+	ShaderResourceUpdate region;
+
+	EntryHandle previousBuffer = EntryHandle();
+
+	DescriptorSetBuilder* builder = nullptr;
+
+	while (link)
+	{
+		link = descriptorUpdatePool.PopLink(&region, link);
+
+		EntryHandle index = descriptorManager.vkDescriptorSets[region.descriptorSet];
+
+		void* data = region.data;
+
+		if (index != previousBuffer)
+		{
+			builder = dev->UpdateDescriptorSet(index);
+			previousBuffer = index;
+		}
+		
+		switch (region.type)
+		{
+		case SAMPLERBINDLESS:
+		{
+			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)region.data;
+			builder->AddBindlessTextureArray(update->handles, update->samplercount, update->begdestinationslot, 1, currentFrame, region.bindingIndex);
+			break;
+		}
+
+		}
 	}
 }
 
@@ -1576,7 +1617,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			{
 				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)header;
 				if (!samplers->textureHandles)
-					builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, 0, samplers->arrayCount, frames, i);
+					builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, 0, frames, 0, i);
 				break;
 			}
 
@@ -1609,21 +1650,6 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 	descriptorManager.vkDescriptorSets[descriptorSet] = handle;
 
 	return handle;
-}
-
-void RenderInstance::UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
-	ShaderResourceSet* set = (ShaderResourceSet*)head;
-
-	EntryHandle handle = descriptorManager.vkDescriptorSets[descriptorSet];
-
-	int frames = set->setCount;
-
-	DescriptorSetBuilder* builder = dev->UpdateDescriptorSet(handle);
-
-	builder->AddBindlessTextureArray(handles, texCount, destinationArray, 0, frames, bindingIndex);
 }
 
 int RenderInstance::GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex)
@@ -1755,17 +1781,18 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 		vkPipelineObject->SetPerObjectData(dynamicOffsets.data(), dynamicNumber);
 
-		for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount; i++)
+		for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount; i++)
 		{
-			ShaderResourceConstantBuffer* pushArgs = nullptr;
-			do {
-				pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet);
-				constantBufferPerSet++;
-			} while (!pushArgs && ((++j) < info->descCount) && !(constantBufferPerSet = 0));
-
-			if (pushArgs) {
-				vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+			ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
+			if (!pushArgs)
+			{
+				j++;
+				constantBufferPerSet = 0;
+				continue;
 			}
+		
+			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+			
 		}
 
 		
@@ -1848,18 +1875,16 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 
 	vkPipelineObject->SetPerObjectData(dynamicOffsets.data(), dynamicNumber);
 
-
-	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount; i++)
+	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount; i++)
 	{
-		ShaderResourceConstantBuffer* pushArgs = nullptr;
-		do {
-			pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet);
-			constantBufferPerSet++;
-		} while (!pushArgs && ((++j) < info->descCount) && !(constantBufferPerSet = 0));
-
-		if (pushArgs) {
-			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+		ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
+		if (!pushArgs)
+		{
+			j++;
+			constantBufferPerSet = 0;
+			continue;
 		}
+		vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
 	}
 	
 	
@@ -2061,7 +2086,9 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 void RenderInstance::DrawScene(uint32_t imageIndex)
 {
-	CopyHostRegions();
+	UploadHostTransfers();
+
+	UploadDescriptorsUpdates();
 
 	EntryHandle cbindex = currentCBIndex[currentFrame];
 

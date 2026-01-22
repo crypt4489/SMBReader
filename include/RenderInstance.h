@@ -52,10 +52,6 @@ struct ComputeIntermediaryPipelineInfo
 };
 
 
-
-#define FULL_ALLOCATION_SIZE 0
-#define ABSOLUTE_ALLOCATION_OFFSET 0
-
 enum AllocationType
 {
 	STATIC = 0,
@@ -491,7 +487,9 @@ struct RenderInstance
 
 	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType);
 
-	void CopyHostRegions();
+	void UploadHostTransfers();
+
+	void UploadDescriptorsUpdates();
 
 	void InvokeTransferCommands(RecordingBufferObject* rbo);
 
@@ -543,8 +541,6 @@ struct RenderInstance
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
 	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
-
-	void UpdateSamplerBinding(int descriptorSet, int bindingIndex, EntryHandle* handles, uint32_t destinationArray, uint32_t texCount);
 
 	int GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex);
 
@@ -634,6 +630,8 @@ struct RenderInstance
 	HostDriverTransferPool<3> transferPool;
 
 	TransferCommandsPool<3> transferCommandPool;
+
+	ShaderResourceUpdatePool<3> descriptorUpdatePool;
 };
 
 namespace VKRenderer {

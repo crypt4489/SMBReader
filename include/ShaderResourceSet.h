@@ -77,6 +77,215 @@ struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
 {
 };
 
+#include "AppAllocator.h"
+
+struct ShaderResourceUpdate
+{
+	ShaderResourceType type;
+	int descriptorSet;
+	int bindingIndex;
+	int copyCount;
+	void* data;
+	int dataSize;
+};
+
+struct ShaderResourceUpdateLink
+{
+	int shaderResourceIndex;
+	ShaderResourceUpdateLink* next;
+};
+
+struct BindlessSamplerUpdate
+{
+	uint32_t begdestinationslot;
+	uint32_t samplercount;
+	EntryHandle* handles;
+};
+
+template <int T_MaxRegionCopy>
+struct ShaderResourceUpdatePool
+{
+	char stagingbuffer[32 * 1024];
+	std::array<ShaderResourceUpdate, 1000> updateRegions;
+	std::array<ShaderResourceUpdateLink, 1000> updateLinks;
+	ShaderResourceUpdateLink* linkHead = nullptr;
+	ShaderResourceUpdateLink** popPrev = nullptr;
+	std::atomic<int> linkCount = 0;
+	std::atomic<int> updateRegionAlloc = 0;
+	std::atomic<int> currentStagingBufferWrite = 0;
+
+	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data)
+	{
+		ShaderResourceUpdateLink* link = Find(descriptorid, bindingindex);
+		ShaderResourceUpdate* region = nullptr;
+
+		int size = 0;
+
+		switch (type)
+		{
+		case SAMPLERBINDLESS:
+		{
+			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
+			size = (sizeof(EntryHandle) * update->samplercount) + sizeof(BindlessSamplerUpdate);
+			break;
+		}
+		}
+
+
+		if (!link)
+		{
+			int regionAlloc = UpdateAtomic(updateRegionAlloc, 1, (int)updateRegions.size());
+
+			region = &updateRegions[regionAlloc];
+
+			link = &updateLinks[regionAlloc];
+
+			
+
+			
+			int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+
+			switch (type)
+			{
+			case SAMPLERBINDLESS:
+			{
+				BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
+				BindlessSamplerUpdate* cachedUpdate = (BindlessSamplerUpdate*)(stagingbuffer + writeLoc);
+				cachedUpdate->begdestinationslot = update->begdestinationslot;
+				cachedUpdate->samplercount = update->samplercount;
+				cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
+				memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->samplercount);
+				break;
+			}
+			}
+			
+			region->data = stagingbuffer + writeLoc;
+			region->dataSize = size;
+			region->descriptorSet = descriptorid;
+
+			region->bindingIndex = bindingindex;
+
+			link->shaderResourceIndex = regionAlloc;
+			link->next = nullptr;
+
+
+
+			Insert(link);
+
+
+
+
+		}
+		else
+		{
+			region = &updateRegions[link->shaderResourceIndex];
+
+			if (region->type != type)
+			{
+				return -1;
+			}
+			
+			if (size > region->dataSize)
+			{
+				int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+				region->data = stagingbuffer + writeLoc;
+			}
+
+			memcpy(region->data, data, size);
+			
+			
+
+			region->dataSize = size;
+		}
+
+		region->type = type;
+		region->copyCount = T_MaxRegionCopy;
+
+		return 0;
+	}
+
+	void Insert(ShaderResourceUpdateLink* newlink)
+	{
+		int newid = updateRegions[newlink->shaderResourceIndex].descriptorSet;
+		int newbindingindex = updateRegions[newlink->shaderResourceIndex].bindingIndex;
+		ShaderResourceUpdateLink** test = &linkHead;
+		while (*test && (updateRegions[(*test)->shaderResourceIndex].descriptorSet <= newid))
+		{
+			if ((updateRegions[(*test)->shaderResourceIndex].bindingIndex < newbindingindex))
+				break;
+			test = &((*test)->next);
+		}
+		newlink->next = *test;
+		*test = newlink;
+		linkCount.fetch_add(1);
+	}
+
+	void Delete(ShaderResourceUpdateLink* deletelink)
+	{
+		ShaderResourceUpdateLink** link = &linkHead;
+		while (*link != deletelink)
+		{
+			link = &((*link)->next);
+		}
+
+		*link = deletelink->next;
+
+		ShaderResourceUpdate* region = &updateRegions[deletelink->shaderResourceIndex];
+		region->bindingIndex = -1;
+		region->copyCount = -1;
+		region->data = nullptr;
+		region->descriptorSet = -1;
+		region->type = -1;
+		region->dataSize = -1;
+	}
+
+	ShaderResourceUpdateLink* Find(int descriptor, int bindingindex)
+	{
+		ShaderResourceUpdateLink* link = linkHead;
+		while (link && ((updateRegions[link->shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[link->shaderResourceIndex].descriptorSet != bindingindex)))
+		{
+			link = link->next;
+		}
+		return link;
+	}
+
+	void SetupPop()
+	{
+		popPrev = &linkHead;
+	}
+
+	ShaderResourceUpdateLink* PopLink(ShaderResourceUpdate* outputRegion, ShaderResourceUpdateLink* link)
+	{
+		if (!link) return nullptr;
+
+		ShaderResourceUpdate* region = &updateRegions[link->shaderResourceIndex];
+		outputRegion->type = region->type;
+		outputRegion->descriptorSet = region->descriptorSet;
+		outputRegion->bindingIndex = region->bindingIndex;
+		outputRegion->copyCount = region->copyCount;
+		outputRegion->dataSize = region->dataSize;
+		outputRegion->data = region->data;
+		ShaderResourceUpdateLink* linkRet = link->next;
+		if (region->copyCount > 1)
+		{
+			region->copyCount--;
+			popPrev = &link->next;
+		}
+		else
+		{
+			*popPrev = linkRet;
+			linkCount--;
+			region->bindingIndex = -1;
+			region->copyCount = -1;
+			region->data = nullptr;
+			region->descriptorSet = -1;
+			region->type = INVALID_SHADER_RESOURCE;
+			region->dataSize = -1;
+		}
+		return linkRet;
+	}
+};
+
 template <int N>
 struct ShaderResourceManager
 {

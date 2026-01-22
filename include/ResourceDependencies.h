@@ -69,6 +69,7 @@ enum ShaderResourceType
 	IMAGESTORE3D = 32,
 	SAMPLERBINDLESS = 64,
 	BUFFER_VIEW = 128,
+	INVALID_SHADER_RESOURCE = 0x7FFFFFFF
 };
 
 enum ShaderResourceAction

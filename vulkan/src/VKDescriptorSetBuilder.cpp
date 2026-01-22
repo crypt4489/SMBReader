@@ -112,7 +112,7 @@ void DescriptorSetBuilder::AddStorageImageDescription(VkImageView view, uint32_t
 	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t arrayCount, uint32_t frames, uint32_t binding)
+void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t frames, uint32_t firstSet, uint32_t binding)
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * frames));
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
@@ -126,7 +126,7 @@ void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, 
 		imageInfo->sampler = device->GetSamplerByTexture(textureHandles[i], 0);
 	}
 
-	for (uint32_t frame = 0; frame < frames; frame++)
+	for (uint32_t frame = firstSet; frame < firstSet+frames; frame++)
 	{
 		VkWriteDescriptorSet descriptorWrite{};
 		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -136,7 +136,7 @@ void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, 
 		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		descriptorWrite.descriptorCount = texCount;
 		descriptorWrite.pImageInfo = imageInfos;
-		descriptorWrites[frame] = descriptorWrite;
+		descriptorWrites[frame-firstSet] = descriptorWrite;
 	}
 
 	vkUpdateDescriptorSets(device->device, frames, descriptorWrites, 0, nullptr);
@@ -144,7 +144,6 @@ void DescriptorSetBuilder::AddBindlessTextureArray(EntryHandle* textureHandles, 
 
 void DescriptorSetBuilder::AddUniformBuffer(VkBuffer buffer, VkDeviceSize size, uint32_t binding, uint32_t frames, VkDeviceSize offset)
 {
-
 	AddBufferTypePerFrame(buffer, size, binding, frames, offset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 }
 
