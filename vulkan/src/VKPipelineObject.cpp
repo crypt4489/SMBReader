@@ -322,3 +322,207 @@ void VKPipelineObject::AddPushConstant(void* _data, uint32_t size, uint32_t offs
 	args->offset = offset;
 	args->stage = flags;
 }
+
+void VKPipelineObject::ChangePipelineMemeber(
+	PipelineModMember member,
+	void* value
+)
+{
+	switch (member)
+	{
+	case PIPELINE_MOD_MEMBER_TYPE:
+	{
+		type = *static_cast<PipelineObjectType*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_OBJECTDATA:
+	{
+		//objectData = static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_MAXOBJECTCAPACITY:
+	{
+		maxObjectCapacity = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_OBJECTCOUNT:
+	{
+		objectCount = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_PIPELINEID:
+	{
+		pipelineID = *static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_DESCRIPTORSETID:
+	{
+		descriptorSetId = static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_DESCRIPTORCOUNT:
+	{
+		descriptorCount = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_DYNAMICPERSET:
+	{
+		//dynamicPerSet = static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_PUSHCONSTANTCOUNT:
+	{
+		pushConstantCount = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_PUSHARGS:
+	{
+		//pushArgs = static_cast<PushConstantArguments*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INFOS:
+	{
+		//infos = static_cast<VkBarrierInfo*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_MEMBARRIERCAPACITY:
+	{
+		memBarrierCapacity = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_MEMBARRIERCOUNTER:
+	{
+		//memBarrierCounter = *static_cast<uint32_t*>(value);
+		break;
+	}
+
+	default:
+	{
+		break;
+	}
+	}
+}
+
+void VKGraphicsPipelineObject::ChangePipelineMemeber (
+	PipelineModMember member,
+	void* value
+)
+{
+	VKPipelineObject::ChangePipelineMemeber(member, value);
+
+	switch (member)
+	{
+	case PIPELINE_MOD_MEMBER_VERTEXBUFFERINDEX:
+	{
+		vertexBufferIndex = *static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDEXBUFFERHANDLE:
+	{
+		indexBufferHandle = *static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTBUFFERHANDLE:
+	{
+		indirectBufferHandle = *static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFERHANDLE:
+	{
+		indirectCountBufferHandle = *static_cast<EntryHandle*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_VERTEXBUFFEROFFSET:
+	{
+		vertexBufferOffset = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDEXBUFFEROFFSET:
+	{
+		indexBufferOffset = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTBUFFEROFFSET:
+	{
+		indirectBufferOffset = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFEROFFSET:
+	{
+		indirectCountBufferOffset = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_VERTEXCOUNT:
+	{
+		vertexCount = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDEXCOUNT:
+	{
+		indexCount = *static_cast<size_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INSTANCECOUNT:
+	{
+		instanceCount = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDEXTYPE:
+	{
+		indexType = *static_cast<VkIndexType*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTCOMMANDSTRIDE:
+	{
+		indirectCommandStride = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTCOUNTSTRIDE:
+	{
+		indirectCountStride = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_INDIRECTDRAWCOUNT:
+	{
+		indirectDrawCount = *static_cast<uint32_t*>(value);
+		break;
+	}
+
+	default:
+	{
+		break;
+	}
+	}
+}
+
+void VKComputePipelineObject::ChangePipelineMemeber(
+	PipelineModMember member,
+	void* value
+)
+{
+	VKPipelineObject::ChangePipelineMemeber(member, value);
+
+	switch (member)
+	{
+	case PIPELINE_MOD_MEMBER_X:
+	{
+		x = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_Y:
+	{
+		y = *static_cast<uint32_t*>(value);
+		break;
+	}
+	case PIPELINE_MOD_MEMBER_Z:
+	{
+		z = *static_cast<uint32_t*>(value);
+		break;
+	}
+
+	default:
+	{
+		break;
+	}
+	}
+}

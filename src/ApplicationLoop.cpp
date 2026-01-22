@@ -893,12 +893,11 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	}
 
 
+	
+
 	int tag = 2;
 
 	VKRenderer::gRenderInstance->transferPool.Create(&tag, sizeof(uint32_t), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-
-
-	
 
 
 	DebugDrawStruct drawStruct;
@@ -918,7 +917,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	VKRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
-	mainIndirectDrawData.commandBufferCount += count;
+	
 
 	debugIndirectDrawData.commandBufferCount++;
 
@@ -936,6 +935,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	VKRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	debugIndirectDrawData.commandBufferCount++;
+
+	mainIndirectDrawData.commandBufferCount += count;
 }
 
 
@@ -1609,7 +1610,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(-6.0f, 5.0f, 5.0f, 15.0f) };
+	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(0.0f, 5.0f, 10.0f, 15.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 

@@ -4,6 +4,46 @@
 #include "VKTypes.h"
 #include "vulkan/vulkan.h"
 
+enum PipelineModMember
+{
+	// VKPipelineObject
+	PIPELINE_MOD_MEMBER_TYPE,
+	PIPELINE_MOD_MEMBER_OBJECTDATA,
+	PIPELINE_MOD_MEMBER_MAXOBJECTCAPACITY,
+	PIPELINE_MOD_MEMBER_OBJECTCOUNT,
+	PIPELINE_MOD_MEMBER_PIPELINEID,
+	PIPELINE_MOD_MEMBER_DESCRIPTORSETID,
+	PIPELINE_MOD_MEMBER_DESCRIPTORCOUNT,
+	PIPELINE_MOD_MEMBER_DYNAMICPERSET,
+	PIPELINE_MOD_MEMBER_PUSHCONSTANTCOUNT,
+	PIPELINE_MOD_MEMBER_PUSHARGS,
+	PIPELINE_MOD_MEMBER_INFOS,
+	PIPELINE_MOD_MEMBER_MEMBARRIERCAPACITY,
+	PIPELINE_MOD_MEMBER_MEMBARRIERCOUNTER,
+
+	// VKGraphicsPipelineObject
+	PIPELINE_MOD_MEMBER_VERTEXBUFFERINDEX,
+	PIPELINE_MOD_MEMBER_INDEXBUFFERHANDLE,
+	PIPELINE_MOD_MEMBER_INDIRECTBUFFERHANDLE,
+	PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFERHANDLE,
+	PIPELINE_MOD_MEMBER_VERTEXBUFFEROFFSET,
+	PIPELINE_MOD_MEMBER_INDEXBUFFEROFFSET,
+	PIPELINE_MOD_MEMBER_INDIRECTBUFFEROFFSET,
+	PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFEROFFSET,
+	PIPELINE_MOD_MEMBER_VERTEXCOUNT,
+	PIPELINE_MOD_MEMBER_INDEXCOUNT,
+	PIPELINE_MOD_MEMBER_INSTANCECOUNT,
+	PIPELINE_MOD_MEMBER_INDEXTYPE,
+	PIPELINE_MOD_MEMBER_INDIRECTCOMMANDSTRIDE,
+	PIPELINE_MOD_MEMBER_INDIRECTCOUNTSTRIDE,
+	PIPELINE_MOD_MEMBER_INDIRECTDRAWCOUNT,
+
+	// VKComputePipelineObject
+	PIPELINE_MOD_MEMBER_X,
+	PIPELINE_MOD_MEMBER_Y,
+	PIPELINE_MOD_MEMBER_Z
+};
+
 struct VKComputePipelineObjectCreateInfo
 {
 	uint32_t x;
@@ -127,6 +167,11 @@ struct VKPipelineObject
 	
 	void AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, 
 		EntryHandle barrierIndex, VKBarrierLocation location, uint16_t barrierType);
+
+	void ChangePipelineMemeber(
+		PipelineModMember member,
+		void* value
+	);
 };
 
 
@@ -148,6 +193,11 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 	uint32_t indirectCommandStride;
 	uint32_t indirectCountStride;
 	uint32_t indirectDrawCount;
+
+	void ChangePipelineMemeber(
+		PipelineModMember member,
+		void* value
+	);
 };
 
 
@@ -162,5 +212,9 @@ struct VKComputePipelineObject : public VKPipelineObject
 
 	void Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 
+	void ChangePipelineMemeber(
+		PipelineModMember member,
+		void* value
+	);
 };
 

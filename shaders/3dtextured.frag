@@ -4,8 +4,8 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoords;
 layout(location = 2) in vec2 texCoords2;
-
-layout(location = 3) flat in uint modelIdx;
+layout(location = 3) in vec3 inNormal;
+layout(location = 4) flat in uint modelIdx;
 
 layout(location = 0) out vec4 outColor;
 
@@ -92,6 +92,22 @@ void main() {
         normal = normal * 2.0 - 1.0;
         
         normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
+
+        LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
+
+        vec3 lightDir = normalize(light.pos.xyz - position);
+
+        //vec3 viewDir = gs.world[2].xyz;
+
+        float diffuse = max(dot(normal, lightDir), 0.0);
+
+        float distance = length(light.pos.xyz - position);
+
+        albedoColor *= (vec4(229, 211, 191, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
+    } 
+    else
+    {
+        vec3 normal = normalize(transpose(inverse(mat3(modelData.m))) * inNormal);
 
         LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
 

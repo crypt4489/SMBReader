@@ -64,8 +64,8 @@ struct Frustrum
 layout(location = 0) out vec3 position;
 layout(location = 1) out vec2 texCoords;
 layout(location = 2) out vec2 texCoords2;
-//layout(location = 3) out vec3 normal;
-layout(location = 3) flat out uint modelIndex;
+layout(location = 3) out vec3 normal;
+layout(location = 4) flat out uint modelIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -128,6 +128,25 @@ vec2 converttexcoords16(uint offset)
 	return vec2(float(tiX), float(tiY)) * dx * 16.0;;
 }
 
+
+vec3 convertnormal(uint offset)
+{
+    int lo = int(VertexData.vertexData[offset + 0]);
+    int lo2 = int(VertexData.vertexData[offset + 1]);
+    int hi = int(VertexData.vertexData[offset + 2]);
+    int hi2 = int(VertexData.vertexData[offset + 3]);
+
+    int normal = int((hi2<<24) | (hi<<16) | (lo2<<8) | (lo));
+
+    float denom = pow(2.0, 31.0);
+
+    float x = float(normal << 21) * 1.0/denom;
+    float y = float((normal << 10) & 0xfffff800) * 1.0/denom;
+    float z = float((normal & 0xffc00000)) * 1.0/(denom-1.0);
+
+    return vec3(x, y, z);
+}
+
 vec3 pack6decomp(uint offset, PerModel model)
 {
 
@@ -153,7 +172,7 @@ void main() {
     uint comp = modelData.vertexComponents;
     texCoords = vec2(0.0, 0.0);
     texCoords2 = vec2(0.0, 0.0);
-  //  normal = vec3(0.0);
+    normal = vec3(0.0);
 
     uint stride = modelData.vertexStride;
 
@@ -167,6 +186,8 @@ void main() {
         {
             offset += 4;
         }
+
+       
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
@@ -183,6 +204,7 @@ void main() {
 
         if ((comp&NORMAL)==NORMAL)
         {
+            normal = normalize(convertnormal(offset));
             offset += 4;
         }
 
@@ -207,6 +229,12 @@ void main() {
         if ((comp & TEXTURES1) == TEXTURES1)
         {
             texCoords = vec2(ReconstructVEC4(offset+16).xy);
+        }
+
+        if ((comp & TEXTURES2) == TEXTURES2)
+        {
+            texCoords2 = vec2(ReconstructVEC4(offset+16+8).xy);
+
         }
     }
 }

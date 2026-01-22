@@ -423,9 +423,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 
 				//norms = bswap32_u(norms);
 
-				vertex->NORMAL.x = (((float)(norms & 0x7ff)) * ax) - 1.0f;
-				vertex->NORMAL.y = (((float)((norms & 0x3ff800) >> 11)) * ax) - 1.0f;
-				vertex->NORMAL.z = (((float)((norms & 0xffc00000) >> 22)) * bx) - 1.0f;
+				vertex->NORMAL.x = ((float)(norms << 21) * (1.0/(INT_MAX-1)));
+				vertex->NORMAL.y = ((float)((norms & 0xfffff800) << 10) * (1.0/(INT_MAX-1)));
+				vertex->NORMAL.z = ((float)(norms & 0xffc00000) * (1.0/(INT_MAX)));
 
 				int16_t t[2];
 				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];

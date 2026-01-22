@@ -119,8 +119,8 @@ typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 {
 	Vector2uc BONES;
 	Vector2uc WEIGHTS;
-	int NORMAL;
 	Vector2s TEXTURE;
+	int NORMAL;
 	Vector3s POSITION;
 
 	cpospack6_cnorm_c16tex1_bone2_type_h() = default;
