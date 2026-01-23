@@ -54,7 +54,13 @@ struct RenderInstance
 
 	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
 
-	void UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VkSampleCountFlagBits flags);
+	void UsePipelineBuilders(
+		VKGraphicsPipelineBuilder* generic, 
+		VKGraphicsPipelineBuilder* text, 
+		VKGraphicsPipelineBuilder* debug, 
+		VKGraphicsPipelineBuilder* normaldebug, 
+		VkSampleCountFlagBits flags
+	);
 
 	EntryHandle CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipeline, ShaderGraph* graph);
 
@@ -187,15 +193,15 @@ struct RenderInstance
 	char* shaderDetailsData;
 	std::atomic<int> shaderDetailAlloc = 0;
 
-	RenderAllocationHolder<50> allocations{};
+	RenderAllocationHolder<100> allocations{};
 
-	ArrayAllocator<EntryHandle, 50> renderStateObjects{};
+	ArrayAllocator<EntryHandle, 100> renderStateObjects{};
 
-	ArrayAllocator<EntryHandle, 50> computeStateObjects{};
+	ArrayAllocator<EntryHandle, 100> computeStateObjects{};
 
-	ArrayAllocator<int, 50> graphIndices{};
+	ArrayAllocator<int, 100> graphIndices{};
 
-	ArrayAllocator<PipelineHandle, 100> stateObjectHandles{};
+	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
 
 	int width = 0; 
 	int height = 0;

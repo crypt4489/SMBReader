@@ -12,6 +12,8 @@
 
 ApplicationLoop* loop;
 
+
+
 std::array<std::string, 4> commandsStrings =
 {
 	"end",
@@ -111,6 +113,8 @@ static int globalLightTypesBufferSize = globalLightSize * sizeof(uint32_t);
 
 std::array<int, 125> tempArr;
 
+static int normalDebugAlloc;
+
 struct DebugDrawStruct
 {
 	Vector4f center; // fourth component is radius for sphere type
@@ -152,6 +156,9 @@ static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
 
 static TextureDictionary mainDictionary;
 
+Vector4f wow = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
+
+LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = wow };
 
 #define MAX_GEOMETRY 2048
 #define MAX_MESHES 4096
@@ -438,7 +445,10 @@ void ApplicationLoop::Execute()
 
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
+					return 1;
 				}
+
+				return 0;
 			};
 
 		QueryPerformanceFrequency(&frequency);
@@ -453,6 +463,8 @@ void ApplicationLoop::Execute()
 		int lightCountPrev = globalLightCount;
 
 		VKRenderer::gRenderInstance->EndFrame();
+
+		static int what2 = 0;
 
 		while (running)
 		{
@@ -524,6 +536,8 @@ void ApplicationLoop::Execute()
 			if (mainWindow->windowData.info.HandleResizeRequested())
 			{
 				VKRenderer::gRenderInstance->RecreateSwapChain();
+				c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
+				UpdateCameraMatrix();
 				continue;
 			}
 
@@ -548,7 +562,18 @@ void ApplicationLoop::Execute()
 
 			ThreadManager::ASyncThreadsDone();
 
-			fps();
+			int what = fps();
+
+			static float x = 230.0f;
+			
+			source3.pos.x = wow.x + cosf(DegToRad(x)) * 5.0f;
+			source3.pos.z = wow.z + -sinf(DegToRad(x)) * 10.0f;
+
+			VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
+
+			x += 0.01f;
+
+			std::cout << source3.pos.x << " " << source3.pos.z << std::endl;
 
 			frameCounter++;
 
@@ -722,7 +747,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	*geomSpecificData = Identity4f();
 		
-	*geomSpecificData = *geomSpecificData * 5.0f;
+	//*geomSpecificData = *geomSpecificData * 5.0f;
 		
 	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
 
@@ -884,7 +909,14 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	
 		
+		VkDrawIndirectCommand command;
 
+		command.firstInstance = 0;
+		command.firstVertex = 0;
+		command.instanceCount = 1;
+		command.vertexCount = vertexCount * 2;
+
+		rendInst->transferPool.Create(&command, sizeof(VkDrawIndirectCommand), normalDebugAlloc, sizeof(VkDrawIndirectCommand) * i, TransferType::CACHED);
 
 
 		
@@ -1574,6 +1606,8 @@ void ApplicationLoop::InitializeRuntime()
 	mainIndirectDrawData.indirectCullPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
 
 
+
+
 	mainIndirectDrawData.indirectDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
@@ -1589,6 +1623,39 @@ void ApplicationLoop::InitializeRuntime()
 
 	};
 
+	
+	normalDebugAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndirectCommand)*10, 64, AllocationType::PERFRAME);
+
+	int normalDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(13, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(normalDrawDescriptor, globalMeshLocation, 0, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(normalDrawDescriptor, globalVertexBuffer, 1, 0);
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(normalDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	std::array<int, 1> indirectDrawDescriptors2 = {
+		normalDrawDescriptor,
+
+	};
+	GraphicsIntermediaryPipelineInfo normalDrawCreate = {
+	.drawType = 0,
+	.vertexBufferHandle = ~0,
+	.vertexCount = 0,
+	.pipelinename = 13,
+	.descCount = 1,
+	.descriptorsetid = indirectDrawDescriptors2.data(),
+	.indexBufferHandle = ~0,
+	.indexSize = 0,
+	.indexOffset = 0,
+	.vertexOffset = 0,
+	.indirectAllocation = normalDebugAlloc,
+	.indirectDrawCount = 6,
+	.indirectCountAllocation = ~0
+	};
+
+	//int what = VKRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&normalDrawCreate, true);
+	
 
 	GraphicsIntermediaryPipelineInfo indirectDrawCreate = {
 		.drawType = 0,
@@ -1610,7 +1677,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(0.0f, 5.0f, 10.0f, 15.0f) };
+//	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(5.0f, 5.0f, 10.0f, 15.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 
@@ -1619,11 +1686,11 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	VKRenderer::gRenderInstance->transferPool.Create(&source4, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	
-	c.CamLookAt(Vector3f(0.0f, 0.0f, 55.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
+	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();
 
-	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 1.0f, 10000.0f, DegToRad(45.0f));
+	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 	
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 }

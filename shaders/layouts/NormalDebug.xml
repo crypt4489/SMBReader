@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="vert">
-		3dtextured.vert
+		normaldebug.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		3dtextured.frag
+		normaldebug.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="vf">
@@ -15,14 +15,11 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="storage" used="vf" rw="read">
+		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="v" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="f" rw="read">
-		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
-

@@ -61,11 +61,7 @@ struct Frustrum
 };
 
 
-layout(location = 0) out vec3 position;
-layout(location = 1) out vec2 texCoords;
-layout(location = 2) out vec2 texCoords2;
-layout(location = 3) out vec3 normal;
-layout(location = 4) flat out uint modelIndex;
+layout(location = 0) out vec4 color;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -74,6 +70,7 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 world;
 } gs;
 
+layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
 
 layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
@@ -165,20 +162,19 @@ vec3 pack6decomp(uint offset, PerModel model)
 void main() {
     
 
-    modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
+    uint modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
 
     PerModel modelData = perModelBuffer.objects[modelIndex];
 
     uint comp = modelData.vertexComponents;
-    texCoords = vec2(0.0, 0.0);
-    texCoords2 = vec2(0.0, 0.0);
-    normal = vec3(0.0);
 
     uint stride = modelData.vertexStride;
 
-    uint offset = (stride * gl_VertexIndex) + modelData.vertexByteOffset;
-
+    uint offset = (stride * uint(gl_VertexIndex/2)) + modelData.vertexByteOffset;
     
+    vec3 normal = vec3(0.0);
+
+    color = vec4(1.0, 1.0, 0.0, 1.0);
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -191,13 +187,21 @@ void main() {
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
-            texCoords = converttexcoords16(offset);
             offset += 4;
         }
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-            texCoords2 = converttexcoords16(offset);
+            vec2 normalCords = converttexcoords16(offset);
+
+            uint textureIndex = modelData.textureHandles[1];
+
+           normal = texture(Textures[textureIndex], normalCords).xyz;
+
+           normal = normal * 2.0 - 1.0;
+        
+            normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
+
             offset += 4;
         }
 
@@ -205,15 +209,27 @@ void main() {
         if ((comp&NORMAL)==NORMAL)
         {
             normal = normalize(convertnormal(offset));
+
+            normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
+
             offset += 4;
         }
 
         if ((comp & POSITION) == POSITION)
         {
-            mat4 VP = gs.proj * gs.view;
+            mat4 MVP = gs.proj * gs.view;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = VP * modelData.m * intPos;
-            position = vec3(modelData.m * intPos);
+
+            intPos = modelData.m * intPos;
+
+            if ((gl_VertexIndex & 1) == 1)
+            {
+                intPos += (vec4(normal, 0));
+            }
+
+
+            gl_Position = MVP * intPos;
+          
         }
 
     } 
@@ -228,12 +244,12 @@ void main() {
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
-            texCoords = vec2(ReconstructVEC4(offset+16).xy);
+           
         }
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-            texCoords2 = vec2(ReconstructVEC4(offset+16+8).xy);
+            
 
         }
     }

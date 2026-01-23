@@ -89,6 +89,8 @@ void main() {
 
         vec3 normal = texture(Textures[textureIndex], texCoords2).xyz;
 
+       // normal.z *= -1.0;
+
         normal = normal * 2.0 - 1.0;
         
         normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
@@ -99,7 +101,7 @@ void main() {
 
         //vec3 viewDir = gs.world[2].xyz;
 
-        float diffuse = max(dot(normal, lightDir), 0.0);
+        float diffuse = max(dot(normal.xyz, lightDir), 0.0);
 
         float distance = length(light.pos.xyz - position);
 
@@ -109,13 +111,15 @@ void main() {
     {
         vec3 normal = normalize(transpose(inverse(mat3(modelData.m))) * inNormal);
 
+        //normal.z *= -1.0;
+
         LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
 
         vec3 lightDir = normalize(light.pos.xyz - position);
 
         //vec3 viewDir = gs.world[2].xyz;
 
-        float diffuse = max(dot(normal, lightDir), 0.0);
+        float diffuse = max(dot(normal.xyz, lightDir), 0.0);
 
         float distance = length(light.pos.xyz - position);
 
