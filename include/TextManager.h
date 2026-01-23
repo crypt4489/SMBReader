@@ -57,18 +57,8 @@ public:
 
 	static void UpdateVertexBuffer(Text* text, size_t indexInString);
 
-	static void DrawTextTM(RecordingBufferObject& cb, uint32_t frame);
+	static void DrawTextTM(RecordingBufferObject* cb, uint32_t frame);
 
 	static void DestroyTextManager();
-
-	static constexpr uint32_t MAXTEXTRENDERABLES = 64;
-	static constexpr uint32_t BUFFERSIZE = 1048576;
-	static size_t bufferOffset;
-	static size_t vertexCount, commandCount;
-	static int vertexBufferIndex, indirectCommandsIndex;
-	static Font* fonts;
-	static VKGraphicsPipelineObject* obj;
-	static std::vector<std::tuple<Text*, size_t, size_t>> textsCommand;
-	static EntryHandle descHandle;
 };
 

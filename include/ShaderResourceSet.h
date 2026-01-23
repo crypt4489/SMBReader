@@ -2,105 +2,15 @@
 
 #include <array>
 #include <atomic>
-#include <functional>
 
+#include "AppAllocator.h"
+#include "AppTypes.h"
 #include "FileManager.h"
 #include "ResourceDependencies.h"
 
 
-struct ShaderResourceSet
-{
-	int bindingCount;
-	int layoutHandle;
-	int setCount;
-	int barrierCount;
-};
+BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
 
-struct ShaderResourceHeader
-{
-	ShaderResourceType type;
-	ShaderResourceAction action;
-	int binding;
-	uint32_t arrayCount;
-};
-
-struct ShaderResourceImage : public ShaderResourceHeader
-{
-	EntryHandle textureHandle;
-};
-
-struct ShaderResourceSamplerBindless : public ShaderResourceHeader
-{
-	EntryHandle *textureHandles;
-	uint32_t textureCount;
-};
-
-struct ShaderResourceBuffer : public ShaderResourceHeader
-{
-	int allocation;
-	int offset;
-};
-
-struct ShaderResourceBufferView : public ShaderResourceHeader
-{
-	EntryHandle bufferViewHandle;
-	uint32_t subAllocations;
-	int allocationIndex;
-};
-
-
-struct ShaderResourceConstantBuffer : public ShaderResourceHeader
-{
-	ShaderStageType stage;
-	int size;
-	int offset;
-	void* data;
-};
-
-struct ShaderResourceBarrier
-{
-	MemoryBarrierType type;
-	BarrierStage srcStage;
-	BarrierStage dstStage;
-	BarrierAction srcAction;
-	BarrierAction dstAction;
-};
-
-struct ImageShaderResourceBarrier : public ShaderResourceBarrier
-{
-	VkImageLayout srcResourceLayout;
-	VkImageLayout dstResourceLayout;
-	VkImageAspectFlags imageType;
-};
-
-struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
-{
-};
-
-#include "AppAllocator.h"
-
-struct ShaderResourceUpdate
-{
-	ShaderResourceType type;
-	int descriptorSet;
-	int bindingIndex;
-	int copyCount;
-	void* data;
-	int dataSize;
-};
-
-struct ShaderResourceUpdateLink
-{
-	int shaderResourceIndex;
-	ShaderResourceUpdateLink* next;
-};
-
-struct BindlessSamplerUpdate
-{
-	uint32_t begdestinationslot;
-	uint32_t samplercount;
-	EntryHandle* handles;
-};
 
 template <int T_MaxRegionCopy>
 struct ShaderResourceUpdatePool
@@ -108,8 +18,8 @@ struct ShaderResourceUpdatePool
 	char stagingbuffer[32 * 1024];
 	std::array<ShaderResourceUpdate, 1000> updateRegions;
 	std::array<ShaderResourceUpdateLink, 1000> updateLinks;
-	ShaderResourceUpdateLink* linkHead = nullptr;
-	ShaderResourceUpdateLink** popPrev = nullptr;
+	int linkHead = -1;
+	int* popPrev = nullptr;
 	std::atomic<int> linkCount = 0;
 	std::atomic<int> updateRegionAlloc = 0;
 	std::atomic<int> currentStagingBufferWrite = 0;
@@ -123,7 +33,7 @@ struct ShaderResourceUpdatePool
 
 		switch (type)
 		{
-		case SAMPLERBINDLESS:
+		case ShaderResourceType::SAMPLERBINDLESS:
 		{
 			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
 			size = (sizeof(EntryHandle) * update->samplercount) + sizeof(BindlessSamplerUpdate);
@@ -147,7 +57,7 @@ struct ShaderResourceUpdatePool
 
 			switch (type)
 			{
-			case SAMPLERBINDLESS:
+			case ShaderResourceType::SAMPLERBINDLESS:
 			{
 				BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
 				BindlessSamplerUpdate* cachedUpdate = (BindlessSamplerUpdate*)(stagingbuffer + writeLoc);
@@ -166,11 +76,11 @@ struct ShaderResourceUpdatePool
 			region->bindingIndex = bindingindex;
 
 			link->shaderResourceIndex = regionAlloc;
-			link->next = nullptr;
+			link->next = -1;
 
 
 
-			Insert(link);
+			Insert(regionAlloc);
 
 
 
@@ -204,24 +114,25 @@ struct ShaderResourceUpdatePool
 		return 0;
 	}
 
-	void Insert(ShaderResourceUpdateLink* newlink)
+	void Insert(int index)
 	{
-		int newid = updateRegions[newlink->shaderResourceIndex].descriptorSet;
-		int newbindingindex = updateRegions[newlink->shaderResourceIndex].bindingIndex;
-		ShaderResourceUpdateLink** test = &linkHead;
-		while (*test && (updateRegions[(*test)->shaderResourceIndex].descriptorSet <= newid))
+		int newid = updateRegions[index].descriptorSet;
+		int newbindingindex = updateRegions[index].bindingIndex;
+		int* test = &linkHead;
+		while ((*test != -1) && (updateRegions[updateLinks[(*test)].shaderResourceIndex].descriptorSet <= newid))
 		{
-			if ((updateRegions[(*test)->shaderResourceIndex].bindingIndex < newbindingindex))
+			if ((updateRegions[updateLinks[(*test)].shaderResourceIndex].bindingIndex < newbindingindex))
 				break;
-			test = &((*test)->next);
+			test = &(updateLinks[(*test)].next);
 		}
-		newlink->next = *test;
-		*test = newlink;
+		updateLinks[index].next = *test;
+		*test = index;
 		linkCount.fetch_add(1);
 	}
 
 	void Delete(ShaderResourceUpdateLink* deletelink)
 	{
+		/*
 		ShaderResourceUpdateLink** link = &linkHead;
 		while (*link != deletelink)
 		{
@@ -235,18 +146,19 @@ struct ShaderResourceUpdatePool
 		region->copyCount = -1;
 		region->data = nullptr;
 		region->descriptorSet = -1;
-		region->type = -1;
+		region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
 		region->dataSize = -1;
+		*/
 	}
 
 	ShaderResourceUpdateLink* Find(int descriptor, int bindingindex)
 	{
-		ShaderResourceUpdateLink* link = linkHead;
-		while (link && ((updateRegions[link->shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[link->shaderResourceIndex].descriptorSet != bindingindex)))
+		int link = linkHead;
+		while ((link != -1) && ((updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != bindingindex)))
 		{
-			link = link->next;
+			link = updateLinks[link].next;
 		}
-		return link;
+		return (link == -1 || link >= 1000 ? nullptr : &updateLinks[link]);
 	}
 
 	void SetupPop()
@@ -254,22 +166,22 @@ struct ShaderResourceUpdatePool
 		popPrev = &linkHead;
 	}
 
-	ShaderResourceUpdateLink* PopLink(ShaderResourceUpdate* outputRegion, ShaderResourceUpdateLink* link)
+	int PopLink(ShaderResourceUpdate* outputRegion, int link)
 	{
-		if (!link) return nullptr;
+		if (link < 0) return -1;
 
-		ShaderResourceUpdate* region = &updateRegions[link->shaderResourceIndex];
+		ShaderResourceUpdate* region = &updateRegions[updateLinks[link].shaderResourceIndex];
 		outputRegion->type = region->type;
 		outputRegion->descriptorSet = region->descriptorSet;
 		outputRegion->bindingIndex = region->bindingIndex;
 		outputRegion->copyCount = region->copyCount;
 		outputRegion->dataSize = region->dataSize;
 		outputRegion->data = region->data;
-		ShaderResourceUpdateLink* linkRet = link->next;
+		int linkRet = updateLinks[link].next;
 		if (region->copyCount > 1)
 		{
 			region->copyCount--;
-			popPrev = &link->next;
+			popPrev = &updateLinks[link].next;
 		}
 		else
 		{
@@ -279,8 +191,10 @@ struct ShaderResourceUpdatePool
 			region->copyCount = -1;
 			region->data = nullptr;
 			region->descriptorSet = -1;
-			region->type = INVALID_SHADER_RESOURCE;
+			region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
 			region->dataSize = -1;
+			updateLinks[link].next = -1;
+			updateLinks[link].shaderResourceIndex = -1;
 		}
 		return linkRet;
 	}
@@ -314,7 +228,7 @@ struct ShaderResourceManager
 
 		ShaderResourceBuffer* header = (ShaderResourceBuffer*)offsets[bindingIndex];
 
-		if (header->type != UNIFORM_BUFFER && header->type != STORAGE_BUFFER)
+		if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER)
 			return;
 
 		header->allocation = allocationIndex;
@@ -329,7 +243,7 @@ struct ShaderResourceManager
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
-		if (header->type != SAMPLER && header->type != IMAGESTORE2D)
+		if (header->type != ShaderResourceType::SAMPLER && header->type != ShaderResourceType::IMAGESTORE2D)
 			return;
 
 		header->textureHandle = index;
@@ -343,7 +257,7 @@ struct ShaderResourceManager
 
 		ShaderResourceSamplerBindless* header = (ShaderResourceSamplerBindless*)offsets[bindingIndex];
 
-		if (header->type != SAMPLERBINDLESS)
+		if (header->type != ShaderResourceType::SAMPLERBINDLESS)
 			return;
 
 		header->textureHandles = indices;
@@ -358,7 +272,7 @@ struct ShaderResourceManager
 
 		ShaderResourceBufferView* header = (ShaderResourceBufferView*)offsets[bindingIndex];
 
-		if (header->type != BUFFER_VIEW)
+		if (header->type != ShaderResourceType::BUFFER_VIEW)
 			return;
 
 		header->bufferViewHandle = bufferViewHandle;
@@ -380,8 +294,8 @@ struct ShaderResourceManager
 
 		switch (desc->type)
 		{
-		case IMAGESTORE2D:
-		case SAMPLER:
+		case ShaderResourceType::IMAGESTORE2D:
+		case ShaderResourceType::SAMPLER:
 		{
 			head += sizeof(ShaderResourceImage);
 			ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)head;
@@ -390,7 +304,7 @@ struct ShaderResourceManager
 			barrier->dstStage = stage;
 			break;
 		}
-		case BUFFER_VIEW:
+		case ShaderResourceType::BUFFER_VIEW:
 		{
 			head += sizeof(ShaderResourceBufferView);
 			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
@@ -398,8 +312,8 @@ struct ShaderResourceManager
 			barrier->dstAction = action;
 			break;
 		}
-		case STORAGE_BUFFER:
-		case UNIFORM_BUFFER:
+		case ShaderResourceType::STORAGE_BUFFER:
+		case ShaderResourceType::UNIFORM_BUFFER:
 		{
 
 			head += sizeof(ShaderResourceBuffer);
@@ -413,7 +327,7 @@ struct ShaderResourceManager
 		
 	}
 
-	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, VkImageLayout oldLayout, VkImageLayout dstLayout, bool location)
+	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -423,18 +337,18 @@ struct ShaderResourceManager
 		head = offsets[binding];
 		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
 
-		if (desc->type != SAMPLER && desc->type != IMAGESTORE2D)
+		if (desc->type != ShaderResourceType::SAMPLER && desc->type != ShaderResourceType::IMAGESTORE2D)
 			return;
 
 		switch (desc->type)
 		{
-		case IMAGESTORE2D:
-		case SAMPLER:
+		case ShaderResourceType::IMAGESTORE2D:
+		case ShaderResourceType::SAMPLER:
 			head += sizeof(ShaderResourceImage);
 
 			break;
-		case STORAGE_BUFFER:
-		case UNIFORM_BUFFER:
+		case ShaderResourceType::STORAGE_BUFFER:
+		case ShaderResourceType::UNIFORM_BUFFER:
 
 			head += sizeof(ShaderResourceBuffer);
 			break;
@@ -444,7 +358,7 @@ struct ShaderResourceManager
 		ImageShaderResourceBarrier* imageBarrier = (ImageShaderResourceBarrier*)head;
 
 
-		imageBarrier[barrierIndex].imageType = VK_IMAGE_ASPECT_COLOR_BIT;
+		imageBarrier[barrierIndex].imageType = ImageUsage::COLOR;
 		imageBarrier[barrierIndex].dstResourceLayout = dstLayout;
 		imageBarrier[barrierIndex].srcResourceLayout = oldLayout;
 
@@ -474,7 +388,7 @@ struct ShaderResourceManager
 
 		ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[set->bindingCount - (constantBuffer + 1)]);
 
-		if (ret->type != CONSTANT_BUFFER) return nullptr;
+		if (ret->type != ShaderResourceType::CONSTANT_BUFFER) return nullptr;
 
 		return ret;
 	}
@@ -492,7 +406,7 @@ struct ShaderResourceManager
 		while (iter >= 0)
 		{
 			ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[iter--]);
-			if (ret->type & CONSTANT_BUFFER) count++;
+			if (ret->type == ShaderResourceType::CONSTANT_BUFFER) count++;
 			else break;
 		}
 
@@ -508,13 +422,6 @@ struct ShaderResourceManager
 
 };
 
-struct ShaderComputeLayout
-{
-	unsigned long x;
-	unsigned long y;
-	unsigned long z;
-};
-
 struct ShaderDetails
 {
 	int shaderNameSize;
@@ -527,16 +434,9 @@ struct ShaderDetails
 	void* GetShaderData();
 };
 
-#define KB 1024
-#define MB 1024 * KB
-#define GB 1024 * MB
 
 struct ShaderGraphReader
 {
-	static char readerMemBuffer[16 * MB];
-	static int readerMemBufferAllocate;
-
-
 	struct ShaderXMLTag
 	{
 		unsigned long hashCode;

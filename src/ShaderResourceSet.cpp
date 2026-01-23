@@ -1,7 +1,16 @@
 #include "ShaderResourceSet.h"
-char ShaderGraphReader::readerMemBuffer[16 * MB];
-int ShaderGraphReader::readerMemBufferAllocate = 0;
 
+static char readerMemBuffer[16 * MiB];
+static int readerMemBufferAllocate;
+
+BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
+{
+	BarrierStage flags = 0;
+	flags |= (VERTEX_SHADER_BARRIER) * ((type & VERTEXSHADERSTAGE) != 0);
+	//flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
+	flags |= (COMPUTE_BARRIER) * ((type & COMPUTESHADERSTAGE) != 0);
+	return flags;
+}
 
 ShaderDetails* ShaderDetails::GetNext()
 {
@@ -202,7 +211,7 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 		{
 
 			ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceIter++);
-			if (tag->resourceType & CONSTANT_BUFFER)
+			if (tag->resourceType == ShaderResourceType::CONSTANT_BUFFER)
 			{
 				resource->binding = ~0;
 			}
@@ -222,7 +231,7 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 			setLay->bindingCount++;
 
 
-			if (!(tag->resourceType & CONSTANT_BUFFER))
+			if (!(tag->resourceType == ShaderResourceType::CONSTANT_BUFFER))
 			{
 				bindingCount++;
 			}

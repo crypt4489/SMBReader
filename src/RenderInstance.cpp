@@ -35,7 +35,7 @@ namespace VKRenderer {
 
 namespace API {
 
-	VkCompareOp ConvertDepthTestAppToVulkan(DepthTest testApp)
+	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp)
 	{
 		VkCompareOp ret = VK_COMPARE_OP_LESS;
 		switch (testApp)
@@ -50,7 +50,7 @@ namespace API {
 		return ret;
 	}
 
-	VkFormat ConvertSMBToVkFormat(ImageFormat format)
+	VkFormat ConvertImageFormatToVulkanFormat(ImageFormat format)
 	{
 		VkFormat vkFormat = VK_FORMAT_MAX_ENUM;
 		switch (format)
@@ -144,14 +144,65 @@ namespace API {
 		return top;
 	}
 
+	VkAccessFlags ConvertResourceActionToVulkanAccessFlags(BarrierAction action)
+	{
+		VkAccessFlags flags = 0;
+		flags |= (VK_ACCESS_SHADER_WRITE_BIT) * ((action & WRITE_SHADER_RESOURCE) != 0);
+		flags |= (VK_ACCESS_SHADER_READ_BIT) * ((action & READ_SHADER_RESOURCE) != 0);
+		flags |= (VK_ACCESS_UNIFORM_READ_BIT) * ((action & READ_UNIFORM_BUFFER) != 0);
+		flags |= (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) * ((action & READ_VERTEX_INPUT) != 0);
+		flags |= (VK_ACCESS_INDIRECT_COMMAND_READ_BIT) & ((action & READ_INDIRECT_COMMAND) != 0);
+		return flags;
+	}
+
+	VkPipelineStageFlags ConvertBarrierStageToVulkanPipelineStage(BarrierStage sourceStage)
+	{
+		VkPipelineStageFlags flags = 0;
+		flags |= (VK_PIPELINE_STAGE_VERTEX_SHADER_BIT) * ((sourceStage & VERTEX_SHADER_BARRIER) != 0);
+		flags |= (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT) * ((sourceStage & VERTEX_INPUT_BARRIER) != 0);
+		flags |= (VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT) * ((sourceStage & COMPUTE_BARRIER) != 0);
+		flags |= (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT) * ((sourceStage & BEGINNING_OF_PIPE) != 0);
+		flags |= (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT) * ((sourceStage & FRAGMENT_BARRIER) != 0);
+		flags |= (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT) * ((sourceStage & INDIRECT_DRAW_BARRIER) != 0);
+		return flags;
+	}
+
+	VkShaderStageFlags ConvertShaderStageToVulkanShaderStage(ShaderStageType type)
+	{
+		VkShaderStageFlags flags = 0;
+		flags |= (VK_SHADER_STAGE_VERTEX_BIT) * ((type & VERTEXSHADERSTAGE) != 0);
+		flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
+		flags |= (VK_SHADER_STAGE_COMPUTE_BIT) * ((type & COMPUTESHADERSTAGE) != 0);
+		return flags;
+	}
+
+	VkImageLayout ConvertImageLayoutToVulkanImageLayout(ImageLayout layout)
+	{
+		VkImageLayout outLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		switch (layout)
+		{
+		case ImageLayout::UNDEFINED:
+
+			break;
+		case ImageLayout::WRITEABLE:
+			outLayout = VK_IMAGE_LAYOUT_GENERAL;
+			break;
+		case ImageLayout::SHADERREADABLE:
+			outLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			break;
+		case ImageLayout::COLORATTACHMENT:
+			outLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			break;
+		case ImageLayout::DEPTHSTENCILATTACHMENT:
+			outLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			break;
+		}
+
+		return outLayout;
+	}
 }
 
-
-
-
-#define KB 1024
-#define MB 1024 * KB
-#define GB 1024 * MB
 
 RenderInstance::RenderInstance()
 	:
@@ -159,9 +210,9 @@ RenderInstance::RenderInstance()
 	descriptorManager{}
 {
 	vkInstance = new VKInstance();
-	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(5 * KB);
-	descriptorManager.hostResourceHeap = (uintptr_t)malloc(5 * KB);
-	shaderDetailsData = (char*)malloc(5 * KB);
+	vulkanShaderGraphs.shaderGraphs = (uintptr_t)malloc(5 * KiB);
+	descriptorManager.hostResourceHeap = (uintptr_t)malloc(5 * KiB);
+	shaderDetailsData = (char*)malloc(5 * KiB);
 
 	if (!vulkanShaderGraphs.shaderGraphs || !descriptorManager.hostResourceHeap || !shaderDetailsData)
 	{
@@ -241,7 +292,7 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t 
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	VkFormat vkDepthFormat = API::ConvertSMBToVkFormat(depthFormat);
+	VkFormat vkDepthFormat = API::ConvertImageFormatToVulkanFormat(depthFormat);
 
 	depthImages[index] = dev->CreateImage(width, height,
 		1, vkDepthFormat, 1,
@@ -305,7 +356,7 @@ void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits samp
 
 	VkFormat format = swapChain->GetSwapChainFormat();
 
-	VkFormat vkDepthFormat = API::ConvertSMBToVkFormat(depthFormat);
+	VkFormat vkDepthFormat = API::ConvertImageFormatToVulkanFormat(depthFormat);
 
 	if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
 	{
@@ -503,16 +554,16 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 	{
 		ShaderSetLayout* set = (ShaderSetLayout*)graph->GetSet(j);
 		descriptorBuilders[j] = dev->CreateDescriptorSetLayoutBuilder(set->bindingCount);
-		set->vkDescriptorLayout = descriptorLayoutIndex+j;
+		set->vulkanDescLayout = descriptorLayoutIndex+j;
 	}
 
 	for (int j = 0; j < graph->resourceCount; j++)
 	{
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(j);
 
-		VkShaderStageFlags stageFlags = ConvertShaderStageToVKShaderStageFlags(resource->stages);
+		VkShaderStageFlags stageFlags = API::ConvertShaderStageToVulkanShaderStage(resource->stages);
 
-		if (resource->type & CONSTANT_BUFFER) {
+		if (resource->type == ShaderResourceType::CONSTANT_BUFFER) {
 			descriptorBuilders[resource->set]->bindingCounts--;
 			continue;
 		}
@@ -521,26 +572,26 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 
 		switch (resource->type)
 		{
-		case UNIFORM_BUFFER:
+		case ShaderResourceType::UNIFORM_BUFFER:
 			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags);
 			break;
-		case IMAGESTORE2D:
+		case ShaderResourceType::IMAGESTORE2D:
 			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
 			break;
-		case SAMPLER:
+		case ShaderResourceType::SAMPLER:
 			descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
 			break;
-		case STORAGE_BUFFER:
+		case ShaderResourceType::STORAGE_BUFFER:
 			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
 			break;
-		case SAMPLERBINDLESS:
+		case ShaderResourceType::SAMPLERBINDLESS:
 			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 			descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
 			break;
-		case BUFFER_VIEW:
-			if (resource->action == SHADERREAD)
+		case ShaderResourceType::BUFFER_VIEW:
+			if (resource->action == ShaderResourceAction::SHADERREAD)
 				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags);
-			else if (resource->action == SHADERWRITE)
+			else if (resource->action == ShaderResourceAction::SHADERWRITE)
 				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags);
 			break;
 		}
@@ -702,7 +753,7 @@ EntryHandle RenderInstance::CreateVulkanGraphicPipelineTemplate(VKGraphicsPipeli
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{
 		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
-		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vkDescriptorLayout];
+		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 	}
 
 	return pipelineBuilder->CreateGraphicsPipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle.data(), graph->shaderMapCount);
@@ -727,7 +778,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 	while (g < j)
 	{
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
-		if (resource->type != CONSTANT_BUFFER)
+		if (resource->type != ShaderResourceType::CONSTANT_BUFFER)
 		{
 			break;
 		}
@@ -746,7 +797,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{
 		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
-		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vkDescriptorLayout];
+		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 	}
 
 	return pipelineBuilder->CreateComputePipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle);
@@ -908,14 +959,14 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 	descriptorUpdatePool.SetupPop();
 	
-	ShaderResourceUpdateLink* link = descriptorUpdatePool.linkHead;
+	int link = descriptorUpdatePool.linkHead;
 	ShaderResourceUpdate region;
 
 	EntryHandle previousBuffer = EntryHandle();
 
 	DescriptorSetBuilder* builder = nullptr;
 
-	while (link)
+	while (link >= 0)
 	{
 		link = descriptorUpdatePool.PopLink(&region, link);
 
@@ -931,7 +982,7 @@ void RenderInstance::UploadDescriptorsUpdates()
 		
 		switch (region.type)
 		{
-		case SAMPLERBINDLESS:
+		case ShaderResourceType::SAMPLERBINDLESS:
 		{
 			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)region.data;
 			builder->AddBindlessTextureArray(update->handles, update->samplercount, update->begdestinationslot, 1, currentFrame, region.bindingIndex);
@@ -981,7 +1032,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 
 		lbuffMemBarriers.buffer = dev->GetBufferHandle(index);
 		lbuffMemBarriers.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		lbuffMemBarriers.dstAccessMask = ConvertResourceActionToVulkan(region.dstAction);
+		lbuffMemBarriers.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(region.dstAction);
 		lbuffMemBarriers.offset = intOffset;
 		lbuffMemBarriers.size = intSize;
 		lbuffMemBarriers.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -990,7 +1041,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 
 		RBOPipelineBarrierArgs args = {
 			.srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT,
-			.dstStageMask = ConvertResourceStageToVulkan(region.dstStage),
+			.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(region.dstStage),
 			.dependencyFlags = 0,
 			.memoryBarrierCount = 0,
 			.pMemoryBarriers = nullptr,
@@ -1017,12 +1068,12 @@ int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, A
 
 	switch (allocType)
 	{
-	case STATIC:
+	case AllocationType::STATIC:
 		break;
-	case PERFRAME:
+	case AllocationType::PERFRAME:
 		allocSize*=MAX_FRAMES_IN_FLIGHT;
 		break;
-	case PERDRAW:
+	case AllocationType::PERDRAW:
 		break;
 	}
 	
@@ -1046,12 +1097,12 @@ int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, Al
 
 	switch (allocType)
 	{
-	case STATIC:
+	case AllocationType::STATIC:
 		break;
-	case PERFRAME:
+	case AllocationType::PERFRAME:
 		allocSize *= MAX_FRAMES_IN_FLIGHT;
 		break;
-	case PERDRAW:
+	case AllocationType::PERDRAW:
 		break;
 	}
 
@@ -1077,12 +1128,12 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 
 	switch (allocType)
 	{
-	case STATIC:
+	case AllocationType::STATIC:
 		break;
-	case PERFRAME:
+	case AllocationType::PERFRAME:
 		allocSize *= MAX_FRAMES_IN_FLIGHT;
 		break;
-	case PERDRAW:
+	case AllocationType::PERDRAW:
 		break;
 	}
 
@@ -1112,7 +1163,7 @@ EntryHandle RenderInstance::CreateImage(
 	return majorDevice->CreateSampledImage(
 		imageData, sizes, blobSize,
 		width, height,
-		mipLevels, API::ConvertSMBToVkFormat(type),
+		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
 }
@@ -1124,7 +1175,7 @@ EntryHandle RenderInstance::CreateStorageImage(
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	return majorDevice->CreateStorageImage(
 		width, height,
-		mipLevels, API::ConvertSMBToVkFormat(type),
+		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
 		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
 }
@@ -1206,7 +1257,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
     ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(targetSet);
 
     set->bindingCount = resourceSet->bindingCount;
-    set->layoutHandle = resourceSet->vkDescriptorLayout;
+    set->layoutHandle = resourceSet->vulkanDescLayout;
     set->setCount = setCount;
 	set->barrierCount = 0;
 
@@ -1218,7 +1269,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 	int constantCount = set->bindingCount;
 	for (int h = 0; h < set->bindingCount; h++)
 	{
-		MemoryBarrierType memBarrierType = MEMORY_BARRIER;
+		MemoryBarrierType memBarrierType = MemoryBarrierType::MEMORY_BARRIER;
 
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceSet->resourceStart+h);
 
@@ -1239,11 +1290,11 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 		switch (resource->type)
 		{
-		case IMAGESTORE2D:
+		case ShaderResourceType::IMAGESTORE2D:
 		{
 			ptr += sizeof(ShaderResourceImage);
-			memBarrierType = IMAGE_BARRIER;
-			if (resource->action & SHADERWRITE)
+			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
+			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
 				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
 				barriers->dstStage = ConvertShaderStageToBarrierStage(resource->stages);
@@ -1259,11 +1310,11 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			}
 			break;
 		}
-		case SAMPLER:
+		case ShaderResourceType::SAMPLER:
 		{
 			ptr += sizeof(ShaderResourceImage);
-			memBarrierType = IMAGE_BARRIER;
-			if (resource->action & SHADERWRITE)
+			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
+			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
 				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)ptr;
 				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
@@ -1274,14 +1325,14 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			}
 			break;
 		}
-		case SAMPLERBINDLESS:
+		case ShaderResourceType::SAMPLERBINDLESS:
 		{
-			memBarrierType = IMAGE_BARRIER;
+			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
 			memset((void*)ptr, 0, sizeof(ShaderResourceSamplerBindless));
 			ptr += sizeof(ShaderResourceSamplerBindless);
 			break;
 		}
-		case CONSTANT_BUFFER:
+		case ShaderResourceType::CONSTANT_BUFFER:
 		{
 			ShaderResourceConstantBuffer* constants = (ShaderResourceConstantBuffer*)ptr;
 			constants->size = resource->size;
@@ -1290,12 +1341,12 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			ptr += sizeof(ShaderResourceConstantBuffer);
 			break;
 		}
-		case STORAGE_BUFFER:
-		case UNIFORM_BUFFER:
+		case ShaderResourceType::STORAGE_BUFFER:
+		case ShaderResourceType::UNIFORM_BUFFER:
 		{
-			memBarrierType = BUFFER_BARRIER;
+			memBarrierType = MemoryBarrierType::BUFFER_BARRIER;
 			ptr += sizeof(ShaderResourceBuffer);
-			if (resource->action & SHADERWRITE)
+			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
 				ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
 				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
@@ -1306,11 +1357,11 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			}
 			break;
 		}
-		case BUFFER_VIEW:
+		case ShaderResourceType::BUFFER_VIEW:
 		{
-			memBarrierType = BUFFER_BARRIER;
+			memBarrierType = MemoryBarrierType::BUFFER_BARRIER;
 			ptr += sizeof(ShaderResourceBufferView);
-			if (resource->action & SHADERWRITE)
+			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
 				ShaderResourceBarrier* barriers = (ShaderResourceBarrier*)ptr;
 				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
@@ -1337,7 +1388,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 {
 	this->windowMan = window;
 
-	vkInstance->SetInstanceDataAndSize(800 * KB, 256 * KB);
+	vkInstance->SetInstanceDataAndSize(800 * KiB, 256 * KiB);
 	vkInstance->CreateRenderInstance(WINDOWS);
 
 	OSWindowInternalData data;
@@ -1383,11 +1434,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		vkInstance->deviceExtCount,
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT,
 		&features2, vkInstance->renderSurface,
-		64 * KB,
-		8 * KB,
-		96 * KB,
-		12 * MB,
-		16 * KB
+		64 * KiB,
+		8 * KiB,
+		96 * KiB,
+		12 * MiB,
+		16 * KiB
 	);
 
 
@@ -1400,7 +1451,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
 
 
@@ -1417,9 +1468,9 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	colorFormat = API::ConvertVkFormatToAppFormat(swcFormat);
 
-	CreateImagePool(128 * MB, colorFormat, 4096, 4096, true);
+	CreateImagePool(128 * MiB, colorFormat, 4096, 4096, true);
 
-	CreateImagePool(128 * MB, depthFormat, 4096, 4096, true);
+	CreateImagePool(128 * MiB, depthFormat, 4096, 4096, true);
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{
@@ -1443,7 +1494,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	globalIndex = majorDevice->CreateHostBuffer
 	(
-		128 * MB, true,
+		128 * MiB, true,
 		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -1455,7 +1506,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
 	);
 
-	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(64 * MB,
+	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(64 * MiB,
 		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
 		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
@@ -1536,8 +1587,8 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 		switch (header->type)
 		{
 		
-		case STORAGE_BUFFER:
-		case UNIFORM_BUFFER:
+		case ShaderResourceType::STORAGE_BUFFER:
+		case ShaderResourceType::UNIFORM_BUFFER:
 		{
 			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
 			auto alloc = allocations[buffer->allocation];
@@ -1580,40 +1631,40 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 		switch (header->type)
 		{
-			case IMAGESTORE2D:
+			case ShaderResourceType::IMAGESTORE2D:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
-			case SAMPLER:
+			case ShaderResourceType::SAMPLER:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), dev->GetSamplerByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
-			case STORAGE_BUFFER:
+			case ShaderResourceType::STORAGE_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
-				if (alloc.allocType == PERFRAME)
+				if (alloc.allocType == AllocationType::PERFRAME)
 					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
 					builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
 				break;
 			}
-			case UNIFORM_BUFFER:
+			case ShaderResourceType::UNIFORM_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 				auto alloc = allocations[buffer->allocation];
-				if (alloc.allocType == PERFRAME)
+				if (alloc.allocType == AllocationType::PERFRAME)
 					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
 					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
 				break;
 			}
 
-			case SAMPLERBINDLESS:
+			case ShaderResourceType::SAMPLERBINDLESS:
 			{
 				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)header;
 				if (!samplers->textureHandles)
@@ -1621,7 +1672,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				break;
 			}
 
-			case BUFFER_VIEW:
+			case ShaderResourceType::BUFFER_VIEW:
 			{
 				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
 
@@ -1631,11 +1682,11 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					{
 
 						VkBufferView handle = dev->GetBufferView(bufferView->bufferViewHandle, i);
-						if (bufferView->action == SHADERREAD)
+						if (bufferView->action == ShaderResourceAction::SHADERREAD)
 						{
 							builder->AddUniformBufferViewPerFrame(handle, bufferView->binding, i);
 						}
-						else if (bufferView->action == SHADERWRITE)
+						else if (bufferView->action == ShaderResourceAction::SHADERWRITE)
 						{
 							builder->AddStorageBufferViewPerFrame(handle, bufferView->binding, i);
 						}
@@ -1660,7 +1711,7 @@ int RenderInstance::GetBufferAllocationViaDescriptor(int descriptorSet, int bind
 
 	ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[bindingIndex];
 
-	if (header->type != UNIFORM_BUFFER && header->type != STORAGE_BUFFER) return -1;
+	if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER) return -1;
 
 	ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 
@@ -1791,7 +1842,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 				continue;
 			}
 		
-			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
 			
 		}
 
@@ -1884,7 +1935,7 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 			constantBufferPerSet = 0;
 			continue;
 		}
-		vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, ConvertShaderStageToVKShaderStageFlags(pushArgs->stage));
+		vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
 	}
 	
 	
@@ -1913,11 +1964,11 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 		while (counter < set->bindingCount)
 		{
 			ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[counter++];
-			if (header->action & SHADERWRITE)
+			if (header->action == ShaderResourceAction::SHADERWRITE || header->action == ShaderResourceAction::SHADERREADWRITE)
 			{
 				switch (header->type)
 				{
-				case IMAGESTORE2D:
+				case ShaderResourceType::IMAGESTORE2D:
 				{
 					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
 					ImageShaderResourceBarrier* barrier = (ImageShaderResourceBarrier*)(imageBarrier + 1);
@@ -1928,16 +1979,16 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					range.levelCount = 1;
 					range.layerCount = 1;
 
-					VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
-					VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
-					VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
-					VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
 					{
 
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, barrier->srcResourceLayout,
-							barrier->dstResourceLayout, imageBarrier->textureHandle, range);
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), imageBarrier->textureHandle, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							BEFORE,
 							srcStage,
@@ -1946,17 +1997,17 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					}
 
 
-					srcAction = ConvertResourceActionToVulkan(barrier2->srcAction);
-					dstAction = ConvertResourceActionToVulkan(barrier2->dstAction);
-					srcStage = ConvertResourceStageToVulkan(barrier2->srcStage);
-					dstStage = ConvertResourceStageToVulkan(barrier2->dstStage);
+					srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->srcAction);
+					dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->dstAction);
+					srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->srcStage);
+					dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->dstStage);
 
 					if (barrier2->dstResourceLayout != barrier2->srcResourceLayout)
 					{
 
 
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, barrier2->srcResourceLayout,
-							barrier2->dstResourceLayout, imageBarrier->textureHandle, range);
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier2->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), imageBarrier->textureHandle, range);
 
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							AFTER,
@@ -1967,7 +2018,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					break;
 				}
-				case SAMPLER:
+				case ShaderResourceType::SAMPLER:
 				{
 					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
 
@@ -1979,16 +2030,16 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					range.levelCount = 1;
 					range.layerCount = 1;
 
-					VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
-					VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
-					VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
-					VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
 					{
 
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, barrier->srcResourceLayout,
-							barrier->dstResourceLayout, imageBarrier->textureHandle, range);
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), imageBarrier->textureHandle, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							BEFORE,
 							srcStage,
@@ -1998,20 +2049,20 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					break;
 				}
-				case BUFFER_VIEW:
+				case ShaderResourceType::BUFFER_VIEW:
 				{
 					ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
-					VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
-					VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
-					VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
-					VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					size_t size = allocations[bufferBarrier->allocationIndex].deviceAllocSize;
 					uint32_t pfo = 0;
 
-					if (allocations[bufferBarrier->allocationIndex].allocType == PERFRAME)
+					if (allocations[bufferBarrier->allocationIndex].allocType == AllocationType::PERFRAME)
 					{
 						size = (allocations[bufferBarrier->allocationIndex].requestedSize + allocations[bufferBarrier->allocationIndex].alignment - 1) & ~(allocations[bufferBarrier->allocationIndex].alignment - 1);
 						pfo = static_cast<uint32_t>(size);
@@ -2036,21 +2087,21 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					break;
 				}
-				case STORAGE_BUFFER:
-				case UNIFORM_BUFFER:
+				case ShaderResourceType::STORAGE_BUFFER:
+				case ShaderResourceType::UNIFORM_BUFFER:
 				{
 					ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
-					VkAccessFlags srcAction = ConvertResourceActionToVulkan(barrier->srcAction);
-					VkAccessFlags dstAction = ConvertResourceActionToVulkan(barrier->dstAction);
-					VkShaderStageFlags srcStage = ConvertResourceStageToVulkan(barrier->srcStage);
-					VkShaderStageFlags dstStage = ConvertResourceStageToVulkan(barrier->dstStage);
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					size_t size = allocations[bufferBarrier->allocation].deviceAllocSize;
 					uint32_t pfo = 0;
 
-					if (allocations[bufferBarrier->allocation].allocType == PERFRAME)
+					if (allocations[bufferBarrier->allocation].allocType == AllocationType::PERFRAME)
 					{
 						size = (allocations[bufferBarrier->allocation].requestedSize + allocations[bufferBarrier->allocation].alignment - 1) & ~(allocations[bufferBarrier->allocation].alignment - 1);
 						pfo = static_cast<uint32_t>(size);
@@ -2165,7 +2216,7 @@ EntryHandle RenderInstance::CreateBufferView(int allocationIndex, VkFormat buffe
 
 	size_t size = alloc.deviceAllocSize;
 
-	if (alloc.allocType == PERFRAME)
+	if (alloc.allocType == AllocationType::PERFRAME)
 	{
 		allocs = MAX_FRAMES_IN_FLIGHT;
 		size = (alloc.requestedSize + (alloc.alignment - 1)) & ~(alloc.alignment - 1);

@@ -3,14 +3,13 @@
 
 #include "RenderInstance.h"
 #include "VertexTypes.h"
-size_t TextManager::bufferOffset = ~0ui64;
-Font* TextManager::fonts;
-size_t TextManager::vertexCount = 0;
-size_t TextManager::commandCount = 0;
-VKGraphicsPipelineObject* TextManager::obj;
-std::vector<std::tuple<Text *, size_t, size_t>> TextManager::textsCommand;
-int TextManager::vertexBufferIndex = ~0i32, TextManager::indirectCommandsIndex = ~0i32;
-EntryHandle TextManager::descHandle;
+size_t bufferOffset = ~0ui64;
+Font*fonts;
+size_t vertexCount = 0;
+size_t commandCount = 0;
+std::vector<std::tuple<Text *, size_t, size_t>> textsCommand;
+int vertexBufferIndex = ~0i32, indirectCommandsIndex = ~0i32;
+EntryHandle descHandle;
 
 void TextManager::CreateFontTextManager(const std::string& imageName, const std::string& dataName)
 {
@@ -29,8 +28,8 @@ void TextManager::CreatePipelineObject()
 
 void TextManager::CreateTextBuffer()
 {
-	vertexBufferIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(BUFFERSIZE, 0, STATIC);
-	indirectCommandsIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U, STATIC);
+	//vertexBufferIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(BUFFERSIZE, 0, STATIC);
+	//indirectCommandsIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U, STATIC);
 }
 
 void TextManager::UploadToVertexBuffer(Text* text)
@@ -99,7 +98,7 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 		 (cCount * sizeof(VkDrawIndirectCommand)), 0, 1);
 }
 
-void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
+void TextManager::DrawTextTM(RecordingBufferObject* cb, uint32_t frame)
 {
 	//obj->DrawIndirectOneBuffer(&cb, static_cast<uint32_t>(textsCommand.size()), frame, 0);
 }
@@ -107,7 +106,6 @@ void TextManager::DrawTextTM(RecordingBufferObject &cb, uint32_t frame)
 void TextManager::DestroyTextManager()
 {
 	if (fonts) delete fonts;
-	if (obj) delete obj;
 }
 
 
