@@ -50,7 +50,7 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 		case GEO:
 		{
 
-			
+			/*
 
 			OSFileHandle* handle = FileManager::GetFile(smb.id);
 
@@ -65,7 +65,7 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 			SMBGeoChunk geoDef{};
 			ProcessGeometryClass(geomHeader.data(), 0, &geoDef, chunk[j].contigOffset + smb.fileOffset, chunk[j].fileOffset + smb.numContiguousBytes + smb.fileOffset);
 
-
+			*/
 			break;
 		}
 		
@@ -137,7 +137,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 			//compressedSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input.data());
 			break;
-		case SMBImageFormat::SMB_R8G8B8A8:
+		case SMBImageFormat::SMB_R8G8B8A8_UNORM:
 			std::memcpy(input.data(), ptr, writeWidth * writeHeight * 4);
 			break;
 		default:
@@ -155,6 +155,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
 			//outputFile.write(input.data() + offset, bpr);
+			OSWriteFile(handle, bpr, input.data() + offset);
 			offset -= bpr;
 		}
 

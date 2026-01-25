@@ -104,7 +104,12 @@ typedef struct pospack6_c16tex2_bone2_type_h
 	Vector2f WEIGHTS;
 
 	pospack6_c16tex2_bone2_type_h() = default;
-	pospack6_c16tex2_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2f& _t2, const Vector2i& _b, const Vector2f& _w);
+	pospack6_c16tex2_bone2_type_h(
+		const Vector4f& _p, 
+		const Vector2f& _t, 
+		const Vector2f& _t2, 
+		const Vector2i& _b, 
+		const Vector2f& _w);
 
 	static VkVertexInputBindingDescription getBindingDescription();
 
@@ -165,7 +170,7 @@ typedef struct cpospack6_c16tex1_bone2_type_h
 
 } CVertex_PosPack6_C16Tex1_Bone2;
 
-
+#pragma pack(push, 1)
 typedef struct cpospack6_c16tex2_bone2_type_h
 {
 	Vector2uc BONES;
@@ -174,10 +179,15 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 	Vector2s TEXTURE2;
 	Vector3s POSITION;
 	
-	
 
 	cpospack6_c16tex2_bone2_type_h() = default;
-	cpospack6_c16tex2_bone2_type_h(const Vector3s& _p, const Vector2s& _t, const Vector2s& _t2, const Vector2uc& _b, const Vector2uc& _w);
+	cpospack6_c16tex2_bone2_type_h(
+		const Vector3s& _p, 
+		const Vector2s& _t, 
+		const Vector2s& _t2, 
+		const Vector2uc& _b, 
+		const Vector2uc& _w
+		);
 
 	static VkVertexInputBindingDescription getBindingDescription();
 
@@ -186,3 +196,4 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 	bool operator==(const cpospack6_c16tex2_bone2_type_h& v);
 
 } CVertex_PosPack6_C16Tex2_Bone2;
+#pragma pack(pop)

@@ -54,7 +54,7 @@ int OSOpenFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle
 	DWORD fileShare = 0;
 	DWORD hAccess = ConvertOSFlags(flags, &fileShare);
 
-	hFile = CreateFile(filename, hAccess, fileShare, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	hFile = CreateFile(filename, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
@@ -103,6 +103,22 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 	fileHandle->filePointer += hBytesRead;
 
 	return hBytesRead;
+}
+
+int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
+{
+	HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+
+	DWORD hBytesWrite = 0;
+
+	if ( WriteFile(hFile, buffer, size, &hBytesWrite, NULL) == FALSE)
+	{
+		return OS_FAILED_WRITE;
+	}
+
+	fileHandle->filePointer += hBytesWrite;
+
+	return hBytesWrite;
 }
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)

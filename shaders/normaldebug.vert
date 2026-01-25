@@ -158,6 +158,23 @@ vec3 pack6decomp(uint offset, PerModel model)
 	return mix( model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
 }
 
+vec3 ReconstructVEC3(uint offset)
+{
+   uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
+            uint(VertexData.vertexData[offset+2]) << 16 |
+            uint(VertexData.vertexData[offset+1]) << 8 |
+            uint(VertexData.vertexData[offset+0]));
+   uint y = (uint(VertexData.vertexData[offset+7]) << 24 | 
+            uint(VertexData.vertexData[offset+6]) << 16 |
+            uint(VertexData.vertexData[offset+5]) << 8 |
+            uint(VertexData.vertexData[offset+4]));
+   uint z = (uint(VertexData.vertexData[offset+11]) << 24 | 
+            uint(VertexData.vertexData[offset+10]) << 16 |
+            uint(VertexData.vertexData[offset+9]) << 8 |
+            uint(VertexData.vertexData[offset+8]));
+   
+   return vec3(uintBitsToFloat(x),uintBitsToFloat(y),uintBitsToFloat(z));
+}
 
 void main() {
     
@@ -192,6 +209,7 @@ void main() {
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
+        /*
             vec2 normalCords = converttexcoords16(offset);
 
             uint textureIndex = modelData.textureHandles[1];
@@ -201,16 +219,18 @@ void main() {
            normal = normal * 2.0 - 1.0;
         
             normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
-
+            */
             offset += 4;
+            normal = ReconstructVEC3(offset+6+24);
+            
         }
 
 
         if ((comp&NORMAL)==NORMAL)
         {
-            normal = normalize(convertnormal(offset));
+           // normal = normalize(convertnormal(offset));
 
-            normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
+          //  normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
 
             offset += 4;
         }

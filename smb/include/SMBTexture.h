@@ -22,8 +22,8 @@ inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
 	case SMBImageFormat::SMB_DXT3:
 		os << "DXT3";
 		break;
-	case SMBImageFormat::SMB_R8G8B8A8:
-		os << "R8G8B8A8";
+	case SMBImageFormat::SMB_R8G8B8A8_UNORM:
+		os << "R8G8B8A8UNORM";
 		break;
 	default:
 		std::cerr << "Unsupported/Unknown texture type";

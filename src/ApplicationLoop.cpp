@@ -279,14 +279,14 @@ static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
 	case X8L8U8V8:         return SMB_X8L8U8V8;
 	case DXT1:             return SMB_DXT1;
 	case DXT3:             return SMB_DXT3;
-	case R8G8B8A8:         return SMB_R8G8B8A8;
+	case R8G8B8A8_UNORM:        return SMB_R8G8B8A8_UNORM;
 
 		// Formats that have no SMB equivalent:
 	case B8G8R8A8:
 	case D24UNORMS8STENCIL:
 	case D32FLOATS8STENCIL:
 	case D32FLOAT:
-	case R8G8B8A8_UNORM:
+	case R8G8B8A8:
 	case R8G8B8:
 	case IMAGE_UNKNOWN:
 	default:
@@ -301,7 +301,7 @@ ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
 	case SMB_X8L8U8V8:     return X8L8U8V8;
 	case SMB_DXT1:         return DXT1;
 	case SMB_DXT3:         return DXT3;
-	case SMB_R8G8B8A8:     return R8G8B8A8;
+	case SMB_R8G8B8A8_UNORM:    return R8G8B8A8_UNORM;
 
 	case SMB_IMAGEUNKNOWN:
 	default:
@@ -323,7 +323,11 @@ ApplicationLoop::~ApplicationLoop() {
 	{ 
 		CleanupRuntime(); 
 	} 
-	delete mainWindow;
+
+	if (mainWindow)
+	{
+		delete mainWindow;
+	}
 }
 
 
@@ -567,13 +571,12 @@ void ApplicationLoop::Execute()
 			static float x = 230.0f;
 			
 			source3.pos.x = wow.x + cosf(DegToRad(x)) * 5.0f;
+			source3.pos.y = 0.0f;
 			source3.pos.z = wow.z + -sinf(DegToRad(x)) * 10.0f;
 
 			VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
 
 			x += 0.01f;
-
-			std::cout << source3.pos.x << " " << source3.pos.z << std::endl;
 
 			frameCounter++;
 

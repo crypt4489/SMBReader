@@ -45,16 +45,14 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 	
 		switch (type)
 		{
-			//case SMBImageFormat::X8L8U8V8:
 			//	std::cerr << "X8L8U8V8 format is not exportable\n";
-			//	return;
 		case SMBImageFormat::SMB_DXT1:
 			size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			break;
 		case SMBImageFormat::SMB_DXT3:
 			size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			break;
-		case SMBImageFormat::SMB_R8G8B8A8:
+		case SMBImageFormat::SMB_R8G8B8A8_UNORM:
 			size = writeWidth * writeHeight * 4;
 			break;
 		default:

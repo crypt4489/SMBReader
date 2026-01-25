@@ -22,7 +22,7 @@ enum SMBImageFormat : uint32_t
 	SMB_X8L8U8V8 = 7,
 	SMB_DXT1 = 12,
 	SMB_DXT3 = 14,
-	SMB_R8G8B8A8 = 18,
+	SMB_R8G8B8A8_UNORM = 18,
 	SMB_IMAGEUNKNOWN = 0xffffffff
 };
 
@@ -187,3 +187,5 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed);
 
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
+
+void CreateBitTangent(SMBGeoChunk* geoDefinition, void* vertexDataOut, int vertexCount, uint16_t* indices, int indexCount, int decompressed);

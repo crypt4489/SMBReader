@@ -109,6 +109,24 @@ vec4 ReconstructVEC4(uint offset)
    return vec4(uintBitsToFloat(x),uintBitsToFloat(y),uintBitsToFloat(z),uintBitsToFloat(w));
 }
 
+vec3 ReconstructVEC3(uint offset)
+{
+   uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
+            uint(VertexData.vertexData[offset+2]) << 16 |
+            uint(VertexData.vertexData[offset+1]) << 8 |
+            uint(VertexData.vertexData[offset+0]));
+   uint y = (uint(VertexData.vertexData[offset+7]) << 24 | 
+            uint(VertexData.vertexData[offset+6]) << 16 |
+            uint(VertexData.vertexData[offset+5]) << 8 |
+            uint(VertexData.vertexData[offset+4]));
+   uint z = (uint(VertexData.vertexData[offset+11]) << 24 | 
+            uint(VertexData.vertexData[offset+10]) << 16 |
+            uint(VertexData.vertexData[offset+9]) << 8 |
+            uint(VertexData.vertexData[offset+8]));
+   
+   return vec3(uintBitsToFloat(x),uintBitsToFloat(y),uintBitsToFloat(z));
+}
+
 
 int unpack_i16(uint offset)
 {
@@ -158,7 +176,12 @@ vec3 pack6decomp(uint offset, PerModel model)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-	return mix( model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
+    vec3 min = model.minMaxBox.min.xyz;
+    vec3 max = model.minMaxBox.max.xyz;
+
+    vec3 pos = mix(min, max, unormPos);
+
+	return pos.xyz;
 }
 
 
@@ -186,8 +209,6 @@ void main() {
         {
             offset += 4;
         }
-
-       
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {

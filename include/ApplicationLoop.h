@@ -75,7 +75,7 @@ public:
 	Semaphore queueSema;
 	std::queue<std::vector<std::string>> commands;
 	bool running, cleaned;
-	WindowManager* mainWindow;
+	WindowManager* mainWindow = nullptr;
 	
 	Camera c;
 
