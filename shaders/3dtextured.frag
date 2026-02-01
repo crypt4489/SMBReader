@@ -1,5 +1,4 @@
 #version 460
-#extension GL_ARB_shader_draw_parameters : require
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoords;
@@ -74,6 +73,24 @@ layout(set = 2, binding = 3) readonly buffer GLBuffer {
     LightSource objects[];
 } lightBuffer;
 
+vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
+{
+    for (uint i = 0; i<modelData.lightCount; i++)
+    {
+        LightSource light = lightBuffer.objects[modelData.lightIndex[i]];
+
+        vec3 lightDir = normalize(light.pos.xyz - worldPos);
+
+        float diffuse = max(dot(normal.xyz, lightDir), 0.0);
+
+        float distance = length(light.pos.xyz - worldPos);
+
+        color *= (vec4(light.color.xyz, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
+    }
+
+    return color;
+}
+
 void main() {
 
     PerModel modelData = perModelBuffer.objects[modelIdx];
@@ -86,35 +103,17 @@ void main() {
     {
         textureIndex = modelData.textureHandles[1];
 
-        vec3 normal = texture(Textures[textureIndex], texCoords2).bgr;
+        vec3 normal = texture(Textures[textureIndex], texCoords2).rgb;
 
         normal = transpose(inverse(mat3(modelData.m))) * (2.0 * normal.xyz - 1.0);
 
-        LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
-
-        vec3 lightDir = normalize(light.pos.xyz - position);
-
-        float diffuse = max(dot(normal.xyz, lightDir), 0.0);
-
-        float distance = length(light.pos.xyz - position);
-
-        albedoColor *= (vec4(229, 211, 191, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
-       
-    
+        albedoColor = DoLights(normal, position, albedoColor, modelData);
     } 
     else 
     {
         vec3 normal = normalize(transpose(inverse(mat3(modelData.m))) * inNormal);
 
-        LightSource light = lightBuffer.objects[modelData.lightIndex[0]];
-
-        vec3 lightDir = normalize(light.pos.xyz - position);
-
-        float diffuse = max(dot(normal.xyz, lightDir), 0.0);
-
-        float distance = length(light.pos.xyz - position);
-
-        albedoColor *= (vec4(229, 211, 191, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
+        albedoColor = DoLights(normal, position, albedoColor, modelData);
     }
 
     outColor = albedoColor;

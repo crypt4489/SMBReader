@@ -28,7 +28,7 @@ enum OSRelativeFlags
 	END = 2,
 };
 
-enum OSErrorFlags
+enum OSFileErrorFlags
 {
 	OS_SUCCESS = 0,
 	OS_FAILED_CREATE = -1,

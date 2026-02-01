@@ -36,6 +36,7 @@ enum ImageFormat
 	D32FLOAT = 7,
 	R8G8B8A8_UNORM = 8,
 	R8G8B8 = 9,
+	B8G8R8A8_UNORM = 10,
 	IMAGE_UNKNOWN = 0x7fffffff
 };
 
@@ -75,6 +76,14 @@ enum class AllocationType
 	STATIC = 0,
 	PERFRAME = 1,
 	PERDRAW = 2
+};
+
+enum class ComponentFormatType
+{
+	NO_BUFFER_FORMAT = 0,
+	RAW_8BIT_BUFFER = 1, 
+	R32_UINT = 2,
+	R32_SINT = 3,
 };
 
 
@@ -223,7 +232,6 @@ struct ShaderResourceBuffer : public ShaderResourceHeader
 
 struct ShaderResourceBufferView : public ShaderResourceHeader
 {
-	EntryHandle bufferViewHandle;
 	int subAllocations;
 	int allocationIndex;
 };
@@ -349,6 +357,8 @@ struct RenderAllocation
 	size_t requestedSize;
 	size_t alignment;
 	AllocationType allocType;
+	ComponentFormatType formatType;
+	EntryHandle viewIndex;
 };
 
 

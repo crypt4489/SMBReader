@@ -264,7 +264,7 @@ struct ShaderResourceManager
 		header->textureCount = texCount;
 	}
 
-	void BindBufferView(int descriptorSet, int allocationIndex, EntryHandle bufferViewHandle, int bindingIndex, int subAllocations)
+	void BindBufferView(int descriptorSet, int allocationIndex, int bindingIndex, int subAllocations)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -275,7 +275,7 @@ struct ShaderResourceManager
 		if (header->type != ShaderResourceType::BUFFER_VIEW)
 			return;
 
-		header->bufferViewHandle = bufferViewHandle;
+	
 		header->subAllocations = subAllocations;
 		header->allocationIndex = allocationIndex;
 	}

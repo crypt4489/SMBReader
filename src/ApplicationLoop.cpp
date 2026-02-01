@@ -50,7 +50,7 @@ struct IndirectDrawData
 	int indirectCullDescriptor;
 	int indirectCullPipeline;
 	int indirectGlobalIDsAlloc;
-	EntryHandle indirectGlobalIDsView;
+	//EntryHandle indirectGlobalIDsView;
 };
 
 struct WorldSpaceGPUPartition
@@ -73,9 +73,9 @@ struct WorldSpaceGPUPartition
 	int postWorldSpaceDivisionDescriptor; //for assigning all the slots
 	int postWorldSpaceDivisionPipeline;
 	int worldSpaceDivisionAlloc; //where all the assignments go 
-	EntryHandle worldSpaceDivisonView;
-	EntryHandle deviceOffsetsView;
-	EntryHandle deviceCountsView;
+	//EntryHandle worldSpaceDivisonView;
+	//EntryHandle deviceOffsetsView;
+	//EntryHandle deviceCountsView;
 }; 
 
 struct LightSource
@@ -158,7 +158,7 @@ static TextureDictionary mainDictionary;
 
 Vector4f wow = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
 
-LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = wow };
+LightSource source3 = { .color = Vector4f(229, 211, 191, 1.0), .pos = wow };
 
 #define MAX_GEOMETRY 2048
 #define MAX_MESHES 4096
@@ -280,6 +280,7 @@ static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
 	case DXT1:             return SMB_DXT1;
 	case DXT3:             return SMB_DXT3;
 	case R8G8B8A8_UNORM:        return SMB_R8G8B8A8_UNORM;
+	case B8G8R8A8_UNORM:        return SMB_B8G8R8A8_UNORM;
 
 		// Formats that have no SMB equivalent:
 	case B8G8R8A8:
@@ -302,6 +303,7 @@ ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
 	case SMB_DXT1:         return DXT1;
 	case SMB_DXT3:         return DXT3;
 	case SMB_R8G8B8A8_UNORM:    return R8G8B8A8_UNORM;
+	case SMB_B8G8R8A8_UNORM:    return B8G8R8A8_UNORM;
 
 	case SMB_IMAGEUNKNOWN:
 	default:
@@ -570,9 +572,9 @@ void ApplicationLoop::Execute()
 
 			static float x = 230.0f;
 			
-			source3.pos.x = wow.x + cosf(DegToRad(x)) * 5.0f;
+			source3.pos.x = wow.x + cosf(DegToRad(-90.0f)) * 5.0f;
 			source3.pos.y = 0.0f;
-			source3.pos.z = wow.z + -sinf(DegToRad(x)) * 10.0f;
+			source3.pos.z = wow.z + -sinf(DegToRad(-90.0f)) * 10.0f;
 
 			VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
 
@@ -593,7 +595,7 @@ void ApplicationLoop::CreateTexturePools()
 		ImageFormat::DXT1,
 		ImageFormat::DXT3,
 		ImageFormat::R8G8B8A8,
-		ImageFormat::R8G8B8A8_UNORM
+		ImageFormat::B8G8R8A8_UNORM
 	};
 
 	auto rendInst = VKRenderer::gRenderInstance;
@@ -703,7 +705,7 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	case ImageFormat::R8G8B8A8:
 		ret = 2;
 		break;
-	case ImageFormat::R8G8B8A8_UNORM:
+	case ImageFormat::B8G8R8A8_UNORM:
 		ret = 3;
 		break;
 	}
@@ -756,7 +758,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
-	*geomSpecificData = *geomSpecificData * rotation;
+	//*geomSpecificData = *geomSpecificData * rotation;
 
 	for (int i = 0; i < count; i++)
 	{
@@ -1132,13 +1134,13 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), AllocationType::PERFRAME);
-	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(globalIndexBufferSize, 16, AllocationType::STATIC);
-	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, AllocationType::STATIC);
+	globalBufferLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
+	globalIndexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(globalIndexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT);
+	globalVertexBuffer = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(globalVertexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT);
 	globalBufferDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(Matrix4f), AllocationType::PERFRAME);;
+	globalMeshLocation = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalMeshSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 
@@ -1149,23 +1151,19 @@ void ApplicationLoop::InitializeRuntime()
 	mainIndirectDrawData.commandBufferSize = 64;
 	mainIndirectDrawData.commandBufferCount = 0;
 
-	mainIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME);
+	mainIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndexedIndirectCommand) * 64, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 	
-	mainIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME);
+	mainIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 	mainIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	mainIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME);
-
-	mainIndirectDrawData.indirectGlobalIDsView = VKRenderer::gRenderInstance->CreateBufferView(mainIndirectDrawData.indirectGlobalIDsAlloc, VK_FORMAT_R32_UINT);
-
-	//int deviceMeshIndirectCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), AllocationType::PERFRAME);
+	mainIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferAlloc, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalMeshLocation, 1, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 3, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferCountAlloc, 4, 0);
 	
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
@@ -1184,7 +1182,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	
 
-	debugAllocBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(debugAllocBufferSize, alignof(Matrix4f), AllocationType::PERFRAME);
+	debugAllocBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(debugAllocBufferSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 	
 	
@@ -1193,34 +1191,24 @@ void ApplicationLoop::InitializeRuntime()
 
 
 
-	debugIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME);
+	debugIndirectDrawData.commandBufferAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceBuffer(sizeof(VkDrawIndirectCommand) * debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
+	debugIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
-	
-//	int deviceDebugCount = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t)*2, alignof(uint32_t), AllocationType::PERFRAME);
-
-	
-	
-	debugIndirectDrawData.indirectGlobalIDsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME);
-
-	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME);
+	globalDebugTypes = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
 	
-
-	debugIndirectDrawData.indirectGlobalIDsView = VKRenderer::gRenderInstance->CreateBufferView(debugIndirectDrawData.indirectGlobalIDsAlloc, VK_FORMAT_R32_UINT);
-
-	EntryHandle indirectDebugTypesView = VKRenderer::gRenderInstance->CreateBufferView(globalDebugTypes, VK_FORMAT_R32_UINT);
 	
-	debugIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME);
+	debugIndirectDrawData.commandBufferCountAlloc = VKRenderer::gRenderInstance->GetAllocFromDeviceStorageBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 
 	debugIndirectDrawData.indirectCullDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferAlloc, 0, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, debugIndirectDrawData.indirectGlobalIDsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, globalDebugTypes, indirectDebugTypesView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, globalDebugTypes, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 3, 0);
 
@@ -1257,9 +1245,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectDrawDescriptor, debugAllocBuffer, 0, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, debugIndirectDrawData.indirectGlobalIDsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, globalDebugTypes, indirectDebugTypesView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, globalDebugTypes, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	std::array<int, 2> indirectDebugDrawDescriptors = {
 		globalBufferDescriptor,
@@ -1295,11 +1283,11 @@ void ApplicationLoop::InitializeRuntime()
 
 	 worldSpaceAssignment.prefixSumDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	 worldSpaceAssignment.deviceOffsetsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME);
+	 worldSpaceAssignment.deviceOffsetsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
-	 worldSpaceAssignment.deviceCountsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME);
+	 worldSpaceAssignment.deviceCountsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 	 
-	 worldSpaceAssignment.deviceSumsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME);
+	 worldSpaceAssignment.deviceSumsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 	
 
 
@@ -1379,7 +1367,7 @@ void ApplicationLoop::InitializeRuntime()
 	 worldSpaceAssignment.sumAppliedToBinPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
 
 
-	worldSpaceAssignment.worldSpaceDivisionAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME);
+	worldSpaceAssignment.worldSpaceDivisionAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
 	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(9, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1408,9 +1396,7 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
 
-	worldSpaceAssignment.worldSpaceDivisonView = VKRenderer::gRenderInstance->CreateBufferView(worldSpaceAssignment.worldSpaceDivisionAlloc, VK_FORMAT_R32_UINT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, worldSpaceAssignment.worldSpaceDivisonView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	//VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 
@@ -1430,9 +1416,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	worldSpaceAssignment.postWorldSpaceDivisionPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 
-	globalLightBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalLightBufferSize, alignof(uint32_t), AllocationType::PERFRAME);
+	globalLightBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalLightBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
-	globalLightTypesBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalLightTypesBufferSize, alignof(uint32_t), AllocationType::PERFRAME);
+	globalLightTypesBuffer = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(globalLightTypesBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 	lightAssignment.totalElementsCount = 125;
 	lightAssignment.totalSumsNeeded = (int)ceil(lightAssignment.totalElementsCount / 2048.0f);
@@ -1440,11 +1426,11 @@ void ApplicationLoop::InitializeRuntime()
 
 	lightAssignment.prefixSumDescriptors = VKRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	lightAssignment.deviceOffsetsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME);
+	lightAssignment.deviceOffsetsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
-	lightAssignment.deviceCountsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME);
+	lightAssignment.deviceCountsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
-	lightAssignment.deviceSumsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME);
+	lightAssignment.deviceSumsAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 
 
@@ -1530,7 +1516,7 @@ void ApplicationLoop::InitializeRuntime()
 	lightAssignment.sumAppliedToBinPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
 	*/
 
-	lightAssignment.worldSpaceDivisionAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME);
+	lightAssignment.worldSpaceDivisionAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT);
 
 	lightAssignment.preWorldSpaceDivisionDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(11, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1559,9 +1545,7 @@ void ApplicationLoop::InitializeRuntime()
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.deviceOffsetsAlloc, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
 
-	lightAssignment.worldSpaceDivisonView = VKRenderer::gRenderInstance->CreateBufferView(lightAssignment.worldSpaceDivisionAlloc, VK_FORMAT_R32_UINT);
-
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, lightAssignment.worldSpaceDivisonView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	//VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 
@@ -1582,14 +1566,11 @@ void ApplicationLoop::InitializeRuntime()
 	lightAssignment.postWorldSpaceDivisionPipeline = VKRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline2);
 
 	int cullLightDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(4, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	lightAssignment.deviceOffsetsView = VKRenderer::gRenderInstance->CreateBufferView(lightAssignment.deviceOffsetsAlloc, VK_FORMAT_R32_UINT);
-	lightAssignment.deviceCountsView = VKRenderer::gRenderInstance->CreateBufferView(lightAssignment.deviceCountsAlloc, VK_FORMAT_R32_UINT);
 	
 	
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.worldSpaceDivisionAlloc, lightAssignment.worldSpaceDivisonView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceOffsetsAlloc, lightAssignment.deviceOffsetsView, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceCountsAlloc, lightAssignment.deviceCountsView, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceOffsetsAlloc, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceCountsAlloc, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(cullLightDescriptor, globalLightBuffer, 3, 0);
 
 
@@ -1617,7 +1598,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
 
@@ -1627,7 +1608,7 @@ void ApplicationLoop::InitializeRuntime()
 	};
 
 	
-	normalDebugAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndirectCommand)*10, 64, AllocationType::PERFRAME);
+	normalDebugAlloc = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(sizeof(VkDrawIndirectCommand)*10, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT);
 
 	int normalDrawDescriptor = VKRenderer::gRenderInstance->AllocateShaderResourceSet(13, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -1635,7 +1616,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(normalDrawDescriptor, globalVertexBuffer, 1, 0);
 
-	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(normalDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, mainIndirectDrawData.indirectGlobalIDsView, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferView(normalDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	std::array<int, 1> indirectDrawDescriptors2 = {
 		normalDrawDescriptor,
@@ -1680,13 +1661,12 @@ void ApplicationLoop::InitializeRuntime()
 
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-//	LightSource source3 = { .color = Vector4f(1.0f, 0.0, 1.0, 0.0f), .pos = Vector4f(5.0f, 5.0f, 10.0f, 15.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
 
 	VKRenderer::gRenderInstance->transferPool.Create(&source1, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	VKRenderer::gRenderInstance->transferPool.Create(&source2, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
-	VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	VKRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::MEMORY);
 	VKRenderer::gRenderInstance->transferPool.Create(&source4, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));

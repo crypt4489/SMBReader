@@ -16,6 +16,8 @@
 
 namespace API {
 
+	VkFormat ConvertComponentFormatTypeToVulkanFormat(ComponentFormatType type);
+
 	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp);
 
 	VkFormat ConvertImageFormatToVulkanFormat(ImageFormat format);
@@ -80,11 +82,11 @@ struct RenderInstance
 
 	void UpdateAllocation(void* data, int handle, size_t size, size_t offset, size_t frame, int copies);
 
-	int GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType);
+	int GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
 
-	int GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType);
+	int GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
 
-	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType);
+	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
 
 	void UploadHostTransfers();
 
@@ -140,12 +142,6 @@ struct RenderInstance
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
 	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
-
-	int GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex);
-
-	EntryHandle CreateBufferView(int allocationIndex, VkFormat bufferViewFormat);
-
-	void DestroyBufferView(EntryHandle bufferViewIndex);
 
 	void EndFrame();
 

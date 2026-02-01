@@ -22,7 +22,9 @@ enum SMBImageFormat : uint32_t
 	SMB_X8L8U8V8 = 7,
 	SMB_DXT1 = 12,
 	SMB_DXT3 = 14,
-	SMB_R8G8B8A8_UNORM = 18,
+	SMB_B8G8R8A8_UNORM = 18,
+	SMB_R8G8B8A8_UNORM = 0x6fff,
+	
 	SMB_IMAGEUNKNOWN = 0xffffffff
 };
 

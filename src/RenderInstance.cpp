@@ -35,6 +35,26 @@ namespace VKRenderer {
 
 namespace API {
 
+
+	VkFormat ConvertComponentFormatTypeToVulkanFormat(ComponentFormatType type)
+	{
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		switch (type)
+		{
+		case ComponentFormatType::R32_UINT:
+			format = VK_FORMAT_R32_UINT;
+			break;
+		case ComponentFormatType::R32_SINT:
+			format = VK_FORMAT_R32_SINT;
+			break;
+		default:
+			break;
+
+		}
+
+		return format;
+	}
+
 	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp)
 	{
 		VkCompareOp ret = VK_COMPARE_OP_LESS;
@@ -66,6 +86,9 @@ namespace API {
 			break;
 		case ImageFormat::R8G8B8A8_UNORM:
 			vkFormat = VK_FORMAT_R8G8B8A8_UNORM;
+			break;
+		case ImageFormat::B8G8R8A8_UNORM:
+			vkFormat = VK_FORMAT_B8G8R8A8_UNORM;
 			break;
 		case ImageFormat::B8G8R8A8:
 			vkFormat = VK_FORMAT_B8G8R8A8_SRGB;
@@ -1074,7 +1097,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	
 }
 
-int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType)
+int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1082,59 +1105,79 @@ int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, A
 	
 	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
 
+	size_t copies = 1;
+
 	switch (allocType)
 	{
 	case AllocationType::STATIC:
 		break;
 	case AllocationType::PERFRAME:
-		allocSize*=MAX_FRAMES_IN_FLIGHT;
+		copies = MAX_FRAMES_IN_FLIGHT;
 		break;
 	case AllocationType::PERDRAW:
 		break;
 	}
 	
-	size_t location = dev->GetMemoryFromBuffer(globalIndex, allocSize, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalIndex, allocSize*copies, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalIndex;
 	allocations.allocations[index].offset = location;
-	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].deviceAllocSize = allocSize*copies;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
+	allocations.allocations[index].formatType = formatType;
+	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
+	{
+		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
+
+	}
+
 	return index;
 }
 
-int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType)
+int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	size_t allocSize = (size);
+
+
+	size_t copies = 1;
 
 	switch (allocType)
 	{
 	case AllocationType::STATIC:
 		break;
 	case AllocationType::PERFRAME:
-		allocSize *= MAX_FRAMES_IN_FLIGHT;
+		copies = MAX_FRAMES_IN_FLIGHT;
 		break;
 	case AllocationType::PERDRAW:
 		break;
 	}
 
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize*copies, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalDeviceBufIndex;
 	allocations.allocations[index].offset = location;
-	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].deviceAllocSize = allocSize * copies;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
+	allocations.allocations[index].formatType = formatType;
+
+	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
+	{
+		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalDeviceBufIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
+
+	}
+
 	return index;
 }
 
-int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType)
+int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1142,28 +1185,36 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 
 	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
 
+	size_t copies = 1;
+
 	switch (allocType)
 	{
 	case AllocationType::STATIC:
 		break;
 	case AllocationType::PERFRAME:
-		allocSize *= MAX_FRAMES_IN_FLIGHT;
+		copies = MAX_FRAMES_IN_FLIGHT;
 		break;
 	case AllocationType::PERDRAW:
 		break;
 	}
 
-
-
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize, alignment);
+	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize * copies, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = globalDeviceBufIndex;
 	allocations.allocations[index].offset = location;
-	allocations.allocations[index].deviceAllocSize = allocSize;
+	allocations.allocations[index].deviceAllocSize = allocSize * copies;
 	allocations.allocations[index].requestedSize = size;
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
+	allocations.allocations[index].formatType = formatType;
+
+	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
+	{
+		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalDeviceBufIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
+
+	}
+
 	return index;
 }
 
@@ -1224,6 +1275,10 @@ int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidt
 	case ImageFormat::B8G8R8A8:
 		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 		vkFormat = VK_FORMAT_B8G8R8A8_SRGB;
+		break;
+	case ImageFormat::B8G8R8A8_UNORM:
+		flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		vkFormat = VK_FORMAT_B8G8R8A8_UNORM;
 		break;
 
 	case ImageFormat::D24UNORMS8STENCIL:
@@ -1696,8 +1751,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				{
 					for (uint32_t i = 0; i < bufferView->subAllocations; i++)
 					{
-
-						VkBufferView handle = dev->GetBufferView(bufferView->bufferViewHandle, i);
+						VkBufferView handle = dev->GetBufferView(allocations.allocations[bufferView->allocationIndex].viewIndex, i);
 						if (bufferView->action == ShaderResourceAction::SHADERREAD)
 						{
 							builder->AddUniformBufferViewPerFrame(handle, bufferView->binding, i);
@@ -1718,22 +1772,6 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 	return handle;
 }
-
-int RenderInstance::GetBufferAllocationViaDescriptor(int descriptorSet, int bindingIndex)
-{
-	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
-	ShaderResourceSet* set = (ShaderResourceSet*)head;
-	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-
-	ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[bindingIndex];
-
-	if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER) return -1;
-
-	ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
-
-	return buffer->allocation;
-}
-
 
 int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo* info, bool addToGraph)
 {
@@ -2220,34 +2258,6 @@ void RenderInstance::DecreaseMSAA()
 		return;
 	currentMSAALevel = next;
 
-}
-
-EntryHandle RenderInstance::CreateBufferView(int allocationIndex, VkFormat bufferViewFormat)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	auto alloc = allocations[allocationIndex];
-
-	uint32_t allocs = 1;
-
-	size_t size = alloc.deviceAllocSize;
-
-	if (alloc.allocType == AllocationType::PERFRAME)
-	{
-		allocs = MAX_FRAMES_IN_FLIGHT;
-		size = (alloc.requestedSize + (alloc.alignment - 1)) & ~(alloc.alignment - 1);
-	}
-
-	EntryHandle ret = dev->CreateBufferView(alloc.memIndex, bufferViewFormat, size, alloc.offset, allocs);
-
-	return ret;
-}
-
-void RenderInstance::DestroyBufferView(EntryHandle bufferViewIndex)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	dev->DestroyBufferView(bufferViewIndex);
 }
 
 void RenderInstance::EndFrame()

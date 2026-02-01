@@ -52,6 +52,7 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 		case SMBImageFormat::SMB_DXT3:
 			size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			break;
+		case SMBImageFormat::SMB_B8G8R8A8_UNORM:
 		case SMBImageFormat::SMB_R8G8B8A8_UNORM:
 			size = writeWidth * writeHeight * 4;
 			break;
