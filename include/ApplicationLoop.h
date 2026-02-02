@@ -41,21 +41,16 @@ public:
 
 	void LoadObject(const std::string& file);
 
-	void LoadThreadedWrapper(const std::string file);
+	void LoadThreadedWrapper(std::string& file);
 
-	void LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string file);
 
 	void FindWords(std::string words, std::vector<std::string>& out);
-
-	void ScanSTDIN(std::stop_token stoken);
 
 	void UpdateCameraMatrix();
 
 	void WriteCameraMatrix(uint32_t frame);
 
 	bool MoveCamera(double fps);
-
-	void CreateGlobalStorageImage();
 
 	void CreateTexturePools();
 
@@ -69,7 +64,6 @@ public:
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
-	void UpdateThisThing();
 
 	ProgramArgs& args;
 	Semaphore queueSema;

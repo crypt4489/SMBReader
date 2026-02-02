@@ -1,22 +1,12 @@
 #include "ThreadManager.h"
-std::vector<std::pair<std::jthread, std::shared_ptr<std::atomic<bool>>>> ThreadManager::threadsFlags;
-std::vector<std::jthread>  ThreadManager::backgroundTasks;
-
 void ThreadManager::ASyncThreadsDone()
 {
-    if (threadsFlags.size()) {
-        threadsFlags.erase(std::remove_if(threadsFlags.begin(),
-            threadsFlags.end(),
-            [](auto& x) { return x.second->load(); }),
-            threadsFlags.end());
-    }
+  
 }
 
 void ThreadManager::DestroyThreadManager()
 {
-    threadsFlags.clear();
 
-    backgroundTasks.clear();
 }
 
 

@@ -933,14 +933,14 @@ void RenderInstance::UploadHostTransfers()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	transferPool.SetupPop();
 	HostTransferRegion region;
-	TransferRegionLink* link = transferPool.linkHead;
+	int link = transferPool.linkHead;
 	
-	EntryHandle previousBuffer = allocations[link->region->allocationIndex].memIndex;
+	EntryHandle previousBuffer = EntryHandle();
 	size_t previousMin = 0;
 	size_t previousMax = 0;
 	size_t batchCounter = 0;
 
-	while (link)
+	while (link >= 0)
 	{
 		link = transferPool.PopLink(&region, link);
 
@@ -959,27 +959,26 @@ void RenderInstance::UploadHostTransfers()
 
 		void* data = region.data;
 
-		if (index == previousBuffer)
+		if (index != previousBuffer)
 		{
-			batchAddresses[batchCounter] = data;
-			batchOffsets[batchCounter] = intOffset;
-			batchSizes[batchCounter] = intSize;
-			
-			batchCounter++;
-
-			previousMin = std::min(intOffset, previousMin);
-			previousMax = std::max(intOffset+intSize, previousMax);
-		}
-		else
-		{
-			if (index == globalIndex)
-				dev->WriteToHostBufferBatch(globalIndex, batchAddresses.data(), batchSizes.data(), batchOffsets.data(), previousMax - previousMin, previousMin, batchCounter);
+			if (previousBuffer != EntryHandle())
+			{
+				if (previousBuffer == globalIndex)
+					dev->WriteToHostBufferBatch(globalIndex, batchAddresses.data(), batchSizes.data(), batchOffsets.data(), previousMax - previousMin, previousMin, batchCounter);
+			}
 
 			previousBuffer = index;
-			previousMin = intOffset;
-			previousMax = intOffset;
 			batchCounter = 0;
 		}
+
+		batchAddresses[batchCounter] = data;
+		batchOffsets[batchCounter] = intOffset;
+		batchSizes[batchCounter] = intSize;
+
+		batchCounter++;
+
+		previousMin = std::min(intOffset, previousMin);
+		previousMax = std::max(intOffset + rsize, previousMax);
 	}
 
 	if (batchCounter)
@@ -1041,14 +1040,9 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	transferCommandPool.SetupPop();
 	TransferCommand region;
-	TransferCommandLink* link = transferCommandPool.linkHead;
+	int link = transferCommandPool.linkHead;
 
-	EntryHandle previousBuffer = allocations[link->command->allocationIndex].memIndex;
-	size_t previousMin = -1;
-	size_t previousMax = -1;
-	size_t batchCounter = 0;
-
-	while (link)
+	while (link >= 0)
 	{
 		link = transferCommandPool.PopLink(&region, link);
 

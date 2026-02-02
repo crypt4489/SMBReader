@@ -326,8 +326,8 @@ struct HostTransferRegion
 
 struct TransferRegionLink
 {
-	HostTransferRegion* region;
-	TransferRegionLink* next;
+	int region;
+	int next;
 };
 
 struct TransferCommand
@@ -343,8 +343,8 @@ struct TransferCommand
 
 struct TransferCommandLink
 {
-	TransferCommandLink* next;
-	TransferCommand* command;
+	int next;
+	int command;
 };
 
 

@@ -10,14 +10,15 @@ struct HostDriverTransferPool
 	char stagingbuffer[32 * 1024];
 	std::array<HostTransferRegion, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
-	TransferRegionLink* linkHead = nullptr;
-	TransferRegionLink** popPrev = nullptr;
+	int linkHead = -1;
+	int* popPrev = nullptr;
 	std::atomic<int> linkCount = 0;
 	std::atomic<int> ddsRegionAlloc = 0;
 	std::atomic<int> currentStagingBufferWrite = 0;
 
 	int Create(void* data, int size, int allocationIndex, int allocOffset, TransferType type)
 	{
+	
 		TransferRegionLink* link = Find(allocationIndex, allocOffset);
 		HostTransferRegion* region = nullptr;
 
@@ -43,23 +44,18 @@ struct HostDriverTransferPool
 			}
 
 
-
-			link->region = region;
-			link->next = nullptr;
+			link->region = regionAlloc;
+			link->next = -1;
 
 			region->allocationIndex = allocationIndex;
 			region->allocoffset = allocOffset;
 			region->size = size;
 
-			Insert(link);
-
-
-
-
+			Insert(regionAlloc);
 		}
 		else
 		{
-			region = link->region;
+			region = &transferRegions[link->region];
 
 			if (type == TransferType::CACHED)
 			{
@@ -86,44 +82,26 @@ struct HostDriverTransferPool
 		return 0;
 	}
 
-	void Insert(TransferRegionLink* newlink)
+	void Insert(int newlink)
 	{
-		TransferRegionLink** test = &linkHead;
-		while (*test && ((*test)->region->allocationIndex <= newlink->region->allocationIndex))
+		int* test = &linkHead;
+		while ((*test >= 0) && (transferRegions[regionLinks[(*test)].region].allocationIndex <= transferRegions[regionLinks[newlink].region].allocationIndex))
 		{
-			test = &((*test)->next);
+			test = &(regionLinks[(*test)].next);
 		}
-		newlink->next = *test;
+		regionLinks[newlink].next = *test;
 		*test = newlink;
 		linkCount.fetch_add(1);
 	}
-
-	void Delete(TransferRegionLink* deletelink)
-	{
-		TransferRegionLink** link = &linkHead;
-		while (*link != deletelink)
-		{
-			link = &((*link)->next);
-		}
-
-		*link = deletelink->next;
-
-		HostTransferRegion* region = deletelink->region;
-		region->allocationIndex = -1;
-		region->size = 0;
-		region->copyCount = -1;
-		region->allocoffset = -1;
-		region->data = nullptr;
-	}
-
+	
 	TransferRegionLink* Find(int allocationIndex, int offset)
 	{
-		TransferRegionLink* link = linkHead;
-		while (link && (link->region->allocationIndex != allocationIndex || link->region->allocoffset != offset))
+		int link = linkHead;
+		while (link >= 0 && (transferRegions[regionLinks[link].region].allocationIndex != allocationIndex || transferRegions[regionLinks[link].region].allocoffset != offset))
 		{
-			link = link->next;
+			link = regionLinks[link].next;
 		}
-		return link;
+		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
 	}
 
 	void SetupPop()
@@ -131,30 +109,31 @@ struct HostDriverTransferPool
 		popPrev = &linkHead;
 	}
 
-	TransferRegionLink* PopLink(HostTransferRegion* outputRegion, TransferRegionLink* link)
+	int PopLink(HostTransferRegion* outputRegion, int link)
 	{
-		if (!link) return nullptr;
-		outputRegion->allocationIndex = link->region->allocationIndex;
-		outputRegion->size = link->region->size;
-		outputRegion->copyCount = link->region->copyCount;
-		outputRegion->data = link->region->data;
-		outputRegion->allocoffset = link->region->allocoffset;
-		TransferRegionLink* linkRet = link->next;
-		if (link->region->copyCount > 1)
+		if (link < 0 || link >= 1000) return -1;
+		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
+		outputRegion->size = transferRegions[regionLinks[link].region].size;
+		outputRegion->copyCount = transferRegions[regionLinks[link].region].copyCount;
+		outputRegion->data = transferRegions[regionLinks[link].region].data;
+		outputRegion->allocoffset = transferRegions[regionLinks[link].region].allocoffset;
+		int linkRet = regionLinks[link].next;
+		if (transferRegions[regionLinks[link].region].copyCount > 1)
 		{
-			link->region->copyCount--;
-			popPrev = &link->next;
+			transferRegions[regionLinks[link].region].copyCount--;
+			popPrev = &regionLinks[link].next;
 		}
 		else
 		{
 			*popPrev = linkRet;
 			linkCount--;
-			HostTransferRegion* region = link->region;
-			region->allocationIndex = -1;
-			region->size = 0;
-			region->copyCount = -1;
-			region->allocoffset = -1;
-			region->data = nullptr;
+			transferRegions[regionLinks[link].region].allocationIndex = -1;
+			transferRegions[regionLinks[link].region].size = 0;
+			transferRegions[regionLinks[link].region].copyCount = -1;
+			transferRegions[regionLinks[link].region].allocoffset = -1;
+			transferRegions[regionLinks[link].region].data = nullptr;
+			regionLinks[link].next = -1;
+			regionLinks[link].region = -1;
 		}
 		return linkRet;
 	}
@@ -168,8 +147,8 @@ struct TransferCommandsPool
 {
 	std::array<TransferCommand, 1000> transferRegions;
 	std::array<TransferCommandLink, 1000> regionLinks;
-	TransferCommandLink* linkHead = nullptr;
-	TransferCommandLink** popPrev = nullptr;
+	int linkHead = -1;
+	int* popPrev = nullptr;
 	std::atomic<int> linkCount = 0;
 	std::atomic<int> ddsRegionAlloc = 0;
 
@@ -190,18 +169,18 @@ struct TransferCommandsPool
 			region->fillVal = fillValue;
 
 
-			link->command = region;
-			link->next = nullptr;
+			link->command = regionAlloc;
+			link->next = -1;
 
 			region->allocationIndex = allocationIndex;
 			region->offset = allocOffset;
 			region->size = size;
 
-			Insert(link);
+			Insert(regionAlloc);
 		}
 		else
 		{
-			region = link->command;
+			region = &transferRegions[link->command];
 
 
 			region->fillVal = fillValue;
@@ -219,18 +198,18 @@ struct TransferCommandsPool
 		return 0;
 	}
 
-	void Insert(TransferCommandLink* newlink)
+	void Insert(int newlink)
 	{
-		TransferCommandLink** test = &linkHead;
-		while (*test && ((*test)->command->allocationIndex <= newlink->command->allocationIndex))
+		int* test = &linkHead;
+		while ((*test >= 0) && (transferRegions[regionLinks[*test].command].allocationIndex <= transferRegions[regionLinks[newlink].command].allocationIndex))
 		{
-			test = &((*test)->next);
+			test = &(regionLinks[*test].next);
 		}
-		newlink->next = *test;
+		regionLinks[newlink].next = *test;
 		*test = newlink;
 		linkCount.fetch_add(1);
 	}
-
+	/*
 	void Delete(TransferCommandLink* deletelink)
 	{
 		TransferCommandLink** link = &linkHead;
@@ -248,15 +227,16 @@ struct TransferCommandsPool
 		region->offset = -1;
 		region->fillVal = 0;
 	}
+	*/
 
 	TransferCommandLink* Find(int allocationIndex, int offset)
 	{
-		TransferCommandLink* link = linkHead;
-		while (link && (link->command->allocationIndex != allocationIndex || link->command->offset != offset))
+		int link = linkHead;
+		while ((link >= 0) && (transferRegions[regionLinks[link].command].allocationIndex != allocationIndex || transferRegions[regionLinks[link].command].offset != offset))
 		{
-			link = link->next;
+			link = regionLinks[link].next;
 		}
-		return link;
+		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
 	}
 
 	void SetupPop()
@@ -264,32 +244,34 @@ struct TransferCommandsPool
 		popPrev = &linkHead;
 	}
 
-	TransferCommandLink* PopLink(TransferCommand* outputRegion, TransferCommandLink* link)
+	int PopLink(TransferCommand* outputRegion, int link)
 	{
-		if (!link) return nullptr;
-		outputRegion->allocationIndex = link->command->allocationIndex;
-		outputRegion->size = link->command->size;
-		outputRegion->copycount = link->command->copycount;
-		outputRegion->fillVal = link->command->fillVal;
-		outputRegion->offset = link->command->offset;
-		outputRegion->dstStage = link->command->dstStage;
-		outputRegion->dstAction = link->command->dstAction;
-		TransferCommandLink* linkRet = link->next;
-		if (link->command->copycount > 1)
+		if (link < 0) return -1;
+		outputRegion->allocationIndex = transferRegions[regionLinks[link].command].allocationIndex;
+		outputRegion->size = transferRegions[regionLinks[link].command].size;
+		outputRegion->copycount = transferRegions[regionLinks[link].command].copycount;
+		outputRegion->fillVal = transferRegions[regionLinks[link].command].fillVal;
+		outputRegion->offset = transferRegions[regionLinks[link].command].offset;
+		outputRegion->dstStage = transferRegions[regionLinks[link].command].dstStage;
+		outputRegion->dstAction = transferRegions[regionLinks[link].command].dstAction;
+		int linkRet = regionLinks[link].next;
+		if (transferRegions[regionLinks[link].command].copycount > 1)
 		{
-			link->command->copycount--;
-			popPrev = &link->next;
+			transferRegions[regionLinks[link].command].copycount--;
+			popPrev = &regionLinks[link].next;
 		}
 		else
 		{
 			*popPrev = linkRet;
 			linkCount--;
-			TransferCommand* region = link->command;
+			TransferCommand* region = &transferRegions[regionLinks[link].command];
 			region->allocationIndex = -1;
 			region->size = 0;
 			region->copycount = -1;
 			region->offset = -1;
 			region->fillVal = 0;
+			region->dstAction = -1;
+			region->dstStage = -1;
 		}
 		return linkRet;
 	}

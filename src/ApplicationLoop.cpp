@@ -311,6 +311,11 @@ ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
 	}
 }
 
+static void ScanSTDIN(void*);
+bool stopThreadServer = false;
+
+OSThreadHandle threadHandle;
+
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	queueSema(Semaphore()),
@@ -377,7 +382,7 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 
 	if (command == "load")
 	{
-		LoadThreadedWrapper(args.at(0));
+		//LoadThreadedWrapper(args.at(0));
 	}
 	else if (command == "end")
 	{
@@ -405,6 +410,9 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 	}
 }
 
+
+std::string name;
+
 void ApplicationLoop::Execute()
 {
 
@@ -422,7 +430,9 @@ void ApplicationLoop::Execute()
 
 		//ExecuteCommands("load", { args.inputFile.string() });
 
-		LoadObject(args.inputFile.string());
+		name = args.inputFile.string();
+
+		LoadThreadedWrapper(name);
 
 		CreateUniformGrid();
 
@@ -1111,14 +1121,18 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 }
 
 
+
+
 void ApplicationLoop::InitializeRuntime()
 {
 
 	queueSema.Create();
 
-	ThreadManager::LaunchBackgroundThread(
-			std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
-				this, std::placeholders::_1));
+	//ThreadManager::LaunchBackgroundThread(
+	//		std::bind(std::mem_fn(&ApplicationLoop::ScanSTDIN),
+	//			this, std::placeholders::_1));
+
+	threadHandle = ThreadManager::LaunchOSBackgroundThread(ScanSTDIN, &stopThreadServer);
 
 	mainDictionary.textureCache = (uintptr_t)mainTextureCacheMemory;
 	
@@ -1712,6 +1726,11 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 void ApplicationLoop::CleanupRuntime()
 {
+
+	stopThreadServer = true;
+
+	OSCloseThread(&threadHandle);
+
 	VKRenderer::gRenderInstance->WaitOnRender();
 
 	ThreadManager::DestroyThreadManager();
@@ -1761,28 +1780,29 @@ void ApplicationLoop::LoadObject(const std::string& file)
 
 }
 
-void ApplicationLoop::LoadThreadedWrapper(const std::string file)
+void LoadObjectThreaded(void* data);
+
+void ApplicationLoop::LoadThreadedWrapper(std::string& file)
 {
-	ThreadManager::LaunchASyncThread(std::bind(std::mem_fn(&ApplicationLoop::LoadObjectThreaded), this, std::placeholders::_1, file));
+	//ThreadManager::LaunchASyncThread(std::bind(std::mem_fn(&ApplicationLoop::LoadObjectThreaded), this, std::placeholders::_1, file));
+
+	ThreadManager::LaunchOSASyncThread(LoadObjectThreaded, &file);
 }
 
-void ApplicationLoop::LoadObjectThreaded(std::shared_ptr<std::atomic<bool>> flag, const std::string file)
+void LoadObjectThreaded(void* data)
 {
 
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	std::string* file = (std::string*)data;
 
-	std::string out = file;
+	std::string out = *file;
 
-	if (file[0] == 0x22)
+	if (out[0] == 0x22)
 	{
-		out = file.substr(1, file.length() - 2);
+		out = out.substr(1, out.length() - 2);
 	}
 
-
-
-	this->LoadObject(out);
-
-	flag->store(true);
+	loop->LoadObject(out);
 }
 
 void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out)
@@ -1806,7 +1826,7 @@ void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out
 	out.push_back(words.substr(i, (j - i)));
 }
 
-void ApplicationLoop::ScanSTDIN(std::stop_token stoken)
+void ScanSTDIN(void* data)
 {
 	HANDLE stdInHandle = GetStdHandle(STD_INPUT_HANDLE);
 
@@ -1826,7 +1846,9 @@ void ApplicationLoop::ScanSTDIN(std::stop_token stoken)
 
 	std::osyncstream(std::cout) << "Ready for commands... \n" << "Hit enter and then write command > ";
 
-	while (!stoken.stop_requested())
+	bool* stopToken = (bool*)data;
+
+	while (!*stopToken)
 	{
 
 		DWORD ret = WaitForSingleObject(stdInHandle, 500);
@@ -1868,12 +1890,15 @@ void ApplicationLoop::ScanSTDIN(std::stop_token stoken)
 
 		std::vector<std::string> comandargs{};
 
-		FindWords(output, comandargs);
+		loop->FindWords(output, comandargs);
 
-		this->AddCommandTS(comandargs);
+		loop->AddCommandTS(comandargs);
 
 		if (output == "end") break;
 
 		std::osyncstream(std::cout) << "Hit enter and then write command > ";
 	}
+
+
+	return;
 }

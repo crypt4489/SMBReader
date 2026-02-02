@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "OSMutex.h"
-
+#include "OSThread.h"
 
 struct SharedExclusiveFlag
 {
@@ -55,27 +55,25 @@ struct SemaphoreGuard
 
 struct ThreadManager
 {
-    static std::vector<std::pair<std::jthread, std::shared_ptr<std::atomic<bool>>>> threadsFlags;
-
-    static std::vector<std::jthread> backgroundTasks;
-
     static void ASyncThreadsDone();
 
     static void DestroyThreadManager();
 
-    template<class F, class... Args>
-    static void LaunchASyncThread(F&& f, Args&&... args)
+
+    static void LaunchOSASyncThread(ThreadPointer routine, void* args)
     {
-        auto df = std::make_shared<std::atomic<bool>>(false);
-
-        std::jthread thread = std::jthread{ std::forward<F>(f), df, std::forward<Args>(args)... };
-
-        threadsFlags.emplace_back(std::move(thread), std::move(df));
+        OSThreadHandle thread;
+        OSCreateThread(&thread, args, routine, OS_THREAD_ASYNC);
+        return;
     }
 
-    template<class F, class... Args>
-    static void LaunchBackgroundThread(F&& f, Args&&... args)
+
+    static OSThreadHandle LaunchOSBackgroundThread(ThreadPointer routine, void* args)
     {
-        backgroundTasks.emplace_back(std::forward<F>(f), std::stop_token(), std::forward<Args>(args)...);
+        OSThreadHandle thread;
+        OSCreateThread(&thread, args, routine, OS_THREAD_NONE);
+        return thread;
     }
+
+
 };

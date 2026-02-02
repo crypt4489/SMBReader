@@ -11,7 +11,6 @@
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
 
-
 template <int T_MaxRegionCopy>
 struct ShaderResourceUpdatePool
 {
@@ -119,7 +118,7 @@ struct ShaderResourceUpdatePool
 		int newid = updateRegions[index].descriptorSet;
 		int newbindingindex = updateRegions[index].bindingIndex;
 		int* test = &linkHead;
-		while ((*test != -1) && (updateRegions[updateLinks[(*test)].shaderResourceIndex].descriptorSet <= newid))
+		while ((*test >= 0) && (updateRegions[updateLinks[(*test)].shaderResourceIndex].descriptorSet <= newid))
 		{
 			if ((updateRegions[updateLinks[(*test)].shaderResourceIndex].bindingIndex < newbindingindex))
 				break;
@@ -130,31 +129,10 @@ struct ShaderResourceUpdatePool
 		linkCount.fetch_add(1);
 	}
 
-	void Delete(ShaderResourceUpdateLink* deletelink)
-	{
-		/*
-		ShaderResourceUpdateLink** link = &linkHead;
-		while (*link != deletelink)
-		{
-			link = &((*link)->next);
-		}
-
-		*link = deletelink->next;
-
-		ShaderResourceUpdate* region = &updateRegions[deletelink->shaderResourceIndex];
-		region->bindingIndex = -1;
-		region->copyCount = -1;
-		region->data = nullptr;
-		region->descriptorSet = -1;
-		region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
-		region->dataSize = -1;
-		*/
-	}
-
 	ShaderResourceUpdateLink* Find(int descriptor, int bindingindex)
 	{
 		int link = linkHead;
-		while ((link != -1) && ((updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != bindingindex)))
+		while ((link >= 0) && ((updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != bindingindex)))
 		{
 			link = updateLinks[link].next;
 		}
