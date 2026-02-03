@@ -264,12 +264,6 @@ struct ShaderResourceUpdate
 	int dataSize;
 };
 
-struct ShaderResourceUpdateLink
-{
-	int shaderResourceIndex;
-	int next;
-};
-
 struct BindlessSamplerUpdate
 {
 	int begdestinationslot;
@@ -324,6 +318,28 @@ struct HostTransferRegion
 	void* data;
 };
 
+struct DeviceTransferRegion
+{
+	TransferType transferType;
+	int size;
+	int copyCount;
+	int allocationIndex;
+	int allocoffset;
+	void* data;
+};
+
+struct TextureMemoryRegion
+{
+	void* data;
+	uint32_t* imageSizes;
+	size_t totalSize;
+	EntryHandle textureIndex;
+	int width;
+	int height;
+	int mipLevels;
+	ImageFormat format;
+};
+
 struct TransferRegionLink
 {
 	int region;
@@ -340,13 +356,6 @@ struct TransferCommand
 	BarrierStage dstStage;
 	BarrierAction dstAction;
 };
-
-struct TransferCommandLink
-{
-	int next;
-	int command;
-};
-
 
  /* Allocation management */
 struct RenderAllocation

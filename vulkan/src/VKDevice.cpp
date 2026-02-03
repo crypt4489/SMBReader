@@ -210,6 +210,14 @@ void VKMemoryAllocator::FreeMemory(VkDeviceSize addr)
 	InsertSortedMerged(freeList, beg, end);
 }
 
+void VKMemoryAllocator::Reset()
+{
+	occupiedList.clear();
+	freeList.clear();
+	auto firstRange = std::make_pair(0U, capacity);
+	freeList.emplace_front(firstRange);
+}
+
 
 RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* data)
 {
@@ -968,7 +976,7 @@ EntryHandle VKDevice::CreateStorageImage(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
 	EntryHandle memIndex,
-	EntryHandle hostIndex, VkImageAspectFlags flags, VkImageLayout layout, bool createSampler)
+    VkImageAspectFlags flags, VkImageLayout layout, bool createSampler)
 {
 	//std::shared_lock lock(deviceLock);
 	
@@ -1573,6 +1581,42 @@ EntryHandle VKDevice::CreateSampledImage(
 
 	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
 	
+
+	return ret;
+}
+
+EntryHandle VKDevice::CreateSampledImageHandle(
+	uint32_t blobSize,
+	uint32_t width, uint32_t height,
+	uint32_t mipLevels, VkFormat type,
+	EntryHandle memIndex,
+	VkImageAspectFlags flags
+)
+{
+
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
+
+	VkFormat format = type;
+
+	EntryHandle imageIndex = CreateImage(
+		width, height, mipLevels, type, 1,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex);
+
+
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+
+	EntryHandle samplerIndex = CreateSampler(mipLevels);
+
+	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+
+	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, &samplerIndex, 1);
+
+	EntryHandle ret;
+
+	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
 
 	return ret;
 }
@@ -3076,7 +3120,7 @@ void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingB
 
 	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
 
-	VK::Utils::CopyBuffer(device, pool, queue, stagingBuffer, outBuffer, size, allocOffset, offset, copies, stride);
+	VK::Utils::CopyBuffer(cb, stagingBuffer, outBuffer, size, allocOffset, offset, copies, stride);
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
@@ -3084,6 +3128,199 @@ void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingB
 
 	alloc->alloc.FreeMemory(allocOffset);
 
+}
+
+
+void VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo)
+{
+	VkBufferCopy* stagingoffset = (VkBufferCopy*)AllocFromDeviceCache(sizeof(VkBufferCopy) * entries);
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+
+
+	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	stagingBuffer = alloc->buffer;
+	stagingMemory = alloc->memory;
+
+	VkDeviceSize allocOffset = alloc->alloc.GetMemory(cumulativesize + (entries * 256), 256);
+
+	char* ldata;
+
+	vkMapMemory(device, stagingMemory, allocOffset, cumulativesize + (entries * 256), 0, reinterpret_cast<void**>(&ldata));
+
+	size_t localOffset = 0;
+
+	for (int i = 0; i < entries; i++)
+	{
+		
+		std::memcpy(ldata + localOffset, data[i], sizes[i]);
+		
+		stagingoffset[i].srcOffset = allocOffset + localOffset;
+		stagingoffset[i].dstOffset = offsets[i];
+		stagingoffset[i].size = sizes[i];
+		
+		localOffset += sizes[i];
+
+		localOffset = (localOffset + 255) & ~(255ui64);
+	}
+	
+	vkUnmapMemory(device, stagingMemory);
+
+	VkBuffer outBuffer = GetBufferHandle(deviceIndex);
+
+	VK::Utils::CopyBufferBatch(rbo->cbBufferHandler.buffer, stagingBuffer, outBuffer, stagingoffset, entries);
+}
+
+void VKDevice::UploadImageData(EntryHandle textureIndex, 
+	char* imageData, size_t totalImageDataSize, 
+	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex, 
+	int width, int height, 
+	int mipLevels, VkFormat format
+)
+{
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
+
+
+	VkQueue queue;
+	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
+
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+
+	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	stagingBuffer = alloc->buffer;
+	stagingMemory = alloc->memory;
+	VkDeviceSize offsetAlloc = alloc->alloc.GetMemory(imagesSize, 4);
+
+	char* data;
+	auto& pixels = imageData;
+	vkMapMemory(device, stagingMemory, offsetAlloc, imagesSize, 0, reinterpret_cast<void**>(&data));
+
+	std::memcpy(data, pixels, imagesSize);
+
+	vkUnmapMemory(device, stagingMemory);
+
+
+
+
+
+	VkImage image = GetImageByTexture(textureIndex);
+
+	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
+
+	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
+
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+
+	VkDeviceSize offset = 0UL;
+
+	if (mipLevels > 1)
+
+	{
+		for (auto i = 0U; i < mipLevels; i++) {
+
+			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+
+			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
+		}
+	}
+	else
+	{
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
+	}
+
+	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+
+	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
+
+	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
+
+	alloc->alloc.FreeMemory(offsetAlloc);
+
+}
+
+void VKDevice::UploadImageData(EntryHandle textureIndex,
+	char* imageData, size_t totalImageDataSize,
+	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+	int width, int height,
+	int mipLevels, VkFormat format, RecordingBufferObject* rbo
+)
+{
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
+
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
+
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+
+	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	stagingBuffer = alloc->buffer;
+	stagingMemory = alloc->memory;
+	VkDeviceSize offsetAlloc = alloc->alloc.GetMemory(imagesSize, 16);
+
+	char* data;
+	auto& pixels = imageData;
+	vkMapMemory(device, stagingMemory, offsetAlloc, imagesSize, 0, reinterpret_cast<void**>(&data));
+
+	std::memcpy(data, pixels, imagesSize);
+
+	vkUnmapMemory(device, stagingMemory);
+
+	VkImage image = GetImageByTexture(textureIndex);
+
+	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+
+	VkDeviceSize offset = offsetAlloc;
+
+	if (mipLevels > 1)
+
+	{
+		for (auto i = 0U; i < mipLevels; i++) {
+
+			VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+
+			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
+		}
+	}
+	else
+	{
+		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
+	}
+
+	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+}
+
+void VKDevice::ResetBufferAllocator(EntryHandle bufferIndex)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(bufferIndex);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return;
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	alloc->alloc.Reset();
 }
 
 /*---------------------------------------------------------*/

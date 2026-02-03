@@ -891,34 +891,6 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	normaldebug->CreateDepthStencil(VK_COMPARE_OP_LESS);
 }
 
-void RenderInstance::UpdateAllocation(void* data, int handle, size_t size, size_t offset, size_t frame, int copies)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	
-	size_t intSize = allocations[handle].requestedSize;
-	size_t rsize = intSize;
-	
-	if (size) 
-	{
-		intSize = size;
-	}
-
-	size_t align = allocations[handle].alignment;
-
-	rsize = (rsize + align - 1) & ~(align - 1);
-
-	size_t intOffset = allocations[handle].offset + (frame * rsize) + offset;
-
-	size_t stride = rsize;
-
-	EntryHandle index = allocations[handle].memIndex;
-
-	if (index == globalIndex)
-		dev->WriteToHostBuffer(index, data, intSize, intOffset, copies, stride);
-	else if (index == globalDeviceBufIndex)
-		dev->WriteToDeviceBuffer(index, stagingBufferIndex, data, intSize, intOffset, copies, stride);
-}
-
 std::array<void*, 1000> batchAddresses;
 std::array<size_t, 1000> batchSizes;
 std::array<size_t, 1000> batchOffsets;
@@ -989,7 +961,7 @@ void RenderInstance::UploadHostTransfers()
 
 void RenderInstance::UploadDescriptorsUpdates()
 {
-	int memCount = descriptorUpdatePool.linkCount.load();
+	int memCount = descriptorUpdatePool.linkCount.load(std::memory_order_acquire);
 
 	if (!memCount) return;
 
@@ -1031,9 +1003,79 @@ void RenderInstance::UploadDescriptorsUpdates()
 	}
 }
 
+void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
+{
+	int memCount = imageMemoryUpdateManager.linkCount.load(std::memory_order_acquire);
+
+	if (!memCount) return;
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	imageMemoryUpdateManager.SetupPop();
+	TextureMemoryRegion region;
+	int link = imageMemoryUpdateManager.linkHead;
+
+	while (link >= 0)
+	{
+		link = imageMemoryUpdateManager.PopLink(&region, link);
+
+		EntryHandle handle = region.textureIndex;
+
+		dev->UploadImageData(handle,
+			(char*)region.data,
+			region.totalSize,
+			region.imageSizes,
+			stagingBuffers[currentFrame],
+			region.width,
+			region.height,
+			region.mipLevels,
+			API::ConvertImageFormatToVulkanFormat(region.format),
+			rbo
+		);
+	}
+}
+
+
+void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
+{
+	int memCount = deviceMemoryUpdater.linkCount.load(std::memory_order_acquire);
+
+	if (!memCount) return;
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	deviceMemoryUpdater.SetupPop();
+	DeviceTransferRegion region;
+	int link = deviceMemoryUpdater.linkHead;
+
+	std::vector<size_t> sizes(memCount);
+	std::vector<size_t> offsets(memCount);
+	std::vector<void*> data(memCount);
+
+	int counter = 0;
+	size_t cumulativeSize = 0;
+
+
+
+	while (link >= 0)
+	{
+		link = deviceMemoryUpdater.PopLink(&region, link);
+		sizes[counter] = region.size;
+		data[counter] = region.data;
+		offsets[counter] = allocations.allocations[region.allocationIndex].offset + region.allocoffset;
+		
+		cumulativeSize += region.size;
+
+		counter++;
+	}
+
+	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], data.data(), sizes.data(), offsets.data(), cumulativeSize, memCount, rbo);
+	
+}
+
 void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 {
-	int memCount = transferCommandPool.linkCount.load();
+	int memCount = transferCommandPool.linkCount.load(std::memory_order_acquire);
 
 	if (!memCount) return;
 
@@ -1213,20 +1255,21 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 }
 
 
-EntryHandle RenderInstance::CreateImage(
-	char* imageData,
-	uint32_t* sizes,
+EntryHandle RenderInstance::CreateImageHandle(
 	uint32_t blobSize,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat type, int poolIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice->CreateSampledImage(
-		imageData, sizes, blobSize,
+
+	EntryHandle textureIndex = majorDevice->CreateSampledImageHandle(
+		blobSize,
 		width, height,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
-		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT);
+		VK_IMAGE_ASPECT_COLOR_BIT);
+
+	return textureIndex;
 }
 
 EntryHandle RenderInstance::CreateStorageImage(
@@ -1238,7 +1281,7 @@ EntryHandle RenderInstance::CreateStorageImage(
 		width, height,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
-		stagingBufferIndex, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
 }
 
 
@@ -1516,7 +1559,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	stagingBufferIndex = majorDevice->CreateHostBuffer(64 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		stagingBuffers[i] = majorDevice->CreateHostBuffer(64 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	}
 
 
 
@@ -2203,9 +2250,15 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	rcb.ResetCommandPoolForBuffer();
 
+	dev->ResetBufferAllocator(stagingBuffers[currentFrame]);
+
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
+	UploadDeviceLocalTransfers(&rcb);
+
 	InvokeTransferCommands(&rcb);
+
+	UploadImageMemoryTransfers(&rcb);
 
 //	cGraph->DispatchWork(&rcb, currentFrame);
 

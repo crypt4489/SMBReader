@@ -276,11 +276,11 @@ namespace VK {
 				vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 			}
 
-			void CopyBuffer(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, size_t stride) {
+			void CopyBuffer( VkCommandBuffer& cmdBuffer, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, size_t stride) {
 				
-				std::array<VkBufferCopy, 15> regions={0};
+				std::array<VkBufferCopy, 15> regions={};
 				
-				VkCommandBuffer commandBuffer = BeginOneTimeCommands(device, pool);
+			
 
 				for (int i = 0; i < copies; i++)
 				{
@@ -292,10 +292,16 @@ namespace VK {
 				}
 
 				
-				vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, copies, regions.data());
+				vkCmdCopyBuffer(cmdBuffer, srcBuffer, dstBuffer, copies, regions.data());
 
-				EndOneTimeCommands(device, queue, pool, commandBuffer);
+
 			}
+
+			void CopyBufferBatch(VkCommandBuffer& commandBuffer, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkBufferCopy* copyRegions, int numberOfCopies)
+			{
+				vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, numberOfCopies, copyRegions);
+			}
+
 
 			std::pair<VkImage, VkDeviceMemory> CreateImage(VkDevice& device, VkPhysicalDevice& gpu, VkImageCreateInfo& imageInfo, VkMemoryPropertyFlags properties)
 			{

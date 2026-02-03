@@ -16,7 +16,7 @@ struct ShaderResourceUpdatePool
 {
 	char stagingbuffer[32 * 1024];
 	std::array<ShaderResourceUpdate, 1000> updateRegions;
-	std::array<ShaderResourceUpdateLink, 1000> updateLinks;
+	std::array<TransferRegionLink, 1000> updateLinks;
 	int linkHead = -1;
 	int* popPrev = nullptr;
 	std::atomic<int> linkCount = 0;
@@ -25,7 +25,7 @@ struct ShaderResourceUpdatePool
 
 	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data)
 	{
-		ShaderResourceUpdateLink* link = Find(descriptorid, bindingindex);
+		TransferRegionLink* link = Find(descriptorid, bindingindex);
 		ShaderResourceUpdate* region = nullptr;
 
 		int size = 0;
@@ -74,7 +74,7 @@ struct ShaderResourceUpdatePool
 
 			region->bindingIndex = bindingindex;
 
-			link->shaderResourceIndex = regionAlloc;
+			link->region = regionAlloc;
 			link->next = -1;
 
 
@@ -87,7 +87,7 @@ struct ShaderResourceUpdatePool
 		}
 		else
 		{
-			region = &updateRegions[link->shaderResourceIndex];
+			region = &updateRegions[link->region];
 
 			if (region->type != type)
 			{
@@ -118,21 +118,21 @@ struct ShaderResourceUpdatePool
 		int newid = updateRegions[index].descriptorSet;
 		int newbindingindex = updateRegions[index].bindingIndex;
 		int* test = &linkHead;
-		while ((*test >= 0) && (updateRegions[updateLinks[(*test)].shaderResourceIndex].descriptorSet <= newid))
+		while ((*test >= 0) && (updateRegions[updateLinks[(*test)].region].descriptorSet <= newid))
 		{
-			if ((updateRegions[updateLinks[(*test)].shaderResourceIndex].bindingIndex < newbindingindex))
+			if ((updateRegions[updateLinks[(*test)].region].bindingIndex < newbindingindex))
 				break;
 			test = &(updateLinks[(*test)].next);
 		}
 		updateLinks[index].next = *test;
 		*test = index;
-		linkCount.fetch_add(1);
+		linkCount.fetch_add(1, std::memory_order_release);
 	}
 
-	ShaderResourceUpdateLink* Find(int descriptor, int bindingindex)
+	TransferRegionLink* Find(int descriptor, int bindingindex)
 	{
 		int link = linkHead;
-		while ((link >= 0) && ((updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != descriptor) || (updateRegions[updateLinks[link].shaderResourceIndex].descriptorSet != bindingindex)))
+		while ((link >= 0) && ((updateRegions[updateLinks[link].region].descriptorSet != descriptor) || (updateRegions[updateLinks[link].region].descriptorSet != bindingindex)))
 		{
 			link = updateLinks[link].next;
 		}
@@ -148,7 +148,7 @@ struct ShaderResourceUpdatePool
 	{
 		if (link < 0) return -1;
 
-		ShaderResourceUpdate* region = &updateRegions[updateLinks[link].shaderResourceIndex];
+		ShaderResourceUpdate* region = &updateRegions[updateLinks[link].region];
 		outputRegion->type = region->type;
 		outputRegion->descriptorSet = region->descriptorSet;
 		outputRegion->bindingIndex = region->bindingIndex;
@@ -164,7 +164,7 @@ struct ShaderResourceUpdatePool
 		else
 		{
 			*popPrev = linkRet;
-			linkCount--;
+			linkCount.fetch_sub(1);
 			region->bindingIndex = -1;
 			region->copyCount = -1;
 			region->data = nullptr;
@@ -172,7 +172,7 @@ struct ShaderResourceUpdatePool
 			region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
 			region->dataSize = -1;
 			updateLinks[link].next = -1;
-			updateLinks[link].shaderResourceIndex = -1;
+			updateLinks[link].region = -1;
 		}
 		return linkRet;
 	}

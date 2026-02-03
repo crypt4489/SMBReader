@@ -432,7 +432,7 @@ void ApplicationLoop::Execute()
 
 		name = args.inputFile.string();
 
-		LoadThreadedWrapper(name);
+		LoadObject(name);
 
 		CreateUniformGrid();
 
@@ -876,9 +876,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int indexAlloc = indexBufferAlloc.Allocate(sizeof(uint16_t) * indexCount, 1);
 
-		rendInst->UpdateAllocation(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount, indexAlloc, 0, 1);
+		//rendInst->UpdateAllocation(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount, indexAlloc, 0, 1);
 
-		rendInst->UpdateAllocation(vertexData, globalVertexBuffer, vertexSize * vertexCount, vertexAlloc, 0, 1);
+		//rendInst->UpdateAllocation(vertexData, globalVertexBuffer, vertexSize * vertexCount, vertexAlloc, 0, 1);
+
+		rendInst->deviceMemoryUpdater.Create(indices, sizeof(uint16_t) * indexCount, globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+
+		rendInst->deviceMemoryUpdater.Create(vertexData, vertexSize * vertexCount, globalVertexBuffer, vertexAlloc, 1, TransferType::MEMORY);
 
 		mesh->meshInstanceLocalMemoryCount = 1;
 
@@ -1042,6 +1046,10 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		}
 	}
 
+	static char imageMemory[16 * MiB];
+	static uint32_t imageSizes[400];
+	int cpointer = 0, ispointer = 0;
+
 	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount);
 
 	for (int ii = 0; ii < totalTextureCount; ii++)
@@ -1059,16 +1067,33 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			texture.height,
 			texture.miplevels);
 
+		memcpy(imageMemory + cpointer, texture.data, texture.cumulativeSize);
+		
+		memcpy(imageSizes + ispointer, texture.imageSizes, texture.miplevels);
+		
+
 		mainDictionary.textureHandles[ii + index] =
-			VKRenderer::gRenderInstance->CreateImage(
-				(char*)texture.data,
-				texture.imageSizes,
+			VKRenderer::gRenderInstance->CreateImageHandle(
 				texture.cumulativeSize,
 				texture.width,
 				texture.height,
 				texture.miplevels,
 				format,
 				GetPoolIndexByFormat(format));
+
+		VKRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+			imageMemory + cpointer, 
+			mainDictionary.textureHandles[ii + index], 
+			imageSizes + ispointer, 
+			texture.cumulativeSize, 
+			texture.width, 
+			texture.height, 
+			texture.miplevels, 
+			format
+		);
+
+		ispointer += texture.miplevels;
+		cpointer += texture.cumulativeSize;
 	}
 
 	BindlessSamplerUpdate update; 

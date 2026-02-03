@@ -48,6 +48,8 @@ struct VKMemoryAllocator
 	VkDeviceSize GetMemory(VkDeviceSize size, VkDeviceSize alignment);
 
 	void FreeMemory(VkDeviceSize addr);
+
+	void Reset();
 };
 
 struct VKCommandBuffer
@@ -331,7 +333,7 @@ struct VKDevice
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkFormat type,
 		EntryHandle memIndex,
-		EntryHandle hostIndex, VkImageAspectFlags flags, VkImageLayout layout, bool createSampler);
+		VkImageAspectFlags flags, VkImageLayout layout, bool createSampler);
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
@@ -405,6 +407,16 @@ struct VKDevice
 		uint32_t mipLevels, VkFormat type,
 		EntryHandle memIndex,
 		EntryHandle hostIndex, VkImageAspectFlags flags);
+
+
+	EntryHandle CreateSampledImageHandle(
+		uint32_t blobSize,
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, VkFormat type,
+		EntryHandle memIndex,
+		VkImageAspectFlags flags
+	);
+
 
 	EntryHandle CreateSampler(uint32_t mipLevels);
 
@@ -625,6 +637,25 @@ struct VKDevice
 	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
 
 	void ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
+
+	void UploadImageData(EntryHandle textureIndex,
+		char* imageData, size_t totalImageDataSize,
+		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+		int width, int height,
+		int mipLevels, VkFormat format
+	);
+
+	void UploadImageData(EntryHandle textureIndex,
+		char* imageData, size_t totalImageDataSize,
+		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+		int width, int height,
+		int mipLevels, VkFormat format, RecordingBufferObject* rbo
+	);
+
+
+	void WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo);
+
+	void ResetBufferAllocator(EntryHandle bufferIndex);
 
 	//mutable std::shared_mutex deviceLock;
 

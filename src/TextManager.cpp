@@ -34,7 +34,7 @@ void TextManager::CreateTextBuffer()
 
 void TextManager::UploadToVertexBuffer(Text* text)
 {
-
+	/*
 	size_t textVertexCount = text->textVertices.size();
 
 	size_t vertsDataSize = sizeof(TextVertex) * textVertexCount;
@@ -66,10 +66,13 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	vertexCount += allocatedVerts;
 
+	*/
+
 }
 
 void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 {
+	/*
 	size_t i = 0;
 
 	for (auto& ref : textsCommand)
@@ -96,6 +99,7 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 		&textVertexCount, indirectCommandsIndex, sizeof(uint32_t),
 		 offsetof(VkDrawIndirectCommand, vertexCount) +
 		 (cCount * sizeof(VkDrawIndirectCommand)), 0, 1);
+		 */
 }
 
 void TextManager::DrawTextTM(RecordingBufferObject* cb, uint32_t frame)

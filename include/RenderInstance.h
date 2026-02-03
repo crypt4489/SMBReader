@@ -80,8 +80,6 @@ struct RenderInstance
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
-	void UpdateAllocation(void* data, int handle, size_t size, size_t offset, size_t frame, int copies);
-
 	int GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
 
 	int GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
@@ -94,9 +92,11 @@ struct RenderInstance
 
 	void InvokeTransferCommands(RecordingBufferObject* rbo);
 
-	EntryHandle CreateImage(
-		char* imageData,
-		uint32_t* sizes,
+	void UploadImageMemoryTransfers(RecordingBufferObject* rbo);
+
+	void UploadDeviceLocalTransfers(RecordingBufferObject* rbo);
+
+	EntryHandle CreateImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type, int poolIndex);
@@ -153,7 +153,6 @@ struct RenderInstance
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle swapChainIndex;
-	EntryHandle stagingBufferIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
@@ -211,6 +210,12 @@ struct RenderInstance
 	TransferCommandsPool<3> transferCommandPool;
 
 	ShaderResourceUpdatePool<3> descriptorUpdatePool;
+
+	DeviceMemoryUpdateManager deviceMemoryUpdater;
+
+	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
+
+	ImageMemoryUpdateManager imageMemoryUpdateManager;
 };
 
 namespace VKRenderer {
