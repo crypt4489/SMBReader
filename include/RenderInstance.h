@@ -80,12 +80,6 @@ struct RenderInstance
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
-	int GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
-
-	int GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
-
-	int GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType type);
-
 	void UploadHostTransfers();
 
 	void UploadDescriptorsUpdates();
@@ -95,6 +89,8 @@ struct RenderInstance
 	void UploadImageMemoryTransfers(RecordingBufferObject* rbo);
 
 	void UploadDeviceLocalTransfers(RecordingBufferObject* rbo);
+
+	int GetAllocFromBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation);
 
 	EntryHandle CreateImageHandle(
 		uint32_t blobSize,

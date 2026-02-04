@@ -71,16 +71,16 @@ FileID SMBFile::LoadFile(const std::filesystem::path& path)
 
 	auto ret = FileManager::OpenFile(path, READ);
 
-	if (!ret)
+	if (ret() == FileManager::NOHANDLE)
 	{
 		throw std::runtime_error("SMB file is unable to be opened");
 	}
 
-	OSFileHandle* fh = FileManager::GetFile(ret.value());
+	OSFileHandle* fh = FileManager::GetFile(ret);
 
 	ProcessFile(fh);
 
-	return std::move(ret.value());
+	return std::move(ret);
 }
 
 FileID SMBFile::LoadFile(const std::string& name)
@@ -89,16 +89,16 @@ FileID SMBFile::LoadFile(const std::string& name)
 
 	auto ret = FileManager::OpenFile(name, READ);
 
-	if (!ret)
+	if (ret() == FileManager::NOHANDLE)
 	{
 		throw std::runtime_error("SMB file is unable to be opened");
 	}
 
-	OSFileHandle* fh = FileManager::GetFile(ret.value());
+	OSFileHandle* fh = FileManager::GetFile(ret);
 
 	ProcessFile(fh);
 
-	return std::move(ret.value());
+	return std::move(ret);
 }
 
 void SMBFile::ReadHeader(OSFileHandle* fh)

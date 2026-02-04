@@ -660,10 +660,17 @@ void RenderInstance::CreatePipelines()
 
 	int byteOffset = 0;
 
-	for (int i = 0; i < 14; i++)
-	{
+	//OSFileIterator iterator;
 
-		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i], 
+//	int track = FileManager::CreateFileIterator("*.xml", &iterator);
+
+//	if (track == OS_FAILED_SEARCH_ITER) throw std::runtime_error("Cannot find layout files");
+
+	int i = 0;
+
+	while(i<14)
+	{
+		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i],
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
 			shaderDetailsData + shaderDetailAlloc, &byteOffset, &detailsSize);
 
@@ -672,7 +679,11 @@ void RenderInstance::CreatePipelines()
 		shaderDetailAlloc += byteOffset;
 
 		totalDetailSize += detailsSize;
-	}
+
+	//	track = FileManager::NextFileIterator(&iterator);
+
+		i++;
+	} 
 
 	ShaderDetails* deats = (ShaderDetails*)shaderDetailsData;
 
@@ -898,14 +909,15 @@ std::array<size_t, 1000> batchOffsets;
 void RenderInstance::UploadHostTransfers()
 {
 	
-	int memCount = transferPool.linkCount.load();
+	int memCount = transferPool.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	transferPool.SetupPop();
+
 	HostTransferRegion region;
 	int link = transferPool.linkHead;
+	int* linkprev = &transferPool.linkHead;
 	
 	EntryHandle previousBuffer = EntryHandle();
 	size_t previousMin = 0;
@@ -914,7 +926,7 @@ void RenderInstance::UploadHostTransfers()
 
 	while (link >= 0)
 	{
-		link = transferPool.PopLink(&region, link);
+		link = transferPool.PopLink(&region, link, &linkprev);
 
 		int handle = region.allocationIndex;
 
@@ -961,15 +973,15 @@ void RenderInstance::UploadHostTransfers()
 
 void RenderInstance::UploadDescriptorsUpdates()
 {
-	int memCount = descriptorUpdatePool.linkCount.load(std::memory_order_acquire);
+	int memCount = descriptorUpdatePool.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	descriptorUpdatePool.SetupPop();
 	
 	int link = descriptorUpdatePool.linkHead;
+	int* linkprev = &descriptorUpdatePool.linkHead;
 	ShaderResourceUpdate region;
 
 	EntryHandle previousBuffer = EntryHandle();
@@ -978,7 +990,7 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 	while (link >= 0)
 	{
-		link = descriptorUpdatePool.PopLink(&region, link);
+		link = descriptorUpdatePool.PopLink(&region, link, &linkprev);
 
 		EntryHandle index = descriptorManager.vkDescriptorSets[region.descriptorSet];
 
@@ -1005,13 +1017,12 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 {
-	int memCount = imageMemoryUpdateManager.linkCount.load(std::memory_order_acquire);
+	int memCount = imageMemoryUpdateManager.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	imageMemoryUpdateManager.SetupPop();
 	TextureMemoryRegion region;
 	int link = imageMemoryUpdateManager.linkHead;
 
@@ -1033,12 +1044,15 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 			rbo
 		);
 	}
+
+	imageMemoryUpdateManager.ddsRegionAlloc = 0;
+	imageMemoryUpdateManager.linkHead = -1;
 }
 
 
 void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 {
-	int memCount = deviceMemoryUpdater.linkCount.load(std::memory_order_acquire);
+	int memCount = deviceMemoryUpdater.linkCount;
 
 	if (!memCount) return;
 
@@ -1069,24 +1083,25 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 		counter++;
 	}
 
-	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], data.data(), sizes.data(), offsets.data(), cumulativeSize, memCount, rbo);
+	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], data.data(), sizes.data(), offsets.data(), cumulativeSize, counter, rbo);
 	
 }
 
 void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 {
-	int memCount = transferCommandPool.linkCount.load(std::memory_order_acquire);
+	int memCount = transferCommandPool.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	transferCommandPool.SetupPop();
+	
 	TransferCommand region;
 	int link = transferCommandPool.linkHead;
+	int* linkprev = &transferCommandPool.linkHead;
 
 	while (link >= 0)
 	{
-		link = transferCommandPool.PopLink(&region, link);
+		link = transferCommandPool.PopLink(&region, link, &linkprev);
 
 		int handle = region.allocationIndex;
 
@@ -1133,91 +1148,24 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	
 }
 
-int RenderInstance::GetAllocFromUniformBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
+int RenderInstance::GetAllocFromBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	alignment = (alignment + minUniformAlignment - 1) & ~((size_t)minUniformAlignment - 1);
-	
-	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
+	EntryHandle handleDex = EntryHandle();
 
-	size_t copies = 1;
-
-	switch (allocType)
+	switch (storageLocation)
 	{
-	case AllocationType::STATIC:
+	case 0:
+		alignment = (alignment + minUniformAlignment - 1) & ~((size_t)minUniformAlignment - 1);
+		handleDex = globalIndex;
 		break;
-	case AllocationType::PERFRAME:
-		copies = MAX_FRAMES_IN_FLIGHT;
-		break;
-	case AllocationType::PERDRAW:
+	case 1:
+		alignment = (alignment + minStorageAlignment - 1) & ~((size_t)minStorageAlignment - 1);
+	case 2:
+		handleDex = globalDeviceBufIndex;
 		break;
 	}
-	
-	size_t location = dev->GetMemoryFromBuffer(globalIndex, allocSize*copies, alignment);
-
-	int index = allocations.Allocate();
-	allocations.allocations[index].memIndex = globalIndex;
-	allocations.allocations[index].offset = location;
-	allocations.allocations[index].deviceAllocSize = allocSize*copies;
-	allocations.allocations[index].requestedSize = size;
-	allocations.allocations[index].alignment = alignment;
-	allocations.allocations[index].allocType = allocType;
-	allocations.allocations[index].formatType = formatType;
-	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
-	{
-		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
-
-	}
-
-	return index;
-}
-
-int RenderInstance::GetAllocFromDeviceBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	size_t allocSize = (size);
-
-
-	size_t copies = 1;
-
-	switch (allocType)
-	{
-	case AllocationType::STATIC:
-		break;
-	case AllocationType::PERFRAME:
-		copies = MAX_FRAMES_IN_FLIGHT;
-		break;
-	case AllocationType::PERDRAW:
-		break;
-	}
-
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize*copies, alignment);
-
-	int index = allocations.Allocate();
-	allocations.allocations[index].memIndex = globalDeviceBufIndex;
-	allocations.allocations[index].offset = location;
-	allocations.allocations[index].deviceAllocSize = allocSize * copies;
-	allocations.allocations[index].requestedSize = size;
-	allocations.allocations[index].alignment = alignment;
-	allocations.allocations[index].allocType = allocType;
-	allocations.allocations[index].formatType = formatType;
-
-	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
-	{
-		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalDeviceBufIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
-
-	}
-
-	return index;
-}
-
-int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	alignment = (alignment + minStorageAlignment - 1) & ~((size_t)minStorageAlignment - 1);
 
 	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
 
@@ -1234,10 +1182,10 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 		break;
 	}
 
-	size_t location = dev->GetMemoryFromBuffer(globalDeviceBufIndex, allocSize * copies, alignment);
+	size_t location = dev->GetMemoryFromBuffer(handleDex, allocSize * copies, alignment);
 
 	int index = allocations.Allocate();
-	allocations.allocations[index].memIndex = globalDeviceBufIndex;
+	allocations.allocations[index].memIndex = handleDex;
 	allocations.allocations[index].offset = location;
 	allocations.allocations[index].deviceAllocSize = allocSize * copies;
 	allocations.allocations[index].requestedSize = size;
@@ -1247,8 +1195,7 @@ int RenderInstance::GetAllocFromDeviceStorageBuffer(size_t size, uint32_t alignm
 
 	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
 	{
-		allocations.allocations[index].viewIndex = dev->CreateBufferView(globalDeviceBufIndex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
-
+		allocations.allocations[index].viewIndex = dev->CreateBufferView(handleDex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
 	}
 
 	return index;

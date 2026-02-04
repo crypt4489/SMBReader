@@ -107,13 +107,13 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		auto outputfilehandle = FileManager::OpenFile(writePath, WRITE);
 
-		if (!outputfilehandle)
+		if (outputfilehandle() == FileManager::NOHANDLE)
 		{
 			std::cerr << "Something bad happened\n";
 			return;
 		}
 
-		handle = FileManager::GetFile(outputfilehandle.value());
+		handle = FileManager::GetFile(outputfilehandle);
 
 		TexUtils::BMP::WriteOutBMPHeaders(handle, writeWidth, writeHeight);
 
@@ -161,7 +161,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		ptr += tex.imageSizes[i];
 
-		FileManager::RemoveOpenFile(outputfilehandle.value());
+		FileManager::RemoveOpenFile(outputfilehandle);
 	}
 }
 

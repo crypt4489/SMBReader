@@ -373,6 +373,30 @@ struct RenderAllocation
 
 /* */
 
+
+enum class CullMode
+{
+	CULL_NONE = 0,
+	CULL_BACK = 1,
+	CULL_FRONT = 2,
+};
+
+enum class BlendOp
+{
+	LOGIC_COPY = 1
+};
+
+struct GenericPipelineStateInfo
+{
+	PrimitiveType primType;
+	DepthTest depthTest;
+	int sampleCount;
+	ImageFormat colorFormat;
+	ImageFormat depthFormat;
+	BlendOp blendOp;
+	CullMode cullMode;
+};
+
 enum AppPipelineHandleType
 {
 	COMPUTESO,

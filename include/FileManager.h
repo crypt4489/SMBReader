@@ -36,9 +36,9 @@ struct FileManager
 {
 public:
 
-	static std::optional<FileID> OpenFile(const std::string& name, OSFileFlags flags);
+	static FileID OpenFile(const std::string& name, OSFileFlags flags);
 
-	static std::optional<FileID> OpenFile(const std::filesystem::path name, OSFileFlags flags);
+	static FileID OpenFile(const std::filesystem::path name, OSFileFlags flags);
 
 	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer);
 
@@ -70,6 +70,10 @@ public:
 	static int HandleOpening(const std::string& name, OSFileFlags flags, OSFileHandle* outHandle);
 
 	static int ReadBytes(const FileID& id, int numBytes, char* buffer);
+
+	static int CreateFileIterator(std::string searchstring, OSFileIterator* file);
+
+	static int NextFileIterator(OSFileIterator* file);
 
 	static std::array<OSFileHandle, MAXFILES> filesopen;
 	static std::filesystem::path currDir;

@@ -11,10 +11,9 @@ struct HostDriverTransferPool
 	std::array<HostTransferRegion, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
-	int* popPrev = nullptr;
-	std::atomic<int> linkCount = 0;
-	std::atomic<int> ddsRegionAlloc = 0;
-	std::atomic<int> currentStagingBufferWrite = 0;
+	int linkCount = 0;
+	int ddsRegionAlloc = 0;
+	int currentStagingBufferWrite = 0;
 
 	int Create(void* data, int size, int allocationIndex, int allocOffset, TransferType type)
 	{
@@ -24,18 +23,27 @@ struct HostDriverTransferPool
 
 		if (!link)
 		{
-			int regionAlloc = UpdateAtomic(ddsRegionAlloc, 1, (int)transferRegions.size());
+			int regionAlloc = ddsRegionAlloc;
+
+			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
 
 			region = &transferRegions[regionAlloc];
 
 			link = &regionLinks[regionAlloc];
 
-
-
 			if (type == TransferType::CACHED)
 			{
-				int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+				if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
+				{
+					currentStagingBufferWrite = 0;
+				}
+
+				int writeLoc = currentStagingBufferWrite;
+
+				currentStagingBufferWrite += size;
+
 				memcpy(stagingbuffer + writeLoc, data, size);
+
 				region->data = stagingbuffer + writeLoc;
 			}
 			else if (type == TransferType::MEMORY)
@@ -61,7 +69,15 @@ struct HostDriverTransferPool
 			{
 				if (size > region->size)
 				{
-					int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+					if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
+					{
+						currentStagingBufferWrite = 0;
+					}
+
+					int writeLoc = currentStagingBufferWrite;
+
+					currentStagingBufferWrite += size;
+
 					region->data = stagingbuffer + writeLoc;
 				}
 				memcpy(region->data, data, size);
@@ -91,7 +107,7 @@ struct HostDriverTransferPool
 		}
 		regionLinks[newlink].next = *test;
 		*test = newlink;
-		linkCount.fetch_add(1, std::memory_order_release);
+		linkCount++;
 	}
 	
 	TransferRegionLink* Find(int allocationIndex, int offset)
@@ -104,12 +120,7 @@ struct HostDriverTransferPool
 		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
 	}
 
-	void SetupPop()
-	{
-		popPrev = &linkHead;
-	}
-
-	int PopLink(HostTransferRegion* outputRegion, int link)
+	int PopLink(HostTransferRegion* outputRegion, int link, int** popprev)
 	{
 		if (link < 0 || link >= 1000) return -1;
 		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
@@ -121,12 +132,12 @@ struct HostDriverTransferPool
 		if (transferRegions[regionLinks[link].region].copyCount > 1)
 		{
 			transferRegions[regionLinks[link].region].copyCount--;
-			popPrev = &regionLinks[link].next;
+			*popprev = &regionLinks[link].next;
 		}
 		else
 		{
-			*popPrev = linkRet;
-			linkCount.fetch_sub(1);
+			*(*popprev) = linkRet;
+			linkCount--;
 			transferRegions[regionLinks[link].region].allocationIndex = -1;
 			transferRegions[regionLinks[link].region].size = 0;
 			transferRegions[regionLinks[link].region].copyCount = -1;
@@ -148,9 +159,8 @@ struct TransferCommandsPool
 	std::array<TransferCommand, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
-	int* popPrev = nullptr;
-	std::atomic<int> linkCount = 0;
-	std::atomic<int> ddsRegionAlloc = 0;
+	int linkCount = 0;
+	int ddsRegionAlloc = 0;
 
 	int Create(int size, int allocationIndex, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action)
 	{
@@ -159,7 +169,9 @@ struct TransferCommandsPool
 
 		if (!link)
 		{
-			int regionAlloc = UpdateAtomic(ddsRegionAlloc, 1, (int)transferRegions.size());
+			int regionAlloc = ddsRegionAlloc;
+
+			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
 
 			region = &transferRegions[regionAlloc];
 
@@ -207,27 +219,8 @@ struct TransferCommandsPool
 		}
 		regionLinks[newlink].next = *test;
 		*test = newlink;
-		linkCount.fetch_add(1, std::memory_order_release);
+		linkCount++;
 	}
-	/*
-	void Delete(TransferCommandLink* deletelink)
-	{
-		TransferCommandLink** link = &linkHead;
-		while (*link != deletelink)
-		{
-			link = &((*link)->next);
-		}
-
-		*link = deletelink->next;
-
-		TransferCommand* region = deletelink->command;
-		region->allocationIndex = -1;
-		region->size = 0;
-		region->copycount = -1;
-		region->offset = -1;
-		region->fillVal = 0;
-	}
-	*/
 
 	TransferRegionLink* Find(int allocationIndex, int offset)
 	{
@@ -239,12 +232,7 @@ struct TransferCommandsPool
 		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
 	}
 
-	void SetupPop()
-	{
-		popPrev = &linkHead;
-	}
-
-	int PopLink(TransferCommand* outputRegion, int link)
+	int PopLink(TransferCommand* outputRegion, int link, int** popprev)
 	{
 		if (link < 0) return -1;
 		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
@@ -258,12 +246,12 @@ struct TransferCommandsPool
 		if (transferRegions[regionLinks[link].region].copycount > 1)
 		{
 			transferRegions[regionLinks[link].region].copycount--;
-			popPrev = &regionLinks[link].next;
+			*popprev = &regionLinks[link].next;
 		}
 		else
 		{
-			*popPrev = linkRet;
-			linkCount.fetch_sub(1);
+			*(*popprev) = linkRet;
+			linkCount--;
 			TransferCommand* region = &transferRegions[regionLinks[link].region];
 			region->allocationIndex = -1;
 			region->size = 0;
@@ -285,9 +273,9 @@ struct DeviceMemoryUpdateManager
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
 	int* popPrev = nullptr;
-	std::atomic<int> linkCount = 0;
-	std::atomic<int> ddsRegionAlloc = 0;
-	std::atomic<int> currentStagingBufferWrite = 0;
+	int linkCount = 0;
+	int ddsRegionAlloc = 0;
+	int currentStagingBufferWrite = 0;
 
 	int Create(void* data, int size, int allocationIndex, int allocOffset, int copyCount, TransferType transferType)
 	{
@@ -297,7 +285,9 @@ struct DeviceMemoryUpdateManager
 
 		if (!link)
 		{
-			int regionAlloc = UpdateAtomic(ddsRegionAlloc, 1, (int)transferRegions.size());
+			int regionAlloc = ddsRegionAlloc;
+
+			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
 
 			region = &transferRegions[regionAlloc];
 
@@ -305,7 +295,16 @@ struct DeviceMemoryUpdateManager
 
 			if (transferType == TransferType::CACHED)
 			{
-				int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+
+				if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
+				{
+					currentStagingBufferWrite = 0;
+				}
+
+				int writeLoc = currentStagingBufferWrite;
+
+				currentStagingBufferWrite += size;
+
 				memcpy(stagingbuffer + writeLoc, data, size);
 				region->data = stagingbuffer + writeLoc;
 			}
@@ -332,7 +331,15 @@ struct DeviceMemoryUpdateManager
 			{
 				if (size > region->size)
 				{
-					int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+					if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
+					{
+						currentStagingBufferWrite = 0;
+					}
+
+					int writeLoc = currentStagingBufferWrite;
+
+					currentStagingBufferWrite += size;
+
 					region->data = stagingbuffer + writeLoc;
 				}
 				memcpy(region->data, data, size);
@@ -356,13 +363,13 @@ struct DeviceMemoryUpdateManager
 	void Insert(int newlink)
 	{
 		int* test = &linkHead;
-		while ((*test >= 0))
+		while ((*test >= 0) && (transferRegions[regionLinks[*test].region].allocationIndex <= transferRegions[regionLinks[newlink].region].allocationIndex))
 		{
 			test = &(regionLinks[(*test)].next);
 		}
 		regionLinks[newlink].next = *test;
 		*test = newlink;
-		linkCount.fetch_add(1, std::memory_order_release);
+		linkCount++;
 	}
 
 	TransferRegionLink* Find(int allocationIndex, int offset)
@@ -398,7 +405,7 @@ struct DeviceMemoryUpdateManager
 		else
 		{
 			*popPrev = linkRet;
-			linkCount.fetch_sub(1);
+			linkCount--;
 			transferRegions[regionLinks[link].region].allocationIndex = -1;
 			transferRegions[regionLinks[link].region].size = 0;
 			transferRegions[regionLinks[link].region].copyCount = -1;
@@ -419,10 +426,8 @@ struct ImageMemoryUpdateManager
 	std::array<TextureMemoryRegion, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
-	int* popPrev = nullptr;
-	std::atomic<int> linkCount = 0;
-	std::atomic<int> ddsRegionAlloc = 0;
-	std::atomic<int> currentStagingBufferWrite = 0;
+	int linkCount = 0;
+	int ddsRegionAlloc = 0;
 
 	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, ImageFormat format)
 	{
@@ -433,7 +438,9 @@ struct ImageMemoryUpdateManager
 
 		if (link) return -1;
 		
-		int regionAlloc = UpdateAtomic(ddsRegionAlloc, 1, (int)transferRegions.size());
+		int regionAlloc = ddsRegionAlloc;
+
+		ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
 
 		region = &transferRegions[regionAlloc];
 
@@ -467,7 +474,7 @@ struct ImageMemoryUpdateManager
 		}
 		regionLinks[newlink].next = *test;
 		*test = newlink;
-		linkCount.fetch_add(1, std::memory_order_release);
+		linkCount++;
 	}
 
 	TransferRegionLink* Find(EntryHandle textureIndex)
@@ -478,11 +485,6 @@ struct ImageMemoryUpdateManager
 			link = regionLinks[link].next;
 		}
 		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
-	}
-
-	void SetupPop()
-	{
-		popPrev = &linkHead;
 	}
 
 	int PopLink(TextureMemoryRegion* outputRegion, int link)
@@ -504,9 +506,7 @@ struct ImageMemoryUpdateManager
 
 		int linkRet = regionLinks[link].next;
 
-		*popPrev = linkRet;
-
-		linkCount.fetch_sub(1);
+		linkCount--;
 
 
 		src->data = nullptr;

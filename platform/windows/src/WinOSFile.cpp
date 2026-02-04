@@ -158,3 +158,47 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 
 	return OS_SUCCESS;
 }
+
+int OSCreateFileIterator(const char* searchString, OSFileIterator* iterator)
+{
+	if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
+
+	int index = intFileHandleCounter.fetch_add(1);
+
+	WIN32_FIND_DATA data;
+
+	HANDLE searchIdx = FindFirstFile(searchString, &data);
+
+	if (searchIdx == INVALID_HANDLE_VALUE)
+	{
+		return OS_FAILED_SEARCH_ITER;
+	}
+
+	intFileHandles[index] = searchIdx;
+
+	strncpy(iterator->currentFileName, data.cFileName, 250);
+	iterator->osDataHandle = index;
+
+	return 0;
+}
+
+int OSNextFile(OSFileIterator* iterator)
+{
+	if (!iterator) return OS_INVALID_ARGUMENT;
+
+	int index = iterator->osDataHandle;
+
+	WIN32_FIND_DATA data;
+
+	BOOL ret = FindNextFile(intFileHandles[index], &data);
+
+	if (!ret)
+	{
+		CloseHandle(intFileHandles[index]);
+		return OS_REACH_ITER_END;
+	}
+
+	strncpy(iterator->currentFileName, data.cFileName, 250);
+
+	return 0;
+}

@@ -14,14 +14,13 @@ BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
 template <int T_MaxRegionCopy>
 struct ShaderResourceUpdatePool
 {
-	char stagingbuffer[32 * 1024];
+	char temparguments[32 * 1024];
 	std::array<ShaderResourceUpdate, 1000> updateRegions;
 	std::array<TransferRegionLink, 1000> updateLinks;
 	int linkHead = -1;
-	int* popPrev = nullptr;
-	std::atomic<int> linkCount = 0;
-	std::atomic<int> updateRegionAlloc = 0;
-	std::atomic<int> currentStagingBufferWrite = 0;
+	int linkCount = 0;
+	int updateRegionAlloc = 0;
+	int currentTempArgumentsPtr = 0;
 
 	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data)
 	{
@@ -43,23 +42,31 @@ struct ShaderResourceUpdatePool
 
 		if (!link)
 		{
-			int regionAlloc = UpdateAtomic(updateRegionAlloc, 1, (int)updateRegions.size());
+			int regionAlloc = updateRegionAlloc;
+
+			updateRegionAlloc = (updateRegionAlloc + 1) % (int)updateRegions.size();
 
 			region = &updateRegions[regionAlloc];
 
 			link = &updateLinks[regionAlloc];
 
+		
 			
+			if (currentTempArgumentsPtr + size >= sizeof(temparguments))
+			{
+				currentTempArgumentsPtr = 0;
+			}
 
-			
-			int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
+			int writeLoc = currentTempArgumentsPtr;
+
+			currentTempArgumentsPtr += size;
 
 			switch (type)
 			{
 			case ShaderResourceType::SAMPLERBINDLESS:
 			{
 				BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
-				BindlessSamplerUpdate* cachedUpdate = (BindlessSamplerUpdate*)(stagingbuffer + writeLoc);
+				BindlessSamplerUpdate* cachedUpdate = (BindlessSamplerUpdate*)(temparguments + writeLoc);
 				cachedUpdate->begdestinationslot = update->begdestinationslot;
 				cachedUpdate->samplercount = update->samplercount;
 				cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
@@ -68,7 +75,7 @@ struct ShaderResourceUpdatePool
 			}
 			}
 			
-			region->data = stagingbuffer + writeLoc;
+			region->data = temparguments + writeLoc;
 			region->dataSize = size;
 			region->descriptorSet = descriptorid;
 
@@ -96,14 +103,20 @@ struct ShaderResourceUpdatePool
 			
 			if (size > region->dataSize)
 			{
-				int writeLoc = UpdateAtomic(currentStagingBufferWrite, size, (int)sizeof(stagingbuffer));
-				region->data = stagingbuffer + writeLoc;
+				if (currentTempArgumentsPtr + size >= sizeof(temparguments))
+				{
+					currentTempArgumentsPtr = 0;
+				}
+
+				int writeLoc = currentTempArgumentsPtr;
+
+				currentTempArgumentsPtr += size;
+
+				region->data = temparguments + writeLoc;
 			}
 
 			memcpy(region->data, data, size);
 			
-			
-
 			region->dataSize = size;
 		}
 
@@ -126,7 +139,7 @@ struct ShaderResourceUpdatePool
 		}
 		updateLinks[index].next = *test;
 		*test = index;
-		linkCount.fetch_add(1, std::memory_order_release);
+		linkCount++;
 	}
 
 	TransferRegionLink* Find(int descriptor, int bindingindex)
@@ -139,12 +152,7 @@ struct ShaderResourceUpdatePool
 		return (link == -1 || link >= 1000 ? nullptr : &updateLinks[link]);
 	}
 
-	void SetupPop()
-	{
-		popPrev = &linkHead;
-	}
-
-	int PopLink(ShaderResourceUpdate* outputRegion, int link)
+	int PopLink(ShaderResourceUpdate* outputRegion, int link, int** popprev)
 	{
 		if (link < 0) return -1;
 
@@ -159,12 +167,12 @@ struct ShaderResourceUpdatePool
 		if (region->copyCount > 1)
 		{
 			region->copyCount--;
-			popPrev = &updateLinks[link].next;
+			*popprev = &updateLinks[link].next;
 		}
 		else
 		{
-			*popPrev = linkRet;
-			linkCount.fetch_sub(1);
+			*(*popprev) = linkRet;
+			linkCount--;
 			region->bindingIndex = -1;
 			region->copyCount = -1;
 			region->data = nullptr;

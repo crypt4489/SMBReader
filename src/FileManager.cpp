@@ -10,13 +10,13 @@ std::regex FileManager::filenamePattern{"([0-9A-Za-z_]+)\\."};
 
 
 
-std::optional<FileID> FileManager::OpenFile(const std::string& name, OSFileFlags flags)
+FileID FileManager::OpenFile(const std::string& name, OSFileFlags flags)
 {
 	uint32_t index = FindAvailableHandle();
 
 	if (index == NOHANDLE)
 	{
-		return std::nullopt;
+		return FileID(NOHANDLE);
 	}
 
 	OSFileHandle* outHandle = &filesopen[index];
@@ -25,20 +25,20 @@ std::optional<FileID> FileManager::OpenFile(const std::string& name, OSFileFlags
 
 	if (nRet)
 	{
-		return std::nullopt;
+		return FileID(NOHANDLE);
 	}
 
 	return FileID(index);
 }
 
-std::optional<FileID> FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags)
+FileID FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags)
 {
 
 	uint32_t index = FindAvailableHandle();
 
 	if (index == NOHANDLE)
 	{
-		return std::nullopt;
+		return FileID(NOHANDLE);
 	}
 
 	OSFileHandle* outHandle = &filesopen[index];
@@ -47,7 +47,7 @@ std::optional<FileID> FileManager::OpenFile(const std::filesystem::path name, OS
 
 	if (nRet)
 	{
-		return std::nullopt;
+		return FileID(NOHANDLE);
 	}
 
 	return FileID(index);
@@ -216,5 +216,17 @@ int FileManager::ReadBytes(const FileID& id, int numBytes, char* buffer)
 
 	int ret = OSReadFile(handle, numBytes, buffer);
 
+	return ret;
+}
+
+int FileManager::CreateFileIterator(std::string searchstring, OSFileIterator* file)
+{
+	int ret = OSCreateFileIterator(searchstring.c_str(), file);
+	return ret;
+}
+
+int FileManager::NextFileIterator(OSFileIterator* file)
+{
+	int ret = OSNextFile(file);
 	return ret;
 }
