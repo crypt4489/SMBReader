@@ -429,7 +429,7 @@ struct ImageMemoryUpdateManager
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
 
-	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, ImageFormat format)
+	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 	{
 		
 		TransferRegionLink* link = Find(textureIndex);
@@ -455,6 +455,7 @@ struct ImageMemoryUpdateManager
 		region->mipLevels = mipLevels;
 		region->textureIndex = textureIndex;
 		region->format = format;
+		region->layers = layers;
 
 		link->region = regionAlloc;
 		link->next = -1;
@@ -503,6 +504,7 @@ struct ImageMemoryUpdateManager
 		outputRegion->height = src->height;
 		outputRegion->mipLevels = src->mipLevels;
 		outputRegion->format = src->format;
+		outputRegion->layers = src->layers;
 
 		int linkRet = regionLinks[link].next;
 
@@ -517,6 +519,7 @@ struct ImageMemoryUpdateManager
 		src->height = 0;
 		src->mipLevels = 0;
 		src->format = {};
+		src->layers = -1;
 
 		regionLinks[link].next = -1;
 		regionLinks[link].region = -1;

@@ -919,13 +919,13 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount,
-	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, EntryHandle memIndex)
+	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
 {
 	//std::shared_lock lock(deviceLock);
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.imageType = imageType;
 	imageInfo.extent.width = width;
 	imageInfo.extent.height = height;
 	imageInfo.extent.depth = 1;
@@ -971,6 +971,62 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	return ret;
 }
 
+EntryHandle VKDevice::CreateCubedImage(uint32_t width,
+	uint32_t height, uint32_t mipLevels,
+	VkFormat type, uint32_t layers,
+	VkImageUsageFlags flags, uint32_t sampleCount,
+	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
+{
+	//std::shared_lock lock(deviceLock);
+	VkImage image;
+	VkImageCreateInfo imageInfo{};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = imageType;
+	imageInfo.extent.width = width;
+	imageInfo.extent.height = height;
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = mipLevels;
+	imageInfo.arrayLayers = layers;
+
+	imageInfo.format = type;
+	imageInfo.tiling = tiling;
+	imageInfo.initialLayout = layout;
+	imageInfo.usage = flags;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
+	imageInfo.flags = cflags | VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+
+	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create image!");
+	}
+
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(device, image, &memRequirements);
+
+	HandlePoolObject objHandle = GetVkTypeFromEntry(memIndex);
+
+	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
+		return EntryHandle();
+
+	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
+
+	VkDeviceSize addr = iter->alloc.GetMemory(memRequirements.size, memRequirements.alignment);
+
+	vkBindImageMemory(device, image, iter->memory, addr);
+
+	ImageAllocation* alloc = reinterpret_cast<ImageAllocation*>(AllocFromPerDeviceData(sizeof(ImageAllocation)));
+
+	alloc->imageHandle = image;
+	alloc->deviceMemoryAddress = addr;
+	alloc->memIndex = memIndex;
+
+	EntryHandle ret;
+
+	ret = AddVkTypeToEntry(alloc, VulkImageHandle);
+
+	return ret;
+}
+
 
 EntryHandle VKDevice::CreateStorageImage(
 	uint32_t width, uint32_t height,
@@ -986,10 +1042,10 @@ EntryHandle VKDevice::CreateStorageImage(
 		VK_IMAGE_USAGE_STORAGE_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, memIndex
 	);
 
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, 1, type, flags, VK_IMAGE_VIEW_TYPE_2D);
 
 	
 
@@ -1052,8 +1108,8 @@ EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memo
 }
 
 EntryHandle VKDevice::CreateImageView(
-	EntryHandle imageIndex, uint32_t mipLevels,
-	VkFormat type, VkImageAspectFlags aspectMask)
+	EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
+	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
 	//std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
@@ -1062,13 +1118,13 @@ EntryHandle VKDevice::CreateImageView(
 
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
-	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.viewType = imageViewType;
 	viewInfo.format = type;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
 	viewInfo.subresourceRange.baseMipLevel = 0;
 	viewInfo.subresourceRange.levelCount = mipLevels;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
-	viewInfo.subresourceRange.layerCount = 1;
+	viewInfo.subresourceRange.layerCount = layersCount;
 	VkImageView imageView = VK_NULL_HANDLE;
 	if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create texture image view!");
@@ -1085,20 +1141,20 @@ EntryHandle VKDevice::CreateImageView(
 }
 
 EntryHandle VKDevice::CreateImageView(
-	VkImage image, uint32_t mipLevels,
-	VkFormat type, VkImageAspectFlags aspectMask)
+	VkImage image, uint32_t mipLevels, uint32_t layersCount,
+	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
 	//std::shared_lock lock(deviceLock);
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
-	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.viewType = imageViewType;
 	viewInfo.format = type;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
 	viewInfo.subresourceRange.baseMipLevel = 0;
 	viewInfo.subresourceRange.levelCount = mipLevels;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
-	viewInfo.subresourceRange.layerCount = 1;
+	viewInfo.subresourceRange.layerCount = layersCount;
 	VkImageView imageView = VK_NULL_HANDLE;
 	if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create texture image view!");
@@ -1533,7 +1589,7 @@ EntryHandle VKDevice::CreateSampledImage(
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex);
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, memIndex);
 
 
 	VkImage image = GetImageByHandle(imageIndex);
@@ -1551,14 +1607,14 @@ EntryHandle VKDevice::CreateSampledImage(
 	{
 		for (auto i = 0U; i < mipLevels; i++) {
 
-			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, 1);
 
 			offset += static_cast<VkDeviceSize>(imageSizes[i]);
 		}
 	}
 	else
 	{
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 }, 0, 1);
 	}
 
 	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
@@ -1567,7 +1623,7 @@ EntryHandle VKDevice::CreateSampledImage(
 
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
 
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, 1, type, flags, VK_IMAGE_VIEW_TYPE_2D);
 
 	EntryHandle samplerIndex = CreateSampler(mipLevels);
 
@@ -1587,26 +1643,54 @@ EntryHandle VKDevice::CreateSampledImage(
 
 EntryHandle VKDevice::CreateSampledImageHandle(
 	uint32_t blobSize,
-	uint32_t width, uint32_t height,
-	uint32_t mipLevels, VkFormat type,
+	uint32_t width, uint32_t height, uint32_t layers,
+	uint32_t mipLevels, VkFormat imageFormat,
 	EntryHandle memIndex,
-	VkImageAspectFlags flags
+	VkImageAspectFlags flags,
+	VkImageType imageType, bool cubeMaped
 )
 {
 
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
 
-	VkFormat format = type;
+	EntryHandle imageIndex;
+	if (cubeMaped)
+	{
+		imageIndex = CreateCubedImage(
+			width, height, mipLevels, imageFormat, layers,
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+			VK_IMAGE_USAGE_SAMPLED_BIT,
+			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
+	}
+	else
+	{
+		imageIndex = CreateImage(
+			width, height, mipLevels, imageFormat, layers,
+			VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+			VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+			VK_IMAGE_USAGE_SAMPLED_BIT,
+			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
+	}
 
-	EntryHandle imageIndex = CreateImage(
-		width, height, mipLevels, type, 1,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, memIndex);
+	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
+
+	switch (imageType)
+	{
+	case VK_IMAGE_TYPE_2D:
+		if (cubeMaped)
+		{
+			imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		}
+		break;
+
+	case VK_IMAGE_TYPE_3D:
+		imageViewType = VK_IMAGE_VIEW_TYPE_3D;
+		break;
+	}
 
 
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, type, flags);
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
 	EntryHandle samplerIndex = CreateSampler(mipLevels);
 
@@ -3181,7 +3265,7 @@ void VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle sta
 void VKDevice::UploadImageData(EntryHandle textureIndex, 
 	char* imageData, size_t totalImageDataSize, 
 	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex, 
-	int width, int height, 
+	int width, int height, int layers,
 	int mipLevels, VkFormat format
 )
 {
@@ -3234,14 +3318,14 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 	{
 		for (auto i = 0U; i < mipLevels; i++) {
 
-			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
 
 			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
 		}
 	}
 	else
 	{
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 }, 0, layers);
 	}
 
 	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
@@ -3258,7 +3342,7 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 	char* imageData, size_t totalImageDataSize,
 	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
 	int width, int height,
-	int mipLevels, VkFormat format, RecordingBufferObject* rbo
+	int mipLevels, int layers, VkFormat format, RecordingBufferObject* rbo
 )
 {
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
@@ -3289,7 +3373,7 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	VkImage image = GetImageByTexture(textureIndex);
 
-	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, layers);
 
 	VkDeviceSize offset = offsetAlloc;
 
@@ -3298,17 +3382,17 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 	{
 		for (auto i = 0U; i < mipLevels; i++) {
 
-			VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 });
+			VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
 
 			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
 		}
 	}
 	else
 	{
-		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 });
+		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width, height, 0, offset, { 0, 0, 0 }, 0, layers);
 	}
 
-	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
+	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, layers);
 }
 
 void VKDevice::ResetBufferAllocator(EntryHandle bufferIndex)

@@ -52,7 +52,7 @@ ShaderGraphReader::hash(const std::string& string)
 	const char* str = string.c_str();
 
 	while (c = *str++) {
-		if (((c - 'A') >= 0 && (c - 'Z') <= 0) || ((c - 'a') >= 0 && (c - 'z') <= 0))
+		if (((c - 'A') >= 0 && (c - 'Z') <= 0) || ((c - 'a') >= 0 && (c - 'z') <= 0) || ((c - '0') >= 0 && (c - '9') <= 0))
 			hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 	}
 
@@ -607,8 +607,11 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 		{
 			switch (codeV)
 			{
-			case hash("sampler"):
-				tag->resourceType = ShaderResourceType::SAMPLER;
+			case hash("samplerCube"):
+				tag->resourceType = ShaderResourceType::SAMPLERCUBE;
+				break;
+			case hash("sampler2d"):
+				tag->resourceType = ShaderResourceType::SAMPLER2D;
 				break;
 			case hash("storageimage"):
 				tag->resourceType = ShaderResourceType::IMAGESTORE2D;
@@ -624,8 +627,11 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 				tag->resourceType = ShaderResourceType::CONSTANT_BUFFER;
 				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
-			case hash("samplerBindless"):
+			case hash("sampler2dBindless"):
 				tag->resourceType = ShaderResourceType::SAMPLERBINDLESS;
+				break;
+			case hash("sampler3d"):
+				tag->resourceType = ShaderResourceType::SAMPLER3D;
 				break;
 			case hash("bufferView"):
 				tag->resourceType = ShaderResourceType::BUFFER_VIEW;

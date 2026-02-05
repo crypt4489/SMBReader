@@ -76,9 +76,12 @@ namespace VK {
 		{
 
 			void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
-					uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
-					VkOffset3D offset);
+				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
+				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount);
 
+			void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
+				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset, VkDeviceSize bufferSize,
+				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount, VkBufferImageCopy* regions);
 
 
 			void TransitionImageLayout(VkCommandBuffer& commandBuffer,

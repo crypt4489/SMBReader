@@ -446,7 +446,7 @@ namespace VK {
 
 				void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
 					uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
-					VkOffset3D offset) {
+					VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount) {
 
 					VkBufferImageCopy region{};
 					region.bufferOffset = bufferOffset;
@@ -455,8 +455,8 @@ namespace VK {
 
 					region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 					region.imageSubresource.mipLevel = mip;
-					region.imageSubresource.baseArrayLayer = 0;
-					region.imageSubresource.layerCount = 1;
+					region.imageSubresource.baseArrayLayer = baseLayer;
+					region.imageSubresource.layerCount = layerCount;
 
 					region.imageOffset = offset;
 					region.imageExtent = {
@@ -472,6 +472,42 @@ namespace VK {
 						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 						1,
 						&region
+					);
+				}
+
+				void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
+					uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset, VkDeviceSize bufferSize,
+					VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount, VkBufferImageCopy* regions) {
+
+
+					for (int i = 0; i < layerCount; i++)
+					{
+						VkBufferImageCopy& region = regions[i];
+						region.bufferOffset = bufferOffset + (i * bufferSize);
+						region.bufferRowLength = 0;
+						region.bufferImageHeight = 0;
+
+						region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+						region.imageSubresource.mipLevel = mip;
+						region.imageSubresource.baseArrayLayer = baseLayer+i;
+						region.imageSubresource.layerCount = layerCount;
+
+						region.imageOffset = offset;
+						region.imageExtent = {
+							width,
+							height,
+							1
+						};
+					}
+					
+
+					vkCmdCopyBufferToImage(
+						commandBuffer,
+						buffer,
+						image,
+						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						layerCount,
+						regions
 					);
 				}
 

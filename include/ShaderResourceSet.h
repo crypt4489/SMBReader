@@ -229,7 +229,7 @@ struct ShaderResourceManager
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
-		if (header->type != ShaderResourceType::SAMPLER && header->type != ShaderResourceType::IMAGESTORE2D)
+		if (header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE && header->type != ShaderResourceType::SAMPLER3D && header->type != ShaderResourceType::IMAGESTORE2D)
 			return;
 
 		header->textureHandle = index;
@@ -281,7 +281,7 @@ struct ShaderResourceManager
 		switch (desc->type)
 		{
 		case ShaderResourceType::IMAGESTORE2D:
-		case ShaderResourceType::SAMPLER:
+		case ShaderResourceType::SAMPLER2D:
 		{
 			head += sizeof(ShaderResourceImage);
 			ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)head;
@@ -323,13 +323,13 @@ struct ShaderResourceManager
 		head = offsets[binding];
 		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
 
-		if (desc->type != ShaderResourceType::SAMPLER && desc->type != ShaderResourceType::IMAGESTORE2D)
+		if (desc->type != ShaderResourceType::SAMPLER2D && desc->type != ShaderResourceType::SAMPLERCUBE && desc->type != ShaderResourceType::SAMPLER3D && desc->type != ShaderResourceType::IMAGESTORE2D)
 			return;
 
 		switch (desc->type)
 		{
 		case ShaderResourceType::IMAGESTORE2D:
-		case ShaderResourceType::SAMPLER:
+		case ShaderResourceType::SAMPLER2D:
 			head += sizeof(ShaderResourceImage);
 
 			break;

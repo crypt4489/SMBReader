@@ -220,6 +220,8 @@ UniformGrid mainGrid = {
 	.numberOfDivision = 5,
 };
 
+int skyboxPipeline = 0;
+
 static void CreateUniformGrid()
 {
 
@@ -563,7 +565,7 @@ void ApplicationLoop::Execute()
 
 			if (index != ~0ui32) {
 
-				
+				VKRenderer::gRenderInstance->AddPipelineToMainQueue(skyboxPipeline, 1);
 
 				VKRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
 
@@ -735,6 +737,8 @@ enum VertexComponents
 };
 
 std::atomic<float> geoX = 0.0f;
+
+void ReadImage(std::string* name, int count);
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 {
@@ -1069,7 +1073,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 		memcpy(imageMemory + cpointer, texture.data, texture.cumulativeSize);
 		
-		memcpy(imageSizes + ispointer, texture.imageSizes, texture.miplevels);
+		memcpy(imageSizes + ispointer, texture.imageSizes, texture.miplevels * sizeof(uint32_t));
 		
 
 		mainDictionary.textureHandles[ii + index] =
@@ -1088,7 +1092,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			texture.cumulativeSize, 
 			texture.width, 
 			texture.height, 
-			texture.miplevels, 
+			texture.miplevels,
+			1,
 			format
 		);
 
@@ -1186,6 +1191,103 @@ void ApplicationLoop::InitializeRuntime()
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
 
 	VKRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
+
+	static uint16_t BoxIndices[36] = {
+		2,  1,  0,
+		1,  2,  3,
+		4,  5,  6,
+		7,  6,  5,
+	    8,  9,  10,
+		11, 10, 9,
+	   14, 13, 12,
+	   13, 14, 15,
+	   18, 17, 16,
+	   17, 18, 19,
+	   20, 21, 22,
+	   23, 22, 21
+	};
+
+	static Vector4f BoxVerts[24] =
+	{
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0)
+	};
+	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(BoxVerts), 64);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+
+	VKRenderer::gRenderInstance->deviceMemoryUpdater.Create(BoxVerts, sizeof(BoxVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::MEMORY);
+	VKRenderer::gRenderInstance->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+
+	std::string names[6] = {
+	"face4.bmp",
+	"face1.bmp",
+	"face5.bmp",
+	"face2.bmp",
+	"face6.bmp",
+	"face3.bmp",
+	
+	
+	
+	};
+
+	ReadImage(names, 6);
+
+	static Matrix4f matrix = Identity4f();
+
+	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
+
+	int skyboxDesc = VKRenderer::gRenderInstance->AllocateShaderResourceSet(14, 1, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int globalPipelineBufferWhat = VKRenderer::gRenderInstance->AllocateShaderResourceSet(14, 0, VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+
+	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, globalBufferLocation, 0, 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, mainDictionary.textureHandles[10], 0);
+	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
+
+	std::array<int, 2> skyboxDescs = { globalPipelineBufferWhat, skyboxDesc };
+
+	GraphicsIntermediaryPipelineInfo skyboxInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = globalVertexBuffer,
+		.vertexCount = 24,
+		.pipelinename = 14,
+		.descCount = 2,
+		.descriptorsetid = skyboxDescs.data(),
+		.indexBufferHandle = globalIndexBuffer,
+		.indexCount = 36,
+		.instanceCount = 1,
+		.indexSize = 2,
+		.indexOffset = (uint32_t)indexAlloc,
+		
+		.vertexOffset = (uint32_t)vertexAlloc,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
+
+	skyboxPipeline = VKRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&skyboxInfo, false); 
 
 	mainIndirectDrawData.commandBufferSize = 64;
 	mainIndirectDrawData.commandBufferCount = 0;
@@ -1715,6 +1817,61 @@ void ApplicationLoop::InitializeRuntime()
 	c.CreateProjectionMatrix(VKRenderer::gRenderInstance->GetSwapChainWidth() / (float)VKRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 	
 	WriteCameraMatrix(VKRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+
+
+
+}
+
+#include "TextureIO.h"
+
+static int imageCounter = 10;
+
+void ReadImage(std::string *name, int count)
+{
+
+	static char imagemem[64 * MiB];
+
+	size_t offset = 0;
+
+	TextureDetails details;
+
+	for (int i = 0; i < 6; i++)
+	{
+		std::vector<char> data;
+		FileManager::ReadFileInFull(name[i], data);
+
+		
+
+		ParseBMP(data, &details);
+
+		memcpy(imagemem + offset, details.data, details.dataSize);
+
+		offset += details.dataSize;
+
+		delete[] details.data;
+	}
+
+	mainDictionary.textureHandles[10] =
+		VKRenderer::gRenderInstance->CreateCubeImageHandle(
+			offset,
+			details.width,
+			details.height,
+			details.miplevels,
+			details.type,
+			loop->GetPoolIndexByFormat(details.type));
+
+	VKRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+		imagemem,
+		mainDictionary.textureHandles[10],
+		nullptr,
+		offset,
+		details.width,
+		details.height,
+		1,
+		6,
+		details.type
+	);
 }
 
 

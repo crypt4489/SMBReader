@@ -61,7 +61,7 @@ struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 
 	void CreateColorBlending(VkLogicOp blendOp);
 
-	void CreateDepthStencil(VkCompareOp depthOp);
+	void CreateDepthStencil(VkCompareOp depthOp, bool depthwriteenable);
 
 	VkRenderPass renderPass;
 	

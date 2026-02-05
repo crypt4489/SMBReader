@@ -11,7 +11,7 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="samplerBindless" used="vf" count="1024">
+		<ShaderResourceItem type="sampler2dBindless" used="vf" count="1024">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>

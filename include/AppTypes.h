@@ -150,7 +150,7 @@ struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
 
 enum class ShaderResourceType
 {
-	SAMPLER = 1,
+	SAMPLER2D = 1,
 	STORAGE_BUFFER = 2,
 	UNIFORM_BUFFER = 4,
 	CONSTANT_BUFFER = 8,
@@ -158,6 +158,8 @@ enum class ShaderResourceType
 	IMAGESTORE3D = 32,
 	SAMPLERBINDLESS = 64,
 	BUFFER_VIEW = 128,
+	SAMPLER3D = 129,
+	SAMPLERCUBE = 130,
 	INVALID_SHADER_RESOURCE = 0x7FFFFFFF
 };
 
@@ -337,6 +339,7 @@ struct TextureMemoryRegion
 	int width;
 	int height;
 	int mipLevels;
+	int layers;
 	ImageFormat format;
 };
 

@@ -24,7 +24,7 @@ void ParseBMP(std::vector<char>& _fileData, TextureDetails* details)
 	switch (bitcount)
 	{
 	case 32:
-		details->type = ImageFormat::R8G8B8A8;
+		details->type = ImageFormat::B8G8R8A8;
 		bytesPerRow = 4 * width;
 		break;
 	default:
@@ -64,6 +64,6 @@ void ParseBMP(std::vector<char>& _fileData, TextureDetails* details)
 
 	memcpy(copy, iter2, bytesPerRow);
 
-	TexUtils::BGRATexture((char*)details->data, height, width, (bitcount == 24 ? 3 : 4));
-
+	//TexUtils::BGRATexture((char*)details->data, height, width, (bitcount == 24 ? 3 : 4));
+	details->miplevels = 1;
 }

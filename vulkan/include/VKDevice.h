@@ -327,7 +327,13 @@ struct VKDevice
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,
-		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, EntryHandle memIndex);
+		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
+
+	EntryHandle CreateCubedImage(uint32_t width,
+		uint32_t height, uint32_t mipLevels,
+		VkFormat type, uint32_t layers,
+		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
 
 	EntryHandle CreateStorageImage(
 		uint32_t width, uint32_t height,
@@ -338,12 +344,12 @@ struct VKDevice
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
 	EntryHandle CreateImageView(
-		EntryHandle imageIndex, uint32_t mipLevels,
-		VkFormat type, VkImageAspectFlags aspectMask);
+		EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
+		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
 	EntryHandle CreateImageView(
-		VkImage image, uint32_t mipLevels,
-		VkFormat type, VkImageAspectFlags aspectMask);
+		VkImage image, uint32_t mipLevels, uint32_t layersCount,
+		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
 	void CreateLogicalDevice(
 		const char** instanceLayers,
@@ -411,10 +417,11 @@ struct VKDevice
 
 	EntryHandle CreateSampledImageHandle(
 		uint32_t blobSize,
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, VkFormat type,
+		uint32_t width, uint32_t height, uint32_t layers,
+		uint32_t mipLevels, VkFormat imageFormat,
 		EntryHandle memIndex,
-		VkImageAspectFlags flags
+		VkImageAspectFlags flags,
+		VkImageType imageType, bool cubeMaped
 	);
 
 
@@ -641,14 +648,14 @@ struct VKDevice
 	void UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
 		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
-		int width, int height,
+		int width, int height, int layers,
 		int mipLevels, VkFormat format
 	);
 
 	void UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
 		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
-		int width, int height,
+		int width, int height, int layers,
 		int mipLevels, VkFormat format, RecordingBufferObject* rbo
 	);
 

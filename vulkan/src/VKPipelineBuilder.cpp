@@ -118,12 +118,12 @@ void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 }
-void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp)
+void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool depthwriteenable)
 
 {
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencil.depthTestEnable = VK_TRUE;
-	depthStencil.depthWriteEnable = VK_TRUE;
+	depthStencil.depthTestEnable =  VK_TRUE;
+	depthStencil.depthWriteEnable = depthwriteenable ? VK_TRUE : VK_FALSE;
 
 	depthStencil.depthCompareOp = depthOp;
 

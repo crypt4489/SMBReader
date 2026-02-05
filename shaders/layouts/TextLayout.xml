@@ -7,7 +7,7 @@
 		text.frag
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="sampler" used ="f">
+		<ShaderResourceItem type="sampler2d" used ="f">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

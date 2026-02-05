@@ -61,6 +61,7 @@ struct RenderInstance
 		VKGraphicsPipelineBuilder* text, 
 		VKGraphicsPipelineBuilder* debug, 
 		VKGraphicsPipelineBuilder* normaldebug, 
+		VKGraphicsPipelineBuilder* skybox,
 		VkSampleCountFlagBits flags
 	);
 
@@ -96,6 +97,11 @@ struct RenderInstance
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type, int poolIndex);
+
+	EntryHandle CreateCubeImageHandle(
+		uint32_t blobSize,
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, ImageFormat format, int poolIndex);
 
 	EntryHandle CreateStorageImage(
 		uint32_t width, uint32_t height,

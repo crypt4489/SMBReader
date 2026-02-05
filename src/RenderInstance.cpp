@@ -321,9 +321,9 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t 
 		1, vkDepthFormat, 1,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imagePools[1]);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
 
-	depthViews[index] = dev->CreateImageView(depthImages[index], 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+	depthViews[index] = dev->CreateImageView(depthImages[index], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
 
 	dev->TransitionImageLayout(
 		depthImages[index], vkDepthFormat,
@@ -495,9 +495,9 @@ void RenderInstance::CreateMSAAColorResources(uint32_t width, uint32_t height, u
 		VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 		VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 		sampleCount,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imagePools[0]);
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[0]);
 
-	colorViews[index] = dev->CreateImageView(colorImages[index], 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT);
+	colorViews[index] = dev->CreateImageView(colorImages[index], 1, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 }
 
 void RenderInstance::WaitOnRender()
@@ -601,7 +601,9 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		case ShaderResourceType::IMAGESTORE2D:
 			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
 			break;
-		case ShaderResourceType::SAMPLER:
+		case ShaderResourceType::SAMPLER2D:
+		case ShaderResourceType::SAMPLER3D:
+		case ShaderResourceType::SAMPLERCUBE:
 			descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
 			break;
 		case ShaderResourceType::STORAGE_BUFFER:
@@ -652,7 +654,8 @@ void RenderInstance::CreatePipelines()
 		"MeshWorldAssignments.xml",
 		"LightObjectDivision.xml",
 		"LightWorldAssignment.xml",
-		"NormalDebug.xml"
+		"NormalDebug.xml",
+		"Skybox.xml"
 		
 	};
 
@@ -668,7 +671,7 @@ void RenderInstance::CreatePipelines()
 
 	int i = 0;
 
-	while(i<14)
+	while(i<15)
 	{
 		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i],
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
@@ -749,6 +752,7 @@ void RenderInstance::CreatePipelines()
 	std::vector<EntryHandle> r(maxMSAALevels);
 	std::vector<EntryHandle> debug(maxMSAALevels);
 	std::vector<EntryHandle> normaldebug(maxMSAALevels);
+	std::vector<EntryHandle> skyboxPipeline(maxMSAALevels);
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{
@@ -756,9 +760,11 @@ void RenderInstance::CreatePipelines()
 		auto textBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 1, 2, 0);
 		auto debugBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
 		auto normalBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
+		auto skyboxBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 2, 2, 1);
 
-		UsePipelineBuilders(genericBuilder, textBuilder, debugBuilder, normalBuilder, (VkSampleCountFlagBits)(1<<i));
+		UsePipelineBuilders(genericBuilder, textBuilder, debugBuilder, normalBuilder, skyboxBuilder, (VkSampleCountFlagBits)(1<<i));
 
+		skyboxBuilder->AddPushConstantRange(0, 64, VK_SHADER_STAGE_VERTEX_BIT, 0);
 
 		r[i] = CreateVulkanGraphicPipelineTemplate(genericBuilder, vulkanShaderGraphs.shaderGraphPtrs[0]);
 
@@ -767,6 +773,8 @@ void RenderInstance::CreatePipelines()
 		debug[i] = CreateVulkanGraphicPipelineTemplate(debugBuilder, vulkanShaderGraphs.shaderGraphPtrs[5]);
 
 		normaldebug[i] = CreateVulkanGraphicPipelineTemplate(normalBuilder, vulkanShaderGraphs.shaderGraphPtrs[13]);
+
+		skyboxPipeline[i] = CreateVulkanGraphicPipelineTemplate(skyboxBuilder, vulkanShaderGraphs.shaderGraphPtrs[14]);
 
 	}
 
@@ -777,6 +785,8 @@ void RenderInstance::CreatePipelines()
 	pipelinesIdentifier[5] = debug;
 
 	pipelinesIdentifier[13] = normaldebug;
+
+	pipelinesIdentifier[14] = skyboxPipeline;
 
 }
 
@@ -845,7 +855,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 }
 
 
-void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VKGraphicsPipelineBuilder* normaldebug, VkSampleCountFlagBits flags)
+void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VKGraphicsPipelineBuilder* normaldebug, VKGraphicsPipelineBuilder* skybox, VkSampleCountFlagBits flags)
 {
 	std::array<VkDynamicState, 2> dynamicStates = {
 		VK_DYNAMIC_STATE_VIEWPORT,
@@ -856,50 +866,71 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	text->CreateDynamicStateInfo(dynamicStates.data(), 2);
 	debug->CreateDynamicStateInfo(dynamicStates.data(), 2);
 	normaldebug->CreateDynamicStateInfo(dynamicStates.data(), 2);
+	skybox->CreateDynamicStateInfo(dynamicStates.data(), 2);
 
 	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
+	VkVertexInputBindingDescription bindingDescription{};
+	bindingDescription.binding = 0;
+	bindingDescription.stride = sizeof(Vector4f);
+	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(1);
+
+	attributeDescriptions[0].binding = 0;
+	attributeDescriptions[0].location = 0;
+	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].offset = 0;
+
 	generic->CreateVertexInput(nullptr, 0, nullptr, 0);
 	text->CreateVertexInput(bindings.data(), 1, ref.data(), static_cast<uint32_t>(ref.size()));
 	debug->CreateVertexInput(nullptr, 0, nullptr, 0);
 	normaldebug->CreateVertexInput(nullptr, 0, nullptr, 0);
+	skybox->CreateVertexInput(&bindingDescription, 1, attributeDescriptions.data(), 1);
 
 	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	debug->CreateInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
 	normaldebug->CreateInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
+	skybox->CreateInputAssembly(API::ConvertTopology(TRIANGLES), false);
 
 	generic->CreateViewportState(1, 1);
 	text->CreateViewportState(1, 1);
 	debug->CreateViewportState(1, 1);
 	normaldebug->CreateViewportState(1, 1);
+	skybox->CreateViewportState(1, 1);
 
 	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
 	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
 	debug->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 5.0f);
 	normaldebug->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
+	skybox->CreateRasterizer(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
 
 	generic->CreateMultiSampling(flags);
 	text->CreateMultiSampling(flags);
 	debug->CreateMultiSampling(flags);
 	normaldebug->CreateMultiSampling(flags);
+	skybox->CreateMultiSampling(flags);
 
 	generic->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 	text->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 	debug->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 	normaldebug->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+	skybox->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
 
 	generic->CreateColorBlending(VK_LOGIC_OP_COPY);
 	text->CreateColorBlending(VK_LOGIC_OP_COPY);
 	debug->CreateColorBlending(VK_LOGIC_OP_COPY);
 	normaldebug->CreateColorBlending(VK_LOGIC_OP_COPY);
+	skybox->CreateColorBlending(VK_LOGIC_OP_COPY);
 
-	generic->CreateDepthStencil(VK_COMPARE_OP_LESS);
-	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS);
-	debug->CreateDepthStencil(VK_COMPARE_OP_LESS);
-	normaldebug->CreateDepthStencil(VK_COMPARE_OP_LESS);
+	generic->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
+	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS, true);
+	debug->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
+	normaldebug->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
+	skybox->CreateDepthStencil(VK_COMPARE_OP_LESS_OR_EQUAL, false);
 }
 
 std::array<void*, 1000> batchAddresses;
@@ -1040,6 +1071,7 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 			region.width,
 			region.height,
 			region.mipLevels,
+			region.layers,
 			API::ConvertImageFormatToVulkanFormat(region.format),
 			rbo
 		);
@@ -1205,19 +1237,37 @@ int RenderInstance::GetAllocFromBuffer(size_t size, uint32_t alignment, Allocati
 EntryHandle RenderInstance::CreateImageHandle(
 	uint32_t blobSize,
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat type, int poolIndex)
+	uint32_t mipLevels, ImageFormat format, int poolIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	EntryHandle textureIndex = majorDevice->CreateSampledImageHandle(
 		blobSize,
-		width, height,
-		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
+		width, height, 1,
+		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT);
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, false);
 
 	return textureIndex;
 }
+
+EntryHandle RenderInstance::CreateCubeImageHandle(
+	uint32_t blobSize,
+	uint32_t width, uint32_t height,
+	uint32_t mipLevels, ImageFormat format, int poolIndex)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	EntryHandle textureIndex = majorDevice->CreateSampledImageHandle(
+		blobSize,
+		width, height, 6,
+		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
+		imagePools[poolIndex],
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, true);
+
+	return textureIndex;
+}
+
 
 EntryHandle RenderInstance::CreateStorageImage(
 	uint32_t width, uint32_t height,
@@ -1365,7 +1415,9 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			}
 			break;
 		}
-		case ShaderResourceType::SAMPLER:
+		case ShaderResourceType::SAMPLER3D:
+		case ShaderResourceType::SAMPLER2D:
+		case ShaderResourceType::SAMPLERCUBE:
 		{
 			ptr += sizeof(ShaderResourceImage);
 			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
@@ -1509,7 +1561,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		stagingBuffers[i] = majorDevice->CreateHostBuffer(64 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		stagingBuffers[i] = majorDevice->CreateHostBuffer(128 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 	}
 
 
@@ -1696,7 +1748,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), i, frames);
 				break;
 			}
-			case ShaderResourceType::SAMPLER:
+			case ShaderResourceType::SAMPLER3D:
+			case ShaderResourceType::SAMPLER2D:
+			case ShaderResourceType::SAMPLERCUBE:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), dev->GetSamplerByTexture(image->textureHandle, 0), i, frames);
@@ -1874,7 +1928,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 		vkPipelineObject->SetPerObjectData(dynamicOffsets.data(), dynamicNumber);
 
-		for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount; i++)
+		for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 		{
 			ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
 			if (!pushArgs)
@@ -1885,7 +1939,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 			}
 		
 			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
-			
+			i++;
 		}
 
 		
@@ -1968,7 +2022,7 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 
 	vkPipelineObject->SetPerObjectData(dynamicOffsets.data(), dynamicNumber);
 
-	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount; i++)
+	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 	{
 		ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
 		if (!pushArgs)
@@ -1978,6 +2032,7 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 			continue;
 		}
 		vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
+		i++;
 	}
 	
 	
@@ -2060,7 +2115,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					break;
 				}
-				case ShaderResourceType::SAMPLER:
+				case ShaderResourceType::SAMPLER2D:
 				{
 					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
 
@@ -2223,9 +2278,9 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
-	graph->DrawScene(&rcb, currentFrame);
-
 	queue->DrawScene(&rcb, currentFrame);
+
+	graph->DrawScene(&rcb, currentFrame);
 
 	rcb.EndRenderPassCommand();
 
