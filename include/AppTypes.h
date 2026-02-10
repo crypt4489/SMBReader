@@ -81,11 +81,19 @@ enum class AllocationType
 enum class ComponentFormatType
 {
 	NO_BUFFER_FORMAT = 0,
-	RAW_8BIT_BUFFER = 1, 
+	RAW_8BIT_BUFFER = 1,
 	R32_UINT = 2,
 	R32_SINT = 3,
-};
+	R32G32B32A32_SFLOAT = 4,
+	R32G32B32_SFLOAT = 5,
+	R32G32_SFLOAT = 6,
+	R32_SFLOAT = 7,
+	R32G32_SINT = 8,
+	R8G8_UINT = 9,
+	R16G16_SINT = 10,
+	R16G16B16_SINT = 11
 
+};
 
 
 enum class TransferType

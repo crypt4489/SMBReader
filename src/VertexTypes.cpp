@@ -10,31 +10,20 @@ text_vertex_t::text_vertex_t(Vector2f _p, Vector2f _t, Vector4f _c) :
 
 }
 
-VkVertexInputBindingDescription text_vertex_t::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(text_vertex_t);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
+std::vector<VertexInputDescription> text_vertex_t::getAttributeDescriptions() {
+	std::vector<VertexInputDescription> attributeDescriptions(3);
 
-std::vector<VkVertexInputAttributeDescription> text_vertex_t::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(3);
+	attributeDescriptions[0].byteoffset = offsetof(text_vertex_t, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32_SFLOAT; 
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(text_vertex_t, POSITION);
+	attributeDescriptions[1].byteoffset = offsetof(text_vertex_t, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32_SFLOAT; 
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(text_vertex_t, TEXTURE);
-
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[2].offset = offsetof(text_vertex_t, COLOR);
+	attributeDescriptions[2].byteoffset = offsetof(text_vertex_t, COLOR);
+	attributeDescriptions[2].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[2].vertexusage = VertexUsage::COLOR0;
 
 	return attributeDescriptions;
 }
@@ -51,31 +40,21 @@ vertex_type_h::vertex_type_h(Vector4f _p, Vector2f _t, Vector3f _n) :
 {
 }
 
-VkVertexInputBindingDescription vertex_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(vertex_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
+std::vector<VertexInputDescription> vertex_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(3);
 
-std::vector<VkVertexInputAttributeDescription> vertex_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(3);
+	attributeDescriptions[0].byteoffset = offsetof(vertex_type_h, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(vertex_type_h, POSITION);
+	attributeDescriptions[1].byteoffset = offsetof(vertex_type_h, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(vertex_type_h, TEXTURE);
-
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attributeDescriptions[2].offset = offsetof(vertex_type_h, NORMAL);
+	attributeDescriptions[2].byteoffset = offsetof(vertex_type_h, NORMAL);
+	attributeDescriptions[2].format = ComponentFormatType::R32G32B32_SFLOAT;
+	attributeDescriptions[2].vertexusage = VertexUsage::NORMAL;
 
 	return attributeDescriptions;
 }
@@ -94,26 +73,18 @@ basic_vertex_type_h::basic_vertex_type_h(Vector4f _p, Vector4f _t) :
 {
 }
 
-VkVertexInputBindingDescription basic_vertex_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(basic_vertex_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
 
-std::vector<VkVertexInputAttributeDescription> basic_vertex_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(2);
+std::vector<VertexInputDescription> basic_vertex_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(2);
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(basic_vertex_type_h, POSITION);
+	attributeDescriptions[0].byteoffset = offsetof(basic_vertex_type_h, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(basic_vertex_type_h, TEXTURE);
+	attributeDescriptions[1].byteoffset = offsetof(basic_vertex_type_h, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
 	return attributeDescriptions;
 }
@@ -129,41 +100,30 @@ pospack6_cnorm_c16tex1_bone2_type_h::pospack6_cnorm_c16tex1_bone2_type_h(const V
 {
 }
 
-VkVertexInputBindingDescription pospack6_cnorm_c16tex1_bone2_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(pospack6_cnorm_c16tex1_bone2_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
 
-std::vector<VkVertexInputAttributeDescription> pospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(5);
+std::vector<VertexInputDescription> pospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(5);
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, POSITION);
+	attributeDescriptions[0].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, TEXTURE);
+	attributeDescriptions[1].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attributeDescriptions[2].offset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, NORMAL);
+	attributeDescriptions[2].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, NORMAL);
+	attributeDescriptions[2].format = ComponentFormatType::R32G32B32_SFLOAT;
+	attributeDescriptions[2].vertexusage = VertexUsage::NORMAL;
 
-	attributeDescriptions[3].binding = 0;
-	attributeDescriptions[3].location = 3;
-	attributeDescriptions[3].format = VK_FORMAT_R32G32_SINT;
-	attributeDescriptions[3].offset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, BONES);
+	attributeDescriptions[3].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, BONES);
+	attributeDescriptions[3].format = ComponentFormatType::R32G32_SINT;
+	attributeDescriptions[3].vertexusage = VertexUsage::BONES;
 
-	attributeDescriptions[4].binding = 0;
-	attributeDescriptions[4].location = 4;
-	attributeDescriptions[4].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[4].offset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, WEIGHTS);
+	attributeDescriptions[4].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, WEIGHTS);
+	attributeDescriptions[4].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[4].vertexusage = VertexUsage::WEIGHTS;
 
 	return attributeDescriptions;
 }
@@ -186,36 +146,25 @@ pospack6_c16tex1_bone2_type_h::pospack6_c16tex1_bone2_type_h(const Vector4f& _p,
 {
 }
 
-VkVertexInputBindingDescription pospack6_c16tex1_bone2_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(pospack6_c16tex1_bone2_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
+std::vector<VertexInputDescription> pospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(4);
 
-std::vector<VkVertexInputAttributeDescription> pospack6_c16tex1_bone2_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(4);
+	attributeDescriptions[0].byteoffset = offsetof(pospack6_c16tex1_bone2_type_h, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(pospack6_c16tex1_bone2_type_h, POSITION);
+	attributeDescriptions[1].byteoffset = offsetof(pospack6_c16tex1_bone2_type_h, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(pospack6_c16tex1_bone2_type_h, TEXTURE);
+	attributeDescriptions[2].byteoffset = offsetof(pospack6_c16tex1_bone2_type_h, BONES);
+	attributeDescriptions[2].format = ComponentFormatType::R32G32_SINT;
+	attributeDescriptions[2].vertexusage = VertexUsage::BONES;
 
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32_SINT;
-	attributeDescriptions[2].offset = offsetof(pospack6_c16tex1_bone2_type_h, BONES);
-
-	attributeDescriptions[3].binding = 0;
-	attributeDescriptions[3].location = 3;
-	attributeDescriptions[3].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[3].offset = offsetof(pospack6_c16tex1_bone2_type_h, WEIGHTS);
+	attributeDescriptions[3].byteoffset = offsetof(pospack6_c16tex1_bone2_type_h, WEIGHTS);
+	attributeDescriptions[3].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[3].vertexusage = VertexUsage::WEIGHTS;
 
 	return attributeDescriptions;
 }
@@ -233,45 +182,33 @@ pospack6_c16tex2_bone2_type_h::pospack6_c16tex2_bone2_type_h(const Vector4f& _p,
 {
 }
 
-VkVertexInputBindingDescription pospack6_c16tex2_bone2_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(pospack6_c16tex2_bone2_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
 
-std::vector<VkVertexInputAttributeDescription> pospack6_c16tex2_bone2_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(5);
+std::vector<VertexInputDescription> pospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(5);
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = offsetof(pospack6_c16tex2_bone2_type_h, POSITION);
+	attributeDescriptions[0].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, POSITION);
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = offsetof(pospack6_c16tex2_bone2_type_h, TEXTURE);
+	attributeDescriptions[1].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, TEXTURE);
+	attributeDescriptions[1].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[1].vertexusage = VertexUsage::TEX0;
 
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 2;
-	attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[2].offset = offsetof(pospack6_c16tex2_bone2_type_h, TEXTURE2);
+	attributeDescriptions[2].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, TEXTURE2);
+	attributeDescriptions[2].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[2].vertexusage = VertexUsage::TEX1;
 
-	attributeDescriptions[3].binding = 0;
-	attributeDescriptions[3].location = 3;
-	attributeDescriptions[3].format = VK_FORMAT_R32G32_SINT;
-	attributeDescriptions[3].offset = offsetof(pospack6_c16tex2_bone2_type_h, BONES);
+	attributeDescriptions[3].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, BONES);
+	attributeDescriptions[3].format = ComponentFormatType::R32G32_SINT;
+	attributeDescriptions[3].vertexusage = VertexUsage::BONES;
 
-	attributeDescriptions[4].binding = 0;
-	attributeDescriptions[4].location = 4;
-	attributeDescriptions[4].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[4].offset = offsetof(pospack6_c16tex2_bone2_type_h, WEIGHTS);
+	attributeDescriptions[4].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, WEIGHTS);
+	attributeDescriptions[4].format = ComponentFormatType::R32G32_SFLOAT;
+	attributeDescriptions[4].vertexusage = VertexUsage::WEIGHTS;
 
 	return attributeDescriptions;
 }
-
 bool pospack6_c16tex2_bone2_type_h::operator==(const pospack6_c16tex2_bone2_type_h& v)
 {
 	return (v.POSITION == this->POSITION) &&
@@ -291,24 +228,29 @@ cpospack6_cnorm_c16tex1_bone2_type_h::cpospack6_cnorm_c16tex1_bone2_type_h(
 	{
 	}
 
-VkVertexInputBindingDescription cpospack6_cnorm_c16tex1_bone2_type_h::getBindingDescription()
+std::vector<VertexInputDescription> cpospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	VkVertexInputBindingDescription desc{};
-	desc.binding = 0;
-	desc.stride = sizeof(cpospack6_cnorm_c16tex1_bone2_type_h);
-	desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return desc;
-}
+	std::vector<VertexInputDescription> a(5);
 
-std::vector<VkVertexInputAttributeDescription> cpospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
-{
-	std::vector<VkVertexInputAttributeDescription> a(5);
+	a[0].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, BONES);
+	a[0].format = ComponentFormatType::R8G8_UINT;
+	a[0].vertexusage = VertexUsage::BONES;
 
-	a[0] = { 0, 0, VK_FORMAT_R8G8_UINT,        offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, BONES) };
-	a[1] = { 0, 1, VK_FORMAT_R8G8_UINT,        offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, WEIGHTS) };
-	a[2] = { 0, 2, VK_FORMAT_R16G16_SINT,      offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, TEXTURE) };
-	a[3] = { 0, 3, VK_FORMAT_R32_SINT,		   offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, NORMAL) };
-	a[4] = { 0, 4, VK_FORMAT_R16G16B16_SINT,   offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, POSITION) };
+	a[1].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, WEIGHTS);
+	a[1].format = ComponentFormatType::R8G8_UINT;
+	a[1].vertexusage = VertexUsage::WEIGHTS;
+
+	a[2].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, TEXTURE);
+	a[2].format = ComponentFormatType::R16G16_SINT;
+	a[2].vertexusage = VertexUsage::TEX0;
+
+	a[3].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, NORMAL);
+	a[3].format = ComponentFormatType::R32_SINT;
+	a[3].vertexusage = VertexUsage::NORMAL;
+
+	a[4].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, POSITION);
+	a[4].format = ComponentFormatType::R16G16B16_SINT;
+	a[4].vertexusage = VertexUsage::POSITION;
 
 	return a;
 }
@@ -332,23 +274,25 @@ cpospack6_c16tex1_bone2_type_h::cpospack6_c16tex1_bone2_type_h(
 {
 }
 
-VkVertexInputBindingDescription cpospack6_c16tex1_bone2_type_h::getBindingDescription()
+std::vector<VertexInputDescription> cpospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	VkVertexInputBindingDescription desc{};
-	desc.binding = 0;
-	desc.stride = sizeof(cpospack6_c16tex1_bone2_type_h);
-	desc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return desc;
-}
+	std::vector<VertexInputDescription> a(4);
 
-std::vector<VkVertexInputAttributeDescription> cpospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
-{
-	std::vector<VkVertexInputAttributeDescription> a(4);
+	a[0].byteoffset = offsetof(cpospack6_c16tex1_bone2_type_h, BONES);
+	a[0].format = ComponentFormatType::R8G8_UINT;
+	a[0].vertexusage = VertexUsage::BONES;
 
-	a[0] = { 0, 0, VK_FORMAT_R8G8_UINT,      offsetof(cpospack6_c16tex1_bone2_type_h, BONES) };
-	a[1] = { 0, 1, VK_FORMAT_R8G8_UINT,      offsetof(cpospack6_c16tex1_bone2_type_h, WEIGHTS) };
-	a[2] = { 0, 2, VK_FORMAT_R16G16_SINT,    offsetof(cpospack6_c16tex1_bone2_type_h, TEXTURE) };
-	a[3] = { 0, 3, VK_FORMAT_R16G16B16_SINT, offsetof(cpospack6_c16tex1_bone2_type_h, POSITION) };
+	a[1].byteoffset = offsetof(cpospack6_c16tex1_bone2_type_h, WEIGHTS);
+	a[1].format = ComponentFormatType::R8G8_UINT;
+	a[1].vertexusage = VertexUsage::WEIGHTS;
+
+	a[2].byteoffset = offsetof(cpospack6_c16tex1_bone2_type_h, TEXTURE);
+	a[2].format = ComponentFormatType::R16G16_SINT;
+	a[2].vertexusage = VertexUsage::TEX0;
+
+	a[3].byteoffset = offsetof(cpospack6_c16tex1_bone2_type_h, POSITION);
+	a[3].format = ComponentFormatType::R16G16B16_SINT;
+	a[3].vertexusage = VertexUsage::POSITION;
 
 	return a;
 }
@@ -366,41 +310,33 @@ cpospack6_c16tex2_bone2_type_h::cpospack6_c16tex2_bone2_type_h(const Vector3s& _
 {
 }
 
-VkVertexInputBindingDescription cpospack6_c16tex2_bone2_type_h::getBindingDescription() {
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(cpospack6_c16tex2_bone2_type_h);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	return bindingDescription;
-}
 
-std::vector<VkVertexInputAttributeDescription> cpospack6_c16tex2_bone2_type_h::getAttributeDescriptions() {
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(5);
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 4;
-	attributeDescriptions[0].format = VK_FORMAT_R16G16B16_SINT;
-	attributeDescriptions[0].offset = offsetof(cpospack6_c16tex2_bone2_type_h, POSITION);
 
-	attributeDescriptions[1].binding = 0;
-	attributeDescriptions[1].location = 2;
-	attributeDescriptions[1].format = VK_FORMAT_R16G16_SINT;
-	attributeDescriptions[1].offset = offsetof(cpospack6_c16tex2_bone2_type_h, TEXTURE);
+std::vector<VertexInputDescription> cpospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
+{
+	std::vector<VertexInputDescription> attributeDescriptions(5);
 
-	attributeDescriptions[2].binding = 0;
-	attributeDescriptions[2].location = 3;
-	attributeDescriptions[2].format = VK_FORMAT_R16G16_SINT;
-	attributeDescriptions[2].offset = offsetof(cpospack6_c16tex2_bone2_type_h, TEXTURE2);
+	attributeDescriptions[0].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, BONES);
+	attributeDescriptions[0].format = ComponentFormatType::R8G8_UINT;
+	attributeDescriptions[0].vertexusage = VertexUsage::BONES;
 
-	attributeDescriptions[3].binding = 0;
-	attributeDescriptions[3].location = 0;
-	attributeDescriptions[3].format = VK_FORMAT_R8G8_UINT;
-	attributeDescriptions[3].offset = offsetof(cpospack6_c16tex2_bone2_type_h, BONES);
+	attributeDescriptions[1].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, WEIGHTS);
+	attributeDescriptions[1].format = ComponentFormatType::R8G8_UINT;
+	attributeDescriptions[1].vertexusage = VertexUsage::WEIGHTS;
 
-	attributeDescriptions[4].binding = 0;
-	attributeDescriptions[4].location = 1;
-	attributeDescriptions[4].format = VK_FORMAT_R8G8_UINT;
-	attributeDescriptions[4].offset = offsetof(cpospack6_c16tex2_bone2_type_h, WEIGHTS);
+	attributeDescriptions[2].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, TEXTURE);
+	attributeDescriptions[2].format = ComponentFormatType::R16G16_SINT;
+	attributeDescriptions[2].vertexusage = VertexUsage::TEX0;
+
+	attributeDescriptions[3].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, TEXTURE2);
+	attributeDescriptions[3].format = ComponentFormatType::R16G16_SINT;
+	attributeDescriptions[3].vertexusage = VertexUsage::TEX1;
+
+	attributeDescriptions[4].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, POSITION);
+	attributeDescriptions[4].format = ComponentFormatType::R16G16B16_SINT;
+	attributeDescriptions[4].vertexusage = VertexUsage::POSITION;
+
 
 	return attributeDescriptions;
 }

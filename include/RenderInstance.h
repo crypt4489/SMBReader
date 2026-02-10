@@ -7,6 +7,7 @@
 #include "AppAllocator.h"
 #include "IndexTypes.h"
 #include "VKTypes.h"
+#include "VertexTypes.h"
 #include "ResourceDependencies.h"
 #include "RenderInstanceManagement.h"
 #include "ShaderResourceSet.h"
@@ -31,6 +32,8 @@ namespace API {
 	VkShaderStageFlags ConvertShaderStageToVulkanShaderStage(ShaderStageType type);
 
 	VkImageLayout ConvertImageLayoutToVulkanImageLayout(ImageLayout layout);
+
+	void ConvertVertexInputToVKVertexAttrDescription(VertexInputDescription* inputDescs, int numInputDescs, int vertexBufferLocation, VkVertexInputAttributeDescription* attrs);
 }
 
 enum PipelineLabels

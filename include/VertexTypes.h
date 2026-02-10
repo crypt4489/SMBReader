@@ -1,7 +1,30 @@
 #pragma once
+#include "AppTypes.h"
 #include <vector>
 #include "MathTypes.h"
 #include "VKUtilities.h"
+
+
+enum class VertexUsage
+{
+	POSITION = 0,
+	TEX0 = 1,
+	TEX1 = 2,
+	TEX2 = 3,
+	TEX3 = 4,
+	NORMAL = 5,
+	BONES = 6,
+	WEIGHTS = 7, 
+	COLOR0 = 8
+};
+
+struct VertexInputDescription
+{
+	ComponentFormatType format;
+	int byteoffset;
+	VertexUsage vertexusage;
+};
+
 typedef struct text_vertex_t
 {
 	text_vertex_t() = default;
@@ -11,9 +34,7 @@ typedef struct text_vertex_t
 	Vector2f TEXTURE;
 	Vector4f COLOR;
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const text_vertex_t& v);
 
@@ -29,9 +50,7 @@ typedef struct vertex_type_h
 	vertex_type_h() = default;
 	vertex_type_h(Vector4f _p, Vector2f _t, Vector3f _n);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const vertex_type_h& v);
 
@@ -45,9 +64,7 @@ typedef struct basic_vertex_type_h
 	basic_vertex_type_h() = default;
 	basic_vertex_type_h(Vector4f _p, Vector4f _t);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const basic_vertex_type_h& v);
 
@@ -66,9 +83,7 @@ typedef struct pospack6_cnorm_c16tex1_bone2_type_h
 	pospack6_cnorm_c16tex1_bone2_type_h() = default;
 	pospack6_cnorm_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector3f& _n, const Vector2i& _b, const Vector2f& _w);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const pospack6_cnorm_c16tex1_bone2_type_h& v);
 
@@ -86,9 +101,7 @@ typedef struct pospack6_c16tex1_bone2_type_h
 	pospack6_c16tex1_bone2_type_h() = default;
 	pospack6_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2i& _b, const Vector2f& _w);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const pospack6_c16tex1_bone2_type_h& v);
 
@@ -111,9 +124,7 @@ typedef struct pospack6_c16tex2_bone2_type_h
 		const Vector2i& _b, 
 		const Vector2f& _w);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const pospack6_c16tex2_bone2_type_h& v);
 
@@ -136,9 +147,7 @@ typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 		const Vector2uc& _b,
 		const Vector2uc& _w);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_cnorm_c16tex1_bone2_type_h& v) const;
 
@@ -163,8 +172,8 @@ typedef struct cpospack6_c16tex1_bone2_type_h
 		const Vector2uc& _b,
 		const Vector2uc& _w);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_c16tex1_bone2_type_h& v) const;
 
@@ -189,9 +198,7 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 		const Vector2uc& _w
 		);
 
-	static VkVertexInputBindingDescription getBindingDescription();
-
-	static std::vector<VkVertexInputAttributeDescription> getAttributeDescriptions();
+	static std::vector<VertexInputDescription> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_c16tex2_bone2_type_h& v);
 

@@ -106,7 +106,14 @@ namespace VK {
 				return os;
 		}
 
-
+		VkVertexInputBindingDescription CreateVertexInputBindingDescription(uint32_t vertexBufferLocation, size_t stride)
+		{
+			VkVertexInputBindingDescription bindingDescription{};
+			bindingDescription.binding = vertexBufferLocation;
+			bindingDescription.stride = stride;
+			bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return bindingDescription;
+		}
 
 
 		VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(

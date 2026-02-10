@@ -41,15 +41,41 @@ namespace API {
 		VkFormat format = VK_FORMAT_UNDEFINED;
 		switch (type)
 		{
+		case ComponentFormatType::RAW_8BIT_BUFFER:
+			format = VK_FORMAT_R8_UINT;
+			break;
 		case ComponentFormatType::R32_UINT:
 			format = VK_FORMAT_R32_UINT;
 			break;
 		case ComponentFormatType::R32_SINT:
 			format = VK_FORMAT_R32_SINT;
 			break;
+		case ComponentFormatType::R32G32B32A32_SFLOAT:
+			format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			break;
+		case ComponentFormatType::R32G32B32_SFLOAT:
+			format = VK_FORMAT_R32G32B32_SFLOAT;
+			break;
+		case ComponentFormatType::R32G32_SFLOAT:
+			format = VK_FORMAT_R32G32_SFLOAT;
+			break;
+		case ComponentFormatType::R32_SFLOAT:
+			format = VK_FORMAT_R32_SFLOAT;
+			break;
+		case ComponentFormatType::R32G32_SINT:
+			format = VK_FORMAT_R32G32_SINT;
+			break;
+		case ComponentFormatType::R8G8_UINT:
+			format = VK_FORMAT_R8G8_UINT;
+			break;
+		case ComponentFormatType::R16G16_SINT:
+			format = VK_FORMAT_R16G16_SINT;
+			break;
+		case ComponentFormatType::R16G16B16_SINT:
+			format = VK_FORMAT_R16G16B16_SINT;
+			break;
 		default:
 			break;
-
 		}
 
 		return format;
@@ -223,6 +249,19 @@ namespace API {
 		}
 
 		return outLayout;
+	}
+
+	void ConvertVertexInputToVKVertexAttrDescription(VertexInputDescription* inputDescs, int numInputDescs, int vertexBufferLocation, VkVertexInputAttributeDescription* attrs)
+	{
+		for (int i = 0; i < numInputDescs; i++)
+		{
+			VkVertexInputAttributeDescription& attr = attrs[i];
+
+			attr.location = i;
+			attr.format = ConvertComponentFormatTypeToVulkanFormat(inputDescs[i].format);
+			attr.offset = inputDescs[i].byteoffset;
+			attr.binding = vertexBufferLocation;
+		}
 	}
 }
 
@@ -868,27 +907,30 @@ void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKG
 	normaldebug->CreateDynamicStateInfo(dynamicStates.data(), 2);
 	skybox->CreateDynamicStateInfo(dynamicStates.data(), 2);
 
-	std::array<VkVertexInputBindingDescription, 1> bindings = { TextVertex::getBindingDescription() };
+
 
 	auto ref = TextVertex::getAttributeDescriptions();
 
-	VkVertexInputBindingDescription bindingDescription{};
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(Vector4f);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	VkVertexInputBindingDescription skybindingDescription = VK::Utils::CreateVertexInputBindingDescription(0, sizeof(Vector4f));
+	VkVertexInputBindingDescription textbindingDescription = VK::Utils::CreateVertexInputBindingDescription(0, sizeof(TextVertex));
+	std::vector<VkVertexInputAttributeDescription> skyattributeDescriptions(1);
+	std::vector<VkVertexInputAttributeDescription> textattributeDescriptions(ref.size());
 
-	std::vector<VkVertexInputAttributeDescription> attributeDescriptions(1);
+	API::ConvertVertexInputToVKVertexAttrDescription(ref.data(), ref.size(), 0, textattributeDescriptions.data());
 
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = 0;
+	std::vector<VertexInputDescription> attributeDescriptions(1);
+
+	attributeDescriptions[0].byteoffset = 0;
+	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
+	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+
+	API::ConvertVertexInputToVKVertexAttrDescription(attributeDescriptions.data(), attributeDescriptions.size(), 0, skyattributeDescriptions.data());
 
 	generic->CreateVertexInput(nullptr, 0, nullptr, 0);
-	text->CreateVertexInput(bindings.data(), 1, ref.data(), static_cast<uint32_t>(ref.size()));
+	text->CreateVertexInput(&textbindingDescription, 1, textattributeDescriptions.data(), static_cast<uint32_t>(textattributeDescriptions.size()));
 	debug->CreateVertexInput(nullptr, 0, nullptr, 0);
 	normaldebug->CreateVertexInput(nullptr, 0, nullptr, 0);
-	skybox->CreateVertexInput(&bindingDescription, 1, attributeDescriptions.data(), 1);
+	skybox->CreateVertexInput(&skybindingDescription, 1, skyattributeDescriptions.data(), 1);
 
 	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
 	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);

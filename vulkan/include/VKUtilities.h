@@ -72,6 +72,8 @@ namespace VK {
 		void TransitionImageLayout(VkDevice& device, VkCommandPool& pool, VkQueue& queue,
 				VkImage& image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mips, uint32_t layers);
 
+		VkVertexInputBindingDescription CreateVertexInputBindingDescription(uint32_t vertexBufferLocation, size_t stride);
+
 		namespace MultiCommands
 		{
 

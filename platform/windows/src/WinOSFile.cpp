@@ -5,200 +5,200 @@
 static HANDLE intFileHandles[50];
 static std::atomic<int> intFileHandleCounter;
 
-static DWORD ConvertOSFlags(OSFileFlags flags, DWORD *shareMode)
+static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
 {
-	DWORD outflags = 0;
-	if (flags & READ) {
-		outflags |= GENERIC_READ;
-		*shareMode |= FILE_SHARE_READ;
-	}
+    DWORD outflags = 0;
+    if (flags & READ) {
+        outflags |= GENERIC_READ;
+        *shareMode |= FILE_SHARE_READ;
+    }
 
-	if (flags & WRITE) {
-		outflags |= GENERIC_WRITE;
-		*shareMode |= FILE_SHARE_WRITE;
-	}
+    if (flags & WRITE) {
+        outflags |= GENERIC_WRITE;
+        *shareMode |= FILE_SHARE_WRITE;
+    }
 
-	return outflags;
+    return outflags;
 }
 
 int OSCreateFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle)
 {
-	HANDLE hFile;
-	DWORD fileShare = 0;
-	DWORD hAccess = ConvertOSFlags(flags, &fileShare);
+    HANDLE hFile;
+    DWORD fileShare = 0;
+    DWORD hAccess = ConvertOSFlags(flags, &fileShare);
 
 
 
-	hFile = CreateFile(filename, hAccess, fileShare, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    hFile = CreateFileA(filename, hAccess, fileShare, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	if (hFile == INVALID_HANDLE_VALUE)
-	{
-		return OS_FAILED_CREATE;
-	}
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return OS_FAILED_CREATE;
+    }
 
-	fileHandle->fileLength = 0;
-	fileHandle->filePointer = 0;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 
-	int internalHandlePtr = intFileHandleCounter.fetch_add(1);
-	intFileHandles[internalHandlePtr] = hFile;
+    int internalHandlePtr = intFileHandleCounter.fetch_add(1);
+    intFileHandles[internalHandlePtr] = hFile;
 
-	fileHandle->osDataHandle = internalHandlePtr;
+    fileHandle->osDataHandle = internalHandlePtr;
 
-	return OS_SUCCESS;
+    return OS_SUCCESS;
 
 }
 
 int OSOpenFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle)
 {
-	HANDLE hFile;
-	DWORD fileShare = 0;
-	DWORD hAccess = ConvertOSFlags(flags, &fileShare);
+    HANDLE hFile;
+    DWORD fileShare = 0;
+    DWORD hAccess = ConvertOSFlags(flags, &fileShare);
 
-	hFile = CreateFile(filename, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    hFile = CreateFileA(filename, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
-	if (hFile == INVALID_HANDLE_VALUE)
-	{
-		return OS_FAILED_CREATE;
-	}
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return OS_FAILED_CREATE;
+    }
 
-	 DWORD fileSize = GetFileSize(hFile, NULL);
-	
-	 if (fileSize == INVALID_FILE_SIZE)
-	 {
-		 CloseHandle(hFile);
-		 return OS_FAILED_SIZE;
-	 }
-	 
-	 fileHandle->fileLength = fileSize;
-	 fileHandle->filePointer = 0;
+    DWORD fileSize = GetFileSize(hFile, NULL);
 
-	int internalHandlePtr = intFileHandleCounter.fetch_add(1);
-	intFileHandles[internalHandlePtr] = hFile;
+    if (fileSize == INVALID_FILE_SIZE)
+    {
+        CloseHandle(hFile);
+        return OS_FAILED_SIZE;
+    }
 
-	fileHandle->osDataHandle = internalHandlePtr;
+    fileHandle->fileLength = fileSize;
+    fileHandle->filePointer = 0;
 
-	return OS_SUCCESS;
+    int internalHandlePtr = intFileHandleCounter.fetch_add(1);
+    intFileHandles[internalHandlePtr] = hFile;
+
+    fileHandle->osDataHandle = internalHandlePtr;
+
+    return OS_SUCCESS;
 }
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
-	HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
-	CloseHandle(hFile);
-	intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;
-	memset(fileHandle, -1, sizeof(OSFileHandle));
-	return OS_SUCCESS;
+    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    CloseHandle(hFile);
+    intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;
+    memset(fileHandle, -1, sizeof(OSFileHandle));
+    return OS_SUCCESS;
 }
 
 int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-	HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
 
-	DWORD hBytesRead = 0;
+    DWORD hBytesRead = 0;
 
-	if (ReadFile(hFile, buffer, size, &hBytesRead, NULL) == FALSE)
-	{
-		return OS_FAILED_READ;
-	}
+    if (ReadFile(hFile, buffer, size, &hBytesRead, NULL) == FALSE)
+    {
+        return OS_FAILED_READ;
+    }
 
-	fileHandle->filePointer += hBytesRead;
+    fileHandle->filePointer += hBytesRead;
 
-	return hBytesRead;
+    return hBytesRead;
 }
 
 int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-	HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
 
-	DWORD hBytesWrite = 0;
+    DWORD hBytesWrite = 0;
 
-	if ( WriteFile(hFile, buffer, size, &hBytesWrite, NULL) == FALSE)
-	{
-		return OS_FAILED_WRITE;
-	}
+    if (WriteFile(hFile, buffer, size, &hBytesWrite, NULL) == FALSE)
+    {
+        return OS_FAILED_WRITE;
+    }
 
-	fileHandle->filePointer += hBytesWrite;
+    fileHandle->filePointer += hBytesWrite;
 
-	return hBytesWrite;
+    return hBytesWrite;
 }
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 {
 
-	HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
 
-	int currentPointer = fileHandle->filePointer;
+    int currentPointer = fileHandle->filePointer;
 
-	DWORD moveMethod = FILE_BEGIN;
+    DWORD moveMethod = FILE_BEGIN;
 
-	switch(flags)
-	{
-	case BEGIN:
-		currentPointer = pointer;
-		break;
-	case CURRENT:
-		moveMethod = FILE_CURRENT;
-		currentPointer += pointer;
-		break;
-	case END:
-		moveMethod = FILE_END;
-		currentPointer = fileHandle->fileLength;
-		break;
-	default:
-		return OS_INVALID_ARGUMENT;
-	}
+    switch (flags)
+    {
+    case BEGIN:
+        currentPointer = pointer;
+        break;
+    case CURRENT:
+        moveMethod = FILE_CURRENT;
+        currentPointer += pointer;
+        break;
+    case END:
+        moveMethod = FILE_END;
+        currentPointer = fileHandle->fileLength;
+        break;
+    default:
+        return OS_INVALID_ARGUMENT;
+    }
 
-	DWORD nRet = SetFilePointer(hFile, pointer, NULL, moveMethod);
+    DWORD nRet = SetFilePointer(hFile, pointer, NULL, moveMethod);
 
-	if (nRet == INVALID_SET_FILE_POINTER)
-	{
-		return OS_FAILED_SEEK;
-	}
+    if (nRet == INVALID_SET_FILE_POINTER)
+    {
+        return OS_FAILED_SEEK;
+    }
 
-	fileHandle->filePointer = currentPointer;
+    fileHandle->filePointer = currentPointer;
 
-	return OS_SUCCESS;
+    return OS_SUCCESS;
 }
 
 int OSCreateFileIterator(const char* searchString, OSFileIterator* iterator)
 {
-	if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
+    if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
 
-	int index = intFileHandleCounter.fetch_add(1);
+    int index = intFileHandleCounter.fetch_add(1);
 
-	WIN32_FIND_DATA data;
+    WIN32_FIND_DATAA data;
 
-	HANDLE searchIdx = FindFirstFile(searchString, &data);
+    HANDLE searchIdx = FindFirstFileA(searchString, &data);
 
-	if (searchIdx == INVALID_HANDLE_VALUE)
-	{
-		return OS_FAILED_SEARCH_ITER;
-	}
+    if (searchIdx == INVALID_HANDLE_VALUE)
+    {
+        return OS_FAILED_SEARCH_ITER;
+    }
 
-	intFileHandles[index] = searchIdx;
+    intFileHandles[index] = searchIdx;
 
-	strncpy(iterator->currentFileName, data.cFileName, 250);
-	iterator->osDataHandle = index;
+    strncpy(iterator->currentFileName, data.cFileName, 250);
+    iterator->osDataHandle = index;
 
-	return 0;
+    return 0;
 }
 
 int OSNextFile(OSFileIterator* iterator)
 {
-	if (!iterator) return OS_INVALID_ARGUMENT;
+    if (!iterator) return OS_INVALID_ARGUMENT;
 
-	int index = iterator->osDataHandle;
+    int index = iterator->osDataHandle;
 
-	WIN32_FIND_DATA data;
+    WIN32_FIND_DATAA data;
 
-	BOOL ret = FindNextFile(intFileHandles[index], &data);
+    BOOL ret = FindNextFileA(intFileHandles[index], &data);
 
-	if (!ret)
-	{
-		CloseHandle(intFileHandles[index]);
-		return OS_REACH_ITER_END;
-	}
+    if (!ret)
+    {
+        CloseHandle(intFileHandles[index]);
+        return OS_REACH_ITER_END;
+    }
 
-	strncpy(iterator->currentFileName, data.cFileName, 250);
+    strncpy(iterator->currentFileName, data.cFileName, 250);
 
-	return 0;
+    return 0;
 }
