@@ -640,17 +640,26 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		case ShaderResourceType::IMAGESTORE2D:
 			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
 			break;
+		case ShaderResourceType::IMAGE2D:
+			//if (resource->arrayCount > 1)
+			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, resource->arrayCount);
+			break;
+		case ShaderResourceType::SAMPLERSTATE:
+			//if (resource->arrayCount > 1)
+			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, resource->arrayCount);
+			
+			break;
 		case ShaderResourceType::SAMPLER2D:
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLERCUBE:
-			descriptorBuilder->AddPixelImageSamplerLayout(resource->binding, stageFlags);
+			//if (resource->arrayCount > 1)
+			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
 			break;
 		case ShaderResourceType::STORAGE_BUFFER:
 			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
-			break;
-		case ShaderResourceType::SAMPLERBINDLESS:
-			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddBindlessSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
 			break;
 		case ShaderResourceType::BUFFER_VIEW:
 			if (resource->action == ShaderResourceAction::SHADERREAD)
@@ -1077,10 +1086,11 @@ void RenderInstance::UploadDescriptorsUpdates()
 		
 		switch (region.type)
 		{
-		case ShaderResourceType::SAMPLERBINDLESS:
+		case ShaderResourceType::SAMPLER3D:
+		case ShaderResourceType::SAMPLER2D:
 		{
 			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)region.data;
-			builder->AddBindlessTextureArray(update->handles, update->samplercount, update->begdestinationslot, 1, currentFrame, region.bindingIndex);
+			builder->AddCombinedTextureArray(update->handles, update->samplercount, update->begdestinationslot, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 
@@ -1437,8 +1447,19 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 		switch (resource->type)
 		{
+		case ShaderResourceType::SAMPLERSTATE:
+		{
+
+			ptr += sizeof(ShaderResourceSampler);
+			break;
+		}
+		case ShaderResourceType::IMAGE2D:
 		case ShaderResourceType::IMAGESTORE2D:
 		{
+			ShaderResourceImage* image = (ShaderResourceImage*)ptr;
+			image->textureHandles = nullptr;
+			image->textureCount = 0;
+			image->firstTexture = 0;
 			ptr += sizeof(ShaderResourceImage);
 			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
 			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
@@ -1461,6 +1482,11 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 		case ShaderResourceType::SAMPLER2D:
 		case ShaderResourceType::SAMPLERCUBE:
 		{
+			ShaderResourceImage* image = (ShaderResourceImage*)ptr;
+			image->textureHandles = nullptr;
+			image->textureCount = 0;
+			image->firstTexture = 0;
+
 			ptr += sizeof(ShaderResourceImage);
 			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
 			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
@@ -1472,13 +1498,6 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 				ptr += (sizeof(ImageShaderResourceBarrier));
 				set->barrierCount++;
 			}
-			break;
-		}
-		case ShaderResourceType::SAMPLERBINDLESS:
-		{
-			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
-			memset((void*)ptr, 0, sizeof(ShaderResourceSamplerBindless));
-			ptr += sizeof(ShaderResourceSamplerBindless);
 			break;
 		}
 		case ShaderResourceType::CONSTANT_BUFFER:
@@ -1784,10 +1803,22 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 		switch (header->type)
 		{
+			case ShaderResourceType::SAMPLERSTATE:
+			{
+				ShaderResourceSampler* image = (ShaderResourceSampler*)header;
+				builder->AddSamplerDescription(dev->GetSamplerByTexture(image->samplerHandle, 0), i, frames);
+				break;
+			}
+			case ShaderResourceType::IMAGE2D:
+			{
+				ShaderResourceImage* image = (ShaderResourceImage*)header;
+				builder->AddImageResourceDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				break;
+			}
 			case ShaderResourceType::IMAGESTORE2D:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				builder->AddStorageImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), i, frames);
+				builder->AddStorageImageDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
 				break;
 			}
 			case ShaderResourceType::SAMPLER3D:
@@ -1795,7 +1826,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::SAMPLERCUBE:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				builder->AddPixelShaderImageDescription(dev->GetImageViewByTexture(image->textureHandle, 0), dev->GetSamplerByTexture(image->textureHandle, 0), i, frames);
+				if (image->textureHandles)
+					builder->AddCombinedTextureArray(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				
 				break;
 			}
 			case ShaderResourceType::STORAGE_BUFFER:
@@ -1818,15 +1851,6 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
 				break;
 			}
-
-			case ShaderResourceType::SAMPLERBINDLESS:
-			{
-				ShaderResourceSamplerBindless* samplers = (ShaderResourceSamplerBindless*)header;
-				if (!samplers->textureHandles)
-					builder->AddBindlessTextureArray(samplers->textureHandles, samplers->textureCount, 0, frames, 0, i);
-				break;
-			}
-
 			case ShaderResourceType::BUFFER_VIEW:
 			{
 				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
@@ -2127,7 +2151,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					{
 
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), imageBarrier->textureHandle, range);
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							BEFORE,
 							srcStage,
@@ -2146,7 +2170,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier2->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), imageBarrier->textureHandle, range);
+							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), *imageBarrier->textureHandles, range);
 
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							AFTER,
@@ -2178,7 +2202,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					{
 
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), imageBarrier->textureHandle, range);
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
 							BEFORE,
 							srcStage,

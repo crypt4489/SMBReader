@@ -1107,7 +1107,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 	update.begdestinationslot = index;
 	update.handles = mainDictionary.textureHandles.data() + index;
 
-	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERBINDLESS, &update);
+	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLER2D, &update);
 	
 	for (int i = 0; i < totalMeshCount; i++)
 	{
@@ -1263,7 +1263,7 @@ void ApplicationLoop::InitializeRuntime()
 
 
 	VKRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, globalBufferLocation, 0, 0);
-	VKRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, mainDictionary.textureHandles[10], 0);
+	VKRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &mainDictionary.textureHandles[10], 1, 0, 0);
 	VKRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
 
 	std::array<int, 2> skyboxDescs = { globalPipelineBufferWhat, skyboxDesc };

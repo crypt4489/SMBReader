@@ -8,8 +8,6 @@ struct DescriptorSetLayoutBuilder
 	DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc);
 	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout();
 
-	void AddPixelImageSamplerLayout(uint32_t binding, VkShaderStageFlags flags);
-
 	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
 
 	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
@@ -22,12 +20,15 @@ struct DescriptorSetLayoutBuilder
 
 	void AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
 
-	void AddBindlessSamplersLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
+	void AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
 
 	void AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
 	
 	void AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
 
+	void AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
+
+	void AddImageResourceLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
 
 	VkDescriptorSetLayoutBinding* descSetBindings;
 	VkDescriptorBindingFlags* flags;

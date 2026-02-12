@@ -609,12 +609,21 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 			{
 			case hash("samplerCube"):
 				tag->resourceType = ShaderResourceType::SAMPLERCUBE;
+				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
 			case hash("sampler2d"):
 				tag->resourceType = ShaderResourceType::SAMPLER2D;
+				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
-			case hash("storageimage"):
+			case hash("storageImage2D"):
 				tag->resourceType = ShaderResourceType::IMAGESTORE2D;
+				break;
+			case hash("image2D"):
+				tag->resourceType = ShaderResourceType::IMAGE2D;
+				tag->resourceAction = ShaderResourceAction::SHADERREAD;
+				break;
+			case hash("sampler"):
+				tag->resourceType = ShaderResourceType::SAMPLERSTATE;
 				break;
 			case hash("storage"):
 				tag->resourceType = ShaderResourceType::STORAGE_BUFFER;
@@ -627,11 +636,9 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 				tag->resourceType = ShaderResourceType::CONSTANT_BUFFER;
 				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
-			case hash("sampler2dBindless"):
-				tag->resourceType = ShaderResourceType::SAMPLERBINDLESS;
-				break;
 			case hash("sampler3d"):
 				tag->resourceType = ShaderResourceType::SAMPLER3D;
+				tag->resourceAction = ShaderResourceAction::SHADERREAD;
 				break;
 			case hash("bufferView"):
 				tag->resourceType = ShaderResourceType::BUFFER_VIEW;

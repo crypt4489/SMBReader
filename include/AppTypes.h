@@ -164,10 +164,12 @@ enum class ShaderResourceType
 	CONSTANT_BUFFER = 8,
 	IMAGESTORE2D = 16,
 	IMAGESTORE3D = 32,
-	SAMPLERBINDLESS = 64,
+	IMAGE2D = 33,
+	IMAGE3D = 34,
 	BUFFER_VIEW = 128,
 	SAMPLER3D = 129,
 	SAMPLERCUBE = 130,
+	SAMPLERSTATE = 131,
 	INVALID_SHADER_RESOURCE = 0x7FFFFFFF
 };
 
@@ -223,15 +225,16 @@ struct ShaderResourceHeader
 	int arrayCount;
 };
 
-struct ShaderResourceImage : public ShaderResourceHeader
+struct ShaderResourceSampler : public ShaderResourceHeader
 {
-	EntryHandle textureHandle;
+	EntryHandle samplerHandle;
 };
 
-struct ShaderResourceSamplerBindless : public ShaderResourceHeader
+struct ShaderResourceImage : public ShaderResourceHeader
 {
 	EntryHandle* textureHandles;
 	int textureCount;
+	int firstTexture;
 };
 
 struct ShaderResourceBuffer : public ShaderResourceHeader

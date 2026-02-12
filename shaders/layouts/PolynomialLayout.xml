@@ -8,7 +8,7 @@
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="c">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storageimage" used="c" rw="write">
+		<ShaderResourceItem type="storageImage2D" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	

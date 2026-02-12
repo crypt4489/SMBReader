@@ -44,17 +44,6 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 	return descriptorSetLayout;
 }
 
-void DescriptorSetLayoutBuilder::AddPixelImageSamplerLayout(uint32_t binding, VkShaderStageFlags flags)
-{
-	VkDescriptorSetLayoutBinding layoutBinding{};
-	layoutBinding.binding = binding;
-	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutBinding.descriptorCount = 1;
-	layoutBinding.stageFlags = flags;
-
-	descSetBindings[binding] = layoutBinding;
-}
-
 void DescriptorSetLayoutBuilder::AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
@@ -132,7 +121,7 @@ void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShad
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddBindlessSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+void DescriptorSetLayoutBuilder::AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
@@ -146,8 +135,10 @@ void DescriptorSetLayoutBuilder::AddBindlessSamplersLayout(uint32_t binding, VkS
 		VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
 		VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
 
-	descSetBindings[binding] = layoutBinding;
 	flags[binding] = bindingFlags;
+
+	descSetBindings[binding] = layoutBinding;
+	
 }
 
 void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
@@ -160,4 +151,41 @@ void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShad
 
 
 	descSetBindings[binding] = layoutBinding;
+}
+
+
+void DescriptorSetLayoutBuilder::AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+	layoutBinding.descriptorCount = count;
+	layoutBinding.stageFlags = stageFlags;
+
+	const VkDescriptorBindingFlags bindingFlags =
+		//VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+	descSetBindings[binding] = layoutBinding;
+	flags[binding] = bindingFlags;
+}
+
+void DescriptorSetLayoutBuilder::AddImageResourceLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+{
+	VkDescriptorSetLayoutBinding layoutBinding{};
+	layoutBinding.binding = binding;
+	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+	layoutBinding.descriptorCount = count;
+	layoutBinding.stageFlags = stageFlags;
+
+	const VkDescriptorBindingFlags bindingFlags =
+		//VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT |
+		VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+		VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+	descSetBindings[binding] = layoutBinding;
+	flags[binding] = bindingFlags;
 }
