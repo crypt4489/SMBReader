@@ -1,5 +1,5 @@
 #version 460
-
+#extension GL_EXT_nonuniform_qualifier : require
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoords;
 layout(location = 2) in vec2 texCoords2;
@@ -57,7 +57,8 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 world;
 } gs;
 
-layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
+layout(set = 1, binding = 0) uniform texture2D Textures[];
+layout(set = 1, binding = 1) uniform sampler samplerLinear;
 
 layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
@@ -97,13 +98,13 @@ void main() {
 
     uint textureIndex = modelData.textureHandles[0];
 
-    vec4 albedoColor = texture(Textures[textureIndex], texCoords);
+    vec4 albedoColor = texture(sampler2D(Textures[textureIndex], samplerLinear), texCoords);
 
     if (modelData.numHandles > 1)
     {
         textureIndex = modelData.textureHandles[1];
 
-        vec3 normal = texture(Textures[textureIndex], texCoords2).rgb;
+        vec3 normal = texture(sampler2D(Textures[textureIndex], samplerLinear), texCoords2).rgb;
 
         normal = transpose(inverse(mat3(modelData.m))) * (2.0 * normal.xyz - 1.0);
 

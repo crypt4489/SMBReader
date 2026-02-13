@@ -971,68 +971,12 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	return ret;
 }
 
-EntryHandle VKDevice::CreateCubedImage(uint32_t width,
-	uint32_t height, uint32_t mipLevels,
-	VkFormat type, uint32_t layers,
-	VkImageUsageFlags flags, uint32_t sampleCount,
-	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
-{
-	//std::shared_lock lock(deviceLock);
-	VkImage image;
-	VkImageCreateInfo imageInfo{};
-	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	imageInfo.imageType = imageType;
-	imageInfo.extent.width = width;
-	imageInfo.extent.height = height;
-	imageInfo.extent.depth = 1;
-	imageInfo.mipLevels = mipLevels;
-	imageInfo.arrayLayers = layers;
-
-	imageInfo.format = type;
-	imageInfo.tiling = tiling;
-	imageInfo.initialLayout = layout;
-	imageInfo.usage = flags;
-	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
-	imageInfo.flags = cflags | VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-
-	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create image!");
-	}
-
-	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(device, image, &memRequirements);
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(memIndex);
-
-	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
-		return EntryHandle();
-
-	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
-
-	VkDeviceSize addr = iter->alloc.GetMemory(memRequirements.size, memRequirements.alignment);
-
-	vkBindImageMemory(device, image, iter->memory, addr);
-
-	ImageAllocation* alloc = reinterpret_cast<ImageAllocation*>(AllocFromPerDeviceData(sizeof(ImageAllocation)));
-
-	alloc->imageHandle = image;
-	alloc->deviceMemoryAddress = addr;
-	alloc->memIndex = memIndex;
-
-	EntryHandle ret;
-
-	ret = AddVkTypeToEntry(alloc, VulkImageHandle);
-
-	return ret;
-}
-
 
 EntryHandle VKDevice::CreateStorageImage(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, VkFormat type,
 	EntryHandle memIndex,
-    VkImageAspectFlags flags, VkImageLayout layout, bool createSampler)
+    VkImageAspectFlags flags, VkImageLayout layout)
 {
 	//std::shared_lock lock(deviceLock);
 	
@@ -1052,12 +996,6 @@ EntryHandle VKDevice::CreateStorageImage(
 	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
 
 	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
-
-	if (createSampler)
-	{
-		EntryHandle samplerIndex = CreateSampler(mipLevels);
-		tex->samplerIndex[0] = samplerIndex;
-	}
 
 	EntryHandle ret = AddVkTypeToEntry(tex, VulkTextureHandle);
 
@@ -1543,7 +1481,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSampledImage(
+EntryHandle VKDevice::CreateImage(
 	char* imageData,
 	uint32_t* imageSizes,
 	uint32_t blobSize,
@@ -1641,47 +1579,33 @@ EntryHandle VKDevice::CreateSampledImage(
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSampledImageHandle(
+EntryHandle VKDevice::CreateImageHandle(
 	uint32_t blobSize,
 	uint32_t width, uint32_t height, uint32_t layers,
 	uint32_t mipLevels, VkFormat imageFormat,
 	EntryHandle memIndex,
 	VkImageAspectFlags flags,
-	VkImageType imageType, bool cubeMaped
+	VkImageType imageType
 )
 {
 
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
 
 	EntryHandle imageIndex;
-	if (cubeMaped)
-	{
-		imageIndex = CreateCubedImage(
-			width, height, mipLevels, imageFormat, layers,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-			VK_IMAGE_USAGE_SAMPLED_BIT,
-			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
-	}
-	else
-	{
-		imageIndex = CreateImage(
-			width, height, mipLevels, imageFormat, layers,
-			VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-			VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-			VK_IMAGE_USAGE_SAMPLED_BIT,
-			1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
-	}
+	
+	imageIndex = CreateImage(
+		width, height, mipLevels, imageFormat, layers,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
+	
 
 	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 
 	switch (imageType)
 	{
 	case VK_IMAGE_TYPE_2D:
-		if (cubeMaped)
-		{
-			imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
-		}
 		break;
 
 	case VK_IMAGE_TYPE_3D:
@@ -1692,11 +1616,44 @@ EntryHandle VKDevice::CreateSampledImageHandle(
 
 	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
-	EntryHandle samplerIndex = CreateSampler(mipLevels);
+	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+
+	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
+
+	EntryHandle ret;
+
+	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
+
+	return ret;
+}
+
+EntryHandle VKDevice::CreateCubeMapedImageHandle(
+	uint32_t blobSize,
+	uint32_t width, uint32_t height, uint32_t layers,
+	uint32_t mipLevels, VkFormat imageFormat,
+	EntryHandle memIndex,
+	VkImageAspectFlags flags
+)
+{
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
+
+	EntryHandle imageIndex;
+
+	imageIndex = CreateImage(
+		width, height, mipLevels, imageFormat, layers,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_IMAGE_TYPE_2D, memIndex);
+
+
+	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
+
+	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
 	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
 
-	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, &samplerIndex, 1);
+	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
 
 	EntryHandle ret;
 
@@ -2777,6 +2734,14 @@ VKTexture* VKDevice::GetTexture(EntryHandle handle)
 }
 
 //ACTIONS
+
+
+void VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex)
+{
+	VKTexture* tex = GetTexture(textureIndex);
+	if (!tex) return;
+	tex->samplerIndex[0] = samplerIndex;
+}
 
 uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t currentFrame)
 {

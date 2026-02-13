@@ -221,6 +221,8 @@ struct RenderInstance
 	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
 
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
+
+	EntryHandle samplerIndex;
 };
 
 namespace VKRenderer {

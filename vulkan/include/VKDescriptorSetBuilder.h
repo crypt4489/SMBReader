@@ -42,7 +42,7 @@ struct DescriptorSetBuilder
 
 	void AddImageResourceDescription(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
-	void AddSamplerDescription(VkSampler sampler, uint32_t binding, uint32_t setCount);
+	void AddSamplerDescription(EntryHandle* samplerHandles, uint32_t samplerCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
 	EntryHandle AddDescriptorsToCache();
 

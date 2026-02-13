@@ -329,17 +329,11 @@ struct VKDevice
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
 
-	EntryHandle CreateCubedImage(uint32_t width,
-		uint32_t height, uint32_t mipLevels,
-		VkFormat type, uint32_t layers,
-		VkImageUsageFlags flags, uint32_t sampleCount,
-		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
-
 	EntryHandle CreateStorageImage(
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, VkFormat type,
 		EntryHandle memIndex,
-		VkImageAspectFlags flags, VkImageLayout layout, bool createSampler);
+		VkImageAspectFlags flags, VkImageLayout layout);
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
@@ -405,7 +399,7 @@ struct VKDevice
 		VkCommandBufferLevel level
 	);
 
-	EntryHandle CreateSampledImage(
+	EntryHandle CreateImage(
 		char* imageData,
 		uint32_t* imageSizes,
 		uint32_t blobSize,
@@ -415,13 +409,21 @@ struct VKDevice
 		EntryHandle hostIndex, VkImageAspectFlags flags);
 
 
-	EntryHandle CreateSampledImageHandle(
+	EntryHandle CreateImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height, uint32_t layers,
 		uint32_t mipLevels, VkFormat imageFormat,
 		EntryHandle memIndex,
 		VkImageAspectFlags flags,
-		VkImageType imageType, bool cubeMaped
+		VkImageType imageType
+	);
+
+	EntryHandle CreateCubeMapedImageHandle(
+		uint32_t blobSize,
+		uint32_t width, uint32_t height, uint32_t layers,
+		uint32_t mipLevels, VkFormat imageFormat,
+		EntryHandle memIndex,
+		VkImageAspectFlags flags
 	);
 
 
@@ -592,6 +594,7 @@ struct VKDevice
 
 	//ACTIONS/HELPERS
 
+	void AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex);
 
 	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
 

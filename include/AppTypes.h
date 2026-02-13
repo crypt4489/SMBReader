@@ -227,7 +227,9 @@ struct ShaderResourceHeader
 
 struct ShaderResourceSampler : public ShaderResourceHeader
 {
-	EntryHandle samplerHandle;
+	EntryHandle* samplerHandles;
+	int samplerCount;
+	int firstSampler;
 };
 
 struct ShaderResourceImage : public ShaderResourceHeader
@@ -277,10 +279,10 @@ struct ShaderResourceUpdate
 	int dataSize;
 };
 
-struct BindlessSamplerUpdate
+struct ResourceArrayUpdate
 {
-	int begdestinationslot;
-	int samplercount;
+	int dstBegin;
+	int count;
 	EntryHandle* handles;
 };
 

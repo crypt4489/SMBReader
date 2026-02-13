@@ -33,9 +33,11 @@ struct ShaderResourceUpdatePool
 		{
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLER2D:
+		case ShaderResourceType::SAMPLERSTATE:
+		case ShaderResourceType::IMAGE2D:
 		{
-			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
-			size = (sizeof(EntryHandle) * update->samplercount) + sizeof(BindlessSamplerUpdate);
+			ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
+			size = (sizeof(EntryHandle) * update->count) + sizeof(ResourceArrayUpdate);
 			break;
 		}
 		}
@@ -66,13 +68,15 @@ struct ShaderResourceUpdatePool
 			{
 			case ShaderResourceType::SAMPLER3D:
 			case ShaderResourceType::SAMPLER2D:
+			case ShaderResourceType::SAMPLERSTATE:
+			case ShaderResourceType::IMAGE2D:
 			{
-				BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)data;
-				BindlessSamplerUpdate* cachedUpdate = (BindlessSamplerUpdate*)(temparguments + writeLoc);
-				cachedUpdate->begdestinationslot = update->begdestinationslot;
-				cachedUpdate->samplercount = update->samplercount;
+				ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
+				ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(temparguments + writeLoc);
+				cachedUpdate->dstBegin = update->dstBegin;
+				cachedUpdate->count = update->count;
 				cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
-				memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->samplercount);
+				memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->count);
 				break;
 			}
 			}
@@ -147,7 +151,7 @@ struct ShaderResourceUpdatePool
 	TransferRegionLink* Find(int descriptor, int bindingindex)
 	{
 		int link = linkHead;
-		while ((link >= 0) && ((updateRegions[updateLinks[link].region].descriptorSet != descriptor) || (updateRegions[updateLinks[link].region].descriptorSet != bindingindex)))
+		while ((link >= 0) && ((updateRegions[updateLinks[link].region].descriptorSet != descriptor) || (updateRegions[updateLinks[link].region].bindingIndex != bindingindex)))
 		{
 			link = updateLinks[link].next;
 		}
@@ -239,7 +243,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSamplerResourceToShaderResource(int descriptorSet, EntryHandle index, int bindingIndex)
+	void BindSamplerResourceToShaderResource(int descriptorSet, EntryHandle* indices, int samplerCount, int firstSampler, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -250,7 +254,9 @@ struct ShaderResourceManager
 		if (header->type != ShaderResourceType::SAMPLERSTATE)
 			return;
 
-		header->samplerHandle = index;
+		header->samplerHandles = indices;
+		header->samplerCount = samplerCount;
+		header->firstSampler = firstSampler;
 	}
 
 	void BindSampledImageToShaderResource(int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
@@ -269,7 +275,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle** indices, uint32_t texCount, int firstTexture, int bindingIndex)
+	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle* indices, uint32_t texCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -277,7 +283,7 @@ struct ShaderResourceManager
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
-		if (header->type != ShaderResourceType::SAMPLER3D && header->type != ShaderResourceType::SAMPLER2D)
+		if (header->type != ShaderResourceType::SAMPLER3D && header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE)
 			return;
 
 		header->textureHandles = indices;

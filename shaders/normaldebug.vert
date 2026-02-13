@@ -70,7 +70,8 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 world;
 } gs;
 
-layout(set = 1, binding = 0) uniform sampler2D Textures[1024];
+layout(set = 1, binding = 0) uniform texture2D Textures[];
+layout(set = 1, binding = 1) uniform sampler samplerLinear;
 
 layout(set = 2, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
@@ -214,7 +215,7 @@ void main() {
 
             uint textureIndex = modelData.textureHandles[1];
 
-           normal = texture(Textures[textureIndex], normalCords).xyz;
+           normal = texture(sampler2D(Textures[textureIndex], samplerLinear), normalCords).xyz;
 
            normal = normal * 2.0 - 1.0;
         

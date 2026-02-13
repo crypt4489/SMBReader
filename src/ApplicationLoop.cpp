@@ -1101,13 +1101,22 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		cpointer += texture.cumulativeSize;
 	}
 
-	BindlessSamplerUpdate update; 
+	ResourceArrayUpdate update; 
 
-	update.samplercount = totalTextureCount;
-	update.begdestinationslot = index;
+	update.count = totalTextureCount;
+	update.dstBegin = index;
 	update.handles = mainDictionary.textureHandles.data() + index;
 
-	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLER2D, &update);
+	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::IMAGE2D, &update);
+
+
+	ResourceArrayUpdate update2;
+
+	update2.count = 1;
+	update2.dstBegin = 0;
+	update2.handles = &VKRenderer::gRenderInstance->samplerIndex;
+
+	VKRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &update2);
 	
 	for (int i = 0; i < totalMeshCount; i++)
 	{

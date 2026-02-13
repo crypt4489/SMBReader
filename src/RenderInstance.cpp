@@ -641,13 +641,13 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
 			break;
 		case ShaderResourceType::IMAGE2D:
-			//if (resource->arrayCount > 1)
-			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			if (resource->arrayCount > 1)
+				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, resource->arrayCount);
 			break;
 		case ShaderResourceType::SAMPLERSTATE:
-			//if (resource->arrayCount > 1)
-			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			if (resource->arrayCount > 1)
+				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
 			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, resource->arrayCount);
 			
 			break;
@@ -1086,11 +1086,25 @@ void RenderInstance::UploadDescriptorsUpdates()
 		
 		switch (region.type)
 		{
+		case ShaderResourceType::SAMPLERSTATE:
+		{
+
+			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			builder->AddSamplerDescription(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
+			break;
+		}
+		case ShaderResourceType::IMAGE2D:
+		{
+
+			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			builder->AddImageResourceDescription(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
+			break;
+		}
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLER2D:
 		{
-			BindlessSamplerUpdate* update = (BindlessSamplerUpdate*)region.data;
-			builder->AddCombinedTextureArray(update->handles, update->samplercount, update->begdestinationslot, region.bindingIndex, currentFrame, 1);
+			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			builder->AddCombinedTextureArray(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 
@@ -1293,12 +1307,14 @@ EntryHandle RenderInstance::CreateImageHandle(
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle textureIndex = majorDevice->CreateSampledImageHandle(
+	EntryHandle textureIndex = majorDevice->CreateImageHandle(
 		blobSize,
 		width, height, 1,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, false);
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D);
+
+	majorDevice->AssignSamplerToTexture(textureIndex, samplerIndex);
 
 	return textureIndex;
 }
@@ -1310,12 +1326,14 @@ EntryHandle RenderInstance::CreateCubeImageHandle(
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle textureIndex = majorDevice->CreateSampledImageHandle(
+	EntryHandle textureIndex = majorDevice->CreateCubeMapedImageHandle(
 		blobSize,
 		width, height, 6,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, true);
+		VK_IMAGE_ASPECT_COLOR_BIT);
+
+	majorDevice->AssignSamplerToTexture(textureIndex, samplerIndex);
 
 	return textureIndex;
 }
@@ -1330,7 +1348,7 @@ EntryHandle RenderInstance::CreateStorageImage(
 		width, height,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, true);
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
 
 
@@ -1449,7 +1467,10 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
-
+			ShaderResourceSampler* image = (ShaderResourceSampler*)ptr;
+			image->samplerHandles = nullptr;
+			image->samplerCount = 0;
+			image->firstSampler = 0;
 			ptr += sizeof(ShaderResourceSampler);
 			break;
 		}
@@ -1584,6 +1605,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	feature12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
 	feature12.storageBuffer8BitAccess = VK_TRUE;
 	feature12.drawIndirectCount = VK_TRUE;
+	feature12.runtimeDescriptorArray = VK_TRUE;
 	//feature12.d
 
 	VkPhysicalDeviceFeatures2 features2{};
@@ -1703,6 +1725,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		currentCBIndex[i] = *lprimaryCommandBuffers;
 	}
 
+
+	samplerIndex = majorDevice->CreateSampler(7);
 }
 
 
@@ -1806,13 +1830,15 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::SAMPLERSTATE:
 			{
 				ShaderResourceSampler* image = (ShaderResourceSampler*)header;
-				builder->AddSamplerDescription(dev->GetSamplerByTexture(image->samplerHandle, 0), i, frames);
+				if (image->samplerHandles)
+					builder->AddSamplerDescription(image->samplerHandles, image->samplerCount, image->firstSampler, i, 0, frames);
 				break;
 			}
 			case ShaderResourceType::IMAGE2D:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				builder->AddImageResourceDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				if (image->textureHandles)
+					builder->AddImageResourceDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
 				break;
 			}
 			case ShaderResourceType::IMAGESTORE2D:
