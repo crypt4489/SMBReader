@@ -34,6 +34,10 @@ namespace API {
 	VkImageLayout ConvertImageLayoutToVulkanImageLayout(ImageLayout layout);
 
 	void ConvertVertexInputToVKVertexAttrDescription(VertexInputDescription* inputDescs, int numInputDescs, int vertexBufferLocation, VkVertexInputAttributeDescription* attrs);
+
+	VkCullModeFlags ConvertCullMode(CullMode mode);
+
+	VkFrontFace ConvertTriangleWinding(TriangleWinding winding);
 }
 
 enum PipelineLabels
@@ -58,17 +62,6 @@ struct RenderInstance
 	int RecreateSwapChain();
 
 	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
-
-	void UsePipelineBuilders(
-		VKGraphicsPipelineBuilder* generic, 
-		VKGraphicsPipelineBuilder* text, 
-		VKGraphicsPipelineBuilder* debug, 
-		VKGraphicsPipelineBuilder* normaldebug, 
-		VKGraphicsPipelineBuilder* skybox,
-		VkSampleCountFlagBits flags
-	);
-
-	EntryHandle CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipeline, ShaderGraph* graph);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
@@ -154,6 +147,8 @@ struct RenderInstance
 
 	void ReadData(int handle, void* dest, int size, int offset);
 
+	void CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, std::vector<EntryHandle>& outHandles);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -223,6 +218,8 @@ struct RenderInstance
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
 
 	EntryHandle samplerIndex;
+
+	std::array<GenericPipelineStateInfo, 15> pipelineInfos;
 };
 
 namespace VKRenderer {

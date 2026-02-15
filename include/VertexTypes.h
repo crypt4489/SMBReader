@@ -5,25 +5,6 @@
 #include "VKUtilities.h"
 
 
-enum class VertexUsage
-{
-	POSITION = 0,
-	TEX0 = 1,
-	TEX1 = 2,
-	TEX2 = 3,
-	TEX3 = 4,
-	NORMAL = 5,
-	BONES = 6,
-	WEIGHTS = 7, 
-	COLOR0 = 8
-};
-
-struct VertexInputDescription
-{
-	ComponentFormatType format;
-	int byteoffset;
-	VertexUsage vertexusage;
-};
 
 typedef struct text_vertex_t
 {

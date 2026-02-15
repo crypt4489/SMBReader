@@ -470,66 +470,108 @@ struct ShaderDetails
 };
 
 
-struct ShaderGraphReader
+
+
+struct ShaderXMLTag
 {
-	struct ShaderXMLTag
-	{
-		unsigned long hashCode;
-	};
-
-	struct ShaderGLSLShaderXMLTag : ShaderXMLTag //followed by shaderNameLen Bytes
-	{
-		ShaderStageType type;
-	}; 
-
-	struct ShaderComputeLayoutXMLTag : ShaderXMLTag
-	{
-		ShaderComputeLayout comps;
-	};
-
-	struct ShaderResourceItemXMLTag : ShaderXMLTag
-	{
-		ShaderStageType shaderstage;
-		ShaderResourceType resourceType;
-		ShaderResourceAction resourceAction;
-		int arrayCount;
-		int size;
-		int offset;
-	};
-
-	struct ShaderResourceSetXMLTag : ShaderXMLTag
-	{
-		int resourceCount;
-	};
-
-	static constexpr unsigned long
-		hash(char* str);
-
-	static constexpr unsigned long
-		hash(const std::string& string);
-
-
-	static ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize, void* shaderDataOut, int* shaderDataSize, int* shaderDetailCount);
-
-	static int ProcessTag(std::vector<char>& fileData, int currentLocation, unsigned long* hash, bool* opening);
-
-	static int SkipLine(std::vector<char>& fileData, int currentLocation);
-	static int ReadValue(std::vector<char>& fileData, int currentLocation, char* str, int* len);
-
-	static int ReadAttributeName(std::vector<char>& fileData, int currentLocation, unsigned long *hash);
-
-	static int ReadAttributeValueHash(std::vector<char>& fileData, int currentLocation, unsigned long *hash);
-
-	static int ReadAttributeValueVal(std::vector<char>& fileData, int currentLocation, unsigned long* val);
-
-	static int ReadAttributes(std::vector<char>& fileData, int currentLocation, unsigned long* hashes, int* stackSize, int valType);
-
-	static int HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset, void* shaderData, int* shaderDataSize);
-
-	static int HandleShaderResourceItem(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
-
-	static constexpr int ASCIIToInt(char* str);
-
-	static int HandleComputeLayout(std::vector<char>& fileData, int currentLocation, uintptr_t* offset);
+	unsigned long hashCode;
 };
 
+struct ShaderGLSLShaderXMLTag : ShaderXMLTag //followed by shaderNameLen Bytes
+{
+	ShaderStageType type;
+};
+
+struct ShaderComputeLayoutXMLTag : ShaderXMLTag
+{
+	ShaderComputeLayout comps;
+};
+
+struct ShaderResourceItemXMLTag : ShaderXMLTag
+{
+	ShaderStageType shaderstage;
+	ShaderResourceType resourceType;
+	ShaderResourceAction resourceAction;
+	int arrayCount;
+	int size;
+	int offset;
+};
+
+struct ShaderResourceSetXMLTag : ShaderXMLTag
+{
+	int resourceCount;
+};
+
+static constexpr unsigned long
+hash(char* str);
+
+static constexpr unsigned long
+hash(const std::string& string);
+
+
+ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize, void* shaderDataOut, int* shaderDataSize, int* shaderDetailCount);
+
+static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
+
+static int SkipLine(char* fileData, int size, int currentLocation);
+static int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len);
+
+static int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash);
+
+static int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash);
+
+static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val);
+
+static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
+
+static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, void* shaderData, int* shaderDataSize);
+
+static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset);
+
+static constexpr int ASCIIToInt(char* str);
+
+static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset);
+
+
+
+
+struct PipelineXMLTag
+{
+	unsigned long hashCode;
+};
+
+struct PipelineDescriptionXMLTag : PipelineXMLTag //followed by shaderNameLen Bytes
+{
+	int sampLo;
+	int sampHi;
+};
+
+struct PrimitiveXMLTag : PipelineXMLTag
+{
+	PrimitiveType primType;
+};
+
+struct DepthXMLTag : PipelineXMLTag
+{
+	bool enabled;
+	DepthTest depthOp;
+};
+
+struct CullModeXMLTag : PipelineXMLTag
+{
+	CullMode mode;
+};
+
+
+void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo);
+
+static int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
+
+static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
+static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
+static int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
+static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
+
+static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation);
+
+static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);

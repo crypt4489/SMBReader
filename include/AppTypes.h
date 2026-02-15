@@ -20,8 +20,14 @@ enum RenderingBackend
 
 enum DepthTest
 {
-	ALLPASS = 0,
-	DEPTHLESS = 1,
+	DEPTH_NEVER = 0,
+	DEPTH_LESS = 1,
+	DEPTH_EQUAL = 2,
+	DEPTH_LESSEQUAL = 3,
+	DEPTH_GREATER = 4,
+	DEPTH_NOTEQUAL = 5,
+	DEPTH_GREATEREQUAL = 6,
+	ALLPASS = 7
 };
 
 enum ImageFormat
@@ -50,7 +56,9 @@ enum PrimitiveType
 	TRIANGLES = 0,
 	TRISTRIPS = 6,
 	TRIFAN = 7,
-	POINTSLIST = 8
+	POINTSLIST = 8,
+	LINELIST = 9,
+	LINESTRIPS = 10
 };
 
 enum class ImageLayout
@@ -389,6 +397,45 @@ struct RenderAllocation
 
 /* */
 
+enum class VertexUsage
+{
+	POSITION = 0,
+	TEX0 = 1,
+	TEX1 = 2,
+	TEX2 = 3,
+	TEX3 = 4,
+	NORMAL = 5,
+	BONES = 6,
+	WEIGHTS = 7,
+	COLOR0 = 8
+};
+
+enum class VertexBufferRate
+{
+	PERVERTEX = 0,
+	PERINSTANCE = 1,
+};
+
+struct VertexInputDescription
+{
+	ComponentFormatType format;
+	int byteoffset;
+	VertexUsage vertexusage;
+};
+
+struct VertexBufferDescription
+{
+	VertexBufferRate rate;
+	int descCount;
+	int perInputSize;
+	VertexInputDescription descriptions[10];
+};
+
+enum TriangleWinding
+{
+	CW = 0,
+	CCW = 1
+};
 
 enum class CullMode
 {
@@ -405,12 +452,19 @@ enum class BlendOp
 struct GenericPipelineStateInfo
 {
 	PrimitiveType primType;
+	float lineWidth;
+	TriangleWinding windingOrder;
+	bool depthEnable;
+	bool depthWrite;
 	DepthTest depthTest;
-	int sampleCount;
+	int sampleCountLow;
+	int sampleCountHigh;
 	ImageFormat colorFormat;
 	ImageFormat depthFormat;
 	BlendOp blendOp;
 	CullMode cullMode;
+	int vertexBufferDescCount;
+	VertexBufferDescription vertexBufferDesc[1];
 };
 
 enum AppPipelineHandleType

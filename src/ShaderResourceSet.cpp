@@ -30,7 +30,7 @@ void* ShaderDetails::GetShaderData()
 
 
 constexpr unsigned long
-ShaderGraphReader::hash(char* str)
+hash(char* str)
 {
 	unsigned long hash = 5381;
 	int c;
@@ -44,7 +44,7 @@ ShaderGraphReader::hash(char* str)
 }
 
 constexpr unsigned long
-ShaderGraphReader::hash(const std::string& string)
+hash(const std::string& string)
 {
 	unsigned long hash = 5381;
 	int c;
@@ -60,7 +60,7 @@ ShaderGraphReader::hash(const std::string& string)
 }
 
 
-ShaderGraph* ShaderGraphReader::CreateShaderGraph(
+ShaderGraph* CreateShaderGraph(
 	const std::string& filename, uintptr_t graphmemory, size_t *outSize, 
 	void* shaderDataOut, int *shaderDataSize, int *shaderDetailCount
 )
@@ -83,6 +83,9 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 		throw std::runtime_error("Shader Init file is unable to be opened");
 	}
 
+	char* dataStart = fileData.data();
+	int dataSize = fileData.size();
+
 	int shaderCount = 0;
 	int shaderResourceCount = 0;
 	int setCount = 0;
@@ -93,17 +96,17 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 	int tagCount = 0;
 	int curr = 0;
 
-	int stride = SkipLine(fileData, curr);
+	int stride = SkipLine(dataStart, dataSize, curr);
 	curr += stride;
 	while (curr + stride < fileData.size())
 	{
 
 		unsigned long hashl = 0;
 		bool opening = true; 
-		stride = ProcessTag(fileData, curr, &hashl, &opening);
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
 		curr += stride;
 
-		stride = SkipLine(fileData, curr);
+		stride = SkipLine(dataStart, dataSize, curr);
 
 		if (opening)
 		{
@@ -122,7 +125,7 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 		case hash("GLSLShader"):
 			//std::cout << "GLSLShader" << std::endl;
 			if (opening) {
-				stride = HandleGLSLShader(fileData, curr, &TreeNodes[tagCount], (void*)shaderDeatsIter, &shaderDetailDataStride);
+				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], (void*)shaderDeatsIter, &shaderDetailDataStride);
 				
 				ShaderRefs[shaderCount] = tagCount;
 				details[shaderCount] = (ShaderDetails*)shaderDeatsIter;
@@ -144,13 +147,13 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 		case hash("ShaderResourceItem"):
 			//std::cout << "ShaderResourceItem" << std::endl;
 			if (opening) {
-				stride = HandleShaderResourceItem(fileData, curr, &TreeNodes[tagCount]);
+				stride = HandleShaderResourceItem(dataStart, dataSize, curr, &TreeNodes[tagCount]);
 			}
 			break;
 		case hash("ComputeLayout"):
 			//std::cout << "ComputeLayout" << std::endl;
 			if (opening) {
-				stride = HandleComputeLayout(fileData, curr, &TreeNodes[tagCount]);
+				stride = HandleComputeLayout(dataStart, dataSize, curr, &TreeNodes[tagCount]);
 			}
 
 			break;
@@ -251,11 +254,10 @@ ShaderGraph* ShaderGraphReader::CreateShaderGraph(
 	return graph;
 }
 
-int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocation, unsigned long *hash, bool *opening)
+int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *hash, bool *opening)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
-	size_t size = fileData.size();
+	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
@@ -296,21 +298,21 @@ int ShaderGraphReader::ProcessTag(std::vector<char>& fileData, int currentLocati
 	return count;
 }
 
-int ShaderGraphReader::SkipLine(std::vector<char>& fileData, int currentLocation)
+int SkipLine(char* fileData, int size, int currentLocation)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
-	size_t size = fileData.size();
+	char* data = fileData + currentLocation;
+
 	while (currentLocation + count < size && data[count++] != '\n');
-	data = fileData.data() + currentLocation + count;
+	data = fileData + currentLocation + count;
 	return count;
 }
 
-int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocation, char* str, int* len)
+int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len)
 {
 	int memCounter = 0;
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
+	char* data = fileData + currentLocation;
 	while (true)
 	{
 		int test = count++;
@@ -337,10 +339,10 @@ int ShaderGraphReader::ReadValue(std::vector<char>& fileData, int currentLocatio
 	return count;
 }
 #define MAX_ATTRIBUTE_LEN 50
-int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
+int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
+	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
@@ -375,10 +377,10 @@ int ShaderGraphReader::ReadAttributeName(std::vector<char>& fileData, int curren
 	return count;
 }
 
-int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int currentLocation, unsigned long* hash)
+int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
+	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
@@ -418,12 +420,13 @@ int ShaderGraphReader::ReadAttributeValueHash(std::vector<char>& fileData, int c
 	return count;
 }
 
-int ShaderGraphReader::ReadAttributeValueVal(std::vector<char>& fileData, int currentLocation, unsigned long* val)
+int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
+	char* data = fileData + currentLocation;
 
 	unsigned long out = 0;
+	bool readingVal = false;
 
 	while (true)
 	{
@@ -439,20 +442,24 @@ int ShaderGraphReader::ReadAttributeValueVal(std::vector<char>& fileData, int cu
 
 		if (std::isspace(c))
 		{
-			if (out == 0)
-				continue;
-			else
+			if (readingVal)
 				break;
+			continue;
 		}
 
 		if (c == '\"' || c == '\'')
+		{
+			if (readingVal)
+				break;
 			continue;
+		}
 
 		if (count == (MAX_ATTRIBUTE_LEN+currentLocation) || ((c - '0') < 0 || (c - '9') > 0)) {
 			throw std::runtime_error("malformed xml attribute");
 		}
 
 		out = (out * 10) + (c - '0');
+		readingVal = true;
 
 	}
 
@@ -463,18 +470,17 @@ int ShaderGraphReader::ReadAttributeValueVal(std::vector<char>& fileData, int cu
 
 #define MAX_ATTRIBUTE_LINE_LEN 200
 
-int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLocation, unsigned long* hashes, int* stackSize, int valType)
+int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
 {
 	int count = 0;
-	char* data = fileData.data() + currentLocation;
-	size_t size = fileData.size();
+	char* data = fileData + currentLocation;
 
 	int ret = 0;
 	char c = data[ret];
 
 	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation+ret) < size)
 	{
-		ret += ReadAttributeName(fileData, currentLocation + ret, &hashes[count]);
+		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
 	
 		switch (hashes[count])
 		{
@@ -482,7 +488,7 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 		case hash("used"):
 		case hash("rw"):
 		{
-			ret += ReadAttributeValueHash(fileData, currentLocation + ret, &hashes[count + 1]);
+			ret += ReadAttributeValueHash(fileData, size,  currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
 		case hash("offset"):
@@ -492,7 +498,7 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 		case hash("y"):
 		case hash("z"):
 		{
-			ret += ReadAttributeValueVal(fileData, currentLocation + ret, &hashes[count + 1]);
+			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
 		}
@@ -512,13 +518,13 @@ int ShaderGraphReader::ReadAttributes(std::vector<char>& fileData, int currentLo
 
 
 
-int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int currentLocation, uintptr_t* offset, void *shaderData, int *shaderDataSize)
+int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, void *shaderData, int *shaderDataSize)
 {
 	unsigned long hashes[6];
 
-	int size = 0;
+	int glslSize = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, hashes, &size, 0);
+	int ret = ReadAttributes(fileData, size, currentLocation, hashes, &glslSize);
 
 	uintptr_t detailHead = (uintptr_t)shaderData;
 
@@ -537,7 +543,7 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 
 	int stackIter = 0;
 
-	while (size > stackIter)
+	while (glslSize > stackIter)
 	{
 		unsigned long code = hashes[stackIter];
 		unsigned long codeV = hashes[stackIter + 1];
@@ -572,20 +578,20 @@ int ShaderGraphReader::HandleGLSLShader(std::vector<char>& fileData, int current
 
 	readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
 
-	ret += ReadValue(fileData, currentLocation + ret, details->GetString(), &details->shaderNameSize);
+	ret += ReadValue(fileData, size, currentLocation + ret, details->GetString(), &details->shaderNameSize);
 
 	*shaderDataSize = (sizeof(ShaderDetails) + details->shaderNameSize + details->shaderDataSize);
 
 	return ret;
 }
 
-int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int currentLocation, uintptr_t* offset)
+int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset)
 {
 	unsigned long hashes[12];
 
-	int size = 0;
+	int dataSize = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, hashes, &size, 0);
+	int ret = ReadAttributes(fileData, size, currentLocation, hashes, &dataSize);
 
 	ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -597,7 +603,7 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 
 	int stackIter = 0;
 
-	while (size > stackIter)
+	while (dataSize > stackIter)
 	{
 		unsigned long code = hashes[stackIter];
 		unsigned long codeV = hashes[stackIter + 1];
@@ -716,7 +722,7 @@ int ShaderGraphReader::HandleShaderResourceItem(std::vector<char>& fileData, int
 }
 
 
-constexpr int ShaderGraphReader::ASCIIToInt(char* str)
+constexpr int ASCIIToInt(char* str)
 {
 	int c;
 	int out = 0;
@@ -729,13 +735,13 @@ constexpr int ShaderGraphReader::ASCIIToInt(char* str)
 	return out;
 }
 
-int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int currentLocation, uintptr_t* offset)
+int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset)
 {
 	unsigned long hashesAndVals[6];
 
-	int size = 0;
+	int dataSize = 0;
 
-	int ret = ReadAttributes(fileData, currentLocation, hashesAndVals, &size, 1);
+	int ret = ReadAttributes(fileData, size, currentLocation, hashesAndVals, &dataSize);
 
 	ShaderComputeLayoutXMLTag* tag = (ShaderComputeLayoutXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -745,7 +751,7 @@ int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int curr
 
 	int stackIter = 0;
 
-	while (size > stackIter)
+	while (dataSize > stackIter)
 	{
 		unsigned long code = hashesAndVals[stackIter];
 		unsigned long comp = hashesAndVals[stackIter + 1];
@@ -775,6 +781,597 @@ int ShaderGraphReader::HandleComputeLayout(std::vector<char>& fileData, int curr
 	}
 
 	readerMemBufferAllocate += sizeof(ShaderComputeLayoutXMLTag);
+
+	return ret;
+}
+
+void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo)
+{
+	memset(stateInfo, 0, sizeof(GenericPipelineStateInfo));
+
+	std::vector<char> fileData;
+
+	auto ret = FileManager::ReadFileInFull(filename, fileData);
+
+	if (ret)
+	{
+		throw std::runtime_error("Shader Init file is unable to be opened");
+	}
+
+	char* dataStart = fileData.data();
+	int dataSize = fileData.size();
+
+	int tagCount = 0;
+	int curr = 0;
+
+	int stride = SkipLine(dataStart, dataSize, curr);
+	curr += stride;
+
+	int currentVertexInput = 0;
+	int currentVertexInputDescription = 0;
+	while (curr + stride < dataSize)
+	{
+
+		unsigned long hashl = 0;
+		bool opening = true;
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
+		curr += stride;
+
+		stride = SkipLine(dataStart, dataSize, curr);
+
+		if (opening)
+		{
+			tagCount++;
+		}
+
+
+
+		switch (hashl)
+		{
+		case hash("PipelineDescription"):
+			if (opening)
+			{
+				stride = HandlePipelineDescription(dataStart, dataSize, curr, stateInfo);
+			}
+			break;
+		case hash("DepthTest"):
+			if (opening)
+			{
+				stride = HandleDepthTest(dataStart, dataSize, curr, stateInfo);
+			}
+			break;
+		case hash("PrimitiveType"):
+			if (opening)
+			{
+				stride = HandlePrimitiveType(dataStart, dataSize, curr, stateInfo);
+			}
+			break;
+	
+		case hash("CullMode"):
+			if (opening)
+			{
+				stride = HandleCullMode(dataStart, dataSize, curr, stateInfo);
+			}
+			break;
+		case hash("VertexInput"):
+		{
+			if (opening)
+			{
+				stateInfo->vertexBufferDescCount++;
+				stride = HandleVertexInput(dataStart, dataSize, curr, stateInfo, currentVertexInput);
+			}
+			else
+			{
+				currentVertexInput++;
+			}
+			break;
+		}
+		case hash("VertexComponent"):
+		{
+			if (opening)
+			{
+				stateInfo->vertexBufferDesc[currentVertexInput].descCount++;
+				stride = HandleVertexComponentInput(dataStart, dataSize, curr, stateInfo, currentVertexInput, currentVertexInputDescription);
+			}
+			else
+			{
+				currentVertexInputDescription++;
+			}
+			break;
+		}
+		}
+
+		curr += stride;
+
+
+	}
+}
+
+int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
+{
+	int count = 0;
+	char* data = fileData + currentLocation;
+
+	int ret = 0;
+	char c = data[ret];
+
+	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	{
+		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
+
+		switch (hashes[count])
+		{
+		case hash("op"):
+		case hash("type"):
+		case hash("mode"):
+		case hash("format"):
+		case hash("usage"):
+		case hash("rate"):
+		case hash("winding"):
+		case hash("write"):
+		{
+			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		case hash("offset"):
+		case hash("sampLo"):
+		case hash("sampHi"):
+		case hash("size"):
+		{
+			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		}
+		c = data[ret];
+		count += 2;
+	}
+
+	*stackSize = count;
+
+	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	{
+		c = data[ret++];
+	}
+
+	return ret;
+}
+
+static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("sampLo"):
+		{
+			stateInfo->sampleCountLow = codeV;
+			break;
+		}
+		case hash("sampHi"):
+		{
+			stateInfo->sampleCountHigh = codeV;
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Pipeline Description");
+			break;
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("mode"):
+		{
+			switch (codeV)
+			{
+			case hash("none"):
+				stateInfo->cullMode = CullMode::CULL_NONE;
+				break;
+
+			case hash("back"):
+				stateInfo->cullMode = CullMode::CULL_BACK;
+				break;
+
+			case hash("front"):
+				stateInfo->cullMode = CullMode::CULL_FRONT;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid Cull Mode");
+			}
+			break;
+		}
+		case hash("winding"):
+		{
+			switch (codeV)
+			{
+			case hash("cw"):
+				stateInfo->windingOrder = TriangleWinding::CW;
+				break;
+
+			case hash("ccw"):
+				stateInfo->windingOrder = TriangleWinding::CCW;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid Winding");
+			}
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Cull");
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	stateInfo->depthEnable = true;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("write"):
+		{
+			switch (codeV)
+			{
+			case hash("true"):
+			{
+				stateInfo->depthWrite = true;
+				break;
+			}
+			case hash("false"):
+			{
+				stateInfo->depthWrite = false;
+				break;
+			}
+			}
+			break;
+		}
+
+		case hash("op"):
+		{
+			switch (codeV)
+			{
+			case hash("never"):
+				stateInfo->depthTest = DEPTH_NEVER;
+				break;
+
+			case hash("less"):
+				stateInfo->depthTest = DEPTH_LESS;
+				break;
+
+			case hash("equal"):
+				stateInfo->depthTest = DEPTH_EQUAL;
+				break;
+
+			case hash("lessequal"):
+				stateInfo->depthTest = DEPTH_LESSEQUAL;
+				break;
+
+			case hash("greater"):
+				stateInfo->depthTest = DEPTH_GREATER;
+				break;
+
+			case hash("notequal"):
+				stateInfo->depthTest = DEPTH_NOTEQUAL;
+				break;
+
+			case hash("greaterequal"):
+				stateInfo->depthTest = DEPTH_GREATEREQUAL;
+				break;
+
+			case hash("always"):
+				stateInfo->depthTest = ALLPASS;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid Depth Compare Op");
+			}
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Depth Mode");
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("type"):
+		{
+			switch (codeV)
+			{
+			case hash("trilists"):
+				stateInfo->primType = TRIANGLES;
+				break;
+
+			case hash("tristrips"):
+				stateInfo->primType = TRISTRIPS;
+				break;
+
+			case hash("trifans"):
+				stateInfo->primType = TRIFAN;
+				break;
+
+			case hash("points"):
+				stateInfo->primType = POINTSLIST;
+				break;
+
+			case hash("linelists"):
+				stateInfo->primType = LINELIST;
+				break;
+
+			case hash("linestrips"):
+				stateInfo->primType = LINESTRIPS;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid Primitive Type");
+			}
+			break;
+		}
+		case hash("size"):
+		{
+			stateInfo->lineWidth = (float)codeV;
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Prim Mode");
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation)
+{
+	unsigned long hashes[8];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("usage"):
+		{
+			switch (codeV)
+			{
+			case hash("POS0"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::POSITION;
+				break;
+
+			case hash("TEX0"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX0;
+				break;
+
+			case hash("TEX1"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX1;
+				break;
+
+			case hash("TEX2"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX2;
+				break;
+
+			case hash("TEX3"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX3;
+				break;
+
+			case hash("NORMAL"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::NORMAL;
+				break;
+
+			case hash("BONES"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::BONES;
+				break;
+
+			case hash("WEIGHTS"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::WEIGHTS;
+				break;
+
+			case hash("COLOR0"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::COLOR0;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid vertex usage");
+			}
+			break;
+		}
+
+		case hash("format"):
+		{
+			switch (codeV)
+			{
+			case hash("uint"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_UINT;
+				break;
+
+			case hash("int"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_SINT;
+				break;
+
+			case hash("vec4"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+				break;
+
+			case hash("vec3"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32B32_SFLOAT;
+				break;
+
+			case hash("vec2"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32_SFLOAT;
+				break;
+
+			case hash("float"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_SFLOAT;
+				break;
+
+			case hash("ivec2"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32_SINT;
+				break;
+
+			case hash("u8vec2"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R8G8_UINT;
+				break;
+
+			case hash("i16vec2"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R16G16_SINT;
+				break;
+
+			case hash("i16vec3"):
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R16G16B16_SINT;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid vertex format");
+			}
+			break;
+		}
+
+		case hash("offset"):
+		{
+			stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].byteoffset = codeV;
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Vertex Component");
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("rate"):
+		{
+			switch (codeV)
+			{
+			case hash("vertex"):
+			{
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].rate = VertexBufferRate::PERVERTEX;
+				break;
+			}
+			case hash("instance"):
+			{
+				stateInfo->vertexBufferDesc[vertexBufferInputLocation].rate = VertexBufferRate::PERINSTANCE;
+				break;
+			}
+			}
+			break;
+		}
+		case hash("size"):
+		{
+			stateInfo->vertexBufferDesc[vertexBufferInputLocation].perInputSize = codeV;
+			break;
+		}
+		
+		default:
+			throw std::runtime_error("Failed Vertex Input");
+			break;
+		}
+
+		stackIter += 2;
+	}
 
 	return ret;
 }

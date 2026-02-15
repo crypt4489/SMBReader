@@ -83,12 +83,42 @@ namespace API {
 
 	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp)
 	{
-		VkCompareOp ret = VK_COMPARE_OP_LESS;
+		VkCompareOp ret = VK_COMPARE_OP_ALWAYS;
+
 		switch (testApp)
 		{
+		case DepthTest::DEPTH_NEVER:
+			ret = VK_COMPARE_OP_NEVER;
+			break;
+
+		case DepthTest::DEPTH_LESS:
+			ret = VK_COMPARE_OP_LESS;
+			break;
+
+		case DepthTest::DEPTH_EQUAL:
+			ret = VK_COMPARE_OP_EQUAL;
+			break;
+
+		case DepthTest::DEPTH_LESSEQUAL:
+			ret = VK_COMPARE_OP_LESS_OR_EQUAL;
+			break;
+
+		case DepthTest::DEPTH_GREATER:
+			ret = VK_COMPARE_OP_GREATER;
+			break;
+
+		case DepthTest::DEPTH_NOTEQUAL:
+			ret = VK_COMPARE_OP_NOT_EQUAL;
+			break;
+
+		case DepthTest::DEPTH_GREATEREQUAL:
+			ret = VK_COMPARE_OP_GREATER_OR_EQUAL;
+			break;
+
 		case DepthTest::ALLPASS:
 			ret = VK_COMPARE_OP_ALWAYS;
 			break;
+
 		default:
 			break;
 		}
@@ -173,21 +203,35 @@ namespace API {
 	VkPrimitiveTopology ConvertTopology(PrimitiveType type)
 	{
 		VkPrimitiveTopology top = VK_PRIMITIVE_TOPOLOGY_MAX_ENUM;
+
 		switch (type)
 		{
 		case TRIANGLES:
 			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 			break;
+
 		case TRISTRIPS:
 			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
 			break;
+
 		case TRIFAN:
 			top = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
 			break;
+
 		case POINTSLIST:
 			top = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 			break;
 
+		case LINELIST:
+			top = VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+			break;
+
+		case LINESTRIPS:
+			top = VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+			break;
+
+		default:
+			break;
 		}
 
 		return top;
@@ -262,6 +306,52 @@ namespace API {
 			attr.offset = inputDescs[i].byteoffset;
 			attr.binding = vertexBufferLocation;
 		}
+	}
+
+	VkFrontFace ConvertTriangleWinding(TriangleWinding winding)
+	{
+		VkFrontFace face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+		switch (winding)
+		{
+		case CW:
+			face = VK_FRONT_FACE_CLOCKWISE;
+			break;
+
+		case CCW:
+			face = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+			break;
+
+		default:
+			break;
+		}
+
+		return face;
+	}
+
+	VkCullModeFlags ConvertCullMode(CullMode mode)
+	{
+		VkCullModeFlags ret = VK_CULL_MODE_NONE;
+
+		switch (mode)
+		{
+		case CullMode::CULL_NONE:
+			ret = VK_CULL_MODE_NONE;
+			break;
+
+		case CullMode::CULL_BACK:
+			ret = VK_CULL_MODE_BACK_BIT;
+			break;
+
+		case CullMode::CULL_FRONT:
+			ret = VK_CULL_MODE_FRONT_BIT;
+			break;
+
+		default:
+			break;
+		}
+
+		return ret;
 	}
 }
 
@@ -686,6 +776,16 @@ void RenderInstance::CreatePipelines()
 {
 	// Create Shaders
 
+	static int pipelineInfoIndex = 0;
+
+	CreatePipelineDescription("SkyboxPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+
+	CreatePipelineDescription("GenericPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+
+	CreatePipelineDescription("DebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+	CreatePipelineDescription("NormalDebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+	CreatePipelineDescription("TextPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	std::array<std::string, 20> layouts = {
@@ -721,7 +821,7 @@ void RenderInstance::CreatePipelines()
 
 	while(i<15)
 	{
-		vulkanShaderGraphs.shaderGraphPtrs[i] = ShaderGraphReader::CreateShaderGraph(layouts[i],
+		vulkanShaderGraphs.shaderGraphPtrs[i] = CreateShaderGraph(layouts[i],
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
 			shaderDetailsData + shaderDetailAlloc, &byteOffset, &detailsSize);
 
@@ -802,30 +902,12 @@ void RenderInstance::CreatePipelines()
 	std::vector<EntryHandle> normaldebug(maxMSAALevels);
 	std::vector<EntryHandle> skyboxPipeline(maxMSAALevels);
 
-	for (uint32_t i = 0; i < maxMSAALevels; i++)
-	{
-		auto genericBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
-		auto textBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 1, 2, 0);
-		auto debugBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
-		auto normalBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 3, 2, 0);
-		auto skyboxBuilder = dev->CreateGraphicsPipelineBuilder(renderPasses[i], 1, 2, 2, 1);
 
-		UsePipelineBuilders(genericBuilder, textBuilder, debugBuilder, normalBuilder, skyboxBuilder, (VkSampleCountFlagBits)(1<<i));
-
-		skyboxBuilder->AddPushConstantRange(0, 64, VK_SHADER_STAGE_VERTEX_BIT, 0);
-
-		r[i] = CreateVulkanGraphicPipelineTemplate(genericBuilder, vulkanShaderGraphs.shaderGraphPtrs[0]);
-
-		l[i] = CreateVulkanGraphicPipelineTemplate(textBuilder, vulkanShaderGraphs.shaderGraphPtrs[1]);
-
-		debug[i] = CreateVulkanGraphicPipelineTemplate(debugBuilder, vulkanShaderGraphs.shaderGraphPtrs[5]);
-
-		normaldebug[i] = CreateVulkanGraphicPipelineTemplate(normalBuilder, vulkanShaderGraphs.shaderGraphPtrs[13]);
-
-		skyboxPipeline[i] = CreateVulkanGraphicPipelineTemplate(skyboxBuilder, vulkanShaderGraphs.shaderGraphPtrs[14]);
-
-	}
-
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[0], vulkanShaderGraphs.shaderGraphPtrs[14], skyboxPipeline);
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[1], vulkanShaderGraphs.shaderGraphPtrs[0], r);
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[2], vulkanShaderGraphs.shaderGraphPtrs[5], debug);
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[3], vulkanShaderGraphs.shaderGraphPtrs[13], normaldebug);
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[4], vulkanShaderGraphs.shaderGraphPtrs[1], l);
 	pipelinesIdentifier[GENERIC] = r;
 	
 	pipelinesIdentifier[TEXT] = l;
@@ -838,10 +920,13 @@ void RenderInstance::CreatePipelines()
 
 }
 
-EntryHandle RenderInstance::CreateVulkanGraphicPipelineTemplate(VKGraphicsPipelineBuilder* pipelineBuilder, ShaderGraph* graph)
+void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, std::vector<EntryHandle>& outHandles)
 {
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
 	std::vector<EntryHandle> layoutHandles(graph->resourceSetCount);
 	std::vector<EntryHandle> shaderHandle(graph->shaderMapCount);
+	std::vector<ShaderResource*> pushConstants(graph->resourceCount);
 
 	for (int i = 0; i < graph->shaderMapCount; i++)
 	{
@@ -855,7 +940,92 @@ EntryHandle RenderInstance::CreateVulkanGraphicPipelineTemplate(VKGraphicsPipeli
 		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 	}
 
-	return pipelineBuilder->CreateGraphicsPipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle.data(), graph->shaderMapCount);
+	int pushConstantRangeCount = 0;
+
+	for (int i = 0; i < graph->resourceCount; i++)
+	{
+		ShaderResource* resource = (ShaderResource*)graph->GetResource(i);
+		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
+		{
+			pushConstants[pushConstantRangeCount++] = resource;
+		}
+	}
+
+
+	int j = graph->resourceCount;
+	int g = 0;
+
+
+
+	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, pushConstantRangeCount);
+
+
+	for (int i = 0; i < pushConstantRangeCount; i++)
+	{
+		ShaderResource* resource = pushConstants[i];
+		pipelineBuilder->AddPushConstantRange(resource->offset, resource->size, API::ConvertShaderStageToVulkanShaderStage(resource->stages), i);
+
+	}
+
+
+	std::array<VkDynamicState, 2> dynamicStates = {
+	VK_DYNAMIC_STATE_VIEWPORT,
+	VK_DYNAMIC_STATE_SCISSOR
+	};
+
+
+	pipelineBuilder->CreateDynamicStateInfo(dynamicStates.data(), 2);
+
+	std::vector<VkVertexInputBindingDescription> bindingDescriptions(stateInfo->vertexBufferDescCount);
+
+	int descCount = 0;
+
+	for (int i = 0; i < stateInfo->vertexBufferDescCount; i++)
+	{
+
+		bindingDescriptions[i] =  VK::Utils::CreateVertexInputBindingDescription(i, stateInfo->vertexBufferDesc[i].perInputSize);
+
+		descCount += stateInfo->vertexBufferDesc[i].descCount;
+	}
+
+	std::vector<VkVertexInputAttributeDescription> vertexBufferInput(descCount);
+
+	int iter = 0;
+	
+	for (int i = 0; i < stateInfo->vertexBufferDescCount; i++)
+	{
+	
+		API::ConvertVertexInputToVKVertexAttrDescription(stateInfo->vertexBufferDesc->descriptions, stateInfo->vertexBufferDesc[i].descCount, i, vertexBufferInput.data() + iter);
+
+		iter += stateInfo->vertexBufferDesc[i].descCount;
+	}
+
+	
+	pipelineBuilder->CreateVertexInput(bindingDescriptions.data(), stateInfo->vertexBufferDescCount, vertexBufferInput.data(), descCount);
+	
+	pipelineBuilder->CreateInputAssembly(API::ConvertTopology(stateInfo->primType), false);
+
+	pipelineBuilder->CreateViewportState(1, 1);
+
+	pipelineBuilder->CreateRasterizer(API::ConvertCullMode(stateInfo->cullMode), API::ConvertTriangleWinding(stateInfo->windingOrder), stateInfo->lineWidth);
+
+	pipelineBuilder->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+
+	pipelineBuilder->CreateColorBlending(VK_LOGIC_OP_COPY);
+
+	pipelineBuilder->CreateDepthStencil(API::ConvertDepthTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthWrite);
+
+	for (uint32_t i = 0; i < maxMSAALevels; i++)
+	{
+		int msaaLevel = (1 << i);
+		if (msaaLevel> stateInfo->sampleCountHigh) break;
+
+		pipelineBuilder->CreateMultiSampling((VkSampleCountFlagBits)msaaLevel);
+		pipelineBuilder->renderPass = dev->GetRenderPass(renderPasses[i]);
+
+		outHandles[i] = pipelineBuilder->CreateGraphicsPipeline(layoutHandles.data(), graph->resourceSetCount, shaderHandle.data(), graph->shaderMapCount);
+	}
+
 }
 
 EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* graph)
@@ -903,86 +1073,6 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 }
 
 
-void RenderInstance::UsePipelineBuilders(VKGraphicsPipelineBuilder* generic, VKGraphicsPipelineBuilder* text, VKGraphicsPipelineBuilder* debug, VKGraphicsPipelineBuilder* normaldebug, VKGraphicsPipelineBuilder* skybox, VkSampleCountFlagBits flags)
-{
-	std::array<VkDynamicState, 2> dynamicStates = {
-		VK_DYNAMIC_STATE_VIEWPORT,
-		VK_DYNAMIC_STATE_SCISSOR
-	};
-
-	generic->CreateDynamicStateInfo(dynamicStates.data(), 2);
-	text->CreateDynamicStateInfo(dynamicStates.data(), 2);
-	debug->CreateDynamicStateInfo(dynamicStates.data(), 2);
-	normaldebug->CreateDynamicStateInfo(dynamicStates.data(), 2);
-	skybox->CreateDynamicStateInfo(dynamicStates.data(), 2);
-
-
-
-	auto ref = TextVertex::getAttributeDescriptions();
-
-	VkVertexInputBindingDescription skybindingDescription = VK::Utils::CreateVertexInputBindingDescription(0, sizeof(Vector4f));
-	VkVertexInputBindingDescription textbindingDescription = VK::Utils::CreateVertexInputBindingDescription(0, sizeof(TextVertex));
-	std::vector<VkVertexInputAttributeDescription> skyattributeDescriptions(1);
-	std::vector<VkVertexInputAttributeDescription> textattributeDescriptions(ref.size());
-
-	API::ConvertVertexInputToVKVertexAttrDescription(ref.data(), ref.size(), 0, textattributeDescriptions.data());
-
-	std::vector<VertexInputDescription> attributeDescriptions(1);
-
-	attributeDescriptions[0].byteoffset = 0;
-	attributeDescriptions[0].vertexusage = VertexUsage::POSITION;
-	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
-
-	API::ConvertVertexInputToVKVertexAttrDescription(attributeDescriptions.data(), attributeDescriptions.size(), 0, skyattributeDescriptions.data());
-
-	generic->CreateVertexInput(nullptr, 0, nullptr, 0);
-	text->CreateVertexInput(&textbindingDescription, 1, textattributeDescriptions.data(), static_cast<uint32_t>(textattributeDescriptions.size()));
-	debug->CreateVertexInput(nullptr, 0, nullptr, 0);
-	normaldebug->CreateVertexInput(nullptr, 0, nullptr, 0);
-	skybox->CreateVertexInput(&skybindingDescription, 1, skyattributeDescriptions.data(), 1);
-
-	generic->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
-	text->CreateInputAssembly(API::ConvertTopology(TRISTRIPS), false);
-	debug->CreateInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
-	normaldebug->CreateInputAssembly(VK_PRIMITIVE_TOPOLOGY_LINE_LIST, false);
-	skybox->CreateInputAssembly(API::ConvertTopology(TRIANGLES), false);
-
-	generic->CreateViewportState(1, 1);
-	text->CreateViewportState(1, 1);
-	debug->CreateViewportState(1, 1);
-	normaldebug->CreateViewportState(1, 1);
-	skybox->CreateViewportState(1, 1);
-
-	generic->CreateRasterizer(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
-	text->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
-	debug->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 5.0f);
-	normaldebug->CreateRasterizer(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
-	skybox->CreateRasterizer(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE, 1.0f);
-
-	generic->CreateMultiSampling(flags);
-	text->CreateMultiSampling(flags);
-	debug->CreateMultiSampling(flags);
-	normaldebug->CreateMultiSampling(flags);
-	skybox->CreateMultiSampling(flags);
-
-	generic->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-	text->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-	debug->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-	normaldebug->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-	skybox->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
-
-	generic->CreateColorBlending(VK_LOGIC_OP_COPY);
-	text->CreateColorBlending(VK_LOGIC_OP_COPY);
-	debug->CreateColorBlending(VK_LOGIC_OP_COPY);
-	normaldebug->CreateColorBlending(VK_LOGIC_OP_COPY);
-	skybox->CreateColorBlending(VK_LOGIC_OP_COPY);
-
-	generic->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
-	text->CreateDepthStencil(VK_COMPARE_OP_ALWAYS, true);
-	debug->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
-	normaldebug->CreateDepthStencil(VK_COMPARE_OP_LESS, true);
-	skybox->CreateDepthStencil(VK_COMPARE_OP_LESS_OR_EQUAL, false);
-}
 
 std::array<void*, 1000> batchAddresses;
 std::array<size_t, 1000> batchSizes;

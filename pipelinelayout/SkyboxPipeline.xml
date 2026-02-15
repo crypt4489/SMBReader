@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<PipelineDescription sampLo="1" sampHi="16">
+	<VertexInput rate="vertex" size="16">
+		<VertexComponent usage="POS0" format="vec4" offset="0">
+		</VertexComponent>		
+	</VertexInput>
+	<PrimitiveType type="trilists">
+	</PrimitiveType>
+	<CullMode mode="none" winding="ccw">
+	</CullMode>
+	<DepthTest op="lessequal" write="false">
+	</DepthTest>
+</PipelineDescription>

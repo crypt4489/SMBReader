@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<PipelineDescription sampLo="1" sampHi="16">
+	<PrimitiveType type="tristrips">
+	</PrimitiveType>
+	<CullMode mode="none" winding="ccw">
+	</CullMode>
+	<DepthTest op="less" write="true">
+	</DepthTest>
+</PipelineDescription>

@@ -1309,7 +1309,12 @@ VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle r
 {
 	//std::shared_lock lock(deviceLock);
 
-	auto renderPass = GetRenderPass(renderPassIndex);
+	VkRenderPass renderPass = VK_NULL_HANDLE;
+
+	if (renderPassIndex != EntryHandle())
+	{
+		renderPass = GetRenderPass(renderPassIndex);
+	}
 
 	auto renderPassData = reinterpret_cast<VKGraphicsPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKGraphicsPipelineBuilder)));
 
