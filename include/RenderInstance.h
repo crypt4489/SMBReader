@@ -19,7 +19,7 @@ namespace API {
 
 	VkFormat ConvertComponentFormatTypeToVulkanFormat(ComponentFormatType type);
 
-	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp);
+	VkCompareOp ConvertRasterizerTestToVulkanCompareOp(RasterizerTest testApp);
 
 	VkFormat ConvertImageFormatToVulkanFormat(ImageFormat format);
 
@@ -222,6 +222,6 @@ struct RenderInstance
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos;
 };
 
-namespace VKRenderer {
+namespace GlobalRenderer {
 	extern RenderInstance* gRenderInstance;
 }

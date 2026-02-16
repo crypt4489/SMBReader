@@ -22,14 +22,14 @@ void TextManager::CreatePipelineObject()
 {
 	std::string text = "text";
 
-	auto rendInst = VKRenderer::gRenderInstance;
+	auto rendInst = GlobalRenderer::gRenderInstance;
 
 }
 
 void TextManager::CreateTextBuffer()
 {
-	//vertexBufferIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(BUFFERSIZE, 0, STATIC);
-	//indirectCommandsIndex = VKRenderer::gRenderInstance->GetAllocFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U, STATIC);
+	//vertexBufferIndex = GlobalRenderer::gRenderInstance->GetAllocFromUniformBuffer(BUFFERSIZE, 0, STATIC);
+	//indirectCommandsIndex = GlobalRenderer::gRenderInstance->GetAllocFromUniformBuffer(MAXTEXTRENDERABLES * sizeof(VkDrawIndirectCommand), 0U, STATIC);
 }
 
 void TextManager::UploadToVertexBuffer(Text* text)
@@ -43,7 +43,7 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	size_t allocatedDataSize = sizeof(TextVertex) * allocatedVerts;
 
-	VKRenderer::gRenderInstance->UpdateAllocation(
+	GlobalRenderer::gRenderInstance->UpdateAllocation(
 		text->textVertices.data(), vertexBufferIndex, vertsDataSize,
 		bufferOffset, 0, 1);
 
@@ -56,7 +56,7 @@ void TextManager::UploadToVertexBuffer(Text* text)
 
 	size_t commandOffset = commandCount * sizeof(VkDrawIndirectCommand);
 
-	VKRenderer::gRenderInstance->UpdateAllocation(
+	GlobalRenderer::gRenderInstance->UpdateAllocation(
 		&command, indirectCommandsIndex, sizeof(VkDrawIndirectCommand),
 		commandOffset, 0, 1);
 
@@ -91,11 +91,11 @@ void TextManager::UpdateVertexBuffer(Text* text, size_t indexInString)
 
 	size_t newCount = textVertexCount - startingOffset;
 
-	VKRenderer::gRenderInstance->UpdateAllocation(
+	GlobalRenderer::gRenderInstance->UpdateAllocation(
 		text->textVertices.data(), vertexBufferIndex, newCount * sizeof(TextVertex),
 		 bOffset + startingOffset, 0, 1);
 
-	VKRenderer::gRenderInstance->UpdateAllocation(
+	GlobalRenderer::gRenderInstance->UpdateAllocation(
 		&textVertexCount, indirectCommandsIndex, sizeof(uint32_t),
 		 offsetof(VkDrawIndirectCommand, vertexCount) +
 		 (cCount * sizeof(VkDrawIndirectCommand)), 0, 1);

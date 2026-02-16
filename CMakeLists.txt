@@ -33,6 +33,8 @@ file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h" "platfo
 
 file(GLOB PROJECT_SHADERS "shaders/layouts/*" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
 
+file(GLOB PROJECT_PIPELINE_LAYOUTS "pipelineLayout/*.xml")
+
 set (PROJECT_DEFINES)
 
 set (PROJECT_TYPE "exe")
@@ -42,9 +44,9 @@ set(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION_MAJOR 10)
 
 
 if (${PROJECT_TYPE} STREQUAL ${PROJECT_TYPE_EXECUTABLE})
-    add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS} ${PROJECT_SHADERS})
+    add_executable(${PROJECT_NAME} ${PROJECT_SOURCES} ${PROJECT_HEADERS} ${PROJECT_SHADERS} ${PROJECT_PIPELINE_LAYOUTS})
 elseif (${PROJECT_TYPE} STREQUAL ${PROJECT_TYPE_STATIC_LIBRARY})
-    add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCES} ${PROJECT_HEADERS} ${PROJECT_SHADERS})
+    add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCES} ${PROJECT_HEADERS} ${PROJECT_SHADERS} ${PROJECT_PIPELINE_LAYOUTS})
 endif()
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
@@ -60,6 +62,10 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/shaders
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
     PREFIX "Header Files"
     FILES ${PROJECT_HEADERS}
+)
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
+    PREFIX "Pipeline Layouts"
+    FILES ${PROJECT_PIPELINE_LAYOUTS}
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE ${PROJECT_DEFINES})
@@ -86,6 +92,10 @@ if (WIN32)
 
     set_property(SOURCE ${PROJECT_SHADERS} PROPERTY VS_SETTINGS "ExcludedFromBuild=false")
 
+     set_source_files_properties(${PROJECT_PIPELINE_LAYOUTS} PROPERTIES VS_TOOL_OVERRIDE "EmbeddedResource")
+
+    set_property(SOURCE ${PROJECT_PIPELINE_LAYOUTS} PROPERTY VS_SETTINGS "ExcludedFromBuild=false")
+
 endif()
 
 add_custom_command(
@@ -110,4 +120,11 @@ TARGET ${PROJECT_NAME}
 POST_BUILD
 COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/shaders/layouts/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied shader layouts"
+)
+
+add_custom_command(
+TARGET ${PROJECT_NAME}    
+POST_BUILD
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/pipelinelayout/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMENT "Copied pipeline layouts"
 )

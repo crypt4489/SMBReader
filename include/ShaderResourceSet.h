@@ -554,7 +554,7 @@ struct PrimitiveXMLTag : PipelineXMLTag
 struct DepthXMLTag : PipelineXMLTag
 {
 	bool enabled;
-	DepthTest depthOp;
+	RasterizerTest depthOp;
 };
 
 struct CullModeXMLTag : PipelineXMLTag
@@ -570,6 +570,7 @@ static int ReadAttributesPipeline(char* fileData, int size, int currentLocation,
 static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 static int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
+static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face);
 static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 
 static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation);

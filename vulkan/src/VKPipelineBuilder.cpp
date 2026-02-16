@@ -118,12 +118,12 @@ void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 }
-void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool depthwriteenable)
+void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool depthwriteenable, bool stencilEnable, VkStencilOpState* front, VkStencilOpState* back)
 
 {
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depthStencil.depthTestEnable =  VK_TRUE;
-	depthStencil.depthWriteEnable = depthwriteenable ? VK_TRUE : VK_FALSE;
+	depthStencil.depthWriteEnable = depthwriteenable;
 
 	depthStencil.depthCompareOp = depthOp;
 
@@ -131,9 +131,37 @@ void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool dep
 	depthStencil.minDepthBounds = 0.0f; // Optional
 	depthStencil.maxDepthBounds = 1.0f; // Optional
 
-	depthStencil.stencilTestEnable = VK_FALSE;
-	depthStencil.front = {}; // Optional
-	depthStencil.back = {}; // Optional
+	depthStencil.stencilTestEnable = stencilEnable;
+	if (stencilEnable)
+	{
+		memcpy(&depthStencil.back, back, sizeof(VkStencilOpState));
+		memcpy(&depthStencil.front, front, sizeof(VkStencilOpState));
+	}
+
+	/*
+		depthStencil.stencilTestEnable = stencilEnable;
+		depthStencil.front.failOp = VK_STENCIL_OP_KEEP;
+		depthStencil.front.passOp = VK_STENCIL_OP_REPLACE;
+		depthStencil.front.depthFailOp = VK_STENCIL_OP_KEEP;
+		depthStencil.front.compareOp = VK_COMPARE_OP_ALWAYS;
+		depthStencil.front.compareMask = 0xFF;
+		depthStencil.front.writeMask = 0xFF;
+		depthStencil.front.reference = 1;
+		depthStencil.back = {}; // Optional
+		*/
+
+		/*
+		depthStencil.stencilTestEnable = stencilEnable;
+		depthStencil.front.failOp = VK_STENCIL_OP_KEEP;
+		depthStencil.front.passOp = VK_STENCIL_OP_KEEP;
+		depthStencil.front.depthFailOp = VK_STENCIL_OP_KEEP;
+		depthStencil.front.compareOp = VK_COMPARE_OP_EQUAL;
+		depthStencil.front.compareMask = 0xFF;
+		depthStencil.front.writeMask = 0xFF;
+		depthStencil.front.reference = 0;
+		depthStencil.back = {}; // Optional
+		*/
+	
 }
 
 EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descriptorlaysids,

@@ -879,6 +879,24 @@ void CreatePipelineDescription(const std::string& filename, GenericPipelineState
 			}
 			break;
 		}
+		case hash("FrontStencilTest"):
+		{
+			if (opening)
+			{
+				stateInfo->StencilEnable = true;
+				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->frontFace);
+			}
+			break;
+		}
+		case hash("BackStencilTest"):
+		{
+			if (opening)
+			{
+				stateInfo->StencilEnable = true;
+				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->backFace);
+			}
+			break;
+		}
 		}
 
 		curr += stride;
@@ -909,10 +927,17 @@ int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsign
 		case hash("rate"):
 		case hash("winding"):
 		case hash("write"):
+		case hash("failop"):
+		case hash("passop"):
+		case hash("depthfailop"):
+		case hash("compareop"):
 		{
 			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
+		case hash("writemask"):
+		case hash("comparemask"):
+		case hash("ref"):
 		case hash("offset"):
 		case hash("sampLo"):
 		case hash("sampHi"):
@@ -1083,31 +1108,31 @@ int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipeli
 			switch (codeV)
 			{
 			case hash("never"):
-				stateInfo->depthTest = DEPTH_NEVER;
+				stateInfo->depthTest = NEVER;
 				break;
 
 			case hash("less"):
-				stateInfo->depthTest = DEPTH_LESS;
+				stateInfo->depthTest = LESS;
 				break;
 
 			case hash("equal"):
-				stateInfo->depthTest = DEPTH_EQUAL;
+				stateInfo->depthTest = EQUAL;
 				break;
 
 			case hash("lessequal"):
-				stateInfo->depthTest = DEPTH_LESSEQUAL;
+				stateInfo->depthTest = LESSEQUAL;
 				break;
 
 			case hash("greater"):
-				stateInfo->depthTest = DEPTH_GREATER;
+				stateInfo->depthTest = GREATER;
 				break;
 
 			case hash("notequal"):
-				stateInfo->depthTest = DEPTH_NOTEQUAL;
+				stateInfo->depthTest = NOTEQUAL;
 				break;
 
 			case hash("greaterequal"):
-				stateInfo->depthTest = DEPTH_GREATEREQUAL;
+				stateInfo->depthTest = GREATEREQUAL;
 				break;
 
 			case hash("always"):
@@ -1117,6 +1142,119 @@ int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipeli
 			default:
 				throw std::runtime_error("Invalid Depth Compare Op");
 			}
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Depth Mode");
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+StencilOp ParseStencilOp(uint32_t codeV)
+{
+	switch (codeV)
+	{
+	case hash("replace"): return StencilOp::REPLACE;
+	case hash("keep"):    return StencilOp::KEEP;
+	case hash("zero"):    return StencilOp::ZERO;
+	default:              return StencilOp::KEEP;
+	}
+}
+
+static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face)
+{
+	unsigned long hashes[14];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+
+		case hash("failop"):
+			face->failOp = ParseStencilOp(codeV);
+			break;
+		
+		case hash("passop"):
+			face->passOp = ParseStencilOp(codeV);
+			break;
+
+
+		case hash("depthfailop"):
+			face->depthFailOp = ParseStencilOp(codeV);
+			break;
+
+
+		case hash("compareop"):
+		{
+			switch (codeV)
+			{
+			case hash("never"):
+				face->stencilCompare = NEVER;
+				break;
+
+			case hash("less"):
+				face->stencilCompare = LESS;
+				break;
+
+			case hash("equal"):
+				face->stencilCompare = EQUAL;
+				break;
+
+			case hash("lessequal"):
+				face->stencilCompare = LESSEQUAL;
+				break;
+
+			case hash("greater"):
+				face->stencilCompare = GREATER;
+				break;
+
+			case hash("notequal"):
+				face->stencilCompare = NOTEQUAL;
+				break;
+
+			case hash("greaterequal"):
+				face->stencilCompare = GREATEREQUAL;
+				break;
+
+			case hash("always"):
+				face->stencilCompare = ALLPASS;
+				break;
+
+			default:
+				throw std::runtime_error("Invalid Stencil Compare Op");
+			}
+			break;
+		}
+
+		case hash("writemask"):
+		{
+			face->writeMask = codeV;
+			break;
+		}
+
+		case hash("comparemask"):
+		{
+			face->compareMask = codeV;
+			break;
+		}
+
+		case hash("ref"):
+		{
+			face->reference = codeV;
 			break;
 		}
 

@@ -18,15 +18,15 @@ enum RenderingBackend
 	DXD12 = 2,
 };
 
-enum DepthTest
+enum RasterizerTest
 {
-	DEPTH_NEVER = 0,
-	DEPTH_LESS = 1,
-	DEPTH_EQUAL = 2,
-	DEPTH_LESSEQUAL = 3,
-	DEPTH_GREATER = 4,
-	DEPTH_NOTEQUAL = 5,
-	DEPTH_GREATEREQUAL = 6,
+	NEVER = 0,
+	LESS = 1,
+	EQUAL = 2,
+	LESSEQUAL = 3,
+	GREATER = 4,
+	NOTEQUAL = 5,
+	GREATEREQUAL = 6,
 	ALLPASS = 7
 };
 
@@ -449,6 +449,24 @@ enum class BlendOp
 	LOGIC_COPY = 1
 };
 
+enum class StencilOp
+{
+	REPLACE = 0,
+	KEEP = 1,
+	ZERO = 2,
+};
+
+struct FaceStencilData
+{
+	StencilOp failOp;
+	StencilOp passOp;
+	StencilOp depthFailOp;
+	RasterizerTest stencilCompare;
+	int writeMask;
+	int compareMask;
+	int reference;
+};
+
 struct GenericPipelineStateInfo
 {
 	PrimitiveType primType;
@@ -456,7 +474,10 @@ struct GenericPipelineStateInfo
 	TriangleWinding windingOrder;
 	bool depthEnable;
 	bool depthWrite;
-	DepthTest depthTest;
+	RasterizerTest depthTest;
+	bool StencilEnable;
+	FaceStencilData frontFace;
+	FaceStencilData backFace;
 	int sampleCountLow;
 	int sampleCountHigh;
 	ImageFormat colorFormat;
@@ -464,7 +485,7 @@ struct GenericPipelineStateInfo
 	BlendOp blendOp;
 	CullMode cullMode;
 	int vertexBufferDescCount;
-	VertexBufferDescription vertexBufferDesc[1];
+	VertexBufferDescription vertexBufferDesc[4];
 };
 
 enum AppPipelineHandleType

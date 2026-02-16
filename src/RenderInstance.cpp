@@ -28,7 +28,7 @@
 
 #include "ShaderResourceSet.h"
 
-namespace VKRenderer {
+namespace GlobalRenderer {
 	RenderInstance* gRenderInstance = nullptr;
 }
 
@@ -81,41 +81,41 @@ namespace API {
 		return format;
 	}
 
-	VkCompareOp ConvertDepthTestToVulkanCompareOp(DepthTest testApp)
+	VkCompareOp ConvertRasterizerTestToVulkanCompareOp(RasterizerTest testApp)
 	{
 		VkCompareOp ret = VK_COMPARE_OP_ALWAYS;
 
 		switch (testApp)
 		{
-		case DepthTest::DEPTH_NEVER:
+		case RasterizerTest::NEVER:
 			ret = VK_COMPARE_OP_NEVER;
 			break;
 
-		case DepthTest::DEPTH_LESS:
+		case RasterizerTest::LESS:
 			ret = VK_COMPARE_OP_LESS;
 			break;
 
-		case DepthTest::DEPTH_EQUAL:
+		case RasterizerTest::EQUAL:
 			ret = VK_COMPARE_OP_EQUAL;
 			break;
 
-		case DepthTest::DEPTH_LESSEQUAL:
+		case RasterizerTest::LESSEQUAL:
 			ret = VK_COMPARE_OP_LESS_OR_EQUAL;
 			break;
 
-		case DepthTest::DEPTH_GREATER:
+		case RasterizerTest::GREATER:
 			ret = VK_COMPARE_OP_GREATER;
 			break;
 
-		case DepthTest::DEPTH_NOTEQUAL:
+		case RasterizerTest::NOTEQUAL:
 			ret = VK_COMPARE_OP_NOT_EQUAL;
 			break;
 
-		case DepthTest::DEPTH_GREATEREQUAL:
+		case RasterizerTest::GREATEREQUAL:
 			ret = VK_COMPARE_OP_GREATER_OR_EQUAL;
 			break;
 
-		case DepthTest::ALLPASS:
+		case RasterizerTest::ALLPASS:
 			ret = VK_COMPARE_OP_ALWAYS;
 			break;
 
@@ -353,6 +353,40 @@ namespace API {
 
 		return ret;
 	}
+
+	VkStencilOp ConvertStencilOpToVulkan(StencilOp op)
+	{
+		switch (op)
+		{
+		case StencilOp::REPLACE:
+			return VK_STENCIL_OP_REPLACE;
+
+		case StencilOp::KEEP:
+			return VK_STENCIL_OP_KEEP;
+
+		case StencilOp::ZERO:
+			return VK_STENCIL_OP_ZERO;
+
+		default:
+			return VK_STENCIL_OP_KEEP;
+		}
+	}
+
+	VkStencilOpState ConvertFaceStencilDataToVulkan(const FaceStencilData& face)
+	{
+		VkStencilOpState state{};
+		state.failOp = ConvertStencilOpToVulkan(face.failOp);
+		state.passOp = ConvertStencilOpToVulkan(face.passOp);
+		state.depthFailOp = ConvertStencilOpToVulkan(face.depthFailOp);
+		state.compareOp = ConvertRasterizerTestToVulkanCompareOp(face.stencilCompare);
+
+		state.compareMask = static_cast<uint32_t>(face.compareMask);
+		state.writeMask = static_cast<uint32_t>(face.writeMask);
+		state.reference = static_cast<uint32_t>(face.reference);
+
+		return state;
+	}
+
 }
 
 
@@ -452,7 +486,7 @@ void RenderInstance::CreateDepthImage(uint32_t width, uint32_t height, uint32_t 
 		sampleCount,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
 
-	depthViews[index] = dev->CreateImageView(depthImages[index], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
+	depthViews[index] = dev->CreateImageView(depthImages[index], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
 
 	dev->TransitionImageLayout(
 		depthImages[index], vkDepthFormat,
@@ -527,8 +561,8 @@ void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits samp
 			, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 2);
 
 		rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, vkDepthFormat, sampleCount,
-			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
 		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, 2, 1);
@@ -552,8 +586,8 @@ void RenderInstance::CreateRenderPass(uint32_t index, VkSampleCountFlagBits samp
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0);
 
 		rpb.CreateAttachment(VKRenderPassBuilder::DEPTHSTENCILATTACH, vkDepthFormat, sampleCount,
-			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
 			VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
 		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, 0, 1, ~0ui32, 1);
@@ -785,6 +819,7 @@ void RenderInstance::CreatePipelines()
 	CreatePipelineDescription("DebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
 	CreatePipelineDescription("NormalDebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
 	CreatePipelineDescription("TextPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+	CreatePipelineDescription("OutlinePipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -803,7 +838,8 @@ void RenderInstance::CreatePipelines()
 		"LightObjectDivision.xml",
 		"LightWorldAssignment.xml",
 		"NormalDebug.xml",
-		"Skybox.xml"
+		"Skybox.xml",
+		"OutlineLayout.xml"
 		
 	};
 
@@ -819,7 +855,7 @@ void RenderInstance::CreatePipelines()
 
 	int i = 0;
 
-	while(i<15)
+	while(i<16)
 	{
 		vulkanShaderGraphs.shaderGraphPtrs[i] = CreateShaderGraph(layouts[i],
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
@@ -901,6 +937,7 @@ void RenderInstance::CreatePipelines()
 	std::vector<EntryHandle> debug(maxMSAALevels);
 	std::vector<EntryHandle> normaldebug(maxMSAALevels);
 	std::vector<EntryHandle> skyboxPipeline(maxMSAALevels);
+	std::vector<EntryHandle> outlinePipeline(maxMSAALevels);
 
 
 	CreatePipelineFromGraphAndSpec(&pipelineInfos[0], vulkanShaderGraphs.shaderGraphPtrs[14], skyboxPipeline);
@@ -908,6 +945,7 @@ void RenderInstance::CreatePipelines()
 	CreatePipelineFromGraphAndSpec(&pipelineInfos[2], vulkanShaderGraphs.shaderGraphPtrs[5], debug);
 	CreatePipelineFromGraphAndSpec(&pipelineInfos[3], vulkanShaderGraphs.shaderGraphPtrs[13], normaldebug);
 	CreatePipelineFromGraphAndSpec(&pipelineInfos[4], vulkanShaderGraphs.shaderGraphPtrs[1], l);
+	CreatePipelineFromGraphAndSpec(&pipelineInfos[5], vulkanShaderGraphs.shaderGraphPtrs[15], outlinePipeline);
 	pipelinesIdentifier[GENERIC] = r;
 	
 	pipelinesIdentifier[TEXT] = l;
@@ -917,6 +955,8 @@ void RenderInstance::CreatePipelines()
 	pipelinesIdentifier[13] = normaldebug;
 
 	pipelinesIdentifier[14] = skyboxPipeline;
+
+	pipelinesIdentifier[15] = outlinePipeline;
 
 }
 
@@ -1013,7 +1053,11 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 	pipelineBuilder->CreateColorBlending(VK_LOGIC_OP_COPY);
 
-	pipelineBuilder->CreateDepthStencil(API::ConvertDepthTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthWrite);
+
+	VkStencilOpState frontState = API::ConvertFaceStencilDataToVulkan(stateInfo->frontFace);
+	VkStencilOpState backState = API::ConvertFaceStencilDataToVulkan(stateInfo->backFace);
+
+	pipelineBuilder->CreateDepthStencil(API::ConvertRasterizerTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
 	{
@@ -1723,7 +1767,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 
 
-	std::array<VkFormat, 3> formats = { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT };
+	std::array<VkFormat, 3> formats = {  VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT };
 
 	VkFormat depthFormatVK = VK::Utils::findSupportedFormat(majorDevice->gpu,
 		formats.data(),

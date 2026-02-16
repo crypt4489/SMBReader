@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<ShaderGraph>
+	<GLSLShader type="vert">
+		outline.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		outline.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="uniform" used="vf">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="image2D" used="vf" count="1024">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="sampler" used="vf" count="1">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="v" size="16" offset="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="constantbuffer" used="v" size="4" offset="16">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="vf" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>
