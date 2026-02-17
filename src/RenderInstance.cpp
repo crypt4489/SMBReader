@@ -966,7 +966,6 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 	std::vector<EntryHandle> layoutHandles(graph->resourceSetCount);
 	std::vector<EntryHandle> shaderHandle(graph->shaderMapCount);
-	std::vector<ShaderResource*> pushConstants(graph->resourceCount);
 
 	for (int i = 0; i < graph->shaderMapCount; i++)
 	{
@@ -982,14 +981,33 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 	int pushConstantRangeCount = 0;
 
+	std::array<int, 2> pushConstantsSizes = { 0, 0 };
+	std::array<int, 2> pushConstantsOffsets = { 0, 0 };
+	std::array<VkShaderStageFlags, 2> shaderStages = { VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT };
+
+	int validVertex = 0, validFragment = 0;
+
 	for (int i = 0; i < graph->resourceCount; i++)
 	{
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(i);
 		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
 		{
-			pushConstants[pushConstantRangeCount++] = resource;
+			if (resource->stages & VERTEXSHADERSTAGE)
+			{
+				pushConstantsSizes[0] += resource->size;
+				pushConstantsOffsets[0] = std::min(pushConstantsOffsets[0], resource->offset);
+				validVertex = 1;
+			}
+			if (resource->stages & FRAGMENTSHADERSTAGE)
+			{
+				pushConstantsSizes[1] += resource->size;
+				pushConstantsOffsets[1] = std::min(pushConstantsOffsets[1], resource->offset);
+				validFragment = 1;
+			}
+		
 		}
 	}
+
 
 
 	int j = graph->resourceCount;
@@ -997,14 +1015,15 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 
 
-	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, pushConstantRangeCount);
+	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, validFragment + validVertex);
 
 
-	for (int i = 0; i < pushConstantRangeCount; i++)
+	for (int i = 0; i < 2; i++)
 	{
-		ShaderResource* resource = pushConstants[i];
-		pipelineBuilder->AddPushConstantRange(resource->offset, resource->size, API::ConvertShaderStageToVulkanShaderStage(resource->stages), i);
-
+		if (pushConstantsSizes[i])
+		{
+			pipelineBuilder->AddPushConstantRange(pushConstantsOffsets[i], pushConstantsSizes[i], shaderStages[i], i);
+		}
 	}
 
 

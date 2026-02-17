@@ -17,8 +17,10 @@ layout(set = 0, binding = 0) buffer Counts {
 
 struct LightSource
 {
-	vec4 color; //w is theta
+	vec4 color; //w is intensity;
 	vec4 pos; //w is radius for point right
+	vec4 direction; //w is unused;
+	vec4 ancillary; //for spot, x, y are cosine theta cutoffs
 };
 
 
@@ -26,6 +28,8 @@ layout(set = 0, binding = 1) readonly buffer GLBuffer {
     LightSource objects[];
 } lightBuffer;
 
+
+layout(set = 0, binding = 2) uniform usamplerBuffer globalLightTypes;
 
 bool SphereIntersectsAABB(vec3 center, float r, vec3 minn, vec3 maxx)
 {
@@ -38,14 +42,8 @@ bool SphereIntersectsAABB(vec3 center, float r, vec3 minn, vec3 maxx)
 }
 
 
-layout (local_size_x = 4, local_size_y = 1, local_size_z = 1) in;
-
-void main()
+void HandlePointLightAssignment(uint lIndex)
 {
-
-	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
-	uint lIndex =  gl_LocalInvocationID.x;
-
     vec4 posLoad = lightBuffer.objects[lIndex].pos;
     vec3 posReal = posLoad.xyz;
     float r = posLoad.w;
@@ -54,9 +52,8 @@ void main()
 
     vec3 AABBMin = clamp(posReal - vec3(r), gs.grid.min.xyz, gs.grid.max.xyz);
     vec3 AABBMax = clamp(posReal + vec3(r), gs.grid.min.xyz, gs.grid.max.xyz);
-
-
-    if (any(lessThan(AABBMax, AABBMin)))
+      
+     if (any(lessThan(AABBMax, AABBMin)))
         return;
 
     
@@ -78,17 +75,143 @@ void main()
 
                 vec3 gridMinPoints = (vec3(x, y, z) * cellDiv) + gs.grid.min.xyz;
                 vec3 gridMaxPoints = gridMinPoints + cellDiv;
-                
+
                 if (SphereIntersectsAABB(posReal, r, gridMinPoints, gridMaxPoints)) {
                     uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
                     atomicAdd(counts.countsAtN[insertIndex], 1);
-                } 
-                
-                
+                }  
             }
         }
     }
-   
+}
+
+void HandleDirectionalLight(uint lIndex)
+{
+    for (uint x = 0; x<gs.grid.numberOfDivisions; x++)
+    {
+        for (uint y = 0; y<gs.grid.numberOfDivisions; y++)
+        {
+            for (uint z = 0; z<gs.grid.numberOfDivisions; z++)
+            {
+                uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
+                atomicAdd(counts.countsAtN[insertIndex], 1);
+            }
+        }
+    }
+
+}
+
+
+
+bool RayIntersectAABB(vec3 start, vec3 rayDir, vec3 aabbMin, vec3 aabbMax, float rayDist)
+{
+    vec3 end = start + rayDist * rayDir;
+
+    vec3 aabbCenter = (aabbMin + aabbMax) * 0.5;
+    vec3 halfextents = aabbMax - aabbCenter;
+
+    vec3 segmid = (end + start) * 0.5;
+
+    vec3 seghe = (end - segmid);
+
+    segmid = segmid - aabbCenter;
+
+    vec3 ad = abs(seghe);
+
+    vec3 adTemp = ad + halfextents;
+
+    if (any(greaterThan(abs(segmid), adTemp)))
+    {
+        return false;
+    }
+
+    ad += 0.0001;
+
+    vec3 computeOut = vec3(0);
+    vec3 computeOut2 = vec3(0);
+
+    computeOut.x = abs(segmid.y * seghe.z - segmid.z * seghe.y);
+    computeOut.y = abs(segmid.z * seghe.x - segmid.x * seghe.z);
+    computeOut.z = abs(segmid.x * seghe.y - segmid.y * seghe.x);
+
+    computeOut2.x = halfextents.y * ad.z + halfextents.z * ad.y;
+    computeOut2.y = halfextents.x * ad.z + halfextents.z * ad.x;
+    computeOut2.z = halfextents.x * ad.y + halfextents.y * ad.x;
+
+    if (any(greaterThan(computeOut, computeOut2)))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+void HandleSpotLightAssignment(uint lIndex)
+{
+    vec4 posLoad = lightBuffer.objects[lIndex].pos;
+    vec3 posReal = posLoad.xyz;
+    float r = posLoad.w;
+    vec3 lightDir = lightBuffer.objects[lIndex].direction.xyz;
+
+
+    vec3 AABBStart = clamp(posReal, gs.grid.min.xyz, gs.grid.max.xyz);
+    vec3 AABBStop = clamp(posReal + (lightDir * r), gs.grid.min.xyz, gs.grid.max.xyz);
+      
+    vec3 AABBMin = min(AABBStart, AABBStop);
+    vec3 AABBMax = max(AABBStart, AABBStop);
+
+    
+    vec4 range = gs.grid.max - gs.grid.min;
+    vec3 cellDiv = range.xyz / float(gs.grid.numberOfDivisions);
+
+    ivec3 cellsMin = ivec3(floor((AABBMin - gs.grid.min.xyz) / cellDiv));
+    ivec3 cellsMax = ivec3(floor((AABBMax - gs.grid.min.xyz) / cellDiv));
+
+    cellsMin = clamp(cellsMin, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    cellsMax = clamp(cellsMax, ivec3(0), ivec3(gs.grid.numberOfDivisions - 1));
+    
+    for (uint x = cellsMin.x; x<=cellsMax.x; x++)
+    {
+        for (uint y = cellsMin.y; y<=cellsMax.y; y++)
+        {
+            for (uint z = cellsMin.z; z<=cellsMax.z; z++)
+            {
+
+                vec3 gridMinPoints = (vec3(x, y, z) * cellDiv) + gs.grid.min.xyz;
+                vec3 gridMaxPoints = gridMinPoints + cellDiv;
+
+                if (RayIntersectAABB(posReal, lightDir, gridMinPoints, gridMaxPoints, r)) {
+                     uint insertIndex = (x * gs.grid.numberOfDivisions * gs.grid.numberOfDivisions) + (y * gs.grid.numberOfDivisions) + z;
+                    atomicAdd(counts.countsAtN[insertIndex], 1);
+                }  
+            }
+        }
+    }
+}
+
+
+layout (local_size_x = 6, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+
+	//uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    uint lType = uint(texelFetch(globalLightTypes, int(lIndex)).r);
+    
+    if (lType == 0)
+    {
+        HandleDirectionalLight(lIndex);
+    }
+    else if (lType == 1)
+    {
+        HandlePointLightAssignment(lIndex);
+    }
+    else if (lType == 2)
+    {
+       HandleSpotLightAssignment(lIndex);
+    }
   
 	return;
 }

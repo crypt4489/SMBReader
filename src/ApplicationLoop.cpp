@@ -73,17 +73,43 @@ struct WorldSpaceGPUPartition
 	int postWorldSpaceDivisionDescriptor; //for assigning all the slots
 	int postWorldSpaceDivisionPipeline;
 	int worldSpaceDivisionAlloc; //where all the assignments go 
-	//EntryHandle worldSpaceDivisonView;
-	//EntryHandle deviceOffsetsView;
-	//EntryHandle deviceCountsView;
-}; 
+};
+
+enum class LightType
+{
+	DIRECTIONAL = 0,
+	POINT = 1,
+	SPOT = 2,
+};
 
 struct LightSource
 {
-	Vector4f color; //w is theta
+	Vector4f color; //w is intensity;
 	Vector4f pos; //w is radius for point right
+	Vector4f direction; //w is unused;
+	Vector4f ancillary; //for spot, x, y are cosine theta cutoffs
 };
 
+
+LightSource mainDirectionalLight =
+{
+	Vector4f(1.0, 0.0, 0.0, 10.5),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(0.0, -1.0, 0.0, 1.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+};
+
+
+LightSource mainSpotLight =
+{
+	Vector4f(0.0, 0.0, 1.0, 50.5),
+	Vector4f(0.0,-4.0, 2.0,15.0),
+	Vector4f(0.0, 1.0, 0.0, 0.0),
+	Vector4f(DegToRad(10.0),DegToRad(20.0),0.0,0.0),
+};
+
+
+std::array<LightSource, 10> lightsReadBack;
 
 static IndirectDrawData mainIndirectDrawData;
 
@@ -110,8 +136,6 @@ static int globalLightSize = (1024 * KiB) / sizeof(LightSource);
 
 static int globalLightTypesBuffer = 0;
 static int globalLightTypesBufferSize = globalLightSize * sizeof(uint32_t);
-
-std::array<int, 125> tempArr;
 
 static int normalDebugAlloc;
 
@@ -594,6 +618,15 @@ void ApplicationLoop::Execute()
 
 			frameCounter++;
 
+
+			//std::array<LightSource, 10> lightsReadBack;
+
+			std::array<Handles, 10> meshHandles;
+
+			//GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, meshHandles.data(), sizeof(Handles) * 6, 0);
+
+
+			int size = meshHandles.size();
 			
 		}
 	}
@@ -1568,7 +1601,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	globalLightBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	globalLightTypesBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightTypesBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalLightTypesBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightTypesBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
 	lightAssignment.totalElementsCount = 125;
 	lightAssignment.totalSumsNeeded = (int)ceil(lightAssignment.totalElementsCount / 2048.0f);
@@ -1672,6 +1705,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, lightAssignment.deviceCountsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.preWorldSpaceDivisionDescriptor, globalLightTypesBuffer, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -1694,6 +1729,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.deviceOffsetsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightTypesBuffer, 3, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, 0);
@@ -1722,6 +1758,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceOffsetsAlloc, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceCountsAlloc, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(cullLightDescriptor, globalLightBuffer, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
 	ShaderComputeLayout* layout = GlobalRenderer::gRenderInstance->GetComputeLayout(4);
@@ -1751,6 +1788,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	std::array<int, 1> indirectDrawDescriptors = {
 		mainIndirectDrawData.indirectDrawDescriptor,
@@ -1813,12 +1851,32 @@ void ApplicationLoop::InitializeRuntime()
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 	
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&source1, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&mainSpotLight, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	
 	GlobalRenderer::gRenderInstance->transferPool.Create(&source2, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance->transferPool.Create(&source4, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&mainDirectionalLight, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&source1, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 	
+
+	LightType ltype = LightType::POINT;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 5, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t)* 1, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t)* 2, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t)* 3, TransferType::CACHED);
+
+	ltype = LightType::DIRECTIONAL;
+	
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 4, TransferType::CACHED);
+
+	ltype = LightType::SPOT;
+
+	
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 0, TransferType::CACHED);
+
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();

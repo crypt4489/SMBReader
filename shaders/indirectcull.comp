@@ -37,8 +37,10 @@ struct Frustrum
 
 struct LightSource
 {
-	vec4 color; //w is theta
-	vec4 pos; //w is radius for point light
+	vec4 color; //w is intensity;
+	vec4 pos; //w is radius for point right
+	vec4 direction; //w is unused;
+	vec4 ancillary; //for spot, x, y are cosine theta cutoffs
 };
 
 Plane ComputePlane(vec3 normal, vec4 pip)
@@ -150,6 +152,8 @@ layout(set = 1, binding = 2) uniform usamplerBuffer globalLightAllocations;
 layout(set = 1, binding = 3) readonly buffer GLBuffer {
     LightSource objects[];
 } lightBuffer;
+
+layout(set = 1, binding = 4) uniform usamplerBuffer globalLightTypes;
 
 AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
 {
@@ -316,6 +320,46 @@ bool CheckAllPlanesAgainstSphere(uint index)
 }
 
 
+bool RayIntersectSphere(vec3 start, vec3 rayDir, vec3 sphere, float r, float rayDist)
+{
+    vec3 m = start - sphere;
+    float b = dot(m, rayDir);
+    float c = dot(m, m) - r*r;
+    if ((c > 0.0 && b > 0.0)) return false;
+    float disc = b*b-c;
+    if (disc<0.0) return false;
+    float t = -b - sqrt(disc);
+
+    if (t >= rayDist) return false;
+
+    return true;
+}
+
+
+bool SphereIntersectsAABB(vec3 center, float r, vec3 minn, vec3 maxx)
+{
+    vec3 minnBound = minn - min(minn, center);
+    vec3 maxxBound = max(maxx, center)-maxx;
+
+    float d = dot(minnBound, minnBound) + dot(maxxBound, maxxBound);
+
+    return d <= r * r;
+}
+
+bool ConeIntersectSphere(vec3 start, vec3 rayDir, vec3 sphere, float r, float rayDist, float outerAngle)
+{
+    vec3 V = sphere - start;
+    float b = dot(V, V);
+    float c = dot(V, rayDir);
+
+    float distClosest = cos(outerAngle) * sqrt(b - c*c) - c * sin(outerAngle);
+
+    bool angleCull = distClosest > r;
+    bool frontCull = c > (r + rayDist);
+    bool backCull = c < -r;
+
+    return !(angleCull || frontCull || backCull);
+}
 
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
@@ -377,22 +421,44 @@ void main()
     {
         uint lightIndex = texelFetch(globalLightAllocations, int(lightOffsets+i)).r;
 
-        vec4 posLoad = lightBuffer.objects[lightIndex].pos;
+        uint lType = uint(texelFetch(globalLightTypes, int(lightIndex)).r);
 
-        float lR = posLoad.w;
-        vec3 posTest = posLoad.xyz;
-
-        posTest = sphereWPos - posTest;
-
-        float totalRadius = lR + r;
-
-        float d = dot(posTest, posTest);
-
-        if (d <= totalRadius * totalRadius)
+        if (lType == 0)
         {
             perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
             lightMeshCount++;
+        }
+        else if (lType == 1)
+        {
+            vec4 posLoad = lightBuffer.objects[lightIndex].pos;
 
+            float lR = posLoad.w;
+            vec3 posTest = posLoad.xyz;
+
+            posTest = sphereWPos - posTest;
+
+            float totalRadius = lR + r;
+
+            float d = dot(posTest, posTest);
+
+            if (d <= totalRadius * totalRadius)
+            {
+                perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+                lightMeshCount++;
+            }
+        }
+        else if (lType == 2)
+        {
+            vec4 posLoad = lightBuffer.objects[lightIndex].pos;
+            vec3 dirLoad = lightBuffer.objects[lightIndex].direction.xyz;
+
+            bool addToLights = ConeIntersectSphere(posLoad.xyz, dirLoad, sphereWPos, r, posLoad.w, lightBuffer.objects[lightIndex].ancillary.y);
+
+            if (addToLights)
+            {
+                perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+                lightMeshCount++;
+            }
         }
     }
 

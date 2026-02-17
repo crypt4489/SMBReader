@@ -25,6 +25,8 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="f" rw="read">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="f" rw="read">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
 
