@@ -8,6 +8,7 @@ const uint TEXTURES2 = 4u;
 const uint TEXTURES3 = 8u;
 const uint NORMAL = 16u;
 const uint BONES2 = 32u;
+const uint COLOR = 64u;
 const uint COMPRESSED = 0x80000000u;
 
 const float dx = 3.051851e-05;
@@ -29,14 +30,14 @@ struct AABB
 struct PerModel
 {
     uint vertexComponents;
-    uint numHandles;
+    uint numMaterials;
     uint vertexStride;
     uint indexCount;
 	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
     uint lightCount;
-    uint textureHandles[4];
+    uint materialHandles[4];
     uint lightIndex[4];
     mat4 m;
     AABB minMaxBox;
@@ -228,6 +229,12 @@ void main() {
         if ((comp&NORMAL)==NORMAL)
         {
             offset += 4;
+        }
+
+        if ((comp&COLOR)==COLOR)
+        {
+       
+            offset += 16;
         }
 
         if ((comp & POSITION) == POSITION)

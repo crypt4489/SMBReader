@@ -8,6 +8,7 @@ const uint TEXTURES2 = 4u;
 const uint TEXTURES3 = 8u;
 const uint NORMAL = 16u;
 const uint BONES2 = 32u;
+const uint COLOR = 64u;
 const uint COMPRESSED = 0x80000000u;
 
 const float dx = 3.051851e-05;
@@ -26,14 +27,14 @@ struct AABB
 struct PerModel
 {
     uint vertexComponents;
-    uint numHandles;
+    uint numMaterials;
     uint vertexStride;
     uint indexCount;
 	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
     uint lightCount;
-    uint textureHandles[4];
+    uint materialHandles[4];
     uint lightIndex[4];
     mat4 m;
     AABB minMaxBox;
@@ -65,7 +66,8 @@ layout(location = 0) out vec3 position;
 layout(location = 1) out vec2 texCoords;
 layout(location = 2) out vec2 texCoords2;
 layout(location = 3) out vec3 normal;
-layout(location = 4) flat out uint modelIndex;
+layout(location = 4) out vec4 outColor;
+layout(location = 5) flat out uint modelIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -196,12 +198,13 @@ void main() {
     texCoords = vec2(0.0, 0.0);
     texCoords2 = vec2(0.0, 0.0);
     normal = vec3(0.0);
+    outColor = vec4(0.0);
 
     uint stride = modelData.vertexStride;
 
     uint offset = (stride * gl_VertexIndex) + modelData.vertexByteOffset;
 
-    
+   
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -227,6 +230,12 @@ void main() {
         {
             normal = normalize(convertnormal(offset));
             offset += 4;
+        }
+
+        if ((comp&COLOR)==COLOR)
+        {
+            outColor = ReconstructVEC4(offset);
+            offset += 16;
         }
 
         if ((comp & POSITION) == POSITION)

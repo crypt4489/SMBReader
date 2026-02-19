@@ -26,14 +26,14 @@ struct AABB
 struct PerModel
 {
     uint vertexComponents;
-    uint numHandles;
+    uint numMaterials;
     uint vertexStride;
     uint indexCount;
 	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
     uint lightCount;
-    uint textureHandles[4];
+    uint materialHandles[4];
     uint lightIndex[4];
     mat4 m;
     AABB minMaxBox;

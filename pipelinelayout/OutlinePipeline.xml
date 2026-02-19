@@ -6,6 +6,8 @@
 	</CullMode>
 	<DepthTest op="less" write="true">
 	</DepthTest>
-	<FrontStencilTest failop="keep" passop="keep" depthfailop="keep" compareop="equal" writemask="255" comparemask="255" ref="0">
+	<FrontStencilTest failop="keep" passop="keep" depthfailop="keep" compareop="notequal" writemask="0" comparemask="255" ref="1">
 	</FrontStencilTest>
+	<BackStencilTest failop="keep" passop="keep" depthfailop="keep" compareop="notequal" writemask="0" comparemask="255" ref="1">
+	</BackStencilTest>
 </PipelineDescription>

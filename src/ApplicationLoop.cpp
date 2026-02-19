@@ -22,17 +22,36 @@ std::array<std::string, 4> commandsStrings =
 	"positiong",
 };
 
+enum MaterialFlags
+{
+	MATERIALCOLOR = 1,
+	VERTEXCOLOR = 2,
+	ALBEDOMAPPED = 4,
+	NORMALMAPPED = 8,
+	VERTEXNORMAL = 16
+};
+
+struct Material
+{
+	int materialFlags;
+	int unused1;
+	int unused2;
+	int unused3;
+	Vector4f albedoColor;
+	Vector4ui textureHandles; // y - normalMapCoordinates // x- albedo
+};
+
 struct Handles
 {
 	int vertexFlags;
-	int numHandles;
+	int numMaterials;
 	int stride;
 	int indexCount;
 	int instanceCount;
 	int firstIndex;
 	int vertexByteOffset;
 	int lightCount;
-	int handles[4];
+	int materialHandles[4];
 	int lightIndex[4];
 	Matrix4f m;
 	AxisBox minMaxBox;
@@ -105,11 +124,9 @@ LightSource mainSpotLight =
 	Vector4f(0.0, 0.0, 1.0, 50.5),
 	Vector4f(0.0,-4.0, 2.0,15.0),
 	Vector4f(0.0, 1.0, 0.0, 0.0),
-	Vector4f(DegToRad(10.0),DegToRad(20.0),0.0,0.0),
+	Vector4f(DegToRad(5.0),DegToRad(5.0),0.0,0.0),
 };
 
-
-std::array<LightSource, 10> lightsReadBack;
 
 static IndirectDrawData mainIndirectDrawData;
 
@@ -161,6 +178,10 @@ static int globalTexturesDescriptor;
 
 static int globalMeshLocation;
 static int globalMeshSize = 24 * KiB;
+
+static int globalMaterialsLocation; 
+static int globalMaterialsSize = 4 * KiB;
+static int globalMaterialsIndex = 0;
 
 static char vertexAndIndicesMemory[16 * MiB];
 static char meshObjectSpecificMemory[2 * MiB];
@@ -506,7 +527,14 @@ void ApplicationLoop::Execute()
 
 		GlobalRenderer::gRenderInstance->EndFrame();
 
-		static int what2 = 0;
+		float x = 230.0f;
+
+		source3.pos.x = wow.x + cosf(DegToRad(-90.0f)) * 5.0f;
+		source3.pos.y = 0.0f;
+		source3.pos.z = wow.z + -sinf(DegToRad(-90.0f)) * 10.0f;
+
+		GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
+
 
 		while (running)
 		{
@@ -538,7 +566,6 @@ void ApplicationLoop::Execute()
 				if (!updatedCommand || cameraMove) {
 					updatedCommand = 3;
 					GlobalRenderer::gRenderInstance->transferCommandPool.Create(8, mainIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
-					//GlobalRenderer::gRenderInstance->transferCommandPool.Create(4, mainIndirectDrawData.commandBufferCountAlloc, 4, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
 				}
 
 				updatedCommand--;
@@ -565,7 +592,6 @@ void ApplicationLoop::Execute()
 				if (!updatedDebugCommand || cameraMove)
 				{
 					GlobalRenderer::gRenderInstance->transferCommandPool.Create(8, debugIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
-					//GlobalRenderer::gRenderInstance->transferCommandPool.Create(4, debugIndirectDrawData.commandBufferCountAlloc, 4, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
 					updatedDebugCommand = 3;
 				}
 				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
@@ -582,8 +608,6 @@ void ApplicationLoop::Execute()
 				UpdateCameraMatrix();
 				continue;
 			}
-
-			//UpdateThisThing();
 
 			auto index = GlobalRenderer::gRenderInstance->BeginFrame();
 
@@ -604,29 +628,9 @@ void ApplicationLoop::Execute()
 
 			ThreadManager::ASyncThreadsDone();
 
-			int what = fps();
-
-			static float x = 230.0f;
-			
-			source3.pos.x = wow.x + cosf(DegToRad(-90.0f)) * 5.0f;
-			source3.pos.y = 0.0f;
-			source3.pos.z = wow.z + -sinf(DegToRad(-90.0f)) * 10.0f;
-
-			GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
-
-			x += 0.01f;
+			fps();
 
 			frameCounter++;
-
-
-			//std::array<LightSource, 10> lightsReadBack;
-
-			std::array<Handles, 10> meshHandles;
-
-			//GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, meshHandles.data(), sizeof(Handles) * 6, 0);
-
-
-			int size = meshHandles.size();
 			
 		}
 	}
@@ -766,12 +770,297 @@ enum VertexComponents
 	TEXTURES3 = 8,
 	NORMAL = 16,
 	BONES2 = 32,
+	COLOR = 64,
 	COMPRESSED = 0x80000000,
 };
 
 std::atomic<float> geoX = 0.0f;
 
 void ReadImage(std::string* name, int count);
+
+
+
+static Vector3s pack6comp(float* vector, AxisBox& box)
+{
+	float x = vector[0];
+	float y = vector[1];
+	float z = vector[2];
+
+	float x1 = ((((x - box.min.x) / (box.max.x - box.min.x)) * 2.0) - 1.0);
+	float y1 = ((((y - box.min.y) / (box.max.y - box.min.y)) * 2.0) - 1.0);
+	float z1 = ((((z - box.min.z) / (box.max.z - box.min.z)) * 2.0) - 1.0);
+
+	int16_t xs = x1 * 32767;
+	int16_t ys = y1 * 32767;
+	int16_t zs = z1 * 32767;
+   
+	return Vector3s(xs, ys, zs);
+}
+
+static Vector3f convertnormal(int32_t normal)
+{
+
+	float denom = pow(2.0, 31.0);
+
+	float x = float(normal << 21) * 1.0 / denom;
+	float y = float((normal << 10) & 0xfffff800) * 1.0 / denom;
+	float z = float((normal & 0xffc00000)) * 1.0 / (denom - 1.0);
+
+	return Vector3f(x, y, z);
+}
+
+static uint32_t compressnormal(Vector3f normal)
+{
+	uint32_t reg = 0;
+
+	float denom = pow(2.0, 31.0);
+
+	float x = normal.x;
+	float y = normal.y;
+	float z = normal.z;
+
+	int16_t xs = (1023 * x);
+	int16_t ys = (1023 * y);
+	int16_t zs = (511 * z);
+
+	reg = ((zs & 0x3ff) << 22) | ((ys & 0x7ff) << 11) | ((xs & 0x7ff));
+
+	return reg;
+}
+
+void ApplicationLoop::CreateCrateObject()
+{
+	static uint16_t BoxIndices[52] = {
+		2,  1,  0, 1, 
+		1,  2,  3, 3, 4,
+		4,  5,  6, 6,
+		7,  6,  5, 5, 8,
+		8,  9,  10, 10,
+		11, 10, 9, 9, 14,
+	   14, 13, 12, 13,
+	   13, 14, 15, 15, 18,
+	   18, 17, 16, 17,
+	   17, 18, 19, 19, 20,
+	   20, 21, 22, 22,
+	   23, 22, 21
+	};
+
+	static Vector4f BoxVerts[24] =
+	{
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0)
+	};
+
+
+	static Vector4f BoxColors[24] =
+	{
+		Vector4f(1,0,0,1),
+		Vector4f(1,0,0,1),
+		Vector4f(1,0,0,1),
+		Vector4f(1,0,0,1),
+
+	
+		Vector4f(0,1,0,1),
+		Vector4f(0,1,0,1),
+		Vector4f(0,1,0,1),
+		Vector4f(0,1,0,1),
+
+		
+		Vector4f(0,0,1,1),
+		Vector4f(0,0,1,1),
+		Vector4f(0,0,1,1),
+		Vector4f(0,0,1,1),
+
+		
+		Vector4f(1,1,0,1),
+		Vector4f(1,1,0,1),
+		Vector4f(1,1,0,1),
+		Vector4f(1,1,0,1),
+
+		
+		Vector4f(1,0,1,1),
+		Vector4f(1,0,1,1),
+		Vector4f(1,0,1,1),
+		Vector4f(1,0,1,1),
+
+		
+		Vector4f(0,1,1,1),
+		Vector4f(0,1,1,1),
+		Vector4f(0,1,1,1),
+		Vector4f(0,1,1,1),
+	};
+
+	Vector3f totalNormals[24] = {
+
+
+		Vector3f(1.0, 0.0, 0.0),
+		Vector3f(1.0, 0.0, 0.0),
+		Vector3f(1.0, 0.0, 0.0),
+		Vector3f(1.0, 0.0, 0.0),
+		Vector3f(-1.0, 0.0, 0.0),
+		Vector3f(-1.0, 0.0, 0.0),
+		Vector3f(-1.0, 0.0, 0.0),
+		Vector3f(-1.0, 0.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, 1.0, 0.0),
+		Vector3f(0.0, 1.0, 0.0),
+		Vector3f(0.0, 1.0, 0.0),
+		Vector3f(0.0, 1.0, 0.0),
+		Vector3f(0.0, 0.0, 1.0),
+		Vector3f(0.0, 0.0, 1.0),
+		Vector3f(0.0, 0.0, 1.0),
+		Vector3f(0.0, 0.0, 1.0),
+		Vector3f(0.0, 0.0, -1.0),
+		Vector3f(0.0, 0.0, -1.0),
+		Vector3f(0.0, 0.0, -1.0),
+		Vector3f(0.0, 0.0, -1.0),
+	};
+
+	
+#pragma pack(push, 1)
+	struct ColoredVertex
+	{
+		int32_t normalCoord;
+		Vector4f color;
+		Vector3s pos;
+		
+	};
+#pragma pack(pop)
+	ColoredVertex compVerts[24];
+
+	AxisBox BOX =
+	{
+		.min = Vector4f(-1.0, -1.0, -1.0, 0.0),
+		.max = Vector4f(1.0, 1.0, 1.0, 0.0),
+	};
+
+	for (int i = 0; i < 24; i++)
+	{
+		compVerts[i].pos = pack6comp(BoxVerts[i].comp, BOX);
+		compVerts[i].color = BoxColors[i];
+		compVerts[i].normalCoord = compressnormal(totalNormals[i]);
+		totalNormals[i] = convertnormal(compVerts[i].normalCoord);
+	}
+
+
+	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(compVerts), 64);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+
+	auto rendInst = GlobalRenderer::gRenderInstance;
+
+	rendInst->deviceMemoryUpdater.Create(compVerts, sizeof(compVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
+	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+
+	Mesh* mesh = nullptr;
+
+	uint32_t meshIndex;
+
+	std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
+
+	int indexCount = 52;
+
+	int vertexCount = 24;
+
+	mesh->indicesCount = indexCount;
+
+	mesh->verticesCount = vertexCount;
+
+	void* vertexData;
+
+	bool decompressed = false;
+
+	int vertexSize = sizeof(ColoredVertex);
+
+
+	mesh->vertexSize = vertexSize;
+
+	int vertexFlags = NORMAL | POSITION | COLOR;
+
+	vertexFlags |= COMPRESSED;
+
+	mesh->indexSize = 2;
+
+
+	mesh->meshInstanceLocalMemoryCount = 1;
+
+	Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
+
+	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
+
+	handles->numMaterials = 1;
+
+	mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
+	mesh->texuresCount = handles->numMaterials;
+
+	mesh->vertexId = globalVertexBuffer;
+	mesh->indexId = globalIndexBuffer;
+
+	handles->vertexFlags = vertexFlags;
+	handles->stride = vertexSize;
+
+	handles->indexCount = mesh->indicesCount;
+	handles->instanceCount = 1;
+	handles->firstIndex = indexAlloc / mesh->indexSize;
+	handles->vertexByteOffset = vertexAlloc;
+
+
+	Material material{};
+
+	material.albedoColor = Vector4f(1.0, 1.0, 1.0, 1.0);
+
+	material.materialFlags = VERTEXCOLOR | VERTEXNORMAL;
+
+	rendInst->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+
+	handles->materialHandles[0] = globalMaterialsIndex++;
+
+	Matrix4f crateMatrix = Identity4f();
+
+	crateMatrix.translate = Vector4f(-10.0, 5.0, 0.0f, 1.0f);
+
+	Sphere sphere;
+
+	sphere.sphere = Vector4f(0.0, 0.0, 0.0, 1.5f);
+
+	memcpy(&handles->minMaxBox, &BOX, sizeof(AxisBox));
+	memcpy(&handles->m, &crateMatrix, sizeof(Matrix4f));
+	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
+
+	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
+
+	mesh->meshInstanceDeviceMemoryCount = 1;
+	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
+
+	rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
+
+	mainIndirectDrawData.commandBufferCount++;
+
+}
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 {
@@ -927,12 +1216,12 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
 
-		handles->numHandles = geoDef->materialsCount[i];
+		handles->numMaterials = 1;
 
 		int base = geoDef->materialStart[i];
 
-		mesh->texturesStart = meshTextureHandles.AllocateN(handles->numHandles);
-		mesh->texuresCount = handles->numHandles;
+		mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
+		mesh->texuresCount = handles->numMaterials;
 
 		mesh->vertexId = globalVertexBuffer;
 		mesh->indexId = globalIndexBuffer;
@@ -945,12 +1234,25 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		handles->firstIndex = indexAlloc / mesh->indexSize;
 		handles->vertexByteOffset = vertexAlloc;
 
-		for (int ii = 0; ii < handles->numHandles; ii++)
-		{
-			handles->handles[ii] = geoDef->materialsId[base + ii];
-			if (handles->handles[ii] == -1) handles->handles[ii] = 0;
-			meshTextureHandles.Update(mesh->texturesStart + ii, handles->handles[ii]);
+
+		Material material{};
+
+		material.albedoColor = Vector4f(1.0, 1.0, 1.0, 1.0);
+
+		material.textureHandles.x = geoDef->materialsId[base];
+
+		material.materialFlags = ALBEDOMAPPED | ((geoDef->materialsCount[i] > 1) ? NORMALMAPPED : VERTEXNORMAL);
+
+		meshTextureHandles.Update(mesh->texturesStart + base + 0, material.textureHandles.x);
+
+		if (geoDef->materialsCount[i] > 1) {
+			material.textureHandles.y = geoDef->materialsId[base + 1];
+			meshTextureHandles.Update(mesh->texturesStart + base + 1, material.textureHandles.y);
 		}
+
+		rendInst->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+		
+		handles->materialHandles[0] = globalMaterialsIndex++;
 
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
 		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
@@ -1227,6 +1529,7 @@ void ApplicationLoop::InitializeRuntime()
 	globalTexturesDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	globalMeshLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMeshSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalMaterialsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialsSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 
@@ -1788,6 +2091,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialsLocation, 5, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	std::array<int, 1> indirectDrawDescriptors = {
@@ -1893,7 +2197,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	static Vector4f red = { 117.0, 94.0, 114.0, 1.0 };
+	static Vector4f red = { 0.0, 0.0, 0.0, 1.0 };
 
 	static float outlineLength = 1.025;
 
@@ -1920,6 +2224,9 @@ void ApplicationLoop::InitializeRuntime()
 	};
 
 	int outlinePipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&outlineDrawCreate, true);
+
+
+	CreateCrateObject();
 
 }
 

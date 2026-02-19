@@ -64,6 +64,7 @@ public:
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
+	void CreateCrateObject();
 
 	ProgramArgs& args;
 	Semaphore queueSema;
