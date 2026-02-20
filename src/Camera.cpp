@@ -79,13 +79,9 @@ void Camera::CreateCameraFrustrum(float _angle, float aspect, float near, float 
 	float angle = _angle * .5f;
 	float tanAngle = tanf(angle);
 
-	float nh;
+	float nh = near * tanAngle;
 
-	nh = 1.0f * tanAngle;
-
-	float nw;
-
-	nw = (aspect * nh);
+	float nw = (aspect * nh);
 
 	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, near, far);
 }
@@ -114,7 +110,7 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 	planes[0].ComputePlane(nearCenter, forward * -1.0);
 	planes[1].ComputePlane(farCenter, forward * -1.0);
 
-	
+	Vector4f normal;
 
 	Vector4f upTop = (up * _nearheight) + nearCenter;
 
@@ -122,11 +118,9 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 
 	xTop = Normalize(xTop);
 
-	upTop.x = xTop.x;
-	upTop.y = xTop.y;
-	upTop.z = xTop.z;
+	normal = Vector4f(xTop.x, xTop.y, xTop.z, 0.0);
 
-	planes[2].ComputePlane(upTop, Cross(upTop, right));
+	planes[2].ComputePlane(upTop, Cross(normal, right));
 	
 	Vector4f upBottom = nearCenter - (up * _nearheight);
 
@@ -134,11 +128,9 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 
 	xBottom = Normalize(xBottom);
 
-	upBottom.x = xBottom.x;
-	upBottom.y = xBottom.y;
-	upBottom.z = xBottom.z;
+	normal = Vector4f(xBottom.x, xBottom.y, xBottom.z, 0.0);
 
-	planes[3].ComputePlane(upBottom, Cross(right, upBottom));
+	planes[3].ComputePlane(upBottom, Cross(right, normal));
 
 
 	Vector4f rightSide =  nearCenter - (right * _nearwidth);
@@ -147,11 +139,9 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 
 	xRight = Normalize(xRight);
 
-	rightSide.x = xRight.x;
-	rightSide.y = xRight.y;
-	rightSide.z = xRight.z;
+	normal = Vector4f(rightSide.x, rightSide.y, rightSide.z, 0.0);
 
-	planes[4].ComputePlane(rightSide, Cross(rightSide, up));
+	planes[4].ComputePlane(rightSide, Cross(normal, up));
 
 	Vector4f leftSide = (right * _nearwidth) + nearCenter;
 
@@ -159,11 +149,9 @@ void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, 
 
 	xleft = Normalize(xleft);
 
-	leftSide.x = xleft.x;
-	leftSide.y = xleft.y;
-	leftSide.z = xleft.z;
+	normal = Vector4f(leftSide.x, leftSide.y, leftSide.z, 0.0);
 
-	planes[5].ComputePlane(leftSide, Cross(up, leftSide));
+	planes[5].ComputePlane(leftSide, Cross(up, normal));
 
 	planes[0].pointInPlane.w = 1.0f;
 	planes[1].pointInPlane.w = 1.0f;

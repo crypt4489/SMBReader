@@ -112,19 +112,19 @@ struct LightSource
 
 LightSource mainDirectionalLight =
 {
-	Vector4f(1.0, 0.0, 0.0, 10.5),
+	Vector4f(229.0, 211.0, 191.0, .01),
 	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(0.0, -1.0, 0.0, 1.0),
-	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(.75, -0.33, -.25, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
 };
 
 
 LightSource mainSpotLight =
 {
-	Vector4f(0.0, 0.0, 1.0, 50.5),
-	Vector4f(0.0,-4.0, 2.0,15.0),
-	Vector4f(0.0, 1.0, 0.0, 0.0),
-	Vector4f(DegToRad(5.0),DegToRad(5.0),0.0,0.0),
+	Vector4f(229.0, 211.0, 191.0, 100.5),
+	Vector4f(-10.0,5.0, 4.0,15.0),
+	Vector4f(0.0, 0.0, -1.0, 0.0),
+	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
 };
 
 
@@ -203,7 +203,7 @@ static TextureDictionary mainDictionary;
 
 Vector4f wow = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
 
-LightSource source3 = { .color = Vector4f(229, 211, 191, 1.0), .pos = wow };
+LightSource source3 = { .color = Vector4f(229, 211, 191, 130.0), .pos = wow, .direction= Vector4f(0.54,0.75,0.38,0.0), .ancillary= Vector4f(0.04,0.07,0.03,0.0) };
 
 #define MAX_GEOMETRY 2048
 #define MAX_MESHES 4096
@@ -628,6 +628,10 @@ void ApplicationLoop::Execute()
 
 			ThreadManager::ASyncThreadsDone();
 
+			std::array<Handles, 10> arr{};
+
+			GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, arr.data(), sizeof(Handles) * 10, 0);
+
 			fps();
 
 			frameCounter++;
@@ -803,8 +807,8 @@ static Vector3f convertnormal(int32_t normal)
 	float denom = pow(2.0, 31.0);
 
 	float x = float(normal << 21) * 1.0 / denom;
-	float y = float((normal << 10) & 0xfffff800) * 1.0 / denom;
-	float z = float((normal & 0xffc00000)) * 1.0 / (denom - 1.0);
+	float y = float((int)((normal << 10) & 0xfffff800)) * 1.0 / denom;
+	float z = float((int)(normal & 0xffc00000)) * 1.0 / (denom - 1.0);
 
 	return Vector3f(x, y, z);
 }
@@ -923,14 +927,15 @@ void ApplicationLoop::CreateCrateObject()
 		Vector3f(-1.0, 0.0, 0.0),
 		Vector3f(-1.0, 0.0, 0.0),
 		Vector3f(-1.0, 0.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
 		Vector3f(0.0, 1.0, 0.0),
 		Vector3f(0.0, 1.0, 0.0),
 		Vector3f(0.0, 1.0, 0.0),
 		Vector3f(0.0, 1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		Vector3f(0.0, -1.0, 0.0),
+		
 		Vector3f(0.0, 0.0, 1.0),
 		Vector3f(0.0, 0.0, 1.0),
 		Vector3f(0.0, 0.0, 1.0),
@@ -964,7 +969,6 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].pos = pack6comp(BoxVerts[i].comp, BOX);
 		compVerts[i].color = BoxColors[i];
 		compVerts[i].normalCoord = compressnormal(totalNormals[i]);
-		totalNormals[i] = convertnormal(compVerts[i].normalCoord);
 	}
 
 
@@ -1257,6 +1261,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
 		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
 		memcpy(&handles->sphere, &geoDef->spheres[i], sizeof(Vector4f));
+
+		handles->sphere.sphere.w += 3.5f;
 
 		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
 

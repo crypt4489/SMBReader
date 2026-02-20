@@ -1,7 +1,8 @@
 #version 460
 #extension GL_EXT_shader_8bit_storage : enable
 #extension GL_ARB_shader_draw_parameters : require
-
+#extension GL_EXT_debug_printf : enable
+#extension GL_EXT_spirv_intrinsics : enable
 const uint POSITION = 1u;
 const uint TEXTURES1 = 2u;
 const uint TEXTURES2 = 4u;
@@ -151,20 +152,29 @@ vec2 converttexcoords16(uint offset)
 
 vec3 convertnormal(uint offset)
 {
-    int lo = int(VertexData.vertexData[offset + 0]);
-    int lo2 = int(VertexData.vertexData[offset + 1]);
-    int hi = int(VertexData.vertexData[offset + 2]);
-    int hi2 = int(VertexData.vertexData[offset + 3]);
+    uint lo = uint(VertexData.vertexData[offset + 0]);
+    uint lo2 = uint(VertexData.vertexData[offset + 1]);
+    uint hi = uint(VertexData.vertexData[offset + 2]);
+    uint hi2 = uint(VertexData.vertexData[offset + 3]);
 
-    int normal = int((hi2<<24) | (hi<<16) | (lo2<<8) | (lo));
+    int normal = int(((hi2&0xff)<<24) | ((hi&0xff)<<16) | ((lo2&0xff)<<8) | (lo&0xff));
 
     float denom = pow(2.0, 31.0);
 
-    float x = float(normal << 21) * 1.0/denom;
-    float y = float((normal << 10) & 0xfffff800) * 1.0/denom;
-    float z = float((normal & 0xffc00000)) * 1.0/(denom-1.0);
+    int normx = normal << 21;
+    int normy = (normal << 10) & 0xfffff800;
+    int normz = (normal & 0xffc00000);
 
-    return vec3(x, y, z);
+
+    float x = float(normx) * (1.0/denom);
+    float y = float(normy) * (1.0/denom);
+    float z = float(normz) * (1.0/(denom-1.0));
+
+    vec3 ret = vec3(x, y, z);
+
+    
+
+    return ret;
 }
 
 vec3 pack6decomp(uint offset, PerModel model)
@@ -228,7 +238,7 @@ void main() {
 
         if ((comp&NORMAL)==NORMAL)
         {
-            normal = normalize(convertnormal(offset));
+            normal = convertnormal(offset);
             offset += 4;
         }
 

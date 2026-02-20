@@ -180,22 +180,20 @@ AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
     return outputAABB;
 }
 
-Frustrum transformFrustrum;
-
-void CalculateFrustrum()
+Frustrum CalculateFrustrum()
 {
+    Frustrum transformFrustrum;
     transformFrustrum.nearplane = TransformPlane(cData.world, cData.f.nearplane);
     transformFrustrum.farplane = TransformPlane(cData.world, cData.f.farplane);
     transformFrustrum.topplane = TransformPlane(cData.world, cData.f.topplane);
     transformFrustrum.bottomplane = TransformPlane(cData.world, cData.f.bottomplane);
     transformFrustrum.rightplane = TransformPlane(cData.world, cData.f.rightplane);
     transformFrustrum.leftplane = TransformPlane(cData.world, cData.f.leftplane);
+    return transformFrustrum;
 }
 
 bool CheckAllPlanesAgainstAABB(uint index)
 {
-
-    CalculateFrustrum();
 
     mat4 modelM = perModelBuffer.objects[index].m;
 
@@ -210,7 +208,7 @@ bool CheckAllPlanesAgainstAABB(uint index)
     vec4 AABBMin = min(transAABBMin, transAABBMax);
     vec4 AABBMax = max(transAABBMin, transAABBMax);
 
-    Frustrum testFrustrum = transformFrustrum; //cData.f
+    Frustrum testFrustrum = CalculateFrustrum();
 
     bool check = CheckAABB(AABBMin, AABBMax, testFrustrum.nearplane.planeEquation);
 
@@ -261,7 +259,7 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
 bool CheckAllPlanesAgainstSphere(uint index)
 {
-    CalculateFrustrum();
+    
 
     mat4 modelM = perModelBuffer.objects[index].m;
     vec4 sphere = perModelBuffer.objects[index].sphere;
@@ -269,7 +267,7 @@ bool CheckAllPlanesAgainstSphere(uint index)
 
     vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
 
-    Frustrum testFrustrum = transformFrustrum; //cData.f
+    Frustrum testFrustrum = CalculateFrustrum();
 
    float dist = DistanceFromPlane(testFrustrum.nearplane.planeEquation, transPosition);
 

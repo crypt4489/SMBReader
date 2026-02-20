@@ -149,15 +149,12 @@ void VKInstance::CreateRenderInstance(OperatingSystem system)
 	createInfo.pApplicationInfo = &appInfoStruct;
 	
 	VkValidationFeatureEnableEXT enables[] = {
-	VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
-	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,               
-	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
-	VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT
+	VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
 	};
 
 	VkValidationFeaturesEXT validationFeatures{};
 	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-	validationFeatures.enabledValidationFeatureCount = 1;
+	validationFeatures.enabledValidationFeatureCount = 0;
 	validationFeatures.pEnabledValidationFeatures = enables;
 
 	createInfo.pNext = &validationFeatures;
@@ -181,6 +178,7 @@ void VKInstance::CreateRenderInstance(OperatingSystem system)
 	instanceExtensions[2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
 	instanceExtensions[3] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
 	instanceExtensions[4] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+//	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
 //	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
 	
 	uint32_t instExtensionRequired = 0;
@@ -271,8 +269,10 @@ void VKInstance::CreateRenderInstance(OperatingSystem system)
 	instanceDebugInfo.pfnUserCallback = VK::Utils::debugCallback;
 	instanceDebugInfo.pUserData = nullptr;
 
+	
 
-	createInfo.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
+
+	validationFeatures.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
 
 	auto ret = (*allocator)();
 
@@ -311,7 +311,7 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 	memset(devices, 0, sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1));
 
-	deviceExtCount = 3;
+	deviceExtCount = 4;
 
 	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
 
@@ -320,6 +320,8 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 	deviceExtensions[1] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
 
 	deviceExtensions[2] = VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME;
+
+	deviceExtensions[3] = VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME;
 
 	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
 

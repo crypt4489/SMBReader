@@ -70,7 +70,7 @@ struct LightSource
 	vec4 color; //w is intensity;
 	vec4 pos; //w is radius for point right
 	vec4 direction; //w is unused;
-	vec4 ancillary; //for spot, x, y are cosine theta cutoffs
+	vec4 ancillary; //for spot, x, y are cosine theta cutoffs //ambient for directional
 };
 
 layout(set = 2, binding = 3) readonly buffer GLBuffer {
@@ -104,8 +104,10 @@ layout(set = 2, binding = 5) uniform MaterialContext {
 
 vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 {
+    if (modelData.lightCount == 0) return color;
 
     vec4 cumColor = vec4(0.0, 0.0, 0.0, 1.0);
+
     for (uint i = 0; i<modelData.lightCount; i++)
     {
         LightSource light = lightBuffer.objects[modelData.lightIndex[i]];
@@ -114,12 +116,13 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
         if (lType == 0)
         {
-            vec3 lightDir = -light.direction.xyz; 
+            vec3 lightDir = normalize(-light.direction.xyz); 
 
             float diffuse = max(dot(normal.xyz, lightDir), 0.0);
 
-            cumColor += vec4(light.color.xyz * diffuse * light.color.w, 1.0);
+            cumColor += ((vec4((light.color.xyz/255.0) * diffuse * light.color.w, 1.0) * color) + (color * vec4(light.ancillary.xyz, 1.0)));
         }
+        
         else if (lType == 1)
         {
             vec3 lightDir = normalize(light.pos.xyz - worldPos);
@@ -128,7 +131,9 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
             float distance = length(light.pos.xyz - worldPos);
 
-            cumColor += (vec4(light.color.xyz, 1.0) * diffuse * 1.0/(.01 + (.25 * distance) + (.67 * distance*distance)));
+            float attenuation = (1.0/(.01 + (.25 * distance) + (.67 * distance * distance)));
+
+            cumColor += (vec4((light.color.xyz/255.0) * light.color.w, 1.0) * diffuse * attenuation * color) + (vec4(light.ancillary.xyz, 1.0) * attenuation * color);
         }
         else if (lType == 2)
         {
@@ -138,7 +143,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
             lightLook /= distance;
 
-            vec3 lightDir = -light.direction.xyz;
+            vec3 lightDir = normalize(-light.direction.xyz);
 
             float diffuse = max(dot(normal.xyz, lightDir), 0.0);
 
@@ -146,11 +151,11 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
             float spotFactor = smoothstep(cos(light.ancillary.y), cos(light.ancillary.x), cosTheta);
 
-            cumColor += (vec4(light.color.xyz * light.color.w, 1.0) * diffuse * spotFactor * (1.0/(distance*distance)));
+            cumColor += (vec4((light.color.xyz/255.0) * light.color.w, 1.0) * diffuse * spotFactor * (1.0/(distance*distance)) * color);
         }
     }
 
-    return color * cumColor;
+    return vec4(cumColor.xyz, 1.0);
 }
 
 void main() {
