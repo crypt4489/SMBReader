@@ -4,6 +4,7 @@ struct UniformGrid
     vec4 max;
     vec4 min;
 	uint numberOfDivisions;
+    uint numberOfLights;
 };
 
 
@@ -44,7 +45,7 @@ layout(set = 0, binding = 3) uniform usamplerBuffer globalLightTypes;
 
 
 
-layout (local_size_x = 6, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 
 
 void HandlePointLightAssignment(uint lIndex)
@@ -200,7 +201,9 @@ void HandleSpotLightAssignment(uint lIndex)
 void main()
 {
 
-	uint lIndex =  gl_LocalInvocationID.x;
+	uint lIndex =  (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
+
+    if (lIndex >= gs.grid.numberOfLights) return;
 
     uint lType = uint(texelFetch(globalLightTypes, int(lIndex)).r);
     

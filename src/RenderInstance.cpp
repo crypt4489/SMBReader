@@ -921,7 +921,7 @@ void RenderInstance::CreatePipelines()
 
 	int computeIter = 0;
 
-	for (int i = 0; i < 14; i++)
+	for (int i = 0; i < 16; i++)
 	{
 		ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[i];
 		ShaderMap* map = (ShaderMap*)graph->GetMap(0);
@@ -1940,8 +1940,15 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 		case ShaderResourceType::UNIFORM_BUFFER:
 		{
 			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
-			auto alloc = allocations[buffer->allocation];
-			dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset + buffer->offset));
+			if (buffer->allocation >= 0)
+			{
+			
+				auto alloc = allocations[buffer->allocation];
+				dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset + buffer->offset));
+			}
+			else {
+				dynamicOffsets.push_back(0);
+			}
 			size++;
 			break;
 		}
@@ -2013,6 +2020,8 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::STORAGE_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
+				if (buffer->allocation < 0) break;
+
 				auto alloc = allocations[buffer->allocation];
 				if (alloc.allocType == AllocationType::PERFRAME)
 					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
@@ -2023,7 +2032,11 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::UNIFORM_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
+
+				if (buffer->allocation < 0) break;
+
 				auto alloc = allocations[buffer->allocation];
+
 				if (alloc.allocType == AllocationType::PERFRAME)
 					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
@@ -2033,6 +2046,8 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::BUFFER_VIEW:
 			{
 				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
+
+				if (bufferView->allocationIndex < 0) break;
 
 				if (bufferView->subAllocations)
 				{
@@ -2394,6 +2409,8 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				case ShaderResourceType::BUFFER_VIEW:
 				{
 					ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
+
+					if (bufferBarrier->allocationIndex < 0) break;
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
 					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
@@ -2433,6 +2450,9 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				case ShaderResourceType::UNIFORM_BUFFER:
 				{
 					ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
+
+					if (bufferBarrier->allocation < 0) break;
+
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
 					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);

@@ -4,6 +4,7 @@ struct UniformGrid
     vec4 max;
     vec4 min;
 	uint numberOfDivisions;
+    uint numberOfMeshes;
 };
 
 
@@ -71,14 +72,15 @@ AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
     return outputAABB;
 }
 
-layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
 
-    //uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
+    uint lIndex =  (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
-	uint lIndex =  gl_LocalInvocationID.x;
+    if (lIndex >= gs.grid.numberOfMeshes) 
+        return;
 
     AABB objBox = perModelBuffer.objects[lIndex].minMaxBox;
     mat4 objWorld = perModelBuffer.objects[lIndex].m;

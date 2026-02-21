@@ -101,9 +101,6 @@ public:
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
 
-
-
-
 	ProgramArgs& args;
 	Semaphore queueSema;
 	std::queue<std::vector<std::string>> commands;

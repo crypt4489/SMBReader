@@ -164,7 +164,7 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 
 	VkBarrierInfo* info = &infos[0];
 
-	while (i < memBarrierCapacity)
+	while (i < memBarrierCounter)
 	{
 		VkBarrierInfo* next = info;
 		uint32_t j = 0;
