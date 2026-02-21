@@ -265,20 +265,13 @@ UniformGrid mainGrid = {
 	.numberOfDivision = 5,
 };
 
-int skyboxPipeline = 0;
+static int skyboxPipeline = 0;
 
 static void CreateUniformGrid()
 {
-
-	DebugDrawStruct drawStruct;
-	
-
-	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
-	drawStruct.color = Vector4f(1.0, 0.0, 0.0, 0.0);
-
 	float div = (float)(mainGrid.numberOfDivision);
 
-	int count = 5;
+	int count = mainGrid.numberOfDivision;
 
 	Vector4f extent = (mainGrid.max - mainGrid.min) / div;
 
@@ -286,18 +279,9 @@ static void CreateUniformGrid()
 	float yMove = extent.y;
 	float zMove = extent.z;
 
-	Vector4f min = mainGrid.max - (extent * 0.5);
+	Vector4f maxHalf = mainGrid.max - (extent * 0.5);
 
 	Vector4f half = extent/2.0;
-
-
-	drawStruct.halfExtents = half;
-
-	std::vector<int> tags(count*count*count);
-
-	std::fill(tags.begin(), tags.end(), 1);
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(tags.data(), sizeof(uint32_t) * tags.size(), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	for (int i = 0; i < count; i++)
 	{
@@ -305,18 +289,12 @@ static void CreateUniformGrid()
 		{
 			for (int g = 0; g < count; g++)
 			{
-				drawStruct.center = Vector4f(min.x - (i * xMove), min.y - (j * yMove), min.z - (g * zMove), 1.0f);
+				Vector3f center = Vector3f(maxHalf.x - (i * xMove), maxHalf.y - (j * yMove), maxHalf.z - (g * zMove));
 
-				GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-				
-				debugIndirectDrawData.commandBufferCount++;
+				loop->CreateAABBDebugStruct(center, half, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 0.0, 0.0, 0.0));
 			}
 		}
 	}
-	
-	
-	
-
 }
 
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
@@ -384,6 +362,100 @@ ApplicationLoop::~ApplicationLoop() {
 	}
 }
 
+int ApplicationLoop::CreateMaterial(
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& color
+)
+{
+	Material material{};
+
+	material.albedoColor = color;
+
+	material.materialFlags = flags;
+
+	uint32_t* ptr = material.textureHandles.comp;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		ptr[i] = texturesIDs[i];
+	}
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+
+	return globalMaterialsIndex++;
+}
+
+int ApplicationLoop::CreateMeshHandle(
+	void* vertexData, void* indexData, 
+	int vertexFlags, int vertexCount, int vertexStride, 
+	int indexStride, int indexCount, 
+	int numMaterials, int* materialIDs, 
+	Matrix4f& mat, AxisBox& box, Sphere& sphere,
+	int vertexAlloc, int indexAlloc,
+	int textureStart, int textureCount
+)
+{
+	Mesh* mesh = nullptr;
+
+	uint32_t meshIndex;
+
+	std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
+
+	mesh->indicesCount = indexCount;
+
+	mesh->verticesCount = vertexCount;
+
+	mesh->vertexSize = vertexStride;
+
+	mesh->indexSize = indexStride;
+
+	mesh->meshInstanceLocalMemoryCount = 1;
+
+	mesh->texturesStart = textureStart;
+
+	mesh->texuresCount = textureCount;
+
+	Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
+
+	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
+
+	handles->numMaterials = numMaterials;
+
+	mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
+	mesh->texuresCount = handles->numMaterials;
+
+	mesh->vertexId = globalVertexBuffer;
+	mesh->indexId = globalIndexBuffer;
+
+	handles->vertexFlags = vertexFlags;
+	handles->stride = vertexStride;
+
+	handles->indexCount = mesh->indicesCount;
+	handles->instanceCount = 1;
+	handles->firstIndex = indexAlloc / mesh->indexSize;
+	handles->vertexByteOffset = vertexAlloc;
+
+	for (int i = 0; i < numMaterials; i++)
+	{
+
+		handles->materialHandles[i] = materialIDs[i];
+	}
+
+	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
+	memcpy(&handles->m, &mat, sizeof(Matrix4f));
+	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
+
+	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
+
+	mesh->meshInstanceDeviceMemoryCount = 1;
+	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
+
+	return meshIndex;
+}
 
 void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 {
@@ -971,77 +1043,7 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].normalCoord = compressnormal(totalNormals[i]);
 	}
 
-
-	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(compVerts), 64);
-	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
-
 	auto rendInst = GlobalRenderer::gRenderInstance;
-
-	rendInst->deviceMemoryUpdater.Create(compVerts, sizeof(compVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
-	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
-
-	Mesh* mesh = nullptr;
-
-	uint32_t meshIndex;
-
-	std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
-
-	int indexCount = 52;
-
-	int vertexCount = 24;
-
-	mesh->indicesCount = indexCount;
-
-	mesh->verticesCount = vertexCount;
-
-	void* vertexData;
-
-	bool decompressed = false;
-
-	int vertexSize = sizeof(ColoredVertex);
-
-
-	mesh->vertexSize = vertexSize;
-
-	int vertexFlags = NORMAL | POSITION | COLOR;
-
-	vertexFlags |= COMPRESSED;
-
-	mesh->indexSize = 2;
-
-
-	mesh->meshInstanceLocalMemoryCount = 1;
-
-	Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
-
-	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
-
-	handles->numMaterials = 1;
-
-	mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
-	mesh->texuresCount = handles->numMaterials;
-
-	mesh->vertexId = globalVertexBuffer;
-	mesh->indexId = globalIndexBuffer;
-
-	handles->vertexFlags = vertexFlags;
-	handles->stride = vertexSize;
-
-	handles->indexCount = mesh->indicesCount;
-	handles->instanceCount = 1;
-	handles->firstIndex = indexAlloc / mesh->indexSize;
-	handles->vertexByteOffset = vertexAlloc;
-
-
-	Material material{};
-
-	material.albedoColor = Vector4f(1.0, 1.0, 1.0, 1.0);
-
-	material.materialFlags = VERTEXCOLOR | VERTEXNORMAL;
-
-	rendInst->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
-
-	handles->materialHandles[0] = globalMaterialsIndex++;
 
 	Matrix4f crateMatrix = Identity4f();
 
@@ -1051,19 +1053,17 @@ void ApplicationLoop::CreateCrateObject()
 
 	sphere.sphere = Vector4f(0.0, 0.0, 0.0, 1.5f);
 
-	memcpy(&handles->minMaxBox, &BOX, sizeof(AxisBox));
-	memcpy(&handles->m, &crateMatrix, sizeof(Matrix4f));
-	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
+	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(ColoredVertex) * 24, 16);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
+	std::array<int, 1> materialIDs = { CreateMaterial(VERTEXCOLOR | VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0)) };
 
-	mesh->meshInstanceDeviceMemoryCount = 1;
-	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
+	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, COMPRESSED | NORMAL | POSITION | COLOR, 24, sizeof(ColoredVertex), 2, 52, 1, materialIDs.data(), crateMatrix, BOX, sphere, vertexAlloc, indexAlloc, -1, 0);
 
-	rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
+	rendInst->deviceMemoryUpdater.Create(compVerts, sizeof(compVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
+	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
 
 	mainIndirectDrawData.commandBufferCount++;
-
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -1105,25 +1105,13 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		SMBVertexTypes type = geoDef->vertexTypes[i];
 
-		Mesh* mesh = nullptr;
-
-		uint32_t meshIndex;
-
-		std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
-
-		geom->meshCount++;
+		int vertexCount = geoDef->verticesCount[i];
 
 		int indexCount = geoDef->indicesCount[i];
 
-		int vertexCount = geoDef->verticesCount[i];
-
-		mesh->indicesCount = indexCount;
-
-		mesh->verticesCount = vertexCount;
-
-		int vertexSize = 0;
-
-		void* vertexData;
+		size_t vertexSize = 0;
+		
+		void* vertexData = nullptr;
 
 		bool decompressed = false;
 
@@ -1149,20 +1137,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			break;
 		}
 
-
-
-		mesh->vertexSize = vertexSize;
-
-
-
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
-		mesh->vertexId = meshVertexData.Allocate(vertexData);
-
 		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
-
-
-
 
 		int vertexFlags = POSITION | TEXTURES1;
 
@@ -1194,145 +1171,122 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
 
-
-
-		mesh->indexSize = 2;
-
 		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
-
-		mesh->indexId = meshIndexData.Allocate(indices);
 
 		SMBCopyIndices(geoDef, i, file, indices);
 
 		int indexAlloc = indexBufferAlloc.Allocate(sizeof(uint16_t) * indexCount, 1);
 
-		//rendInst->UpdateAllocation(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount, indexAlloc, 0, 1);
-
-		//rendInst->UpdateAllocation(vertexData, globalVertexBuffer, vertexSize * vertexCount, vertexAlloc, 0, 1);
-
+		
 		rendInst->deviceMemoryUpdater.Create(indices, sizeof(uint16_t) * indexCount, globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
 
 		rendInst->deviceMemoryUpdater.Create(vertexData, vertexSize * vertexCount, globalVertexBuffer, vertexAlloc, 1, TransferType::MEMORY);
-
-		mesh->meshInstanceLocalMemoryCount = 1;
-
-		Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
-
-		mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
-
-		handles->numMaterials = 1;
+		
 
 		int base = geoDef->materialStart[i];
 
-		mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
-		mesh->texuresCount = handles->numMaterials;
+		int textureStart = meshTextureHandles.AllocateN(geoDef->materialsCount[i]);
+		int textureCount = geoDef->materialsCount[i];
 
-		mesh->vertexId = globalVertexBuffer;
-		mesh->indexId = globalIndexBuffer;
-
-		handles->vertexFlags = vertexFlags;
-		handles->stride = vertexSize;
-
-		handles->indexCount = mesh->indicesCount;
-		handles->instanceCount = 1;
-		handles->firstIndex = indexAlloc / mesh->indexSize;
-		handles->vertexByteOffset = vertexAlloc;
-
-
-		Material material{};
-
-		material.albedoColor = Vector4f(1.0, 1.0, 1.0, 1.0);
-
-		material.textureHandles.x = geoDef->materialsId[base];
-
-		material.materialFlags = ALBEDOMAPPED | ((geoDef->materialsCount[i] > 1) ? NORMALMAPPED : VERTEXNORMAL);
-
-		meshTextureHandles.Update(mesh->texturesStart + base + 0, material.textureHandles.x);
-
-		if (geoDef->materialsCount[i] > 1) {
-			material.textureHandles.y = geoDef->materialsId[base + 1];
-			meshTextureHandles.Update(mesh->texturesStart + base + 1, material.textureHandles.y);
+		for (int j = 0; j < textureCount; j++)
+		{
+			meshTextureHandles.Update(textureStart + i, geoDef->materialsId[base + i]);
 		}
 
-		rendInst->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
-		
-		handles->materialHandles[0] = globalMaterialsIndex++;
+		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? NORMALMAPPED : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
-		memcpy(&handles->minMaxBox, &geoDef->axialBox, sizeof(AxisBox));
-		memcpy(&handles->m, geomSpecificData, sizeof(Matrix4f));
-		memcpy(&handles->sphere, &geoDef->spheres[i], sizeof(Vector4f));
+		//geoDef->spheres[i].sphere.w += .75f;
 
-		handles->sphere.sphere.w += 3.5f;
-
-		int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
-
-		mesh->meshInstanceDeviceMemoryCount = 1;
-		mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
-
-		rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
-
-	
-		
-		VkDrawIndirectCommand command;
-
-		command.firstInstance = 0;
-		command.firstVertex = 0;
-		command.instanceCount = 1;
-		command.vertexCount = vertexCount * 2;
-
-		rendInst->transferPool.Create(&command, sizeof(VkDrawIndirectCommand), normalDebugAlloc, sizeof(VkDrawIndirectCommand) * i, TransferType::CACHED);
-
-
-		
-
+		CreateMeshHandle(vertexData, indices, 
+			vertexFlags, vertexCount, vertexSize, 2, 
+			indexCount, 1, materialHandles.data(), 
+			*geomSpecificData, geoDef->axialBox, geoDef->spheres[i], 
+			vertexAlloc, indexAlloc, textureStart, textureCount);
 
 	}
 
+	CreateSphereDebugStruct(geoDef->axialBox, 24, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 1.0, 0.0, 0.0));
 
-	
-
-	int tag = 2;
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&tag, sizeof(uint32_t), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-
-
-	DebugDrawStruct drawStruct;
-	drawStruct.center = ((*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5 + (*geomSpecificData * geoDef->axialBox.min));
-
-	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
-	drawStruct.color = Vector4f(1.0, 0.0, 1.0, 0.0);
-
-
-	Vector4f half = ((geoDef->axialBox.max - geoDef->axialBox.min) * 0.5);
-	Vector3f half3 = Vector3f(half.x, half.y, half.z);
-
-	float r = Length(half3);
-
-	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(24), 1.0, 1.0);
-
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-
-	
-
-	debugIndirectDrawData.commandBufferCount++;
-
-
-	tag = 1;
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&tag, sizeof(uint32_t), globalDebugTypes, sizeof(uint32_t) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-
-	drawStruct.scale = Vector4f(1.0, 1.0, 1.0, 1.0);
-	drawStruct.color = Vector4f(0.5, 0.5, 1.0, 0.0);
-
-
-	drawStruct.halfExtents = (*geomSpecificData * geoDef->axialBox.max - *geomSpecificData * geoDef->axialBox.min) * 0.5;
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-
-	debugIndirectDrawData.commandBufferCount++;
+	CreateAABBDebugStruct(geoDef->axialBox, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.5, 0.5, 1.0, 0.0));
 
 	mainIndirectDrawData.commandBufferCount += count;
+}
+
+
+int ApplicationLoop::CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color)
+{
+	return CreateSphereDebugStruct(Vector3f(sphere.sphere.x, sphere.sphere.y, sphere.sphere.z), sphere.sphere.w, count, scale, color);
+}
+
+int ApplicationLoop::CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color)
+{
+	return CreateSphereDebugStruct(box.min, box.max, count, scale, color);
+}
+
+int ApplicationLoop::CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color)
+{
+	Vector4f center = ((maxExtent - minExtent) * 0.5 + (minExtent));
+
+	Vector4f half = ((maxExtent - minExtent) * 0.5);
+	Vector3f half3 = Vector3f(half.x, half.y, half.z);
+	float r = Length(half3);
+
+	return CreateSphereDebugStruct(Vector3f(center.x, center.y, center.z), r, count, scale, color);
+}
+
+int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, const Vector4f& scale, const Vector4f& color)
+{
+	DebugDrawStruct drawStruct;
+	DebugDrawType type = DebugDrawType::DEBUGSPHERE;
+
+
+	drawStruct.center = Vector4f(center.x, center.y, center.z, 1.0f);
+
+	drawStruct.scale = scale;
+	drawStruct.color = color;
+
+	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(count), 1.0, 1.0);
+
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(DebugDrawType), globalDebugTypes, sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+
+	return debugIndirectDrawData.commandBufferCount++;
+}
+
+int ApplicationLoop::CreateAABBDebugStruct(const AxisBox& box, const Vector4f& scale, const Vector4f& color)
+{
+	Vector4f half = ((box.max - box.min) * 0.5);
+
+	Vector4f center = ((box.max - box.min) * 0.5 + (box.min));
+
+	return CreateAABBDebugStruct(Vector3f(center.x, center.y, center.z), half, scale, color);
+}
+
+int ApplicationLoop::CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color)
+{
+	Vector4f half = ((boxMax - boxMin) * 0.5);;
+
+	Vector4f center = ((boxMax - boxMin) * 0.5 + (boxMin));
+	
+	return CreateAABBDebugStruct(Vector3f(center.x, center.y, center.z), half, scale, color);
+}
+
+int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color)
+{
+	DebugDrawType type = DebugDrawType::DEBUGBOX;
+	DebugDrawStruct drawStruct;
+	
+	drawStruct.center = Vector4f(center.x , center.y, center.z, 1.0f);
+	drawStruct.scale = scale;
+	drawStruct.color = color;
+	drawStruct.halfExtents = halfExtents;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(DebugDrawType), globalDebugTypes, sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+
+	return debugIndirectDrawData.commandBufferCount++;
 }
 
 

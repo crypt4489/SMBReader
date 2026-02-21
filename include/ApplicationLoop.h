@@ -19,6 +19,13 @@
 #include "ThreadManager.h"
 
 
+
+enum class DebugDrawType
+{
+	DEBUGBOX = 1,
+	DEBUGSPHERE = 2,
+};
+
 class ApplicationLoop
 {
 public:
@@ -65,6 +72,37 @@ public:
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
 	void CreateCrateObject();
+
+	int CreateMeshHandle(
+		void* vertexData, void* indexData,
+		int vertexFlags, int vertexCount, int vertexStride,
+		int indexStride, int indexCount,
+		int numMaterials, int* materialIDs,
+		Matrix4f& mat, AxisBox& box, Sphere& sphere,
+		int vertexAlloc, int indexAlloc,
+		int textureStart, int textureCount
+	);
+
+	int CreateMaterial(
+		int flags,
+		int* texturesIDs,
+		int textureCount,
+		const Vector4f& color
+		);
+
+	int CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color);
+	int CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color);
+	int CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color);
+
+	int CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, const Vector4f& scale, const Vector4f& color);
+
+	int CreateAABBDebugStruct(const AxisBox& box, const Vector4f &scale, const Vector4f& color);
+	int CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color);
+	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
+
+
+
+
 
 	ProgramArgs& args;
 	Semaphore queueSema;
