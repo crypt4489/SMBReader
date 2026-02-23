@@ -397,7 +397,7 @@ struct RenderAllocation
 
 /* */
 
-enum class VertexUsage
+enum class VertexUsage : size_t
 {
 	POSITION = 0,
 	TEX0 = 1,
@@ -407,7 +407,8 @@ enum class VertexUsage
 	NORMAL = 5,
 	BONES = 6,
 	WEIGHTS = 7,
-	COLOR0 = 8
+	COLOR0 = 8, 
+	NUM_VERTEX_FORMAT = 9
 };
 
 enum class VertexBufferRate

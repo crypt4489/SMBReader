@@ -897,8 +897,6 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 
 
 
-std::atomic<float> geoX = 0.0f;
-
 void ReadImage(std::string* name, int count);
 
 
@@ -920,21 +918,9 @@ static Vector3s pack6comp(float* vector, AxisBox& box)
 	return Vector3s(xs, ys, zs);
 }
 
-static Vector3f convertnormal(int32_t normal)
+static int32_t compressnormal(Vector3f normal)
 {
-
-	float denom = pow(2.0, 31.0);
-
-	float x = float(normal << 21) * 1.0 / denom;
-	float y = float((int)((normal << 10) & 0xfffff800)) * 1.0 / denom;
-	float z = float((int)(normal & 0xffc00000)) * 1.0 / (denom - 1.0);
-
-	return Vector3f(x, y, z);
-}
-
-static uint32_t compressnormal(Vector3f normal)
-{
-	uint32_t reg = 0;
+	int32_t reg = 0;
 
 	float denom = pow(2.0, 31.0);
 
@@ -951,8 +937,159 @@ static uint32_t compressnormal(Vector3f normal)
 	return reg;
 }
 
+int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCount, int vertexStride, int vertexCount, 
+	AxisBox& box, void* vertexStream, void* memoryOut, int* compressedSize, int* vertexFlags)
+{
+	char* streamStart = (char*)vertexStream;
+	int locationInVertexStream = 0;
+
+	char* dataStreamOut = (char*)memoryOut;
+	int locationInStreamOut = 0;
+
+	enum VertexPosition
+	{
+		PPOSITION = 7,
+		PCOLOR0 = 6,
+		BONESWEIGHTS = 0,
+		PTEX0 = 1,
+		PTEX1 = 2,
+		PTEX2 = 3,
+		PTEX3 = 4,
+		PNORMAL = 5,
+	};
+
+	std::array<int, 8> positionalOffsets;
+
+	memset(positionalOffsets.data(), 0, sizeof(int) * 8);
+
+	*vertexFlags |= COMPRESSED;
+
+	for (int j = 0; j < descCount; j++)
+	{
+		VertexInputDescription* desc = &inputDesc[j];
+
+		size_t size = 0;
+
+		int positionIndex = 0;
+		
+		switch (desc->vertexusage)
+		{
+		case VertexUsage::POSITION:
+		{
+			size = sizeof(Vector3s);
+			positionIndex = PPOSITION;
+			*vertexFlags |= POSITION;
+			break;
+		}
+		case VertexUsage::NORMAL:
+		{
+			size = sizeof(int32_t);
+			positionIndex = PNORMAL;
+			*vertexFlags |= NORMAL;
+			break;
+		}
+		case VertexUsage::COLOR0:
+		{
+			size = sizeof(Vector4f);
+			positionIndex = PCOLOR0;
+			*vertexFlags |= COLOR;
+			break;
+		}
+		}
+
+		positionalOffsets[positionIndex] = size;
+		*compressedSize += size;
+	}
+
+	int prev = *compressedSize;
+
+	for (int i = 7; i >= 0; i--)
+	{
+		prev -= positionalOffsets[i];
+		positionalOffsets[i] = prev;
+	}
+
+
+	for (int i = 0; i < vertexCount; i++)
+	{
+		for (int j = 0; j < descCount; j++)
+		{
+			VertexInputDescription* desc = &inputDesc[j];
+			char* genericInput = streamStart + locationInVertexStream + desc->byteoffset;
+			switch (desc->vertexusage)
+			{
+			case VertexUsage::POSITION:
+			{
+				switch (desc->format)
+				{
+				case ComponentFormatType::R32G32B32A32_SFLOAT:
+				{
+
+					Vector4f* pos = (Vector4f*)genericInput;
+					Vector3s pack = pack6comp(pos->comp, box);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PPOSITION], &pack, sizeof(Vector3s));
+					break;
+				}
+				}
+				break;
+			}
+			case VertexUsage::NORMAL:
+			{
+				switch (desc->format)
+				{
+				case ComponentFormatType::R32G32B32_SFLOAT:
+				{
+					Vector3f* pos = (Vector3f*)genericInput;
+					int32_t pack = compressnormal(*pos);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PNORMAL], &pack, sizeof(int32_t));
+					break;
+				}
+				}
+				break;
+			}
+			case VertexUsage::COLOR0:
+				switch (desc->format)
+				{
+					
+				case ComponentFormatType::R32G32B32A32_SFLOAT:
+				{
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PCOLOR0], genericInput, sizeof(Vector4f));
+					break;
+				}
+				}
+				break;
+			}
+		}
+
+		locationInVertexStream += vertexStride;
+		locationInStreamOut += *compressedSize;
+	}
+
+	return locationInStreamOut;
+}
+
 void ApplicationLoop::CreateCrateObject()
 {
+
+
+	VertexInputDescription inputDescription[3];
+
+	inputDescription[0].byteoffset = 0;
+	inputDescription[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	inputDescription[0].vertexusage = VertexUsage::POSITION;
+
+	inputDescription[1].byteoffset = 16;
+	inputDescription[1].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	inputDescription[1].vertexusage = VertexUsage::COLOR0;
+
+	inputDescription[2].byteoffset = 32;
+	inputDescription[2].format = ComponentFormatType::R32G32B32_SFLOAT;
+	inputDescription[2].vertexusage = VertexUsage::NORMAL;
+
+
+
+
+
 	static uint16_t BoxIndices[52] = {
 		2,  1,  0, 1, 
 		1,  2,  3, 3, 4,
@@ -1065,17 +1202,16 @@ void ApplicationLoop::CreateCrateObject()
 		Vector3f(0.0, 0.0, -1.0),
 	};
 
-	
-#pragma pack(push, 1)
-	struct ColoredVertex
+	struct MyVertex
 	{
-		int32_t normalCoord;
+		Vector4f pos;
 		Vector4f color;
-		Vector3s pos;
-		
+		Vector3f normal;
 	};
-#pragma pack(pop)
-	ColoredVertex compVerts[24];
+
+
+	MyVertex compVerts[24];
+	char compVerts2[1056];
 
 	AxisBox BOX =
 	{
@@ -1085,10 +1221,14 @@ void ApplicationLoop::CreateCrateObject()
 
 	for (int i = 0; i < 24; i++)
 	{
-		compVerts[i].pos = pack6comp(BoxVerts[i].comp, BOX);
+		compVerts[i].pos = BoxVerts[i];
 		compVerts[i].color = BoxColors[i];
-		compVerts[i].normalCoord = compressnormal(totalNormals[i]);
+		compVerts[i].normal = totalNormals[i];
 	}
+
+	int compressedSize = 0, vertexFlags = 0;
+
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 3, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1100,7 +1240,7 @@ void ApplicationLoop::CreateCrateObject()
 
 	sphere.sphere = Vector4f(0.0, 0.0, 0.0, 1.5f);
 
-	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(ColoredVertex) * 24, 16);
+	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
 	std::array<int, 1> materialIDs = { CreateMaterial(VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0)) };
@@ -1108,11 +1248,11 @@ void ApplicationLoop::CreateCrateObject()
 	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
 	int materialRangeCount = 1;
 
-	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, COMPRESSED | NORMAL | POSITION | COLOR, 24, sizeof(ColoredVertex), 2, 52, BOX, sphere, vertexAlloc, indexAlloc);
+	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, vertexFlags, 24, compressedSize, 2, 52, BOX, sphere, vertexAlloc, indexAlloc);
 
 	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, 0, 0, meshIndex, 1);
 
-	rendInst->deviceMemoryUpdater.Create(compVerts, sizeof(compVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
+	rendInst->deviceMemoryUpdater.Create(compVerts2, sizeof(compVerts2), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
 	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
 
 	
@@ -1125,10 +1265,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	uint32_t frames = rendInst->MAX_FRAMES_IN_FLIGHT;
 
 	int count = geoDef->numRenderables;
-
-	float xLoc = UpdateAtomic(geoX, 50.0f, 0.0f);
-
-	
 
 	Geometry* geom = nullptr;
 
@@ -1146,7 +1282,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		
 	//*geomSpecificData = *geomSpecificData * 5.0f;
 		
-	(geomSpecificData)->translate = Vector4f(xLoc, 0.f, 0.f, 1.0f);
+	(geomSpecificData)->translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
 
 	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
