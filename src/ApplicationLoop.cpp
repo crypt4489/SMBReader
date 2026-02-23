@@ -34,8 +34,6 @@ std::array<std::string, 4> commandsStrings =
 
 enum MaterialFlags
 {
-	MATERIALCOLOR = 1,
-	VERTEXCOLOR = 2,
 	ALBEDOMAPPED = 4,
 	NORMALMAPPED = 8,
 	VERTEXNORMAL = 16
@@ -51,19 +49,30 @@ struct Material
 	Vector4ui textureHandles; // y - normalMapCoordinates // x- albedo
 };
 
+struct Renderable
+{
+	int meshIndex;
+	int lightCount; 
+	int instanceCount;
+	int pad1;
+	int lightIndices[4];
+	int materialStart;
+	int materialCount;
+	int blendLayersStart;
+	int blendLayerCount;
+	Matrix4f transform;
+};
+
 struct Handles
 {
 	int vertexFlags;
-	int numMaterials;
 	int stride;
 	int indexCount;
-	int instanceCount;
 	int firstIndex;
 	int vertexByteOffset;
-	int lightCount;
-	int materialHandles[4];
-	int lightIndex[4];
-	Matrix4f m;
+	int pad1;
+	int pad2;
+	int pad3;
 	AxisBox minMaxBox;
 	Sphere sphere;
 };
@@ -189,6 +198,12 @@ static int globalTexturesDescriptor;
 static int globalMeshLocation;
 static int globalMeshSize = 24 * KiB;
 
+static int globalRenderableLocation;
+static int globalRenderableSize = 24 * KiB;
+
+static int globalMaterialIndicesLocation;
+static int globalMaterialIndicesSize = 4 * KiB;
+
 static int globalMaterialsLocation; 
 static int globalMaterialsSize = 4 * KiB;
 static int globalMaterialsIndex = 0;
@@ -219,6 +234,10 @@ LightSource source3 = { .color = Vector4f(229, 211, 191, 130.0), .pos = wow, .di
 #define MAX_MESHES 4096
 #define MAX_MESH_TEXTURES 8192
 
+
+std::array<Renderable, 150> renderablesObjects;
+static int globalRenderableCount = 0;
+static int globalMaterialRangeStart = 0;
 
 struct Geometry
 {
@@ -372,6 +391,40 @@ ApplicationLoop::~ApplicationLoop() {
 	}
 }
 
+int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
+{
+	int ret = globalMaterialRangeStart;
+
+	globalMaterialRangeStart += count;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(ids, sizeof(int) * count, globalMaterialIndicesLocation, sizeof(int) * ret, TransferType::CACHED);
+
+	return ret;
+}
+
+int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int blendCount, int meshIndex, int instanceCount)
+{
+	Renderable* renderable = &renderablesObjects[globalRenderableCount];
+
+	int ret = globalRenderableCount++;
+
+	renderable->instanceCount = instanceCount;
+	renderable->materialStart = materialStart;
+	renderable->meshIndex = meshIndex;
+	renderable->blendLayersStart = blendStart;
+	renderable->blendLayerCount = blendCount;
+	renderable->materialStart = materialStart;
+	renderable->materialCount = materialCount;
+	renderable->transform = mat;
+
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(renderable, sizeof(Renderable), globalRenderableLocation, sizeof(Renderable) * ret, TransferType::MEMORY);
+
+	mainIndirectDrawData.commandBufferCount++;
+
+	return ret;
+}
+
 int ApplicationLoop::CreateMaterial(
 	int flags,
 	int* texturesIDs,
@@ -401,10 +454,8 @@ int ApplicationLoop::CreateMeshHandle(
 	void* vertexData, void* indexData, 
 	int vertexFlags, int vertexCount, int vertexStride, 
 	int indexStride, int indexCount, 
-	int numMaterials, int* materialIDs, 
-	Matrix4f& mat, AxisBox& box, Sphere& sphere,
-	int vertexAlloc, int indexAlloc,
-	int textureStart, int textureCount
+	AxisBox& box, Sphere& sphere,
+	int vertexAlloc, int indexAlloc
 )
 {
 	Mesh* mesh = nullptr;
@@ -423,18 +474,10 @@ int ApplicationLoop::CreateMeshHandle(
 
 	mesh->meshInstanceLocalMemoryCount = 1;
 
-	mesh->texturesStart = textureStart;
-
-	mesh->texuresCount = textureCount;
 
 	Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
 
 	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
-
-	handles->numMaterials = numMaterials;
-
-	mesh->texturesStart = meshTextureHandles.AllocateN(handles->numMaterials);
-	mesh->texuresCount = handles->numMaterials;
 
 	mesh->vertexId = globalVertexBuffer;
 	mesh->indexId = globalIndexBuffer;
@@ -443,18 +486,11 @@ int ApplicationLoop::CreateMeshHandle(
 	handles->stride = vertexStride;
 
 	handles->indexCount = mesh->indicesCount;
-	handles->instanceCount = 1;
 	handles->firstIndex = indexAlloc / mesh->indexSize;
 	handles->vertexByteOffset = vertexAlloc;
 
-	for (int i = 0; i < numMaterials; i++)
-	{
-
-		handles->materialHandles[i] = materialIDs[i];
-	}
 
 	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
-	memcpy(&handles->m, &mat, sizeof(Matrix4f));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
 	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
@@ -477,7 +513,7 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 
 	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-	handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+	//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
 	rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 
@@ -499,7 +535,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
-		handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+		//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
 		rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 	}
@@ -710,9 +746,20 @@ void ApplicationLoop::Execute()
 
 			ThreadManager::ASyncThreadsDone();
 
-			std::array<Handles, 10> arr{};
+			/*
+			std::array<Renderable, 10> arr{};
+			std::array<Handles, 10> arr3{};
 
-			GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, arr.data(), sizeof(Handles) * 10, 0);
+			std::array<int, 10> arr2{};
+
+			std::array<VkDrawIndexedIndirectCommand, 10> arr4;
+
+			GlobalRenderer::gRenderInstance->ReadData(globalMaterialIndicesLocation, arr2.data(), sizeof(int) * 10, 0);
+		//	GlobalRenderer::gRenderInstance->ReadData(globalRenderableLocation, arr.data(), sizeof(Renderable) * 10, 0);
+		//	GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, arr3.data(), sizeof(Handles) * 10, 0);
+		//	GlobalRenderer::gRenderInstance->ReadData(mainIndirectDrawData.commandBufferAlloc, arr4.data(), sizeof(VkDrawIndexedIndirectCommand) * 10, 0);
+
+		*/
 
 			fps();
 
@@ -1056,14 +1103,19 @@ void ApplicationLoop::CreateCrateObject()
 	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(ColoredVertex) * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	std::array<int, 1> materialIDs = { CreateMaterial(VERTEXCOLOR | VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0)) };
+	std::array<int, 1> materialIDs = { CreateMaterial(VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0)) };
 
-	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, COMPRESSED | NORMAL | POSITION | COLOR, 24, sizeof(ColoredVertex), 2, 52, 1, materialIDs.data(), crateMatrix, BOX, sphere, vertexAlloc, indexAlloc, -1, 0);
+	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
+	int materialRangeCount = 1;
+
+	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, COMPRESSED | NORMAL | POSITION | COLOR, 24, sizeof(ColoredVertex), 2, 52, BOX, sphere, vertexAlloc, indexAlloc);
+
+	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, 0, 0, meshIndex, 1);
 
 	rendInst->deviceMemoryUpdater.Create(compVerts, sizeof(compVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
 	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
 
-	mainIndirectDrawData.commandBufferCount++;
+	
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -1197,11 +1249,19 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		//geoDef->spheres[i].sphere.w += .75f;
 
-		CreateMeshHandle(vertexData, indices, 
+		int materialRangeStart = AddMaterialToDeviceMemory(1, materialHandles.data());
+		int materialRangeCount = 1;
+
+		int meshIndex = CreateMeshHandle(vertexData, indices, 
 			vertexFlags, vertexCount, vertexSize, 2, 
-			indexCount, 1, materialHandles.data(), 
-			*geomSpecificData, geoDef->axialBox, geoDef->spheres[i], 
-			vertexAlloc, indexAlloc, textureStart, textureCount);
+			indexCount,
+			geoDef->axialBox, geoDef->spheres[i], 
+			vertexAlloc, indexAlloc
+		);
+
+		
+
+		int renderableIndex = CreateRenderable(*geomSpecificData, materialRangeStart, materialRangeCount, 0, 0, meshIndex, 1);
 
 	}
 
@@ -1209,7 +1269,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	CreateAABBDebugStruct(geoDef->axialBox, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.5, 0.5, 1.0, 0.0));
 
-	mainIndirectDrawData.commandBufferCount += count;
+	//mainIndirectDrawData.commandBufferCount += count;
 }
 
 
@@ -1558,13 +1618,14 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 3, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferCountAlloc, 4, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalRenderableLocation, 5, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
@@ -1580,6 +1641,8 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialsLocation, 5, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalRenderableLocation, 6, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialIndicesLocation, 7, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
 	std::array<int, 1> indirectDrawDescriptors = {
@@ -1673,6 +1736,7 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalVertexBuffer, 1, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalRenderableLocation, 3, 0);
 
 	static Vector4f red = { 0.0, 0.0, 0.0, 1.0 };
 
@@ -1817,6 +1881,7 @@ void CreateMeshWorldAssignment(int count)
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalRenderableLocation, 2, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -1841,6 +1906,7 @@ void CreateMeshWorldAssignment(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalRenderableLocation, 3, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -2053,6 +2119,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	debugAllocBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(debugAllocBufferSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	globalDebugTypes = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+
+	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialIndicesSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	globalRenderableLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalRenderableSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 

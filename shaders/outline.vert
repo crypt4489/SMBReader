@@ -27,19 +27,30 @@ struct AABB
     vec4 max;
 };
 
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
+};
+
 struct PerModel
 {
     uint vertexComponents;
-    uint numMaterials;
     uint vertexStride;
     uint indexCount;
-	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
+    uint pad1;
+	uint pad2;
+	uint pad3;
     AABB minMaxBox;
     vec4 sphere;
 };
@@ -83,9 +94,12 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
-layout(set = 2, binding = 2) uniform usamplerBuffer globalMeshIndices;
+layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
-
+layout(set = 2, binding = 3) readonly buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -188,12 +202,13 @@ vec3 pack6decomp(uint offset, PerModel model)
 void main() {
     
 
-    uint modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
+    uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
-    PerModel modelData = perModelBuffer.objects[modelIndex];
+    Renderable currentRenderable = rends.renderables[renderableIndex];
+
+    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
     uint comp = modelData.vertexComponents;
-
 
     uint stride = modelData.vertexStride;
 
@@ -201,8 +216,7 @@ void main() {
 
     outColor = outline.color;
 
-
-    mat4 scaleMatrix = modelData.m;
+    mat4 scaleMatrix = currentRenderable.transform;
     scaleMatrix[0] *= outline.uniScale;
     scaleMatrix[1] *= outline.uniScale;
     scaleMatrix[2] *= outline.uniScale;

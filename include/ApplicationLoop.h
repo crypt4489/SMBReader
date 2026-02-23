@@ -77,10 +77,9 @@ public:
 		void* vertexData, void* indexData,
 		int vertexFlags, int vertexCount, int vertexStride,
 		int indexStride, int indexCount,
-		int numMaterials, int* materialIDs,
-		Matrix4f& mat, AxisBox& box, Sphere& sphere,
-		int vertexAlloc, int indexAlloc,
-		int textureStart, int textureCount
+		AxisBox& box, Sphere& sphere,
+		int vertexAlloc, int indexAlloc
+		
 	);
 
 	int CreateMaterial(
@@ -100,6 +99,8 @@ public:
 	int CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color);
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
+	int AddMaterialToDeviceMemory(int count, int* ids);
+	int CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int blendCount, int meshIndex, int instanceCount);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

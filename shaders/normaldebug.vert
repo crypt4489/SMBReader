@@ -23,23 +23,33 @@ struct AABB
     vec4 max;
 };
 
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
+};
+
 struct PerModel
 {
     uint vertexComponents;
-    uint numMaterials;
     uint vertexStride;
     uint indexCount;
-	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
+    uint pad1;
+	uint pad2;
+	uint pad3;
     AABB minMaxBox;
     vec4 sphere;
 };
-
 
 struct Plane
 {
@@ -81,8 +91,12 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
-layout(set = 2, binding = 2) uniform usamplerBuffer globalMeshIndices;
+layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
+layout(set = 2, binding = 3) readonly buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
 
 
 vec4 ReconstructVEC4(uint offset)
@@ -178,11 +192,12 @@ vec3 ReconstructVEC3(uint offset)
 }
 
 void main() {
-    
+   
+    uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
-    uint modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
+    Renderable currentRenderable = rends.renderables[renderableIndex];
 
-    PerModel modelData = perModelBuffer.objects[modelIndex];
+    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
     uint comp = modelData.vertexComponents;
 
@@ -210,19 +225,7 @@ void main() {
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-        /*
-            vec2 normalCords = converttexcoords16(offset);
-
-            uint textureIndex = modelData.textureHandles[1];
-
-           normal = texture(sampler2D(Textures[textureIndex], samplerLinear), normalCords).xyz;
-
-           normal = normal * 2.0 - 1.0;
-        
-            normal = normalize(transpose(inverse(mat3(modelData.m))) * normal);
-            */
-            offset += 4;
-            normal = ReconstructVEC3(offset+6+24);
+    
             
         }
 
@@ -241,7 +244,7 @@ void main() {
             mat4 MVP = gs.proj * gs.view;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
 
-            intPos = modelData.m * intPos;
+            intPos = currentRenderable.transform * intPos;
 
             if ((gl_VertexIndex & 1) == 1)
             {
@@ -258,7 +261,7 @@ void main() {
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = gs.proj * gs.view * modelData.m;
+            mat4 MVP = gs.proj * gs.view * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
         }

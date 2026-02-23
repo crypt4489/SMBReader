@@ -12,13 +12,15 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="c" rw="readwrite">
+		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="uniform" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="c" rw="write">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="c" rw="read">
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>

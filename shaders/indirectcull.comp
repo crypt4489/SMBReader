@@ -108,19 +108,30 @@ layout(set = 0, binding = 0) writeonly buffer Commands {
 	IndexedIndirectCommand commands[];
 } cmdBuffer;
 
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
+};
+
 struct PerModel
 {
     uint vertexComponents;
-    uint numMaterials;
     uint vertexStride;
     uint indexCount;
-	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
+    uint pad1;
+	uint pad2;
+	uint pad3;
     AABB minMaxBox;
     vec4 sphere;
 };
@@ -138,12 +149,17 @@ layout(set = 0, binding = 2) uniform CameraData {
 } cData;
 
 
-layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalMeshIndices;
+layout(set = 0, binding = 3, r32ui) uniform uimageBuffer globalRenderableIndices;
 
 layout(set = 0, binding = 4) writeonly buffer commandCounts {
     uint visibleCount;
     uint invisibleCount;
 } cCounts;
+
+layout(set = 0, binding = 5) buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
 
 layout(set = 1, binding = 0) uniform usamplerBuffer globalLightOffsets;
 layout(set = 1, binding = 1) uniform usamplerBuffer globalLightCounts;
@@ -195,9 +211,12 @@ Frustrum CalculateFrustrum()
 bool CheckAllPlanesAgainstAABB(uint index)
 {
 
-    mat4 modelM = perModelBuffer.objects[index].m;
+    Renderable currentRenderable = rends.renderables[index];
+    uint meshIndex = currentRenderable.meshIndex;
 
-    AABB AABBTransform = perModelBuffer.objects[index].minMaxBox;
+    mat4 modelM = currentRenderable.transform;
+
+    AABB AABBTransform = perModelBuffer.objects[meshIndex].minMaxBox;
 
 
     AABB outAABBTransform = TransformAABBArvo(modelM, AABBTransform);
@@ -259,10 +278,12 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
 bool CheckAllPlanesAgainstSphere(uint index)
 {
-    
 
-    mat4 modelM = perModelBuffer.objects[index].m;
-    vec4 sphere = perModelBuffer.objects[index].sphere;
+    Renderable currentRenderable = rends.renderables[index];
+    uint meshIndex = currentRenderable.meshIndex;
+
+    mat4 modelM = currentRenderable.transform;
+    vec4 sphere = perModelBuffer.objects[meshIndex].sphere;
     float r = sphere.w;
 
     vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
@@ -365,8 +386,7 @@ void main()
 {
 	uint index = (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
-   
-
+  
     if (index >= gs.grid.indirectDrawCount)  {
         return;
     }
@@ -374,28 +394,33 @@ void main()
     bool visible = CheckAllPlanesAgainstAABB(index);
 
   if (!visible)
-    {
-        uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
-        cmdBuffer.commands[gs.grid.indirectDrawCount-(1+invisibleIndex)].instanceCount = 0;
-        return;
-    } 
+  {
+      uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
+      cmdBuffer.commands[gs.grid.indirectDrawCount-(1+invisibleIndex)].instanceCount = 0;
+      return;
+  } 
 
     uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
    
 
-    imageStore(globalMeshIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
+    imageStore(globalRenderableIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
+
+    uint meshIndex = rends.renderables[index].meshIndex;
+
+    
    
     cmdBuffer.commands[visibleIndex].instanceCount = 1;
-    cmdBuffer.commands[visibleIndex].firstIndex = perModelBuffer.objects[index].firstIndex;
-    cmdBuffer.commands[visibleIndex].indexCount = perModelBuffer.objects[index].indexCount;
+    cmdBuffer.commands[visibleIndex].firstIndex = perModelBuffer.objects[meshIndex].firstIndex;
+    cmdBuffer.commands[visibleIndex].indexCount = perModelBuffer.objects[meshIndex].indexCount;
     cmdBuffer.commands[visibleIndex].firstInstance = 0;
     cmdBuffer.commands[visibleIndex].vertexOffset = 0;
 
+   
 
-    vec4 sphere = perModelBuffer.objects[index].sphere;
+    vec4 sphere = perModelBuffer.objects[meshIndex].sphere;
     float r = sphere.w;
 
-    mat4 worldM = perModelBuffer.objects[index].m;
+    mat4 worldM = rends.renderables[index].transform;
 
     vec3 sphereWPos = vec3(worldM * vec4(sphere.xyz, 1.0f));
 
@@ -423,7 +448,7 @@ void main()
 
         if (lType == 0)
         {
-            perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+            rends.renderables[index].lightIndices[lightMeshCount] = lightIndex;
             lightMeshCount++;
         }
         else if (lType == 1)
@@ -441,7 +466,7 @@ void main()
 
             if (d <= totalRadius * totalRadius)
             {
-                perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+                rends.renderables[index].lightIndices[lightMeshCount] = lightIndex;
                 lightMeshCount++;
             }
         }
@@ -454,11 +479,11 @@ void main()
 
             if (addToLights)
             {
-                perModelBuffer.objects[index].lightIndex[lightMeshCount] = lightIndex;
+                rends.renderables[index].lightIndices[lightMeshCount] = lightIndex;
                 lightMeshCount++;
             }
         }
     }
 
-    perModelBuffer.objects[index].lightCount = lightMeshCount;
+    rends.renderables[index].lightCount = lightMeshCount;
 }

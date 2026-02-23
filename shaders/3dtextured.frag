@@ -1,11 +1,10 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
 layout(location = 0) in vec3 position;
-layout(location = 1) in vec2 texCoords;
-layout(location = 2) in vec2 texCoords2;
-layout(location = 3) in vec3 inNormal;
-layout(location = 4) in vec4 vertColor;
-layout(location = 5) flat in uint modelIdx;
+layout(location = 1) in vec2 texCoords[8];
+layout(location = 10) in vec3 inNormal;
+layout(location = 11) in vec4 vertColor;
+layout(location = 12) flat in uint renderableIndex;
 layout(location = 0) out vec4 outColor;
 
 
@@ -15,21 +14,18 @@ struct AABB
     vec4 max;
 };
 
-struct PerModel
+struct Renderable
 {
-    uint vertexComponents;
-    uint numMaterials;
-    uint vertexStride;
-    uint indexCount;
+	uint meshIndex;
+	uint lightCount; 
 	uint instanceCount;
-	uint firstIndex;
-    uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
-    AABB minMaxBox;
-    vec4 sphere;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
 };
 
 struct Plane
@@ -61,10 +57,6 @@ layout(set = 0, binding = 0) uniform GlobalContext {
 layout(set = 1, binding = 0) uniform texture2D Textures[];
 layout(set = 1, binding = 1) uniform sampler samplerLinear;
 
-layout(set = 2, binding = 0) readonly buffer PMBuffer {
-    PerModel objects[];
-} perModelBuffer;
-
 struct LightSource
 {
 	vec4 color; //w is intensity;
@@ -80,12 +72,9 @@ layout(set = 2, binding = 3) readonly buffer GLBuffer {
 layout(set = 2, binding = 4) uniform usamplerBuffer globalLightTypes;
 
 
-const uint MATERIALCOLOR = 1u;
-const uint VERTEXCOLOR = 2u;
 const uint ALBEDOMAPPED = 4u;
 const uint NORMALMAPPED = 8u;
 const uint VERTEXNORMAL = 16u;
-
 
 struct Material
 {
@@ -101,8 +90,13 @@ layout(set = 2, binding = 5) uniform MaterialContext {
    Material matsData[85];
 } mats;
 
+layout(set = 2, binding = 6) readonly buffer RENDBuffer {
+    Renderable renderables[];
+} rends;
 
-vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
+layout(set = 2, binding = 7) uniform usamplerBuffer globalMaterialIndices;
+
+vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable modelData)
 {
     if (modelData.lightCount == 0) return color;
 
@@ -110,9 +104,9 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
     for (uint i = 0; i<modelData.lightCount; i++)
     {
-        LightSource light = lightBuffer.objects[modelData.lightIndex[i]];
+        LightSource light = lightBuffer.objects[modelData.lightIndices[i]];
 
-        uint lType = uint(texelFetch(globalLightTypes, int(modelData.lightIndex[i])).r);
+        uint lType = uint(texelFetch(globalLightTypes, int(modelData.lightIndices[i])).r);
 
         if (lType == 0)
         {
@@ -160,49 +154,43 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, PerModel modelData)
 
 void main() {
 
-    PerModel modelData = perModelBuffer.objects[modelIdx];
+    Renderable modelData = rends.renderables[renderableIndex];
 
-    vec4 totalColor = vec4(0.0);
+    vec4 totalColor = vertColor;
 
-    for (uint i = 0; i<modelData.numMaterials; i++)
+    uint materialStart = modelData.materialStart;
+
+    for (uint i = 0; i<modelData.materialCount; i++)
     {
-        uint textureIndex = modelData.materialHandles[i];
 
-        Material mat = mats.matsData[textureIndex];
+        uint mateiralIndex = uint(texelFetch(globalMaterialIndices, int(materialStart + i)).r);
 
-        vec4 albedoColor = vec4(0.0);
+        Material mat = mats.matsData[mateiralIndex];
+
+        vec4 albedoColor = mat.albedoColor;
         
         if ((mat.materialFlags & ALBEDOMAPPED) == ALBEDOMAPPED)
         {
-           albedoColor = texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords);
+           albedoColor *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[0]);
         }
-        else if ((mat.materialFlags & MATERIALCOLOR) == MATERIALCOLOR) 
-        {
-            albedoColor = mat.albedoColor;
-        }
-        else if ((mat.materialFlags & VERTEXCOLOR) == VERTEXCOLOR) 
-        {
-            albedoColor = vertColor;
-        }
-        
-
+    
         if ((mat.materialFlags & NORMALMAPPED) == NORMALMAPPED)
         {
-            vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords2).rgb;
+            vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[1]).rgb;
 
-            normal = transpose(inverse(mat3(modelData.m))) * (2.0 * normal.xyz - 1.0);
+            normal = transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0);
 
             albedoColor = DoLights(normal, position, albedoColor, modelData);
         } 
 
         else if ((mat.materialFlags & VERTEXNORMAL) == VERTEXNORMAL)
         {
-            vec3 normal = normalize(transpose(inverse(mat3(modelData.m))) * inNormal);
+            vec3 normal = normalize(transpose(inverse(mat3(modelData.transform))) * inNormal);
 
             albedoColor = DoLights(normal, position, albedoColor, modelData);
         }
 
-        totalColor += albedoColor;
+        totalColor *= albedoColor;
     }
 
     outColor = totalColor;

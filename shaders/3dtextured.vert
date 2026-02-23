@@ -25,19 +25,30 @@ struct AABB
     vec4 max;
 };
 
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
+};
+
 struct PerModel
 {
     uint vertexComponents;
-    uint numMaterials;
     uint vertexStride;
     uint indexCount;
-	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
+    uint pad1;
+	uint pad2;
+	uint pad3;
     AABB minMaxBox;
     vec4 sphere;
 };
@@ -64,11 +75,10 @@ struct Frustrum
 
 
 layout(location = 0) out vec3 position;
-layout(location = 1) out vec2 texCoords;
-layout(location = 2) out vec2 texCoords2;
-layout(location = 3) out vec3 normal;
-layout(location = 4) out vec4 outColor;
-layout(location = 5) flat out uint modelIndex;
+layout(location = 1) out vec2 texCoords[8];
+layout(location = 10) out vec3 normal;
+layout(location = 11) out vec4 outColor;
+layout(location = 12) flat out uint renderableIndex;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -86,9 +96,12 @@ layout(set = 2, binding = 1) readonly buffer InputVertices {
 	uint8_t vertexData[];
 } VertexData;
 
-layout(set = 2, binding = 2) uniform usamplerBuffer globalMeshIndices;
+layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
-
+layout(set = 2, binding = 6) readonly buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -200,21 +213,21 @@ vec3 pack6decomp(uint offset, PerModel model)
 void main() {
     
 
-    modelIndex = uint(texelFetch(globalMeshIndices, gl_DrawID).r);
+    renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
-    PerModel modelData = perModelBuffer.objects[modelIndex];
+    Renderable currentRenderable = rends.renderables[renderableIndex];
+
+    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
     uint comp = modelData.vertexComponents;
-    texCoords = vec2(0.0, 0.0);
-    texCoords2 = vec2(0.0, 0.0);
     normal = vec3(0.0);
-    outColor = vec4(0.0);
+    outColor = vec4(1.0);
 
     uint stride = modelData.vertexStride;
 
     uint offset = (stride * gl_VertexIndex) + modelData.vertexByteOffset;
 
-   
+
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -225,13 +238,13 @@ void main() {
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
-            texCoords = converttexcoords16(offset);
+            texCoords[0] = converttexcoords16(offset);
             offset += 4;
         }
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-            texCoords2 = converttexcoords16(offset);
+            texCoords[1] = converttexcoords16(offset);
             offset += 4;
         }
 
@@ -252,8 +265,8 @@ void main() {
         {
             mat4 VP = gs.proj * gs.view;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = VP * modelData.m * intPos;
-            position = vec3(modelData.m * intPos);
+            gl_Position = VP * currentRenderable.transform* intPos;
+            position = vec3(currentRenderable.transform * intPos);
         }
 
     } 
@@ -261,19 +274,19 @@ void main() {
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = gs.proj * gs.view * modelData.m;
+            mat4 MVP = gs.proj * gs.view * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
         }
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
-            texCoords = vec2(ReconstructVEC4(offset+16).xy);
+            texCoords[0] = vec2(ReconstructVEC4(offset+16).xy);
         }
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-            texCoords2 = vec2(ReconstructVEC4(offset+16+8).xy);
+            texCoords[1] = vec2(ReconstructVEC4(offset+16+8).xy);
 
         }
     }

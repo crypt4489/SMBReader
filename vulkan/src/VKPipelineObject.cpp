@@ -161,34 +161,30 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 
 	if (!infos) return;
 
-
 	VkBarrierInfo* info = &infos[0];
 
-	while (i < memBarrierCounter)
+	while (info)
 	{
 		VkBarrierInfo* next = info;
-		uint32_t j = 0;
-		while (info)
+		while (next)
 		{
-
-			j++;
-			if (info->location == location)
+			if (next->location == location)
 			{
-				switch (info->type)
+				switch (next->type)
 				{
 				case MEMBARRIER:
-					lmemBarriers[mbC] = *rbo->vkDeviceHandle->GetMemoryBarrier(info->barrierIndex);
+					lmemBarriers[mbC] = *rbo->vkDeviceHandle->GetMemoryBarrier(next->barrierIndex);
 					mbC++;
 					break;
 				case BUFFBARRIER:
-					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(info->barrierIndex);
+					lbuffMemBarriers[bmbC] = *rbo->vkDeviceHandle->GetBufferMemoryBarrier(next->barrierIndex);
 					lbuffMemBarriers[bmbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					lbuffMemBarriers[bmbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					lbuffMemBarriers[bmbC].offset += (info->perFrameOffset * frame);
+					lbuffMemBarriers[bmbC].offset += (next->perFrameOffset * frame);
 					bmbC++;
 					break;
 				case IMAGEBARRIER:
-					limageMemBarriers[imbC] = *rbo->vkDeviceHandle->GetImageMemoryBarrier(info->barrierIndex);
+					limageMemBarriers[imbC] = *rbo->vkDeviceHandle->GetImageMemoryBarrier(next->barrierIndex);
 					limageMemBarriers[imbC].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					limageMemBarriers[imbC].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 					imbC++;
@@ -196,29 +192,23 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 				default:
 					break;
 				}
-				info = info->child;
 			}
-			else
-			{
-				i++;
-				j = 0;
-				info = (info->next ? info->next : info->child);
-				next = info;
-			}
+
+			next = next->child;
 		}
 
-		if (next) {
-
+		if (mbC || bmbC || imbC)
+		{
 			RBOPipelineBarrierArgs args = {
-				.srcStageMask = next->srcStageMask,
-				.dstStageMask = next->dstStageMask,
-				.dependencyFlags = next->dependencyFlags,
-				.memoryBarrierCount = mbC,
-				.pMemoryBarriers = lmemBarriers.data(),
-				.bufferMemoryBarrierCount = bmbC,
-				.pBufferMemoryBarriers = lbuffMemBarriers.data(),
-				.imageMemoryBarrierCount = imbC,
-				.pImageMemoryBarriers = limageMemBarriers.data()
+			.srcStageMask = info->srcStageMask,
+			.dstStageMask = info->dstStageMask,
+			.dependencyFlags = info->dependencyFlags,
+			.memoryBarrierCount = mbC,
+			.pMemoryBarriers = lmemBarriers.data(),
+			.bufferMemoryBarrierCount = bmbC,
+			.pBufferMemoryBarriers = lbuffMemBarriers.data(),
+			.imageMemoryBarrierCount = imbC,
+			.pImageMemoryBarriers = limageMemBarriers.data()
 			};
 
 			rbo->BindPipelineBarrierCommand(&args);
@@ -226,12 +216,10 @@ void VKPipelineObject::CreatePipelineBarriers(RecordingBufferObject* rbo, VKBarr
 			bmbC = 0;
 			imbC = 0;
 			mbC = 0;
-
-			info = next->next;
 		}
-
-		i += j;
-	}
+		
+		info = info->next;
+	}	
 }
 
 void VKComputePipelineObject::Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet)

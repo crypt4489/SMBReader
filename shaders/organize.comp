@@ -22,19 +22,30 @@ struct AABB
     vec4 max;
 };
 
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint materialCount;
+	uint blendLayersStart;
+	uint blendLayerCount;
+	mat4 transform;
+};
+
 struct PerModel
 {
     uint vertexComponents;
-    uint numMaterials;
     uint vertexStride;
     uint indexCount;
-	uint instanceCount;
 	uint firstIndex;
     uint vertexByteOffset;
-    uint lightCount;
-    uint materialHandles[4];
-    uint lightIndex[4];
-    mat4 m;
+    uint pad1;
+	uint pad2;
+	uint pad3;
     AABB minMaxBox;
     vec4 sphere;
 };
@@ -42,6 +53,11 @@ struct PerModel
 layout(set = 0, binding = 1) readonly buffer PMBuffer {
     PerModel objects[];
 } perModelBuffer;
+
+layout(set = 0, binding = 2) buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
 
 AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
 {
@@ -78,8 +94,14 @@ void main()
     if (lIndex >= gs.grid.numberOfMeshes) 
         return;
 
-    AABB objBox = perModelBuffer.objects[lIndex].minMaxBox;
-    mat4 objWorld = perModelBuffer.objects[lIndex].m;
+
+    Renderable currentRenderable = rends.renderables[lIndex];
+
+    uint meshIndex = currentRenderable.meshIndex;
+
+    mat4 objWorld = currentRenderable.transform;
+
+    AABB objBox = perModelBuffer.objects[meshIndex].minMaxBox;
 
     AABB outObjTransform = TransformAABBArvo(objWorld, objBox);
 
