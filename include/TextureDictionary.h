@@ -4,6 +4,7 @@
 #include "AppAllocator.h"
 #include "AppTypes.h"
 
+#include "TextureIO.h"
 #include "IndexTypes.h"
 #include "ThreadManager.h"
 
@@ -15,12 +16,12 @@
 
 struct TextureAllocation
 {
-	uintptr_t cacheAddress;
 	size_t size;
 	int pool;
 	int width;
 	int height;
 	int miplevels;
+	int layers;
 };
 
 struct TextureDictionary
@@ -31,7 +32,7 @@ struct TextureDictionary
 	std::atomic<size_t> textureAllocator = 0;
 	
 
-	std::array<TextureAllocation, 50> textureAllocations{};
+	std::array<TextureDetails, 50> textureAllocations{};
 	std::array<EntryHandle, 50> textureHandles{};
 
 	std::array<EntryHandle, 10> deviceImageBuffers{};
@@ -40,14 +41,14 @@ struct TextureDictionary
 	std::array<size_t, 10> texturePoolsSize{};
 	std::array<size_t, 10> texturePoolsAllocatedSize{};
 
-	int AllocateTextureData(char* data, size_t size, ImageFormat format, int width, int height, int mips);
+	void* AllocateImageCache(size_t size);
 
-	void UpdateTextureData(int index, char* data, size_t size, ImageFormat format, int width, int height, int mips);
-
-	int AllocateNTextureHandles(int n);
+	int AllocateNTextureHandles(int n, TextureDetails** details);
 
 	int FindPoolByFormat(ImageFormat format);
 
 	void CreatePools(ImageFormat* formats, size_t* sizes, EntryHandle* poolHandles, EntryHandle* bufferHandles, int num);
+
+
 };
 

@@ -160,6 +160,8 @@ void main() {
 
     uint materialStart = modelData.materialStart;
 
+    uint textureIndex = 0;
+
     for (uint i = 0; i<modelData.materialCount; i++)
     {
 
@@ -171,12 +173,12 @@ void main() {
         
         if ((mat.materialFlags & ALBEDOMAPPED) == ALBEDOMAPPED)
         {
-           albedoColor *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[0]);
+           albedoColor *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[textureIndex++]);
         }
     
         if ((mat.materialFlags & NORMALMAPPED) == NORMALMAPPED)
         {
-            vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[1]).rgb;
+            vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[textureIndex++]).rgb;
 
             normal = transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0);
 

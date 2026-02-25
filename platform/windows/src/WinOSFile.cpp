@@ -2,8 +2,8 @@
 #include "Windows.h"
 #include <atomic>
 
-static HANDLE intFileHandles[50];
-static std::atomic<int> intFileHandleCounter;
+static HANDLE intFileHandles[100];
+static std::atomic<int> intFileHandleCounter = 0;
 
 static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
 {

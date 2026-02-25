@@ -101,6 +101,8 @@ void FileManager::RemoveOpenFile(const FileID& id)
 	{
 		throw std::runtime_error("Closing unopened file");
 	}
+
+	memset(ret, -1, sizeof(OSFileHandle));
 		
 	return;
 }

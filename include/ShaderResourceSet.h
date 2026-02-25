@@ -24,7 +24,7 @@ struct ShaderResourceUpdatePool
 
 	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data)
 	{
-		TransferRegionLink* link = Find(descriptorid, bindingindex);
+		TransferRegionLink* link = nullptr;
 		ShaderResourceUpdate* region = nullptr;
 
 		int size = 0;
@@ -43,88 +43,61 @@ struct ShaderResourceUpdatePool
 		}
 
 
-		if (!link)
-		{
-			int regionAlloc = updateRegionAlloc;
-
-			updateRegionAlloc = (updateRegionAlloc + 1) % (int)updateRegions.size();
-
-			region = &updateRegions[regionAlloc];
-
-			link = &updateLinks[regionAlloc];
-
 		
-			
-			if (currentTempArgumentsPtr + size >= sizeof(temparguments))
-			{
-				currentTempArgumentsPtr = 0;
-			}
+		int regionAlloc = updateRegionAlloc;
 
-			int writeLoc = currentTempArgumentsPtr;
+		updateRegionAlloc = (updateRegionAlloc + 1) % (int)updateRegions.size();
 
-			currentTempArgumentsPtr += size;
+		region = &updateRegions[regionAlloc];
 
-			switch (type)
-			{
-			case ShaderResourceType::SAMPLER3D:
-			case ShaderResourceType::SAMPLER2D:
-			case ShaderResourceType::SAMPLERSTATE:
-			case ShaderResourceType::IMAGE2D:
-			{
-				ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
-				ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(temparguments + writeLoc);
-				cachedUpdate->dstBegin = update->dstBegin;
-				cachedUpdate->count = update->count;
-				cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
-				memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->count);
-				break;
-			}
-			}
-			
-			region->data = temparguments + writeLoc;
-			region->dataSize = size;
-			region->descriptorSet = descriptorid;
-
-			region->bindingIndex = bindingindex;
-
-			link->region = regionAlloc;
-			link->next = -1;
+		link = &updateLinks[regionAlloc];
 
 
 
-			Insert(regionAlloc);
-
-
-
-
-		}
-		else
+		if (currentTempArgumentsPtr + size >= sizeof(temparguments))
 		{
-			region = &updateRegions[link->region];
-
-			if (region->type != type)
-			{
-				return -1;
-			}
-			
-			if (size > region->dataSize)
-			{
-				if (currentTempArgumentsPtr + size >= sizeof(temparguments))
-				{
-					currentTempArgumentsPtr = 0;
-				}
-
-				int writeLoc = currentTempArgumentsPtr;
-
-				currentTempArgumentsPtr += size;
-
-				region->data = temparguments + writeLoc;
-			}
-
-			memcpy(region->data, data, size);
-			
-			region->dataSize = size;
+			currentTempArgumentsPtr = 0;
 		}
+
+		int writeLoc = currentTempArgumentsPtr;
+
+		currentTempArgumentsPtr += size;
+
+		switch (type)
+		{
+		case ShaderResourceType::SAMPLER3D:
+		case ShaderResourceType::SAMPLER2D:
+		case ShaderResourceType::SAMPLERSTATE:
+		case ShaderResourceType::IMAGE2D:
+		{
+			ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
+			ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(temparguments + writeLoc);
+			cachedUpdate->dstBegin = update->dstBegin;
+			cachedUpdate->count = update->count;
+			cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
+			memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->count);
+			break;
+		}
+		}
+
+		region->data = temparguments + writeLoc;
+		region->dataSize = size;
+		region->descriptorSet = descriptorid;
+
+		region->bindingIndex = bindingindex;
+
+		link->region = regionAlloc;
+		link->next = -1;
+
+
+
+		Insert(regionAlloc);
+
+
+
+
+	
+		
 
 		region->type = type;
 		region->copyCount = T_MaxRegionCopy;

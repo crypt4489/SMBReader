@@ -15,9 +15,9 @@ ApplicationLoop* loop;
 enum VertexComponents
 {
 	POSITION = 1,
-	TEXTURES1 = 2,
-	TEXTURES2 = 4,
-	TEXTURES3 = 8,
+	TEXTURE0 = 2,
+	TEXTURE1 = 4,
+	TEXTURE2 = 8,
 	NORMAL = 16,
 	BONES2 = 32,
 	COLOR = 64,
@@ -211,7 +211,7 @@ static int globalMaterialsIndex = 0;
 static char vertexAndIndicesMemory[16 * MiB];
 static char meshObjectSpecificMemory[2 * MiB];
 static char geometryObjectSpecificMemory[1 * MiB];
-static char mainTextureCacheMemory[16 * MiB];
+static char mainTextureCacheMemory[256 * MiB];
 
 
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
@@ -295,6 +295,7 @@ UniformGrid mainGrid = {
 };
 
 static int skyboxPipeline = 0;
+static EntryHandle skyboxCubeImage = EntryHandle();
 
 static void CreateUniformGrid()
 {
@@ -597,7 +598,11 @@ void ApplicationLoop::Execute()
 
 		name = args.inputFile.string();
 
+		CreateCrateObject();
+
 		LoadObject(name);
+
+		
 
 		CreateUniformGrid();
 
@@ -897,7 +902,8 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 
 
 
-void ReadImage(std::string* name, int count);
+EntryHandle ReadCubeImage(std::string* name, int textureCount, TextureIOType ioType);
+int Read2DImage(std::string *name, int mipCounts, TextureIOType ioType);
 
 
 
@@ -935,6 +941,24 @@ static int32_t compressnormal(Vector3f normal)
 	reg = ((zs & 0x3ff) << 22) | ((ys & 0x7ff) << 11) | ((xs & 0x7ff));
 
 	return reg;
+}
+
+static Vector2s compresstexcoords(float* in)
+{
+	int16_t x = ((in[0] / 16.0f) * 32767.5);
+	int16_t y = ((in[1] / 16.0f) * 32767.5);
+
+
+	return Vector2s(x, y);
+}
+
+static Vector2f converttexcoords16(int16_t* huh)
+{
+	float x = huh[0] * dx * 16.0f;
+	float y = huh[1] * dx * 16.0f;
+
+
+	return Vector2f(x, y);
 }
 
 int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCount, int vertexStride, int vertexCount, 
@@ -995,6 +1019,13 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 			*vertexFlags |= COLOR;
 			break;
 		}
+		case VertexUsage::TEX0:
+		{
+			size = sizeof(Vector2s);
+			positionIndex = PTEX0;
+			*vertexFlags |= TEXTURE0;
+			break;
+		}
 		}
 
 		positionalOffsets[positionIndex] = size;
@@ -1048,9 +1079,10 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 				break;
 			}
 			case VertexUsage::COLOR0:
+			{
 				switch (desc->format)
 				{
-					
+
 				case ComponentFormatType::R32G32B32A32_SFLOAT:
 				{
 					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PCOLOR0], genericInput, sizeof(Vector4f));
@@ -1058,6 +1090,21 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 				}
 				}
 				break;
+			}
+			case VertexUsage::TEX0:
+			{
+				switch (desc->format)
+				{
+
+				case ComponentFormatType::R32G32_SFLOAT:
+				{
+					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX0], &packed, sizeof(Vector2s));
+					break;
+				}
+				}
+				break;
+			}
 			}
 		}
 
@@ -1072,7 +1119,7 @@ void ApplicationLoop::CreateCrateObject()
 {
 
 
-	VertexInputDescription inputDescription[3];
+	VertexInputDescription inputDescription[4];
 
 	inputDescription[0].byteoffset = 0;
 	inputDescription[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -1085,6 +1132,10 @@ void ApplicationLoop::CreateCrateObject()
 	inputDescription[2].byteoffset = 32;
 	inputDescription[2].format = ComponentFormatType::R32G32B32_SFLOAT;
 	inputDescription[2].vertexusage = VertexUsage::NORMAL;
+
+	inputDescription[3].byteoffset = 44;
+	inputDescription[3].format = ComponentFormatType::R32G32_SFLOAT;
+	inputDescription[3].vertexusage = VertexUsage::TEX0;
 
 
 
@@ -1202,16 +1253,47 @@ void ApplicationLoop::CreateCrateObject()
 		Vector3f(0.0, 0.0, -1.0),
 	};
 
+	Vector2f texturesCoordinate[24] = {
+
+
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		Vector2f(1.0, 0.0),
+		Vector2f(0.0, 0.0),
+		Vector2f(1.0, 1.0),
+		Vector2f(0.0, 1.0),
+		
+	};
+
 	struct MyVertex
 	{
 		Vector4f pos;
 		Vector4f color;
 		Vector3f normal;
+		Vector2f texCoords;
 	};
 
 
 	MyVertex compVerts[24];
-	char compVerts2[1056];
+	char compVerts2[2048];
 
 	AxisBox BOX =
 	{
@@ -1224,11 +1306,12 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].pos = BoxVerts[i];
 		compVerts[i].color = BoxColors[i];
 		compVerts[i].normal = totalNormals[i];
+		compVerts[i].texCoords = texturesCoordinate[i];
 	}
 
 	int compressedSize = 0, vertexFlags = 0;
 
-	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 3, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 4, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1243,7 +1326,13 @@ void ApplicationLoop::CreateCrateObject()
 	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	std::array<int, 1> materialIDs = { CreateMaterial(VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0)) };
+	std::string normalmapname = "wallnormal.bmp";
+
+	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
+
+	std::array arr = { 0, normalMapped };
+
+	std::array<int, 1> materialIDs = { CreateMaterial(NORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
 	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
 	int materialRangeCount = 1;
@@ -1329,23 +1418,23 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
 
-		int vertexFlags = POSITION | TEXTURES1;
+		int vertexFlags = POSITION | TEXTURE0;
 
 		switch (type)
 		{
 		case PosPack6_CNorm_C16Tex1_Bone2:
 		{
-			vertexFlags = POSITION | TEXTURES1 | NORMAL | BONES2;
+			vertexFlags = POSITION | TEXTURE0 | NORMAL | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex2_Bone2:
 		{
-			vertexFlags = POSITION | TEXTURES1 | TEXTURES2 | BONES2;
+			vertexFlags = POSITION | TEXTURE0 | TEXTURE1 | BONES2;
 			break;
 		}
 		case PosPack6_C16Tex1_Bone2:
 		{
-			vertexFlags = POSITION | TEXTURES1 | BONES2;
+			vertexFlags = POSITION | TEXTURE0 | BONES2;
 			break;
 		}
 		}
@@ -1404,8 +1493,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	CreateSphereDebugStruct(geoDef->axialBox, 24, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 1.0, 0.0, 0.0));
 
 	CreateAABBDebugStruct(geoDef->axialBox, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.5, 0.5, 1.0, 0.0));
-
-	//mainIndirectDrawData.commandBufferCount += count;
 }
 
 
@@ -1541,11 +1628,9 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		}
 	}
 
-	static char imageMemory[16 * MiB];
-	static uint32_t imageSizes[400];
-	int cpointer = 0, ispointer = 0;
+	TextureDetails* details[10];
 
-	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount);
+	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
 
 	for (int ii = 0; ii < totalTextureCount; ii++)
 	{
@@ -1553,19 +1638,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 		ImageFormat format = ConvertSMBImageToAppImage(texture.type);
 
-		mainDictionary.UpdateTextureData(
-			ii + index,
-			(char*)texture.data,
-			texture.cumulativeSize,
-			format,
-			texture.width,
-			texture.height,
-			texture.miplevels);
+		texture.data = (char*)mainDictionary.AllocateImageCache(texture.cumulativeSize);
 
-		memcpy(imageMemory + cpointer, texture.data, texture.cumulativeSize);
-		
-		memcpy(imageSizes + ispointer, texture.imageSizes, texture.miplevels * sizeof(uint32_t));
-		
+		uint32_t* sizesCached = (uint32_t*)mainDictionary.AllocateImageCache(sizeof(uint32_t) * texture.miplevels);
+
+		memcpy(sizesCached, texture.imageSizes, sizeof(uint32_t) * texture.miplevels);
+
+		texture.ReadTextureData(file);
 
 		mainDictionary.textureHandles[ii + index] =
 			GlobalRenderer::gRenderInstance->CreateImageHandle(
@@ -1574,12 +1653,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				texture.height,
 				texture.miplevels,
 				format,
-				GetPoolIndexByFormat(format));
+				GetPoolIndexByFormat(format)
+			);
 
 		GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
-			imageMemory + cpointer, 
+			texture.data, 
 			mainDictionary.textureHandles[ii + index], 
-			imageSizes + ispointer, 
+			sizesCached, 
 			texture.cumulativeSize, 
 			texture.width, 
 			texture.height, 
@@ -1587,9 +1667,6 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			1,
 			format
 		);
-
-		ispointer += texture.miplevels;
-		cpointer += texture.cumulativeSize;
 	}
 
 	ResourceArrayUpdate update; 
@@ -1874,11 +1951,11 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalRenderableLocation, 3, 0);
 
-	static Vector4f red = { 0.0, 0.0, 0.0, 1.0 };
+	static Vector4f black = { 0.0, 0.0, 0.0, 1.0 };
 
 	static float outlineLength = 1.025;
 
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(outlineDescriptor, &red, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(outlineDescriptor, &black, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(outlineDescriptor, &outlineLength, 1);
 
@@ -1920,7 +1997,7 @@ void CreateMeshWorldAssignment(int count)
 
 	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	if (worldSpaceAssignment.totalSumsNeeded )
+	if (worldSpaceAssignment.totalSumsNeeded)
 	{
 		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 		
@@ -2326,7 +2403,7 @@ void ApplicationLoop::InitializeRuntime()
 	
 	};
 
-	ReadImage(names, 6);
+	skyboxCubeImage = ReadCubeImage(names, 6, BMP);
 
 	static Matrix4f matrix = Identity4f();
 
@@ -2337,7 +2414,7 @@ void ApplicationLoop::InitializeRuntime()
 
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, globalBufferLocation, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &mainDictionary.textureHandles[10], 1, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &skyboxCubeImage, 1, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
 
 	std::array<int, 2> skyboxDescs = { globalPipelineBufferWhat, skyboxDesc };
@@ -2410,65 +2487,150 @@ void ApplicationLoop::InitializeRuntime()
 	
 
 
-	CreateCrateObject();
+	
 
 	
 	
 	
 }
 
-#include "TextureIO.h"
 
-static int imageCounter = 10;
-
-void ReadImage(std::string *name, int count)
+EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioType)
 {
+	TextureDetails* details;
 
-	static char imagemem[64 * MiB];
+	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
 
-	size_t offset = 0;
+	std::vector<char> data;
 
-	TextureDetails details;
+	FileManager::ReadFileInFull(name[0], data);
 
-	for (int i = 0; i < 6; i++)
+	int filePointer = ReadBMPDetails(data.data(), details);
+
+	details->data = (char*)mainDictionary.AllocateImageCache(details->dataSize);
+
+	details->currPointer = details->data;
+
+	for (int i = 1; i < textureCount; i++)
 	{
-		std::vector<char> data;
+	
+		ReadBMPData(data.data(), filePointer, details);
+
 		FileManager::ReadFileInFull(name[i], data);
 
-		
+		TextureDetails stubDetails{};
 
-		ParseBMP(data, &details);
+		filePointer = ReadBMPDetails(data.data(), &stubDetails);
 
-		memcpy(imagemem + offset, details.data, details.dataSize);
+		if (stubDetails.width != details->width) {
+			printf("Mismatched Image array\n");
+		}
 
-		offset += details.dataSize;
-
-		delete[] details.data;
+		details->currPointer = (char*)mainDictionary.AllocateImageCache(details->dataSize);
 	}
 
-	int textureStart = mainDictionary.AllocateNTextureHandles(1);
+	ReadBMPData(data.data(), filePointer, details);
+	
+	details->arrayLayers = textureCount;
 
-
-	mainDictionary.textureHandles[10] =
+	EntryHandle ret = mainDictionary.textureHandles[textureStart] =
 		GlobalRenderer::gRenderInstance->CreateCubeImageHandle(
-			offset,
-			details.width,
-			details.height,
-			details.miplevels,
-			details.type,
-			loop->GetPoolIndexByFormat(details.type));
+			textureCount * details->dataSize,
+			details->width,
+			details->height,
+			details->miplevels,
+			details->type,
+			loop->GetPoolIndexByFormat(details->type));
 
 	GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
-		imagemem,
-		mainDictionary.textureHandles[10],
+		details->data,
+		ret,
 		nullptr,
-		offset,
-		details.width,
-		details.height,
-		1,
-		6,
-		details.type
+		textureCount * details->dataSize,
+		details->width,
+		details->height,
+		details->miplevels,
+		details->arrayLayers,
+		details->type
 	);
+
+	return ret;
+}
+
+int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
+{
+	TextureDetails* details;
+
+	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
+
+	uint32_t* mipSizes = (uint32_t*)mainDictionary.AllocateImageCache(sizeof(uint32_t) * mipCounts);
+
+	int totalBlobSize = 0;
+	EntryHandle ret;
+
+	for (int i = 0; i<mipCounts; i++)
+	{
+	
+		std::vector<char> data;
+
+		TextureDetails stubDetails{};
+
+		FileManager::ReadFileInFull(name[i], data);
+
+		int filePointer = ReadBMPDetails(data.data(), &stubDetails);
+
+		stubDetails.data = (char*)mainDictionary.AllocateImageCache(stubDetails.dataSize);
+
+		stubDetails.currPointer = stubDetails.data;
+
+		totalBlobSize += stubDetails.dataSize;
+
+		mipSizes[i] = stubDetails.dataSize;
+
+		ReadBMPData(data.data(), filePointer, &stubDetails);
+
+		if (!i)
+		{
+			memcpy(details, &stubDetails, sizeof(TextureDetails));
+		}
+		
+	}
+
+
+	details->miplevels = mipCounts;
+	details->arrayLayers = 1;
+
+	ret = mainDictionary.textureHandles[textureStart] =
+		GlobalRenderer::gRenderInstance->CreateImageHandle(
+			totalBlobSize,
+			details->width,
+			details->height,
+			details->miplevels,
+			details->type,
+			loop->GetPoolIndexByFormat(details->type));
+
+	GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+		details->data,
+		mainDictionary.textureHandles[textureStart],
+		mipSizes,
+		totalBlobSize,
+		details->width,
+		details->height,
+		details->miplevels,
+		details->arrayLayers,
+		details->type
+	);
+
+	ResourceArrayUpdate update;
+
+	update.count = 1;
+	update.dstBegin = textureStart;
+	update.handles = mainDictionary.textureHandles.data() + textureStart;
+
+	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::IMAGE2D, &update);
+
+
+	return textureStart;
 }
 
 

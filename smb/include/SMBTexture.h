@@ -42,43 +42,43 @@ public:
 	uint32_t height;
 	uint32_t miplevels;
 	uint32_t cumulativeSize;
-	uint32_t* imageSizes;
-	std::byte* data;
+	uint32_t imageSizes[10];
+	char* data;
 	uint32_t id;
 	const char* name;
+	size_t fileOffset;
 
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
 	~SMBTexture()
 	{
-		if (data)
-		{
-			delete[] data;
-		}
-
-		if (imageSizes)
-		{
-			delete[] imageSizes;
-		}
+	
 	}
 
 	SMBTexture(SMBTexture&& other) {
 		this->data = other.data;
-		this->imageSizes = other.imageSizes;
+		
+		for (int i = 0; i < other.miplevels; i++)
+		{
+			this->imageSizes[i] = other.imageSizes[i];
+		}
 		this->height = other.height;
 		this->width = other.width;
 		this->miplevels = other.miplevels;
 		this->type = other.type;
 		this->id = other.id;
 		this->cumulativeSize = other.cumulativeSize;
-
+		this->fileOffset = other.fileOffset;
 		this->name = std::move(other.name);
 		other.data = nullptr;
-		other.imageSizes = nullptr;
+		
 	};
 
 	SMBTexture(SMBTexture& other) {
 		this->data = other.data;
-		this->imageSizes = other.imageSizes;
+		for (int i = 0; i < other.miplevels; i++)
+		{
+			this->imageSizes[i] = other.imageSizes[i];
+		}
 		this->height = other.height;
 		this->width = other.width;
 		this->miplevels = other.miplevels;
@@ -86,14 +86,16 @@ public:
 		this->id = other.id;
 		this->cumulativeSize = other.cumulativeSize;
 		this->name = other.name;
+		this->fileOffset = other.fileOffset;
 		other.data = nullptr;
-		other.imageSizes = nullptr;
 	};
 
 	void MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data);
 
 	SMBTexture(const SMBFile& smb, const SMBChunk& chunk);
 
+
+	void ReadTextureData(const SMBFile& smb);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBTexture& tex)
 	{

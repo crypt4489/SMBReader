@@ -67,7 +67,12 @@ struct TextureDetails
 	uint32_t dataSize;
 	uint32_t width, height, miplevels;
 	char* data;
+	char* currPointer;
+	uint32_t arrayLayers;
+	uint32_t bitcount;
 };
 
 
-void ParseBMP(std::vector<char>& _fileData, TextureDetails* details);
+void ReadBMPData(char* _fileData, int dataPointer, TextureDetails* details);
+
+int ReadBMPDetails(char* _fileData, TextureDetails* details);

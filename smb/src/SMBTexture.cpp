@@ -1,6 +1,6 @@
 #include "SMBTexture.h"
 SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips)
-	: type(_type), width(_width), height(_height), miplevels(_mips), cumulativeSize(0), imageSizes(nullptr), data(nullptr)
+	: type(_type), width(_width), height(_height), miplevels(_mips), cumulativeSize(0),  data(nullptr)
 {
 	
 }
@@ -17,7 +17,7 @@ void SMBTexture::MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data
 }
 
 SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) 
-	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), imageSizes(nullptr), data(nullptr)
+	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), data(nullptr)
 {
 	name = chunk.fileName.c_str();
 	id = chunk.chunkId;
@@ -29,20 +29,18 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 
 	OSReadFile(fileHandle, 4 * 4, reinterpret_cast<char*>(this));
 
-	imageSizes = new uint32_t[miplevels];
+	fileOffset = chunk.contigOffset + smb.fileOffset;
 
-	OSSeekFile(fileHandle, chunk.contigOffset + smb.fileOffset, BEGIN);
+	int totalBlobSize = 0;
+
+	size_t size = 0;
 
 	int writeWidth = width;
 	int	writeHeight = height;
 
-	int size = 0;
-
-	int totalBlobSize = 0;
-
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-	
+
 		switch (type)
 		{
 			//	std::cerr << "X8L8U8V8 format is not exportable\n";
@@ -58,7 +56,7 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 			break;
 		default:
 			std::cerr << type << "\n";
-			delete[] imageSizes;
+
 			return;
 		}
 
@@ -66,22 +64,25 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 
 		totalBlobSize += size;
 
-		writeHeight >>= 1;
 		writeWidth >>= 1;
+		writeHeight >>= 1;
 	}
 
 	cumulativeSize = totalBlobSize;
+}
 
-	data = new std::byte[totalBlobSize];
+void SMBTexture::ReadTextureData(const SMBFile& smb)
+{
+	char* readHead = data;
 
-	std::byte* readHead = data;
+	auto fileHandle = FileManager::GetFile(smb.id);
+
+	OSSeekFile(fileHandle, fileOffset, BEGIN);
 
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-
 		OSReadFile(fileHandle, imageSizes[i], (char*)readHead);
 
 		readHead += imageSizes[i];
 	}
-
 }

@@ -117,7 +117,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		TexUtils::BMP::WriteOutBMPHeaders(handle, writeWidth, writeHeight);
 
-		std::byte* bgra = ptr;
+		char* bgra = ptr;
 
 		std::vector<char> input;
 
