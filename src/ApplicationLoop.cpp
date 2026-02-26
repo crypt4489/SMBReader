@@ -12,6 +12,26 @@
 
 ApplicationLoop* loop;
 
+enum PipelineHandles
+{
+	GENERIC = 0,
+	TEXT,
+	INTERPOLATE,
+	POLYNOMIAL,
+	RENDEROBJCULL,
+	DEBUGDRAW,
+	DEBUGCULL,
+	PREFIXSUM,
+	PREFIXADD,
+	WORLDORGANIZE,
+	WORLDASSIGN,
+	LIGHTORGANIZE,
+	LIGHTASSIGN,
+	NORMALDEBUGDRAW,
+	SKYBOX,
+	OUTLINE
+};
+
 enum VertexComponents
 {
 	POSITION = 1,
@@ -140,7 +160,7 @@ LightSource mainDirectionalLight =
 
 LightSource mainSpotLight =
 {
-	Vector4f(229.0, 211.0, 191.0, 100.5),
+	Vector4f(229.0, 211.0, 191.0, 5.5),
 	Vector4f(-10.0,5.0, 4.0,15.0),
 	Vector4f(0.0, 0.0, -1.0, 0.0),
 	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
@@ -657,6 +677,15 @@ void ApplicationLoop::Execute()
 		source3.pos.z = wow.z + -sinf(DegToRad(-90.0f)) * 10.0f;
 
 		GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
+
+
+		ResourceArrayUpdate update;
+
+		update.count = 1;
+		update.dstBegin = 0;
+		update.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
+
+		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &update);
 
 
 		while (running)
@@ -1677,14 +1706,6 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::IMAGE2D, &update);
 
-
-	ResourceArrayUpdate update2;
-
-	update2.count = 1;
-	update2.dstBegin = 0;
-	update2.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
-
-	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &update2);
 	
 	for (int i = 0; i < totalMeshCount; i++)
 	{
@@ -1740,7 +1761,7 @@ void CreateDebugCommandBuffers(int count)
 	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
 
-	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(6, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferAlloc, 0, 0);
 
@@ -1765,13 +1786,13 @@ void CreateDebugCommandBuffers(int count)
 
 	std::array debugCullDescriptors = { debugIndirectDrawData.indirectCullDescriptor };
 
-	ShaderComputeLayout* debugCullDescriptorLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(6);
+	ShaderComputeLayout* debugCullDescriptorLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(DEBUGCULL);
 
 	ComputeIntermediaryPipelineInfo debugCullPipelineCreate = {
 			.x = 4096 / debugCullDescriptorLayout->x,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 6,
+			.pipelinename = DEBUGCULL,
 			.descCount = 1,
 			.descriptorsetid = debugCullDescriptors.data()
 	};
@@ -1779,7 +1800,7 @@ void CreateDebugCommandBuffers(int count)
 
 	debugIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&debugCullPipelineCreate);
 
-	debugIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(5, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	debugIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(DEBUGDRAW, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectDrawDescriptor, debugAllocBuffer, 0, 0);
 
@@ -1796,7 +1817,7 @@ void CreateDebugCommandBuffers(int count)
 		.drawType = 0,
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
-		.pipelinename = 5,
+		.pipelinename = DEBUGDRAW,
 		.descCount = 2,
 		.descriptorsetid = indirectDebugDrawDescriptors.data(),
 		.indexBufferHandle = ~0,
@@ -1821,7 +1842,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
-	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(4, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
@@ -1846,7 +1867,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 
 
-	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(0, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
@@ -1881,7 +1902,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, true);
 
-	int cullLightDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(4, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int cullLightDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -1891,7 +1912,7 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
-	ShaderComputeLayout* layout = GlobalRenderer::gRenderInstance->GetComputeLayout(4);
+	ShaderComputeLayout* layout = GlobalRenderer::gRenderInstance->GetComputeLayout(RENDEROBJCULL);
 
 	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor, cullLightDescriptor };
 
@@ -1899,7 +1920,7 @@ void CreateGenericMeshCommandBuffers(int count)
 			.x = 4096 / layout->x,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 4,
+			.pipelinename = RENDEROBJCULL,
 			.descCount = 2,
 			.descriptorsetid = computeDescriptors.data()
 	};
@@ -1910,7 +1931,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	normalDebugAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndirectCommand) * 10, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	int normalDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(13, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int normalDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(NORMALDEBUGDRAW, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(normalDrawDescriptor, globalMeshLocation, 0, 0);
 
@@ -1926,7 +1947,7 @@ void CreateGenericMeshCommandBuffers(int count)
 	.drawType = 0,
 	.vertexBufferHandle = ~0,
 	.vertexCount = 0,
-	.pipelinename = 13,
+	.pipelinename = NORMALDEBUGDRAW,
 	.descCount = 1,
 	.descriptorsetid = indirectDrawDescriptors2.data(),
 	.indexBufferHandle = ~0,
@@ -1942,7 +1963,7 @@ void CreateGenericMeshCommandBuffers(int count)
 	*/
 
 
-	int outlineDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(15, 2, 3);
+	int outlineDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(OUTLINE, 2, 3);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalMeshLocation, 0, 0);
 
@@ -1965,7 +1986,7 @@ void CreateGenericMeshCommandBuffers(int count)
 		.drawType = 0,
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
-		.pipelinename = 15,
+		.pipelinename = OUTLINE,
 		.descCount = 1,
 		.descriptorsetid = indirectOutline.data(),
 		.indexBufferHandle = globalIndexBuffer,
@@ -1984,14 +2005,14 @@ void CreateGenericMeshCommandBuffers(int count)
 
 void CreateMeshWorldAssignment(int count)
 {
-	ShaderComputeLayout* prefixLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(7);
+	ShaderComputeLayout* prefixLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(PREFIXSUM);
 
 	worldSpaceAssignment.totalElementsCount = count;
 	worldSpaceAssignment.totalSumsNeeded = (int)floor(worldSpaceAssignment.totalElementsCount / (float)prefixLayout->x);
 
 	uint32_t prefixCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)prefixLayout->x);
 
-	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
@@ -2025,7 +2046,7 @@ void CreateMeshWorldAssignment(int count)
 			.x = prefixCount,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 7,
+			.pipelinename = PREFIXSUM,
 			.descCount = 1,
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
@@ -2037,7 +2058,7 @@ void CreateMeshWorldAssignment(int count)
 	if (worldSpaceAssignment.totalSumsNeeded)
 	{
 
-		worldSpaceAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+		worldSpaceAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 0, 0);
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
@@ -2053,14 +2074,14 @@ void CreateMeshWorldAssignment(int count)
 				.x = (uint32_t)worldSpaceAssignment.totalSumsNeeded,
 				.y = 1,
 				.z = 1,
-				.pipelinename = 7,
+				.pipelinename = PREFIXSUM,
 				.descCount = 1,
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
 
 		worldSpaceAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&prefixSumComputePipeline);
 
-		worldSpaceAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(8, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+		worldSpaceAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
@@ -2076,7 +2097,7 @@ void CreateMeshWorldAssignment(int count)
 				.x = (uint32_t)worldSpaceAssignment.totalSumsNeeded,
 				.y = 1,
 				.z = 1,
-				.pipelinename = 8,
+				.pipelinename = PREFIXADD,
 				.descCount = 1,
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
@@ -2084,13 +2105,13 @@ void CreateMeshWorldAssignment(int count)
 		worldSpaceAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
 	}
 
-	ShaderComputeLayout* assignmentLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(10);
+	ShaderComputeLayout* assignmentLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(WORLDORGANIZE);
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)assignmentLayout->x);
 
 	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
-	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(9, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
@@ -2106,7 +2127,7 @@ void CreateMeshWorldAssignment(int count)
 			.x = assignmentGroupCount,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 9,
+			.pipelinename = WORLDORGANIZE,
 			.descCount = 1,
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
@@ -2114,7 +2135,7 @@ void CreateMeshWorldAssignment(int count)
 	worldSpaceAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&preWorldDivComputePipeline);
 
 
-	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(10, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(WORLDASSIGN, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
@@ -2132,7 +2153,7 @@ void CreateMeshWorldAssignment(int count)
 			.x = assignmentGroupCount,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 10,
+			.pipelinename = WORLDASSIGN,
 			.descCount = 1,
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
@@ -2142,14 +2163,14 @@ void CreateMeshWorldAssignment(int count)
 
 void CreateLightAssignments(int count)
 {
-	ShaderComputeLayout* prefixLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(7);
+	ShaderComputeLayout* prefixLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(PREFIXSUM);
 
 	lightAssignment.totalElementsCount = count;
 	lightAssignment.totalSumsNeeded = (int)floor(lightAssignment.totalElementsCount / (float)prefixLayout->x);
 
 	uint32_t prefixCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)prefixLayout->x);
 
-	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
@@ -2179,7 +2200,7 @@ void CreateLightAssignments(int count)
 			.x = prefixCount,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 7,
+			.pipelinename = PREFIXSUM,
 			.descCount = 1,
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
@@ -2189,7 +2210,7 @@ void CreateLightAssignments(int count)
 	if (lightAssignment.totalSumsNeeded)
 	{
 
-		lightAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(7, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+		lightAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, lightAssignment.deviceSumsAlloc, 0, 0);
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, lightAssignment.deviceSumsAlloc, 1, 0);
@@ -2205,7 +2226,7 @@ void CreateLightAssignments(int count)
 				.x = (uint32_t)lightAssignment.totalSumsNeeded,
 				.y = 1,
 				.z = 1,
-				.pipelinename = 7,
+				.pipelinename = PREFIXSUM,
 				.descCount = 1,
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
@@ -2214,7 +2235,7 @@ void CreateLightAssignments(int count)
 
 
 
-		lightAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(8, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+		lightAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, lightAssignment.deviceOffsetsAlloc, 0, 0);
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, lightAssignment.deviceSumsAlloc, 1, 0);
@@ -2230,7 +2251,7 @@ void CreateLightAssignments(int count)
 				.x = (uint32_t)lightAssignment.totalSumsNeeded,
 				.y = 1,
 				.z = 1,
-				.pipelinename = 8,
+				.pipelinename = PREFIXADD,
 				.descCount = 1,
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
@@ -2239,14 +2260,14 @@ void CreateLightAssignments(int count)
 		lightAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
 	}
 
-	ShaderComputeLayout* assignmentLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(12);
+	ShaderComputeLayout* assignmentLayout = GlobalRenderer::gRenderInstance->GetComputeLayout(LIGHTASSIGN);
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)assignmentLayout->x);
 
 
 	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
-	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(11, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, lightAssignment.deviceCountsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
@@ -2262,7 +2283,7 @@ void CreateLightAssignments(int count)
 			.x = 1,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 11,
+			.pipelinename = LIGHTORGANIZE,
 			.descCount = 1,
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
@@ -2270,7 +2291,7 @@ void CreateLightAssignments(int count)
 	lightAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&preWorldDivComputePipeline);
 
 
-	lightAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(12, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(LIGHTASSIGN, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.deviceOffsetsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
@@ -2288,7 +2309,7 @@ void CreateLightAssignments(int count)
 			.x = 1,
 			.y = 1,
 			.z = 1,
-			.pipelinename = 12,
+			.pipelinename = LIGHTASSIGN,
 			.descCount = 1,
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
@@ -2296,6 +2317,33 @@ void CreateLightAssignments(int count)
 	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 }
 
+static std::array<std::string, 6> pds = {
+	"GenericPipeline.xml",
+	"TextPipeline.xml",
+	"DebugPipeline.xml",
+	"NormalDebugPipeline.xml",
+	"SkyboxPipeline.xml",
+	"OutlinePipeline.xml"
+};
+
+static std::array<std::string, 16> layouts = {
+		"3DTexturedLayout.xml",
+		"TextLayout.xml",
+		"InterpolateMeshLayout.xml",
+		"PolynomialLayout.xml",
+		"IndirectCull.xml",
+		"DebugDraw.xml",
+		"IndirectDebug.xml",
+		"PrefixSum.xml",
+		"PrefixSumAdd.xml",
+		"WorldObjectDivison.xml",
+		"MeshWorldAssignments.xml",
+		"LightObjectDivision.xml",
+		"LightWorldAssignment.xml",
+		"NormalDebug.xml",
+		"Skybox.xml",
+		"OutlineLayout.xml"
+};
 
 void ApplicationLoop::InitializeRuntime()
 {
@@ -2314,15 +2362,15 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance = new RenderInstance();
 
-	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow);
+	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, layouts.data(), layouts.size(), pds.data(), pds.size());
 
 	CreateTexturePools();
 
 	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	globalIndexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalIndexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 2);
 	globalVertexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalVertexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 1);
-	globalBufferDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(0, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	globalTexturesDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(0, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	globalBufferDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	globalTexturesDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	globalMeshLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMeshSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	globalMaterialsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialsSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
@@ -2409,8 +2457,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
 
-	int skyboxDesc = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(14, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	int globalPipelineBufferWhat = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(14, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int skyboxDesc = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int globalPipelineBufferWhat = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, globalBufferLocation, 0, 0);
@@ -2423,7 +2471,7 @@ void ApplicationLoop::InitializeRuntime()
 		.drawType = 0,
 		.vertexBufferHandle = globalVertexBuffer,
 		.vertexCount = 24,
-		.pipelinename = 14,
+		.pipelinename = SKYBOX,
 		.descCount = 2,
 		.descriptorsetid = skyboxDescs.data(),
 		.indexBufferHandle = globalIndexBuffer,

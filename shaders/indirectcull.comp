@@ -32,7 +32,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
-    float pad;
+    float nearDistance;
 };
 
 struct LightSource

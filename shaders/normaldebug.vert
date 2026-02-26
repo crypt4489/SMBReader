@@ -68,6 +68,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
+    float nearDistance;
 };
 
 

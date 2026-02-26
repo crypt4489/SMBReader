@@ -24,6 +24,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
+	float nearDistance;
 };
 
 layout(set = 0, binding = 0) uniform GlobalContext {
@@ -40,6 +41,8 @@ void main()
 	outPos = position;
 
 	mat4 viewWithoutTranslate = mat4(mat3(gs.view));
+
 	vec4 pos = (gs.proj * viewWithoutTranslate * position);
+
 	gl_Position = pos.xyww;
 }

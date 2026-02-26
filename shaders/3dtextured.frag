@@ -45,6 +45,7 @@ struct Frustrum
 	float nearwidth;
 	float nearheight;
 	float farDistance;
+    float nearDistance;
 };
 
 layout(set = 0, binding = 0) uniform GlobalContext {

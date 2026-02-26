@@ -806,23 +806,22 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 
 }
 
-void RenderInstance::CreatePipelines()
+
+void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount)
 {
 	// Create Shaders
 
 	static int pipelineInfoIndex = 0;
 
-	CreatePipelineDescription("SkyboxPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
+	for (int i = 0; i < pipelineDescriptionsCount; i++)
+	{
+		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++]);
+	}
 
-	CreatePipelineDescription("GenericPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
-
-	CreatePipelineDescription("DebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
-	CreatePipelineDescription("NormalDebugPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
-	CreatePipelineDescription("TextPipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
-	CreatePipelineDescription("OutlinePipeline.xml", &pipelineInfos[pipelineInfoIndex++]);
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	/*
 	std::array<std::string, 20> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
@@ -842,22 +841,15 @@ void RenderInstance::CreatePipelines()
 		"OutlineLayout.xml"
 		
 	};
+	*/
 
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
 
-	//OSFileIterator iterator;
-
-//	int track = FileManager::CreateFileIterator("*.xml", &iterator);
-
-//	if (track == OS_FAILED_SEARCH_ITER) throw std::runtime_error("Cannot find layout files");
-
-	int i = 0;
-
-	while(i<16)
+	for (int i = 0; i < shaderGraphLayoutsCount; i++)
 	{
-		vulkanShaderGraphs.shaderGraphPtrs[i] = CreateShaderGraph(layouts[i],
+		vulkanShaderGraphs.shaderGraphPtrs[i] = CreateShaderGraph(shaderGraphLayouts[i],
 			vulkanShaderGraphs.shaderGraphs, &vulkanShaderGraphs.shaderGraphOffset, 
 			shaderDetailsData + shaderDetailAlloc, &byteOffset, &detailsSize);
 
@@ -867,9 +859,6 @@ void RenderInstance::CreatePipelines()
 
 		totalDetailSize += detailsSize;
 
-	//	track = FileManager::NextFileIterator(&iterator);
-
-		i++;
 	} 
 
 	ShaderDetails* deats = (ShaderDetails*)shaderDetailsData;
@@ -917,47 +906,25 @@ void RenderInstance::CreatePipelines()
 		deats = deats->GetNext();
 	}
 
-	std::array<int, 10> pipeIndices = { MESH_INTERPOLATE, POLY, 4, 6, 7, 8, 9, 10, 11, 12 };
-
 	int computeIter = 0;
 
-	for (int i = 0; i < 16; i++)
+	int pipelineDescription = 0;
+
+	for (int i = 0; i < shaderGraphLayoutsCount; i++)
 	{
 		ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[i];
 		ShaderMap* map = (ShaderMap*)graph->GetMap(0);
 		if (map->type == COMPUTESHADERSTAGE)
 		{
-			pipelinesIdentifier[pipeIndices[computeIter++]].push_back(CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[i]));
+			pipelinesIdentifier[i].push_back(CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[i]));
+		}
+		else 
+		{
+			std::vector<EntryHandle> pipelineHandles(maxMSAALevels);
+			CreatePipelineFromGraphAndSpec(&pipelineInfos[pipelineDescription++], vulkanShaderGraphs.shaderGraphPtrs[i], pipelineHandles);
+			pipelinesIdentifier[i] = pipelineHandles;
 		}
 	}
-
-
-	std::vector<EntryHandle> l(maxMSAALevels);
-	std::vector<EntryHandle> r(maxMSAALevels);
-	std::vector<EntryHandle> debug(maxMSAALevels);
-	std::vector<EntryHandle> normaldebug(maxMSAALevels);
-	std::vector<EntryHandle> skyboxPipeline(maxMSAALevels);
-	std::vector<EntryHandle> outlinePipeline(maxMSAALevels);
-
-
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[0], vulkanShaderGraphs.shaderGraphPtrs[14], skyboxPipeline);
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[1], vulkanShaderGraphs.shaderGraphPtrs[0], r);
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[2], vulkanShaderGraphs.shaderGraphPtrs[5], debug);
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[3], vulkanShaderGraphs.shaderGraphPtrs[13], normaldebug);
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[4], vulkanShaderGraphs.shaderGraphPtrs[1], l);
-	CreatePipelineFromGraphAndSpec(&pipelineInfos[5], vulkanShaderGraphs.shaderGraphPtrs[15], outlinePipeline);
-	pipelinesIdentifier[GENERIC] = r;
-	
-	pipelinesIdentifier[TEXT] = l;
-
-	pipelinesIdentifier[5] = debug;
-
-	pipelinesIdentifier[13] = normaldebug;
-
-	pipelinesIdentifier[14] = skyboxPipeline;
-
-	pipelinesIdentifier[15] = outlinePipeline;
-
 }
 
 void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, std::vector<EntryHandle>& outHandles)
@@ -1726,7 +1693,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 
 
-void RenderInstance::CreateVulkanRenderer(WindowManager* window)
+void RenderInstance::CreateVulkanRenderer(WindowManager* window, std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount)
 {
 	this->windowMan = window;
 
@@ -1864,7 +1831,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
 		VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
 
-	CreatePipelines();
+	CreatePipelines(shaderGraphLayouts, shaderGraphLayoutsCount, pipelineDescriptions, pipelineDescriptionsCount);
 
 	computeGraphIndex = majorDevice->CreateComputeGraph(0, 50, 0);
 

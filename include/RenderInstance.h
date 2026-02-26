@@ -40,14 +40,6 @@ namespace API {
 	VkFrontFace ConvertTriangleWinding(TriangleWinding winding);
 }
 
-enum PipelineLabels
-{
-	MESH_INTERPOLATE = 0,
-	TEXT = 1,
-	GENERIC = 2,
-	POLY = 3,
-};
-
 struct RenderInstance
 {
 
@@ -73,7 +65,7 @@ struct RenderInstance
 
 	void WaitOnRender();
 
-	void CreatePipelines();
+	void CreatePipelines(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount);
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
@@ -105,7 +97,7 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(WindowManager* window);
+	void CreateVulkanRenderer(WindowManager* window, std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount);
 
 	uint32_t GetSwapChainHeight();
 
