@@ -151,7 +151,7 @@ struct LightSource
 
 LightSource mainDirectionalLight =
 {
-	Vector4f(229.0, 211.0, 191.0, .01),
+	Vector4f(229.0, 211.0, 191.0, 2.0),
 	Vector4f(0.0,0.0,0.0,0.0),
 	Vector4f(.75, -0.33, -.25, 1.0),
 	Vector4f(0.001,0.0018,0.0012,0.0),
@@ -160,7 +160,7 @@ LightSource mainDirectionalLight =
 
 LightSource mainSpotLight =
 {
-	Vector4f(229.0, 211.0, 191.0, 5.5),
+	Vector4f(229.0, 211.0, 191.0, 50.5),
 	Vector4f(-10.0,5.0, 4.0,15.0),
 	Vector4f(0.0, 0.0, -1.0, 0.0),
 	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
@@ -180,18 +180,13 @@ static int globalIndexBufferSize = 1024 * KiB;
 static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 1024 * KiB;
 
-
+static int globalLightTypesBuffer = 0;
 static int globalLightBuffer = 0;
 static int globalLightBufferSize = 1024 * KiB;
-static int globalLightBufferCount = 0;
-
-
-
+static int globalLightSize = globalLightBufferSize / sizeof(LightSource);
+static int globalLightTypesBufferSize = globalLightSize * sizeof(LightType);
 static int globalLightCount = 0;
-static int globalLightSize = (1024 * KiB) / sizeof(LightSource);
 
-static int globalLightTypesBuffer = 0;
-static int globalLightTypesBufferSize = globalLightSize * sizeof(uint32_t);
 
 static int normalDebugAlloc;
 
@@ -246,9 +241,16 @@ static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
 
 static TextureDictionary mainDictionary;
 
-Vector4f wow = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
+static int mainPointLightIndex = 0;
 
-LightSource source3 = { .color = Vector4f(229, 211, 191, 130.0), .pos = wow, .direction= Vector4f(0.54,0.75,0.38,0.0), .ancillary= Vector4f(0.04,0.07,0.03,0.0) };
+Vector4f mainPointLightPosition = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
+
+LightSource mainPointLight = { 
+	.color = Vector4f(229, 211, 191, 130.0), 
+	.pos = mainPointLightPosition, 
+	.direction= Vector4f(0.54,0.75,0.38,0.0), 
+	.ancillary= Vector4f(0.04,0.07,0.03,0.0) 
+};
 
 #define MAX_GEOMETRY 2048
 #define MAX_MESHES 4096
@@ -316,6 +318,9 @@ UniformGrid mainGrid = {
 
 static int skyboxPipeline = 0;
 static EntryHandle skyboxCubeImage = EntryHandle();
+
+static int AddLight(LightSource& lightDesc, LightType type);
+static void UpdateLight(LightSource& lightDesc, int lightIndex);
 
 static void CreateUniformGrid()
 {
@@ -672,20 +677,19 @@ void ApplicationLoop::Execute()
 
 		float x = 230.0f;
 
-		source3.pos.x = wow.x + cosf(DegToRad(-90.0f)) * 5.0f;
-		source3.pos.y = 0.0f;
-		source3.pos.z = wow.z + -sinf(DegToRad(-90.0f)) * 10.0f;
+		mainPointLight.pos.x = mainPointLightPosition.x + cosf(DegToRad(-90.0f)) * 5.0f;
+		mainPointLight.pos.y = 0.0f;
+		mainPointLight.pos.z = mainPointLightPosition.z + -sinf(DegToRad(-90.0f)) * 10.0f;
 
-		GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * 2, TransferType::MEMORY);
+		UpdateLight(mainPointLight, mainPointLightIndex);
 
+		ResourceArrayUpdate samplerUpdate;
 
-		ResourceArrayUpdate update;
+		samplerUpdate.count = 1;
+		samplerUpdate.dstBegin = 0;
+		samplerUpdate.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
 
-		update.count = 1;
-		update.dstBegin = 0;
-		update.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
-
-		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &update);
+		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 
 		while (running)
@@ -1216,40 +1220,40 @@ void ApplicationLoop::CreateCrateObject()
 
 	static Vector4f BoxColors[24] =
 	{
-		Vector4f(1,0,0,1),
-		Vector4f(1,0,0,1),
-		Vector4f(1,0,0,1),
-		Vector4f(1,0,0,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
 
 	
-		Vector4f(0,1,0,1),
-		Vector4f(0,1,0,1),
-		Vector4f(0,1,0,1),
-		Vector4f(0,1,0,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
 
 		
-		Vector4f(0,0,1,1),
-		Vector4f(0,0,1,1),
-		Vector4f(0,0,1,1),
-		Vector4f(0,0,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
 
 		
-		Vector4f(1,1,0,1),
-		Vector4f(1,1,0,1),
-		Vector4f(1,1,0,1),
-		Vector4f(1,1,0,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
 
 		
-		Vector4f(1,0,1,1),
-		Vector4f(1,0,1,1),
-		Vector4f(1,0,1,1),
-		Vector4f(1,0,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
 
 		
-		Vector4f(0,1,1,1),
-		Vector4f(0,1,1,1),
-		Vector4f(0,1,1,1),
-		Vector4f(0,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1),
+		Vector4f(1,1,1,1)
 	};
 
 	Vector3f totalNormals[24] = {
@@ -1355,13 +1359,17 @@ void ApplicationLoop::CreateCrateObject()
 	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	std::string normalmapname = "wallnormal.bmp";
+	std::string normalmapname = "WNN2.bmp";
 
 	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
 
-	std::array arr = { 0, normalMapped };
+	std::string albedomapname = "WNN.bmp";
 
-	std::array<int, 1> materialIDs = { CreateMaterial(NORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
+	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
+
+	std::array arr = { alebdoMapped, normalMapped };
+
+	std::array<int, 1> materialIDs = { CreateMaterial(ALBEDOMAPPED | VERTEXNORMAL, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
 	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
 	int materialRangeCount = 1;
@@ -1372,8 +1380,6 @@ void ApplicationLoop::CreateCrateObject()
 
 	rendInst->deviceMemoryUpdater.Create(compVerts2, sizeof(compVerts2), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
 	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
-
-	
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -2498,31 +2504,13 @@ void ApplicationLoop::InitializeRuntime()
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&mainSpotLight, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&source2, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&source3, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&source4, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&mainDirectionalLight, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&source1, sizeof(LightSource), globalLightBuffer, sizeof(LightSource)* globalLightCount++, TransferType::CACHED);
-
-
-	LightType ltype = LightType::POINT;
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 5, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 1, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 2, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 3, TransferType::CACHED);
-
-	ltype = LightType::DIRECTIONAL;
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 4, TransferType::CACHED);
-
-	ltype = LightType::SPOT;
-
-
-
-	GlobalRenderer::gRenderInstance->transferPool.Create(&ltype, sizeof(uint32_t), globalLightTypesBuffer, sizeof(uint32_t) * 0, TransferType::CACHED);
+	//AddLight(mainSpotLight, LightType::SPOT);
+	//AddLight(source1, LightType::POINT);
+	//AddLight(source2, LightType::POINT);
+	mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
+	//AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
+	//AddLight(source4, LightType::POINT);
 
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
@@ -2530,18 +2518,26 @@ void ApplicationLoop::InitializeRuntime()
 
 	c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance->GetSwapChainWidth() / (float)GlobalRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 
-	WriteCameraMatrix(GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	
-
-
-	
-
-	
-	
+	WriteCameraMatrix(GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);	
 	
 }
 
+
+static int AddLight(LightSource& lightDesc, LightType type)
+{
+	int lightLocation = globalLightCount++;
+	
+	GlobalRenderer::gRenderInstance->transferPool.Create(&lightDesc, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * lightLocation, TransferType::CACHED);
+	
+	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(LightType), globalLightTypesBuffer, sizeof(LightType) * lightLocation, TransferType::CACHED);
+	
+	return lightLocation;
+}
+
+static void UpdateLight(LightSource& lightDesc, int lightIndex)
+{
+	GlobalRenderer::gRenderInstance->transferPool.Create(&lightDesc, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * lightIndex, TransferType::CACHED);
+}
 
 EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioType)
 {
