@@ -821,28 +821,6 @@ void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shader
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	/*
-	std::array<std::string, 20> layouts = {
-		"3DTexturedLayout.xml",
-		"TextLayout.xml",
-		"InterpolateMeshLayout.xml",
-		"PolynomialLayout.xml",
-		"IndirectCull.xml",
-		"DebugDraw.xml",
-		"IndirectDebug.xml",
-		"PrefixSum.xml",
-		"PrefixSumAdd.xml",
-		"WorldObjectDivison.xml",
-		"MeshWorldAssignments.xml",
-		"LightObjectDivision.xml",
-		"LightWorldAssignment.xml",
-		"NormalDebug.xml",
-		"Skybox.xml",
-		"OutlineLayout.xml"
-		
-	};
-	*/
-
 	int detailsSize = 0, totalDetailSize = 0;
 
 	int byteOffset = 0;
@@ -1425,6 +1403,9 @@ EntryHandle RenderInstance::CreateImageHandle(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat format, int poolIndex)
 {
+
+	assert(poolIndex != 0);
+
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	EntryHandle textureIndex = majorDevice->CreateImageHandle(
@@ -1753,7 +1734,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, std::string* sh
 
 
 
-	std::array<VkFormat, 3> formats = {  VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D24_UNORM_S8_UINT };
+	std::array<VkFormat, 3> formats = { VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT,  };
 
 	VkFormat depthFormatVK = VK::Utils::findSupportedFormat(majorDevice->gpu,
 		formats.data(),

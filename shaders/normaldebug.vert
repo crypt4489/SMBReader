@@ -144,20 +144,25 @@ vec2 converttexcoords16(uint offset)
 
 vec3 convertnormal(uint offset)
 {
-    int lo = int(VertexData.vertexData[offset + 0]);
-    int lo2 = int(VertexData.vertexData[offset + 1]);
-    int hi = int(VertexData.vertexData[offset + 2]);
-    int hi2 = int(VertexData.vertexData[offset + 3]);
+    uint lo = uint(VertexData.vertexData[offset + 0]);
+    uint lo2 = uint(VertexData.vertexData[offset + 1]);
+    uint hi = uint(VertexData.vertexData[offset + 2]);
+    uint hi2 = uint(VertexData.vertexData[offset + 3]);
 
-    int normal = int((hi2<<24) | (hi<<16) | (lo2<<8) | (lo));
+    int normal = int(((hi2&0xff)<<24) | ((hi&0xff)<<16) | ((lo2&0xff)<<8) | (lo&0xff));
 
-    float denom = pow(2.0, 31.0);
+    int normx = normal << 21;
+    int normy = (normal << 10) & 0xfffff800;
+    int normz = (normal & 0xffc00000);
 
-    float x = float(normal << 21) * 1.0/denom;
-    float y = float((normal << 10) & 0xfffff800) * 1.0/denom;
-    float z = float((normal & 0xffc00000)) * 1.0/(denom-1.0);
 
-    return vec3(x, y, z);
+    float x = float(normx) / 2145386496.0;
+    float y = float(normy) / 2145386496.0;
+    float z = float(normz) / 2143289344.0;
+
+    vec3 ret = vec3(x, y, z);
+
+    return ret;
 }
 
 vec3 pack6decomp(uint offset, PerModel model)

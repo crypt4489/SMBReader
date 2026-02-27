@@ -5,6 +5,7 @@ layout(location = 1) in vec2 texCoords[8];
 layout(location = 10) in vec3 inNormal;
 layout(location = 11) in vec4 vertColor;
 layout(location = 12) flat in uint renderableIndex;
+layout(location = 13) in vec4 inTangent;
 layout(location = 0) out vec4 outColor;
 
 
@@ -72,9 +73,9 @@ layout(set = 2, binding = 3) readonly buffer GLBuffer {
 
 layout(set = 2, binding = 4) uniform usamplerBuffer globalLightTypes;
 
-
+const uint TANGENTNORMALMAPPED = 2u;
 const uint ALBEDOMAPPED = 4u;
-const uint NORMALMAPPED = 8u;
+const uint WORLDNORMALMAPPED = 8u;
 const uint VERTEXNORMAL = 16u;
 
 struct Material
@@ -177,18 +178,34 @@ void main() {
            albedoColor *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[textureIndex++]);
         }
     
-        if ((mat.materialFlags & NORMALMAPPED) == NORMALMAPPED)
+        if ((mat.materialFlags & WORLDNORMALMAPPED) == WORLDNORMALMAPPED)
         {
             vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[textureIndex++]).rgb;
 
-            normal = transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0);
+            normal = normalize(transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0));
 
             albedoColor = DoLights(normal, position, albedoColor, modelData);
         } 
 
         else if ((mat.materialFlags & VERTEXNORMAL) == VERTEXNORMAL)
         {
-            vec3 normal = normalize(transpose(inverse(mat3(modelData.transform))) * inNormal);
+            vec3 normal = inNormal;
+
+            albedoColor = DoLights(normal, position, albedoColor, modelData);
+        }
+        else if ((mat.materialFlags & TANGENTNORMALMAPPED) == TANGENTNORMALMAPPED)
+        {
+
+            vec3 N = normalize(inNormal);
+            vec3 T = normalize(inTangent.xyz);
+            T = normalize(T - N * dot(N, T));
+            vec3 B = inTangent.w * cross(N, T);
+
+            mat3 TBN = mat3(T, B, N);
+
+            vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[textureIndex++]).rgb;
+
+            normal = normalize(TBN * (2.0 * normal.xyz - 1.0));
 
             albedoColor = DoLights(normal, position, albedoColor, modelData);
         }

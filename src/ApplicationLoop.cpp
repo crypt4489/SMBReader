@@ -41,6 +41,7 @@ enum VertexComponents
 	NORMAL = 16,
 	BONES2 = 32,
 	COLOR = 64,
+	TANGENT = 128,
 	COMPRESSED = 0x80000000,
 };
 
@@ -54,8 +55,9 @@ std::array<std::string, 4> commandsStrings =
 
 enum MaterialFlags
 {
+	TANGENTNORMALMAPPED = 2,
 	ALBEDOMAPPED = 4,
-	NORMALMAPPED = 8,
+	WORLDNORMALMAPPED = 8,
 	VERTEXNORMAL = 16
 };
 
@@ -681,7 +683,7 @@ void ApplicationLoop::Execute()
 		mainPointLight.pos.y = 0.0f;
 		mainPointLight.pos.z = mainPointLightPosition.z + -sinf(DegToRad(-90.0f)) * 10.0f;
 
-		UpdateLight(mainPointLight, mainPointLightIndex);
+		//UpdateLight(mainPointLight, mainPointLightIndex);
 
 		ResourceArrayUpdate samplerUpdate;
 
@@ -814,7 +816,7 @@ void ApplicationLoop::CreateTexturePools()
 	std::array<ImageFormat, 4> formats = {
 		ImageFormat::DXT1,
 		ImageFormat::DXT3,
-		ImageFormat::R8G8B8A8,
+		ImageFormat::B8G8R8A8,
 		ImageFormat::B8G8R8A8_UNORM
 	};
 
@@ -910,23 +912,22 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
 	GlobalRenderer::gRenderInstance->transferPool.Create(&c.View, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), globalBufferLocation, 0, TransferType::MEMORY);
 }
-
-int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
+EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
-	int ret = 0;
+	EntryHandle ret = EntryHandle();
 	switch (format)
 	{
 	case ImageFormat::DXT1:
-		ret = 0;
+		ret = mainDictionary.texturePoolHandle[0];
 		break;
 	case ImageFormat::DXT3:
-		ret = 1;
+		ret = mainDictionary.texturePoolHandle[1];
 		break;
-	case ImageFormat::R8G8B8A8:
-		ret = 2;
+	case ImageFormat::B8G8R8A8:
+		ret = mainDictionary.texturePoolHandle[2];
 		break;
 	case ImageFormat::B8G8R8A8_UNORM:
-		ret = 3;
+		ret = mainDictionary.texturePoolHandle[3];
 		break;
 	}
 	return ret;
@@ -967,9 +968,9 @@ static int32_t compressnormal(Vector3f normal)
 	float y = normal.y;
 	float z = normal.z;
 
-	int16_t xs = (1023 * x);
-	int16_t ys = (1023 * y);
-	int16_t zs = (511 * z);
+	int16_t xs = (1023.5 * x);
+	int16_t ys = (1023.5 * y);
+	int16_t zs = (511.5 * z);
 
 	reg = ((zs & 0x3ff) << 22) | ((ys & 0x7ff) << 11) | ((xs & 0x7ff));
 
@@ -994,6 +995,130 @@ static Vector2f converttexcoords16(int16_t* huh)
 	return Vector2f(x, y);
 }
 
+static int32_t CompressTangent(Vector4f tangent)
+{
+
+	int wc = (tangent.w > 0.0) ? 1 : 0;
+
+	int xc = (tangent.x * 511.5);
+	int yc = (tangent.y * 511.5);
+	int zc = (tangent.z * 511.5);
+
+	int32_t ret = ((zc & 0x3ff) << 22) | ((yc & 0x3ff) << 12) | ((xc & 0x3ff) << 2) | (wc & 1);
+
+	return ret;
+}
+
+static Vector4f DecompressTangent(int32_t ctangent)
+{
+
+	float w = (ctangent & 1) ? 1.0f : -1.0f;
+
+	int zi = (int)(ctangent & 0xffc00000);
+	int yi = (int)(ctangent & 0x003ff000)<<10;
+	int xi = (int)(ctangent & 0x00000ffc)<<20;
+
+	float x = (float)(xi) / 2143289344.0f;
+	float y = (float)(yi) / 2143289344.0f;
+	float z = (float)(zi) / 2143289344.0f;
+
+	return Vector4f(x, y, z, w);
+}
+
+#include <cassert>
+
+void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents)
+{
+	
+	Vector3f* totalTangents = (Vector3f*)calloc(sizeof(Vector3f), totalVertCount);
+	float* signBitTangents = (float*)calloc(sizeof(float), totalVertCount);
+	//Vector3f* totalNormals = (Vector3f*)calloc(sizeof(Vector3f), totalVertCount);
+
+	assert(signBitTangents);
+	assert(totalTangents);
+
+	for (int lead = 0; lead < totalIndexCount-2; lead++)
+	{
+		uint16_t index1 = indices[lead];
+		uint16_t index2 = indices[lead + 1];
+		uint16_t index3 = indices[lead + 2];
+
+		bool odd = (lead & 1) != 0;
+
+		if (odd)
+			std::swap(index2, index3);
+
+		Vector3f vert1 = Vector3f(pos[index1].x, pos[index1].y, pos[index1].z);
+		Vector3f vert2 = Vector3f(pos[index2].x, pos[index2].y, pos[index2].z);
+		Vector3f vert3 = Vector3f(pos[index3].x, pos[index3].y, pos[index3].z);
+
+
+		Vector3f e1 = vert2 - vert1;
+		Vector3f e2 = vert3 - vert1;
+
+		Vector3f normal = Cross(e1, e2);
+
+		float area2 = Dot(normal, normal);
+
+		if (area2 <= 0.0f) {
+			continue;
+		}
+
+		normal = normals[index1];
+
+		Vector2f uv1 = uvs[index1];
+		Vector2f uv2 = uvs[index2];
+		Vector2f uv3 = uvs[index3];
+
+		Vector2f duv1 = uv2 - uv1;
+		Vector2f duv2 = uv3 - uv1;
+
+		float f_det = (duv1.x * duv2.y - duv2.x * duv1.y);
+
+		
+
+		float f = 1.0f / f_det;
+
+		Vector3f tangent;
+		tangent = Normalize((e1 * duv2.y - e2 * duv1.y) * f);
+
+		Vector3f bitangent = Normalize((e2 * duv1.x - e1 * duv2.x) * f);
+
+
+		Vector3f n = Normalize(normal);
+		float sign = (Dot(Cross(n, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
+
+		totalTangents[index1] = totalTangents[index1] + tangent;
+		totalTangents[index2] = totalTangents[index2] + tangent;
+		totalTangents[index3] = totalTangents[index3] + tangent;
+
+		signBitTangents[index1] += sign;
+		signBitTangents[index2] += sign;
+		signBitTangents[index3] += sign;
+	}
+
+
+	for (int lead = 0; lead < totalVertCount; lead++)
+	{
+
+		Vector3f normal = normals[lead];
+		Vector3f tangent = totalTangents[lead];
+
+		tangent = Normalize(tangent - (normal * Dot(normal, tangent)));
+
+		float handedness = signBitTangents[lead] < 0.0f ? -1.0f : 1.0f;
+
+		Vector4f outTangent = Vector4f(tangent.x, tangent.y, tangent.z, handedness);
+
+		tangents[lead] = outTangent;
+	}
+
+	free(totalTangents);
+	free(signBitTangents);
+
+
+}
+
 int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCount, int vertexStride, int vertexCount, 
 	AxisBox& box, void* vertexStream, void* memoryOut, int* compressedSize, int* vertexFlags)
 {
@@ -1005,19 +1130,20 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 
 	enum VertexPosition
 	{
-		PPOSITION = 7,
-		PCOLOR0 = 6,
+		PPOSITION = 8,
+		PCOLOR0 = 7,
 		BONESWEIGHTS = 0,
 		PTEX0 = 1,
 		PTEX1 = 2,
 		PTEX2 = 3,
 		PTEX3 = 4,
 		PNORMAL = 5,
+		PTANGENT = 6,
 	};
 
-	std::array<int, 8> positionalOffsets;
+	std::array<int, 9> positionalOffsets;
 
-	memset(positionalOffsets.data(), 0, sizeof(int) * 8);
+	memset(positionalOffsets.data(), 0, sizeof(int) * positionalOffsets.size());
 
 	*vertexFlags |= COMPRESSED;
 
@@ -1059,6 +1185,20 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 			*vertexFlags |= TEXTURE0;
 			break;
 		}
+		case VertexUsage::TEX1:
+		{
+			size = sizeof(Vector2s);
+			positionIndex = PTEX1;
+			*vertexFlags |= TEXTURE1;
+			break;
+		}
+		case VertexUsage::TANGENTS:
+		{
+			size = sizeof(int32_t);
+			positionIndex = PTANGENT;
+			*vertexFlags |= TANGENT;
+			break;
+		}
 		}
 
 		positionalOffsets[positionIndex] = size;
@@ -1067,7 +1207,7 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 
 	int prev = *compressedSize;
 
-	for (int i = 7; i >= 0; i--)
+	for (int i = 8; i >= 0; i--)
 	{
 		prev -= positionalOffsets[i];
 		positionalOffsets[i] = prev;
@@ -1138,6 +1278,33 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 				}
 				break;
 			}
+			case VertexUsage::TEX1:
+			{
+				switch (desc->format)
+				{
+
+				case ComponentFormatType::R32G32_SFLOAT:
+				{
+					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX1], &packed, sizeof(Vector2s));
+					break;
+				}
+				}
+				break;
+			}
+			case VertexUsage::TANGENTS:
+			{
+				switch (desc->format)
+				{
+				case ComponentFormatType::R32G32B32A32_SFLOAT:
+				{
+					int32_t packed = CompressTangent(*((Vector4f*)genericInput));
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTANGENT], &packed, sizeof(int32_t));
+					break;
+				}
+				}
+				break;
+			}
 			}
 		}
 
@@ -1152,7 +1319,7 @@ void ApplicationLoop::CreateCrateObject()
 {
 
 
-	VertexInputDescription inputDescription[4];
+	VertexInputDescription inputDescription[6];
 
 	inputDescription[0].byteoffset = 0;
 	inputDescription[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -1169,6 +1336,14 @@ void ApplicationLoop::CreateCrateObject()
 	inputDescription[3].byteoffset = 44;
 	inputDescription[3].format = ComponentFormatType::R32G32_SFLOAT;
 	inputDescription[3].vertexusage = VertexUsage::TEX0;
+
+	inputDescription[4].byteoffset = 52;
+	inputDescription[4].format = ComponentFormatType::R32G32_SFLOAT;
+	inputDescription[4].vertexusage = VertexUsage::TEX1;
+
+	inputDescription[5].byteoffset = 60;
+	inputDescription[5].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	inputDescription[5].vertexusage = VertexUsage::TANGENTS;
 
 
 
@@ -1316,12 +1491,18 @@ void ApplicationLoop::CreateCrateObject()
 		
 	};
 
+	Vector4f tangents[24];
+
+	CreateBitTangentFromNormal(BoxVerts, texturesCoordinate, totalNormals, BoxIndices, 52, 24, tangents);
+
 	struct MyVertex
 	{
 		Vector4f pos;
 		Vector4f color;
 		Vector3f normal;
 		Vector2f texCoords;
+		Vector2f texCoords2;
+		Vector4f tangent;
 	};
 
 
@@ -1340,11 +1521,13 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].color = BoxColors[i];
 		compVerts[i].normal = totalNormals[i];
 		compVerts[i].texCoords = texturesCoordinate[i];
+		compVerts[i].texCoords2 = texturesCoordinate[i];
+		compVerts[i].tangent = tangents[i];
 	}
 
 	int compressedSize = 0, vertexFlags = 0;
 
-	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 4, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 6, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1369,7 +1552,7 @@ void ApplicationLoop::CreateCrateObject()
 
 	std::array arr = { alebdoMapped, normalMapped };
 
-	std::array<int, 1> materialIDs = { CreateMaterial(ALBEDOMAPPED | VERTEXNORMAL, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
+	std::array<int, 1> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
 	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
 	int materialRangeCount = 1;
@@ -1505,7 +1688,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			meshTextureHandles.Update(textureStart + i, geoDef->materialsId[base + i]);
 		}
 
-		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? NORMALMAPPED : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0))};
+		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
 		//geoDef->spheres[i].sphere.w += .75f;
 
@@ -2505,11 +2688,11 @@ void ApplicationLoop::InitializeRuntime()
 	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
 
 
-	//AddLight(mainSpotLight, LightType::SPOT);
+	AddLight(mainSpotLight, LightType::SPOT);
 	//AddLight(source1, LightType::POINT);
 	//AddLight(source2, LightType::POINT);
-	mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
-	//AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
+	//mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
+	AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
 	//AddLight(source4, LightType::POINT);
 
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));

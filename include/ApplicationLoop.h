@@ -61,7 +61,7 @@ public:
 
 	void CreateTexturePools();
 
-	int GetPoolIndexByFormat(ImageFormat format);
+	EntryHandle GetPoolIndexByFormat(ImageFormat format);
 
 	void LoadSMBFile(SMBFile& file);
 

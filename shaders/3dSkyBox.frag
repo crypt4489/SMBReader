@@ -8,5 +8,7 @@ layout(set = 1, binding = 0) uniform samplerCube Texture;
 
 void main()
 {
-	color = texture(Texture, normalize(inPos.xyz));
+	vec3 pos = normalize(inPos.xyz);
+	pos.x = -pos.x;
+	color = texture(Texture, pos);
 }

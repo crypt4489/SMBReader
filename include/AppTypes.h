@@ -408,7 +408,8 @@ enum class VertexUsage : size_t
 	BONES = 6,
 	WEIGHTS = 7,
 	COLOR0 = 8, 
-	NUM_VERTEX_FORMAT = 9
+	TANGENTS = 9,
+	NUM_VERTEX_FORMAT
 };
 
 enum class VertexBufferRate
