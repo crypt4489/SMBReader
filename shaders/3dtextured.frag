@@ -23,9 +23,9 @@ struct Renderable
 	uint pad1;
 	uint lightIndices[4];
 	uint materialStart;
-	uint materialCount;
 	uint blendLayersStart;
-	uint blendLayerCount;
+	uint materialCount;
+    uint pad2;
 	mat4 transform;
 };
 
@@ -81,15 +81,17 @@ const uint VERTEXNORMAL = 16u;
 struct Material
 {
 	uint materialFlags;
-	uint unused1;
+	float shinniness;
 	uint unused2;
 	uint unused3;
 	vec4 albedoColor;
 	uvec4 textureHandles; // y - normalMapCoordinates // x- albedo
+    vec4 emissive;
+    vec4 specular;
 };
 
 layout(set = 2, binding = 5) uniform MaterialContext {
-   Material matsData[85];
+   Material matsData[50];
 } mats;
 
 layout(set = 2, binding = 6) readonly buffer RENDBuffer {
@@ -97,6 +99,18 @@ layout(set = 2, binding = 6) readonly buffer RENDBuffer {
 } rends;
 
 layout(set = 2, binding = 7) uniform usamplerBuffer globalMaterialIndices;
+
+struct BlendDetails
+{
+	uint type;
+    uint alphaMapHandleBlendFactor; //union based on type;
+};
+
+layout(set = 2, binding = 8) readonly buffer BLENDBuffer {
+    BlendDetails details[];
+} blends;
+
+layout(set = 2, binding = 9) uniform usamplerBuffer globalBlendIndices;
 
 vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable modelData)
 {
@@ -154,6 +168,51 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable modelData)
     return vec4(cumColor.xyz, 1.0);
 }
 
+struct PixelColorData
+{
+    vec3 diffuse;
+    vec3 specular;
+    vec3 normal;
+    vec3 emissive;
+    float shinniness;
+};
+
+PixelColorData ZeroColorData()
+{
+    PixelColorData data;
+
+    data.diffuse = vec3(0.0);
+    data.specular = vec3(0.0);
+    data.normal = vec3(0.0);
+    data.emissive = vec3(0.0);
+    data.shinniness = 0.0; 
+
+    return data;
+}
+
+
+const uint ConstantAlpha = 1;
+const uint BlendMap = 2;
+
+float GetPixelBlendWeight(BlendDetails details, uint textureIndex)
+{
+    float ret = 1.0; 
+
+    switch(details.type)
+    {
+        case ConstantAlpha:
+            ret = uintBitsToFloat(details.alphaMapHandleBlendFactor);
+            break;
+        case BlendMap:
+            ret = texture(sampler2D(Textures[details.alphaMapHandleBlendFactor], samplerLinear), texCoords[0]).r;
+            break;
+        default:
+            break;
+    }
+
+    return ret;
+}
+
 void main() {
 
     Renderable modelData = rends.renderables[renderableIndex];
@@ -162,42 +221,51 @@ void main() {
 
     uint materialStart = modelData.materialStart;
 
+    uint blendStart = modelData.blendLayersStart;
+
     uint textureIndex = 0;
+
+    PixelColorData accumulatedColorData = ZeroColorData();
 
     for (uint i = 0; i<modelData.materialCount; i++)
     {
 
-        uint mateiralIndex = uint(texelFetch(globalMaterialIndices, int(materialStart + i)).r);
+        uint materialIndex = uint(texelFetch(globalMaterialIndices, int(materialStart + i)).r);
 
-        Material mat = mats.matsData[mateiralIndex];
+        uint blendIndex = uint(texelFetch(globalBlendIndices, int(blendStart + i)).r);
 
-        vec4 albedoColor = mat.albedoColor;
+        Material mat = mats.matsData[materialIndex];
+
+        BlendDetails details = blends.details[blendIndex];
+
+        PixelColorData colorData = ZeroColorData();
+
+        float w =  GetPixelBlendWeight(details, textureIndex);
+
+        colorData.diffuse = mat.albedoColor.xyz;
+        colorData.specular = mat.specular.xyz;
+        colorData.emissive = mat.emissive.xyz;
         
         if ((mat.materialFlags & ALBEDOMAPPED) == ALBEDOMAPPED)
         {
-           albedoColor *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[textureIndex++]);
+           colorData.diffuse *= texture(sampler2D(Textures[mat.textureHandles.x], samplerLinear), texCoords[textureIndex++]).rgb;
         }
     
         if ((mat.materialFlags & WORLDNORMALMAPPED) == WORLDNORMALMAPPED)
         {
             vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[textureIndex++]).rgb;
 
-            normal = normalize(transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0));
-
-            albedoColor = DoLights(normal, position, albedoColor, modelData);
+            colorData.normal = normalize(transpose(inverse(mat3(modelData.transform))) * (2.0 * normal.xyz - 1.0));
         } 
-
         else if ((mat.materialFlags & VERTEXNORMAL) == VERTEXNORMAL)
         {
-            vec3 normal = inNormal;
-
-            albedoColor = DoLights(normal, position, albedoColor, modelData);
+            colorData.normal = inNormal;
         }
         else if ((mat.materialFlags & TANGENTNORMALMAPPED) == TANGENTNORMALMAPPED)
         {
-
             vec3 N = normalize(inNormal);
             vec3 T = normalize(inTangent.xyz);
+
             T = normalize(T - N * dot(N, T));
             vec3 B = inTangent.w * cross(N, T);
 
@@ -205,13 +273,24 @@ void main() {
 
             vec3 normal = texture(sampler2D(Textures[mat.textureHandles.y], samplerLinear), texCoords[textureIndex++]).rgb;
 
-            normal = normalize(TBN * (2.0 * normal.xyz - 1.0));
-
-            albedoColor = DoLights(normal, position, albedoColor, modelData);
+            colorData.normal = normalize(TBN * (2.0 * normal.xyz - 1.0));
         }
 
-        totalColor *= albedoColor;
+        accumulatedColorData.diffuse += (colorData.diffuse * w);
+        accumulatedColorData.normal += (colorData.normal * w);
+        accumulatedColorData.specular += (colorData.specular * w);
+        accumulatedColorData.emissive += (colorData.emissive * w);
+        accumulatedColorData.shinniness += (colorData.shinniness * w);
+
+        textureIndex = 0;
+
     }
 
-    outColor = totalColor;
+    vec4 albedoColor = vec4(accumulatedColorData.diffuse, 1.0);
+    if (any(notEqual(vec3(0.0), accumulatedColorData.normal)))
+    {
+        albedoColor = DoLights(accumulatedColorData.normal, position, albedoColor, modelData);
+    }
+
+    outColor = totalColor * albedoColor;
 }

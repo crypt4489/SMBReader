@@ -27,9 +27,13 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="f" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="uniform" used="f" count="85">
+		<ShaderResourceItem type="uniform" used="f" count="51">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="vf" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="f" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="f" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="f" rw="read">
 		</ShaderResourceItem>

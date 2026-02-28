@@ -55,6 +55,7 @@ std::array<std::string, 4> commandsStrings =
 
 enum MaterialFlags
 {
+	ALPHACUTTOFFMAP = 1,
 	TANGENTNORMALMAPPED = 2,
 	ALBEDOMAPPED = 4,
 	WORLDNORMALMAPPED = 8,
@@ -64,11 +65,13 @@ enum MaterialFlags
 struct Material
 {
 	int materialFlags;
-	int unused1;
+	float shinniness;
 	int unused2;
 	int unused3;
 	Vector4f albedoColor;
 	Vector4ui textureHandles; // y - normalMapCoordinates // x- albedo
+	Vector4f emissiveColor;
+	Vector4f specularColor;
 };
 
 struct Renderable
@@ -79,13 +82,13 @@ struct Renderable
 	int pad1;
 	int lightIndices[4];
 	int materialStart;
-	int materialCount;
 	int blendLayersStart;
-	int blendLayerCount;
+	int materialCount;
+	int pad2;
 	Matrix4f transform;
 };
 
-struct Handles
+struct MeshDetails
 {
 	int vertexFlags;
 	int stride;
@@ -97,6 +100,21 @@ struct Handles
 	int pad3;
 	AxisBox minMaxBox;
 	Sphere sphere;
+};
+
+enum BlendMaterialType
+{
+	ConstantAlpha = 1,
+	BlendMap = 2,
+};
+
+struct BlendDetails
+{
+	BlendMaterialType type;
+	union {
+		float alphaBlend;
+		int alphaMapHandle;
+	};
 };
 
 struct IndirectDrawData
@@ -224,6 +242,17 @@ static int globalMaterialIndicesSize = 4 * KiB;
 static int globalMaterialsLocation; 
 static int globalMaterialsSize = 4 * KiB;
 static int globalMaterialsIndex = 0;
+
+static int globalBlendDetailsLocation;
+static int globalBlendRangesLocation;
+static int globalBlendDetailsSize = 1 * KiB;
+static int globalBlendRangesSize = 1 * KiB;
+static int globalBlendDetailCount = 0;
+static int globalBlendRangeCount = 0;
+
+static int CreateBlendRange(int* blendIDs, int blendCount);
+static int CreateBlendDetails(BlendMaterialType type, float constantAlpha);
+static int CreateBlendDetails(BlendMaterialType type, int mapID);
 
 static char vertexAndIndicesMemory[16 * MiB];
 static char meshObjectSpecificMemory[2 * MiB];
@@ -430,7 +459,7 @@ int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
 	return ret;
 }
 
-int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int blendCount, int meshIndex, int instanceCount)
+int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
 {
 	Renderable* renderable = &renderablesObjects[globalRenderableCount];
 
@@ -440,7 +469,6 @@ int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int mate
 	renderable->materialStart = materialStart;
 	renderable->meshIndex = meshIndex;
 	renderable->blendLayersStart = blendStart;
-	renderable->blendLayerCount = blendCount;
 	renderable->materialStart = materialStart;
 	renderable->materialCount = materialCount;
 	renderable->transform = mat;
@@ -503,7 +531,7 @@ int ApplicationLoop::CreateMeshHandle(
 	mesh->meshInstanceLocalMemoryCount = 1;
 
 
-	Handles* handles = (Handles*)meshObjectSpecificAlloc.Allocate(sizeof(Handles));
+	MeshDetails* handles = (MeshDetails*)meshObjectSpecificAlloc.Allocate(sizeof(MeshDetails));
 
 	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
 
@@ -521,12 +549,12 @@ int ApplicationLoop::CreateMeshHandle(
 	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
-	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(Handles), 1);
+	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(MeshDetails), 1);
 
 	mesh->meshInstanceDeviceMemoryCount = 1;
 	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
 
 	return meshIndex;
 }
@@ -536,14 +564,14 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
 	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
-	Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+	MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
 
 
 	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
 	//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-	rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
+	rendInst->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 
 }
 
@@ -559,13 +587,13 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 	{
 		Mesh* mesh = &meshInstanceData.dataArray[meshStart + i];
 
-		Handles* handles = (Handles*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+		MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
 
 		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
 
 		//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-		rendInst->transferPool.Create(handles, sizeof(Handles), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
+		rendInst->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
 	}
 
 }
@@ -1542,24 +1570,42 @@ void ApplicationLoop::CreateCrateObject()
 	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
+	std::string blendname = "blendmap.bmp";
+
+	std::string skyname = "sky.bmp";
+
+	int blendMapped = Read2DImage(&blendname, 1, BMP);
+	int skymapped = Read2DImage(&skyname, 1, BMP);
+
+	int blendStart = CreateBlendDetails(BlendMaterialType::ConstantAlpha, 0.5f);
+	int blendStart2 = CreateBlendDetails(BlendMaterialType::BlendMap, blendMapped);
+
+	std::array blends = { blendStart, blendStart2 };
+
+	int blendRange = CreateBlendRange(blends.data(), 2);
+
 	std::string normalmapname = "WNN2.bmp";
 
 	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
 
 	std::string albedomapname = "WNN.bmp";
 
+
 	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
 
-	std::array arr = { alebdoMapped, normalMapped };
+	std::array arr = { alebdoMapped, normalMapped, skymapped };
 
-	std::array<int, 1> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0))};
 
-	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
-	int materialRangeCount = 1;
+
+	std::array<int, 2> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0)),
+		CreateMaterial(ALBEDOMAPPED, arr.data()+2, 1, Vector4f(1.0, 1.0, 1.0, 1.0))};
+
+	int materialRangeStart = AddMaterialToDeviceMemory(2, materialIDs.data());
+	int materialRangeCount = 2;
 
 	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, vertexFlags, 24, compressedSize, 2, 52, BOX, sphere, vertexAlloc, indexAlloc);
 
-	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, 0, 0, meshIndex, 1);
+	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
 
 	rendInst->deviceMemoryUpdater.Create(compVerts2, sizeof(compVerts2), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
 	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
@@ -1702,9 +1748,15 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			vertexAlloc, indexAlloc
 		);
 
+
+		int blendStart = CreateBlendDetails(BlendMaterialType::ConstantAlpha, 1.0f);
+
+		std::array blends = { blendStart };
+
+		int blendRange = CreateBlendRange(blends.data(), 1);
 		
 
-		int renderableIndex = CreateRenderable(*geomSpecificData, materialRangeStart, materialRangeCount, 0, 0, meshIndex, 1);
+		int renderableIndex = CreateRenderable(*geomSpecificData, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
 
 	}
 
@@ -2066,6 +2118,8 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialsLocation, 5, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalRenderableLocation, 6, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialIndicesLocation, 7, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalBlendDetailsLocation, 8, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalBlendRangesLocation, 9, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
 	std::array<int, 1> indirectDrawDescriptors = {
@@ -2573,6 +2627,9 @@ void ApplicationLoop::InitializeRuntime()
 	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialIndicesSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 	globalRenderableLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalRenderableSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
+	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendDetailsSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalBlendRangesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendRangesSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
@@ -3065,4 +3122,43 @@ void ScanSTDIN(void* data)
 
 
 	return;
+}
+
+static int CreateBlendRange(int* blendIDs, int blendCount)
+{
+	int loc = globalBlendRangeCount;
+
+	globalBlendRangeCount += blendCount;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(blendIDs, sizeof(int) * blendCount, globalBlendRangesLocation, sizeof(int) * loc, TransferType::CACHED);
+
+	return loc;
+}
+
+static int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
+{
+	int loc = globalBlendDetailCount++;
+
+	BlendDetails details;
+
+	details.type = type;
+	details.alphaBlend = constantAlpha;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&details, sizeof(BlendDetails), globalBlendDetailsLocation, sizeof(BlendDetails) * loc, TransferType::CACHED);
+
+	return loc;
+}
+
+static int CreateBlendDetails(BlendMaterialType type, int mapID)
+{
+	int loc = globalBlendDetailCount++;
+
+	BlendDetails details;
+
+	details.type = type;
+	details.alphaMapHandle = mapID;
+
+	GlobalRenderer::gRenderInstance->transferPool.Create(&details, sizeof(BlendDetails), globalBlendDetailsLocation, sizeof(BlendDetails) * loc, TransferType::CACHED);
+
+	return loc;
 }

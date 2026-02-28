@@ -31,9 +31,9 @@ struct Renderable
 	uint pad1;
 	uint lightIndices[4];
 	uint materialStart;
-	uint materialCount;
 	uint blendLayersStart;
-	uint blendLayerCount;
+	uint materialCount;
+    uint pad2;
 	mat4 transform;
 };
 
