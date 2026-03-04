@@ -79,7 +79,7 @@ struct RenderInstance
 
 	void UploadDeviceLocalTransfers(RecordingBufferObject* rbo);
 
-	int GetAllocFromBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation);
+	int GetAllocFromBuffer(size_t structureSize, size_t copiesOfStructure, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation);
 
 	EntryHandle CreateImageHandle(
 		uint32_t blobSize,

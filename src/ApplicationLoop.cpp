@@ -1037,6 +1037,16 @@ static int32_t CompressTangent(Vector4f tangent)
 	return ret;
 }
 
+static int32_t CompressColor(Vector4f color)
+{
+	int r = (int)(color.x * 255.5);
+	int g = (int)(color.y * 255.5);
+	int b = (int)(color.z * 255.5);
+	int a = (int)(color.w * 255.5);
+
+	return (a << 24) | (b << 16) | (g << 8) | (r);
+}
+
 static Vector4f DecompressTangent(int32_t ctangent)
 {
 
@@ -1065,16 +1075,13 @@ void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals,
 	assert(signBitTangents);
 	assert(totalTangents);
 
+	memset(normals, 0, sizeof(Vector3f) * totalVertCount);
+
 	for (int lead = 0; lead < totalIndexCount-2; lead++)
 	{
 		uint16_t index1 = indices[lead];
 		uint16_t index2 = indices[lead + 1];
 		uint16_t index3 = indices[lead + 2];
-
-		bool odd = (lead & 1) != 0;
-
-		if (odd)
-			std::swap(index2, index3);
 
 		Vector3f vert1 = Vector3f(pos[index1].x, pos[index1].y, pos[index1].z);
 		Vector3f vert2 = Vector3f(pos[index2].x, pos[index2].y, pos[index2].z);
@@ -1092,7 +1099,9 @@ void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals,
 			continue;
 		}
 
-		normal = normals[index1];
+		normals[index1] = normals[index1] + normal;
+		normals[index2] = normals[index2] + normal;
+		normals[index3] = normals[index3] + normal;
 
 		Vector2f uv1 = uvs[index1];
 		Vector2f uv2 = uvs[index2];
@@ -1128,8 +1137,10 @@ void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals,
 
 	for (int lead = 0; lead < totalVertCount; lead++)
 	{
-
 		Vector3f normal = normals[lead];
+
+		normal = Normalize(normal);
+
 		Vector3f tangent = totalTangents[lead];
 
 		tangent = Normalize(tangent - (normal * Dot(normal, tangent)));
@@ -1139,6 +1150,8 @@ void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals,
 		Vector4f outTangent = Vector4f(tangent.x, tangent.y, tangent.z, handedness);
 
 		tangents[lead] = outTangent;
+
+		normals[lead] = normal;
 	}
 
 	free(totalTangents);
@@ -1201,7 +1214,7 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 		}
 		case VertexUsage::COLOR0:
 		{
-			size = sizeof(Vector4f);
+			size = sizeof(int32_t);
 			positionIndex = PCOLOR0;
 			*vertexFlags |= COLOR;
 			break;
@@ -1218,6 +1231,13 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 			size = sizeof(Vector2s);
 			positionIndex = PTEX1;
 			*vertexFlags |= TEXTURE1;
+			break;
+		}
+		case VertexUsage::TEX2:
+		{
+			size = sizeof(Vector2s);
+			positionIndex = PTEX2;
+			*vertexFlags |= TEXTURE2;
 			break;
 		}
 		case VertexUsage::TANGENTS:
@@ -1286,7 +1306,9 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 
 				case ComponentFormatType::R32G32B32A32_SFLOAT:
 				{
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PCOLOR0], genericInput, sizeof(Vector4f));
+					Vector4f* color = (Vector4f*)genericInput;
+					int32_t pack = CompressColor(*color);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PCOLOR0], &pack, sizeof(int32_t));
 					break;
 				}
 				}
@@ -1320,6 +1342,20 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 				}
 				break;
 			}
+			case VertexUsage::TEX2:
+			{
+				switch (desc->format)
+				{
+
+				case ComponentFormatType::R32G32_SFLOAT:
+				{
+					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
+					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX2], &packed, sizeof(Vector2s));
+					break;
+				}
+				}
+				break;
+			}
 			case VertexUsage::TANGENTS:
 			{
 				switch (desc->format)
@@ -1347,7 +1383,7 @@ void ApplicationLoop::CreateCrateObject()
 {
 
 
-	VertexInputDescription inputDescription[6];
+	VertexInputDescription inputDescription[7];
 
 	inputDescription[0].byteoffset = 0;
 	inputDescription[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -1367,11 +1403,15 @@ void ApplicationLoop::CreateCrateObject()
 
 	inputDescription[4].byteoffset = 52;
 	inputDescription[4].format = ComponentFormatType::R32G32_SFLOAT;
-	inputDescription[4].vertexusage = VertexUsage::TEX1;
+	inputDescription[4].vertexusage = VertexUsage::TEX1;	
 
 	inputDescription[5].byteoffset = 60;
-	inputDescription[5].format = ComponentFormatType::R32G32B32A32_SFLOAT;
-	inputDescription[5].vertexusage = VertexUsage::TANGENTS;
+	inputDescription[5].format = ComponentFormatType::R32G32_SFLOAT;
+	inputDescription[5].vertexusage = VertexUsage::TEX2;
+
+	inputDescription[6].byteoffset = 68;
+	inputDescription[6].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	inputDescription[6].vertexusage = VertexUsage::TANGENTS;
 
 
 
@@ -1459,35 +1499,6 @@ void ApplicationLoop::CreateCrateObject()
 		Vector4f(1,1,1,1)
 	};
 
-	Vector3f totalNormals[24] = {
-
-
-		Vector3f(1.0, 0.0, 0.0),
-		Vector3f(1.0, 0.0, 0.0),
-		Vector3f(1.0, 0.0, 0.0),
-		Vector3f(1.0, 0.0, 0.0),
-		Vector3f(-1.0, 0.0, 0.0),
-		Vector3f(-1.0, 0.0, 0.0),
-		Vector3f(-1.0, 0.0, 0.0),
-		Vector3f(-1.0, 0.0, 0.0),
-		Vector3f(0.0, 1.0, 0.0),
-		Vector3f(0.0, 1.0, 0.0),
-		Vector3f(0.0, 1.0, 0.0),
-		Vector3f(0.0, 1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		Vector3f(0.0, -1.0, 0.0),
-		
-		Vector3f(0.0, 0.0, 1.0),
-		Vector3f(0.0, 0.0, 1.0),
-		Vector3f(0.0, 0.0, 1.0),
-		Vector3f(0.0, 0.0, 1.0),
-		Vector3f(0.0, 0.0, -1.0),
-		Vector3f(0.0, 0.0, -1.0),
-		Vector3f(0.0, 0.0, -1.0),
-		Vector3f(0.0, 0.0, -1.0),
-	};
 
 	Vector2f texturesCoordinate[24] = {
 
@@ -1519,6 +1530,7 @@ void ApplicationLoop::CreateCrateObject()
 		
 	};
 
+	Vector3f totalNormals[24];
 	Vector4f tangents[24];
 
 	CreateBitTangentFromNormal(BoxVerts, texturesCoordinate, totalNormals, BoxIndices, 52, 24, tangents);
@@ -1530,12 +1542,13 @@ void ApplicationLoop::CreateCrateObject()
 		Vector3f normal;
 		Vector2f texCoords;
 		Vector2f texCoords2;
+		Vector2f texCoords3;
 		Vector4f tangent;
 	};
 
 
 	MyVertex compVerts[24];
-	char compVerts2[2048];
+	char compVerts2[4*KiB];
 
 	AxisBox BOX =
 	{
@@ -1550,12 +1563,13 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].normal = totalNormals[i];
 		compVerts[i].texCoords = texturesCoordinate[i];
 		compVerts[i].texCoords2 = texturesCoordinate[i];
+		compVerts[i].texCoords3 = texturesCoordinate[i];
 		compVerts[i].tangent = tangents[i];
 	}
 
 	int compressedSize = 0, vertexFlags = 0;
 
-	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 6, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 7, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1574,28 +1588,25 @@ void ApplicationLoop::CreateCrateObject()
 
 	std::string skyname = "sky.bmp";
 
+	std::string normalmapname = "WNN2.bmp";
+
+	std::string albedomapname = "WNN.bmp";
+
+	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
+
+	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
+
 	int blendMapped = Read2DImage(&blendname, 1, BMP);
 	int skymapped = Read2DImage(&skyname, 1, BMP);
 
-	int blendStart = CreateBlendDetails(BlendMaterialType::ConstantAlpha, 0.5f);
+	int blendStart = CreateBlendDetails(BlendMaterialType::ConstantAlpha, 1.0f);
 	int blendStart2 = CreateBlendDetails(BlendMaterialType::BlendMap, blendMapped);
 
 	std::array blends = { blendStart, blendStart2 };
 
 	int blendRange = CreateBlendRange(blends.data(), 2);
 
-	std::string normalmapname = "WNN2.bmp";
-
-	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
-
-	std::string albedomapname = "WNN.bmp";
-
-
-	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
-
 	std::array arr = { alebdoMapped, normalMapped, skymapped };
-
-
 
 	std::array<int, 2> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0)),
 		CreateMaterial(ALBEDOMAPPED, arr.data()+2, 1, Vector4f(1.0, 1.0, 1.0, 1.0))};
@@ -1995,11 +2006,11 @@ void CreateDebugCommandBuffers(int count)
 	debugIndirectDrawData.commandBufferSize = count;
 
 
-	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndirectCommand) * debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndirectCommand),  debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
-	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
-	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
 
 	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -2079,13 +2090,13 @@ void CreateGenericMeshCommandBuffers(int count)
 	mainIndirectDrawData.commandBufferSize = count;
 	mainIndirectDrawData.commandBufferCount = 0;
 
-	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndexedIndirectCommand) * count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndexedIndirectCommand), count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
-	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
 	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferAlloc, 0, 0);
@@ -2257,13 +2268,13 @@ void CreateMeshWorldAssignment(int count)
 
 	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
 	if (worldSpaceAssignment.totalSumsNeeded)
 	{
-		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 		
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceSumsAlloc, 2, 0);
 
@@ -2352,7 +2363,7 @@ void CreateMeshWorldAssignment(int count)
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)assignmentLayout->x);
 
-	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
 	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -2415,9 +2426,9 @@ void CreateLightAssignments(int count)
 
 	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
-	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceCountsAlloc, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceOffsetsAlloc, 1, 0);
@@ -2426,7 +2437,7 @@ void CreateLightAssignments(int count)
 
 	if (lightAssignment.totalSumsNeeded)
 	{
-		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceSumsAlloc, 2, 0);
 
@@ -2508,7 +2519,7 @@ void CreateLightAssignments(int count)
 	uint32_t assignmentGroupCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)assignmentLayout->x);
 
 
-	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
 	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -2609,26 +2620,26 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	globalIndexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalIndexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 2);
-	globalVertexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalVertexBufferSize, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalIndexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 2);
+	globalVertexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 	globalBufferDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	globalMeshLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMeshSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	globalMaterialsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialsSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalMeshLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMeshSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalMaterialsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialsSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	globalLightBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	globalLightTypesBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightTypesBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	globalLightBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalLightTypesBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalLightTypesBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
-	debugAllocBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(debugAllocBufferSize, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	globalDebugTypes = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t) * 128, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	debugAllocBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(debugAllocBufferSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalDebugTypes = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), 128, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
-	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialIndicesSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
-	globalRenderableLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalRenderableSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalMaterialIndicesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	globalRenderableLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 
-	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendDetailsSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	globalBlendRangesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendRangesSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
+	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalBlendRangesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
 

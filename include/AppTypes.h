@@ -197,12 +197,13 @@ enum ShaderStageTypeBits
 
 typedef int ShaderStageType;
 
-
 struct ShaderSetLayout
 {
 	int vulkanDescLayout;
+	int dx12DescriptorTable;
 	int bindingCount;
 	int resourceStart;
+	int samplerCount;
 };
 
 struct ShaderResource
@@ -223,6 +224,7 @@ struct ShaderResourceSet
 	int layoutHandle;
 	int setCount;
 	int barrierCount;
+	int samplerCount;
 };
 
 struct ShaderResourceHeader
@@ -389,9 +391,10 @@ struct RenderAllocation
 	size_t deviceAllocSize;
 	size_t requestedSize;
 	size_t alignment;
+	EntryHandle viewIndex;
 	AllocationType allocType;
 	ComponentFormatType formatType;
-	EntryHandle viewIndex;
+	int structueCopies;
 };
 
 

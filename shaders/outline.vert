@@ -269,7 +269,6 @@ void main() {
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
-            //texCoords = converttexcoords16(offset);
             offset += 4;
         }
 
@@ -278,6 +277,10 @@ void main() {
             offset += 4;
         }
 
+        if ((comp & TEXTURES3) == TEXTURES3)
+        {
+            offset += 4;
+        }
 
         if ((comp&NORMAL)==NORMAL)
         {
@@ -292,7 +295,7 @@ void main() {
         if ((comp&COLOR)==COLOR)
         {
        
-            offset += 16;
+            offset += 4;
         }
 
         if ((comp & POSITION) == POSITION)

@@ -1115,7 +1115,11 @@ void RenderInstance::UploadHostTransfers()
 		size_t rsize = allocations[handle].requestedSize;
 		size_t align = allocations[handle].alignment;
 
+		rsize *= allocations[handle].structueCopies;
+
 		rsize = (rsize + align-1) & ~(align - 1);
+
+		
 
 		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.allocoffset;
 
@@ -1306,7 +1310,11 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 		size_t rsize = allocations[handle].requestedSize;
 		size_t align = allocations[handle].alignment;
 
+		rsize *= allocations[handle].structueCopies;
+
 		rsize = (rsize + align - 1) & ~(align - 1);
+
+		
 
 		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.offset;
 
@@ -1344,7 +1352,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	
 }
 
-int RenderInstance::GetAllocFromBuffer(size_t size, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation)
+int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1363,7 +1371,7 @@ int RenderInstance::GetAllocFromBuffer(size_t size, uint32_t alignment, Allocati
 		break;
 	}
 
-	size_t allocSize = (size + alignment - 1) & ~((size_t)alignment - 1);
+	size_t allocSize = ((copiesOfStructure * size) + alignment - 1) & ~((size_t)alignment - 1);
 
 	size_t copies = 1;
 
@@ -1388,6 +1396,7 @@ int RenderInstance::GetAllocFromBuffer(size_t size, uint32_t alignment, Allocati
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
 	allocations.allocations[index].formatType = formatType;
+	allocations.allocations[index].structueCopies = copiesOfStructure;
 
 	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
 	{
@@ -1536,6 +1545,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
     set->layoutHandle = resourceSet->vulkanDescLayout;
     set->setCount = setCount;
 	set->barrierCount = 0;
+	set->samplerCount = resourceSet->samplerCount;
 
     uintptr_t* offset = (uintptr_t*)ptr;
 
@@ -1971,6 +1981,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 				if (buffer->allocation < 0) break;
 
 				auto alloc = allocations[buffer->allocation];
+
+
+
 				if (alloc.allocType == AllocationType::PERFRAME)
 					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
 				else
@@ -2070,17 +2083,19 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	if (info->indirectAllocation != ~0)
 	{
 		size_t align = allocations[info->indirectAllocation].alignment;
+		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structueCopies);
 		indirectBufferHandle = allocations[info->indirectAllocation].memIndex;
 		indirectOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset);
-		indirectBufferPerFrameSize = static_cast<uint32_t>((allocations[info->indirectAllocation].requestedSize + align - 1) & ~(align - 1));
+		indirectBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1)) ;
 	}
 
 	if (info->indirectCountAllocation != ~0)
 	{
 		size_t align = allocations[info->indirectCountAllocation].alignment;
+		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structueCopies);
 		indirectCountBufferHandle = allocations[info->indirectCountAllocation].memIndex;
 		indirectCountOffset = static_cast<uint32_t>(allocations[info->indirectCountAllocation].offset);
-		indirectCountBufferPerFrameSize = static_cast<uint32_t>((allocations[info->indirectCountAllocation].requestedSize + align - 1) & ~(align - 1));
+		indirectCountBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectCountAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1));
 	}
 
 	VKGraphicsPipelineObjectCreateInfo create = 
@@ -2367,11 +2382,13 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					size_t size = allocations[bufferBarrier->allocationIndex].deviceAllocSize;
+					size_t copiesOfStruct = allocations[bufferBarrier->allocationIndex].structueCopies;
 					uint32_t pfo = 0;
 
 					if (allocations[bufferBarrier->allocationIndex].allocType == AllocationType::PERFRAME)
 					{
-						size = (allocations[bufferBarrier->allocationIndex].requestedSize + allocations[bufferBarrier->allocationIndex].alignment - 1) & ~(allocations[bufferBarrier->allocationIndex].alignment - 1);
+						
+						size = ((allocations[bufferBarrier->allocationIndex].requestedSize * copiesOfStruct) + allocations[bufferBarrier->allocationIndex].alignment - 1) & ~(allocations[bufferBarrier->allocationIndex].alignment - 1);
 						pfo = static_cast<uint32_t>(size);
 					}
 
@@ -2409,11 +2426,12 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
 					size_t size = allocations[bufferBarrier->allocation].deviceAllocSize;
+					size_t copiesOfStruct = allocations[bufferBarrier->allocation].structueCopies;
 					uint32_t pfo = 0;
 
 					if (allocations[bufferBarrier->allocation].allocType == AllocationType::PERFRAME)
 					{
-						size = (allocations[bufferBarrier->allocation].requestedSize + allocations[bufferBarrier->allocation].alignment - 1) & ~(allocations[bufferBarrier->allocation].alignment - 1);
+						size = ((allocations[bufferBarrier->allocation].requestedSize * copiesOfStruct) + allocations[bufferBarrier->allocation].alignment - 1) & ~(allocations[bufferBarrier->allocation].alignment - 1);
 						pfo = static_cast<uint32_t>(size);
 					}
 					else

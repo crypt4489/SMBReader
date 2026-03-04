@@ -232,7 +232,12 @@ void main() {
         if ((comp & TEXTURES2) == TEXTURES2)
         {
     
-            
+            offset += 4;
+        }
+        if ((comp & TEXTURES3) == TEXTURES3)
+        {
+    
+            offset += 4;
         }
 
 

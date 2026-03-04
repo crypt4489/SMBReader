@@ -281,9 +281,6 @@ void main() {
         accumulatedColorData.specular += (colorData.specular * w);
         accumulatedColorData.emissive += (colorData.emissive * w);
         accumulatedColorData.shinniness += (colorData.shinniness * w);
-
-        textureIndex = 0;
-
     }
 
     vec4 albedoColor = vec4(accumulatedColorData.diffuse, 1.0);

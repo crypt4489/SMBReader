@@ -426,7 +426,7 @@ struct ShaderResourceManager
 	{
 		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
 		if (!header) return;
-		header->allocationIndex = allocationIndex;
+		//header->allocationIndex = allocationIndex;
 	}
 };
 

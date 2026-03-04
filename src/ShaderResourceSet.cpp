@@ -205,6 +205,7 @@ ShaderGraph* CreateShaderGraph(
 	{
 
 		ShaderSetLayout* setLay = (ShaderSetLayout*)graph->GetSet(i);
+		setLay->samplerCount = 0;
 		int resIter = SetNodes[i] + 1;
 		ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
 		int bindingCount = 0;
@@ -221,6 +222,11 @@ ShaderGraph* CreateShaderGraph(
 			else
 			{
 				resource->binding = bindingCount;
+			}
+
+			if (tag->resourceType == ShaderResourceType::SAMPLERSTATE)
+			{
+				setLay->samplerCount++;
 			}
 
 			resource->stages = tag->shaderstage;

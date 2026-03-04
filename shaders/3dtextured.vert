@@ -240,6 +240,16 @@ vec4 DecompressTangent(uint offset)
 	return ret;
 }
 
+vec4 DecompressColor(uint offset)
+{
+    uint r = uint(VertexData.vertexData[offset + 0]);
+    uint g = uint(VertexData.vertexData[offset + 1]);
+    uint b = uint(VertexData.vertexData[offset + 2]);
+    uint a = uint(VertexData.vertexData[offset + 3]);
+
+    return vec4(float(r)/255.0, float(g)/255.0, float(b)/255.0, float(a)/255.0);
+}
+
 
 void main() {
     
@@ -279,6 +289,12 @@ void main() {
             offset += 4;
         }
 
+        if ((comp & TEXTURES3) == TEXTURES3)
+        {
+            texCoords[2] = converttexcoords16(offset);
+            offset += 4;
+        }
+
 
         if ((comp&NORMAL)==NORMAL)
         {
@@ -300,8 +316,8 @@ void main() {
 
         if ((comp&COLOR)==COLOR)
         {
-            outColor = ReconstructVEC4(offset);
-            offset += 16;
+            outColor = DecompressColor(offset);
+            offset += 4;
         }
 
         if ((comp & POSITION) == POSITION)
