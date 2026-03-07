@@ -756,23 +756,46 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			
 		DescriptorSetLayoutBuilder* descriptorBuilder = descriptorBuilders[resource->set];
 
+		int arrayCount = resource->arrayCount;
+
+		VkDescriptorBindingFlags bindingFlags = 0;
+
+		
+
+		if (arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
+		{
+			bindingFlags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
+		}
+
+		if (arrayCount & UPDATE_AFTER_BIND)
+		{
+			bindingFlags |= 
+				VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+				VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+			descriptorBuilder->layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+		}
+
+		arrayCount &= DESCRIPTOR_COUNT_MASK;
+
 		switch (resource->type)
 		{
 		case ShaderResourceType::UNIFORM_BUFFER:
-			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags);
+			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		case ShaderResourceType::IMAGESTORE2D:
-			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags);
+			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		case ShaderResourceType::IMAGE2D:
-			if (resource->arrayCount > 1)
+			if (arrayCount > 1)
 				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, resource->arrayCount);
+			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		case ShaderResourceType::SAMPLERSTATE:
-			if (resource->arrayCount > 1)
+			if (arrayCount > 1)
 				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, resource->arrayCount);
+			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, arrayCount);
 			
 			break;
 		case ShaderResourceType::SAMPLER2D:
@@ -780,16 +803,16 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		case ShaderResourceType::SAMPLERCUBE:
 			//if (resource->arrayCount > 1)
 			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, resource->arrayCount);
+			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		case ShaderResourceType::STORAGE_BUFFER:
-			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags);
+			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		case ShaderResourceType::BUFFER_VIEW:
 			if (resource->action == ShaderResourceAction::SHADERREAD)
-				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags);
+				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags, arrayCount);
 			else if (resource->action == ShaderResourceAction::SHADERWRITE)
-				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags);
+				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags, arrayCount);
 			break;
 		}
 	
@@ -1115,7 +1138,7 @@ void RenderInstance::UploadHostTransfers()
 		size_t rsize = allocations[handle].requestedSize;
 		size_t align = allocations[handle].alignment;
 
-		rsize *= allocations[handle].structueCopies;
+		rsize *= allocations[handle].structureCopies;
 
 		rsize = (rsize + align-1) & ~(align - 1);
 
@@ -1310,7 +1333,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 		size_t rsize = allocations[handle].requestedSize;
 		size_t align = allocations[handle].alignment;
 
-		rsize *= allocations[handle].structueCopies;
+		rsize *= allocations[handle].structureCopies;
 
 		rsize = (rsize + align - 1) & ~(align - 1);
 
@@ -1396,7 +1419,7 @@ int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, ui
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
 	allocations.allocations[index].formatType = formatType;
-	allocations.allocations[index].structueCopies = copiesOfStructure;
+	allocations.allocations[index].structureCopies = copiesOfStructure;
 
 	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
 	{
@@ -1891,6 +1914,8 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 	{
 		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
 
+		int arrayCount = header->arrayCount;
+
 		switch (header->type)
 		{
 		
@@ -1898,16 +1923,24 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 		case ShaderResourceType::UNIFORM_BUFFER:
 		{
 			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
-			if (buffer->allocation >= 0)
+
+			size += arrayCount;
+		
+
+			for (int j = 0; j < arrayCount; j++)
 			{
+				if ((j < buffer->bufferCount) && buffer->allocationIndex)
+				{
+					auto alloc = allocations[buffer->allocationIndex[j]];
+					int offset = (buffer->offsets ? buffer->offsets[j] : 0);
+					dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset + offset));
+				} 
+				else
+				{
+					dynamicOffsets.push_back(0);
+				}
+			}
 			
-				auto alloc = allocations[buffer->allocation];
-				dynamicOffsets.push_back(static_cast<uint32_t>(alloc.offset + buffer->offset));
-			}
-			else {
-				dynamicOffsets.push_back(0);
-			}
-			size++;
 			break;
 		}
 		default:
@@ -1978,53 +2011,72 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::STORAGE_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
-				if (buffer->allocation < 0) break;
+				if (!buffer->allocationIndex) break;
+				int arrayCount = buffer->bufferCount;
+				int firstBuffer = buffer->firstBuffer;
 
-				auto alloc = allocations[buffer->allocation];
+				for (int j = 0; j < arrayCount; j++)
+				{
+					auto alloc = allocations[buffer->allocationIndex[j]];
 
-
-
-				if (alloc.allocType == AllocationType::PERFRAME)
-					builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
-				else
-					builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
+					if (alloc.allocType == AllocationType::PERFRAME)
+						builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0, 0, firstBuffer + j);
+					else
+						builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0, 0, firstBuffer + j);
+					
+				}
 				break;
 			}
 			case ShaderResourceType::UNIFORM_BUFFER:
 			{
 				ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)header;
 
-				if (buffer->allocation < 0) break;
+				if (!buffer->allocationIndex) break;
+				int arrayCount = buffer->bufferCount;
+				int firstBuffer = buffer->firstBuffer;
 
-				auto alloc = allocations[buffer->allocation];
+				for (int j = 0; j < arrayCount; j++)
+				{
+					auto alloc = allocations[buffer->allocationIndex[j]];
 
-				if (alloc.allocType == AllocationType::PERFRAME)
-					builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0);
-				else
-					builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0);
+					if (alloc.allocType == AllocationType::PERFRAME)
+						builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0, 0, firstBuffer+j);
+					else
+						builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0, 0, firstBuffer+j);
+				}
 				break;
 			}
 			case ShaderResourceType::BUFFER_VIEW:
 			{
 				ShaderResourceBufferView* bufferView = (ShaderResourceBufferView*)header;
 
-				if (bufferView->allocationIndex < 0) break;
+				if (!bufferView->allocationIndex) break;
+				
+				int arrayCount = bufferView->viewCount;
+				int firstView = bufferView->firstView;
 
-				if (bufferView->subAllocations)
+				for (int j = 0; j < arrayCount; j++)
 				{
-					for (uint32_t i = 0; i < bufferView->subAllocations; i++)
+					auto alloc = allocations.allocations[bufferView->allocationIndex[j]];
+
+					int frameCount = (alloc.allocType == AllocationType::PERFRAME) ? MAX_FRAMES_IN_FLIGHT : 1;
+
+					for (int g = 0; g < frameCount; g++)
 					{
-						VkBufferView handle = dev->GetBufferView(allocations.allocations[bufferView->allocationIndex].viewIndex, i);
+						VkBufferView handle = dev->GetBufferView(alloc.viewIndex, g);
+
 						if (bufferView->action == ShaderResourceAction::SHADERREAD)
 						{
-							builder->AddUniformBufferViewPerFrame(handle, bufferView->binding, i);
+							builder->AddUniformBufferView(handle, bufferView->binding, g, 1, j + firstView);
 						}
 						else if (bufferView->action == ShaderResourceAction::SHADERWRITE)
 						{
-							builder->AddStorageBufferViewPerFrame(handle, bufferView->binding, i);
+							builder->AddStorageBufferView(handle, bufferView->binding, g, 1, j + firstView);
 						}
 					}
 				}
+				break;
+				
 			}
 		}
 	}
@@ -2083,7 +2135,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	if (info->indirectAllocation != ~0)
 	{
 		size_t align = allocations[info->indirectAllocation].alignment;
-		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structueCopies);
+		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structureCopies);
 		indirectBufferHandle = allocations[info->indirectAllocation].memIndex;
 		indirectOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset);
 		indirectBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1)) ;
@@ -2092,7 +2144,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	if (info->indirectCountAllocation != ~0)
 	{
 		size_t align = allocations[info->indirectCountAllocation].alignment;
-		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structueCopies);
+		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structureCopies);
 		indirectCountBufferHandle = allocations[info->indirectCountAllocation].memIndex;
 		indirectCountOffset = static_cast<uint32_t>(allocations[info->indirectCountAllocation].offset);
 		indirectCountBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectCountAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1));
@@ -2373,41 +2425,48 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				{
 					ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
 
-					if (bufferBarrier->allocationIndex < 0) break;
+					if (bufferBarrier->allocationIndex == nullptr) break;
+
+					int arrayCount = bufferBarrier->arrayCount;
+
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
 					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
 					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
 					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
 					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
-
-					size_t size = allocations[bufferBarrier->allocationIndex].deviceAllocSize;
-					size_t copiesOfStruct = allocations[bufferBarrier->allocationIndex].structueCopies;
-					uint32_t pfo = 0;
-
-					if (allocations[bufferBarrier->allocationIndex].allocType == AllocationType::PERFRAME)
+					for (int g = 0; g < arrayCount; g++)
 					{
-						
-						size = ((allocations[bufferBarrier->allocationIndex].requestedSize * copiesOfStruct) + allocations[bufferBarrier->allocationIndex].alignment - 1) & ~(allocations[bufferBarrier->allocationIndex].alignment - 1);
-						pfo = static_cast<uint32_t>(size);
+						int index = bufferBarrier->allocationIndex[g];
+						size_t size = allocations[index].deviceAllocSize;
+						size_t copiesOfStruct = allocations[index].structureCopies;
+						uint32_t pfo = 0;
+
+
+						if (allocations[index].allocType == AllocationType::PERFRAME)
+						{
+
+							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
+							pfo = static_cast<uint32_t>(size);
+						}
+
+
+
+						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
+							allocations[index].memIndex,
+							allocations[index].offset,
+							size
+						);
+
+
+						vkPipelineObject->AddBufferMemoryBarrier(
+							barrierIndex,
+							AFTER,
+							srcStage,
+							dstStage,
+							pfo
+						);
 					}
-
-
-
-					EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-						allocations[bufferBarrier->allocationIndex].memIndex,
-						allocations[bufferBarrier->allocationIndex].offset,
-						size
-					);
-
-
-					vkPipelineObject->AddBufferMemoryBarrier(
-						barrierIndex,
-						AFTER,
-						srcStage,
-						dstStage,
-						pfo
-					);
 
 					break;
 				}
@@ -2416,7 +2475,9 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				{
 					ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
 
-					if (bufferBarrier->allocation < 0) break;
+					if (bufferBarrier->allocationIndex == nullptr) break;
+
+					int arrayCount = bufferBarrier->arrayCount;
 
 					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
 
@@ -2425,35 +2486,42 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
 					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
 
-					size_t size = allocations[bufferBarrier->allocation].deviceAllocSize;
-					size_t copiesOfStruct = allocations[bufferBarrier->allocation].structueCopies;
-					uint32_t pfo = 0;
 
-					if (allocations[bufferBarrier->allocation].allocType == AllocationType::PERFRAME)
+					for (int g = 0; g < arrayCount; g++)
 					{
-						size = ((allocations[bufferBarrier->allocation].requestedSize * copiesOfStruct) + allocations[bufferBarrier->allocation].alignment - 1) & ~(allocations[bufferBarrier->allocation].alignment - 1);
-						pfo = static_cast<uint32_t>(size);
+						int index = bufferBarrier->allocationIndex[g];
+						size_t size = allocations[index].deviceAllocSize;
+						size_t copiesOfStruct = allocations[index].structureCopies;
+						uint32_t pfo = 0;
+						VkDeviceSize offset = (bufferBarrier->offsets ? bufferBarrier->offsets[g] : 0);
+
+						if (allocations[index].allocType == AllocationType::PERFRAME)
+						{
+							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
+							pfo = static_cast<uint32_t>(size);
+						}
+						else
+						{
+							size -= offset;
+						}
+
+
+						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
+							allocations[index].memIndex,
+							allocations[index].offset + offset,
+							size
+						);
+
+
+						vkPipelineObject->AddBufferMemoryBarrier(
+							barrierIndex,
+							AFTER,
+							srcStage,
+							dstStage,
+							pfo
+						);
 					}
-					else
-					{
-						size -= (VkDeviceSize)bufferBarrier->offset;
-					}
-
-
-					EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-						allocations[bufferBarrier->allocation].memIndex,
-						allocations[bufferBarrier->allocation].offset + (VkDeviceSize)bufferBarrier->offset,
-						size
-					);
-
-
-					vkPipelineObject->AddBufferMemoryBarrier(
-						barrierIndex,
-						AFTER,
-						srcStage,
-						dstStage,
-						pfo
-					);
+					
 
 					break;
 				}

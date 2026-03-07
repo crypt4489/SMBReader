@@ -2000,6 +2000,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 	
 }
 
+static int frameCount = RenderInstance::MAX_FRAMES_IN_FLIGHT;
+
 void CreateDebugCommandBuffers(int count)
 {
 	debugIndirectDrawData.commandBufferCount = 0;
@@ -2015,17 +2017,17 @@ void CreateDebugCommandBuffers(int count)
 
 	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferAlloc, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, globalDebugTypes, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectCullDescriptor, &globalDebugTypes, 0, 1, 2);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr,  0, 1, 3);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugAllocBuffer, 4, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, &debugAllocBuffer, nullptr, 0, 1, 4);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, debugIndirectDrawData.commandBufferCountAlloc, 5, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 5);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCount, 0);
 
@@ -2054,11 +2056,11 @@ void CreateDebugCommandBuffers(int count)
 
 	debugIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(DEBUGDRAW, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectDrawDescriptor, debugAllocBuffer, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(debugIndirectDrawData.indirectDrawDescriptor, &debugAllocBuffer, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, debugIndirectDrawData.indirectGlobalIDsAlloc, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, globalDebugTypes, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(debugIndirectDrawData.indirectDrawDescriptor, &globalDebugTypes, 0, 1, 2);
 
 	std::array<int, 2> indirectDebugDrawDescriptors = {
 		globalBufferDescriptor,
@@ -2099,12 +2101,12 @@ void CreateGenericMeshCommandBuffers(int count)
 	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalMeshLocation, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalBufferLocation, 2, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 3, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, mainIndirectDrawData.commandBufferCountAlloc, 4, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, globalRenderableLocation, 5, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalRenderableLocation, nullptr, 0, 1, 5);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
@@ -2121,16 +2123,16 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMeshLocation, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalVertexBuffer, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalLightBuffer, 3, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialsLocation, 5, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalRenderableLocation, 6, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalMaterialIndicesLocation, 7, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, globalBlendDetailsLocation, 8, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, globalBlendRangesLocation, 9, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalLightTypesBuffer,  0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialsLocation, nullptr, 0, 1, 5);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalRenderableLocation, nullptr, 0, 1, 6);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
 
 
 	std::array<int, 1> indirectDrawDescriptors = {
@@ -2159,11 +2161,11 @@ void CreateGenericMeshCommandBuffers(int count)
 	int cullLightDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceOffsetsAlloc, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, lightAssignment.deviceCountsAlloc, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(cullLightDescriptor, globalLightBuffer, 3, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, globalLightTypesBuffer, 4, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, &lightAssignment.deviceOffsetsAlloc, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, &lightAssignment.deviceCountsAlloc, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(cullLightDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(cullLightDescriptor, &globalLightTypesBuffer, 0, 1, 4 );
 
 
 	ShaderComputeLayout* layout = GlobalRenderer::gRenderInstance->GetComputeLayout(RENDEROBJCULL);
@@ -2219,12 +2221,12 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	int outlineDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(OUTLINE, 2, 3);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalMeshLocation, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalVertexBuffer, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, mainIndirectDrawData.indirectGlobalIDsAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, globalRenderableLocation, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
 
 	static Vector4f black = { 0.0, 0.0, 0.0, 1.0 };
 
@@ -2276,18 +2278,18 @@ void CreateMeshWorldAssignment(int count)
 	{
 		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 		
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceSumsAlloc, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else 
 	{
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, -1, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
 	}
 
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, worldSpaceAssignment.deviceOffsetsAlloc, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
 	
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2314,9 +2316,9 @@ void CreateMeshWorldAssignment(int count)
 
 		worldSpaceAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 0, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, worldSpaceAssignment.deviceSumsAlloc, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 		GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.totalSumsNeeded, 0);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2337,8 +2339,8 @@ void CreateMeshWorldAssignment(int count)
 
 		worldSpaceAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, worldSpaceAssignment.deviceSumsAlloc, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
 		GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(worldSpaceAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2367,9 +2369,9 @@ void CreateMeshWorldAssignment(int count)
 
 	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceCountsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, globalRenderableLocation, 2, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -2391,10 +2393,10 @@ void CreateMeshWorldAssignment(int count)
 
 	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(WORLDASSIGN, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.deviceOffsetsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalMeshLocation, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, worldSpaceAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, globalRenderableLocation, 3, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -2430,8 +2432,8 @@ void CreateLightAssignments(int count)
 
 	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceCountsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceOffsetsAlloc, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.prefixSumDescriptors, &lightAssignment.totalElementsCount, 0);
 
@@ -2439,13 +2441,13 @@ void CreateLightAssignments(int count)
 	{
 		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, lightAssignment.deviceSumsAlloc, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else
 	{
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, -1, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
 	}
 
 	std::array prefixSumDescriptor = { lightAssignment.prefixSumDescriptors };
@@ -2466,9 +2468,9 @@ void CreateLightAssignments(int count)
 
 		lightAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, lightAssignment.deviceSumsAlloc, 0, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, lightAssignment.deviceSumsAlloc, 1, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, lightAssignment.deviceSumsAlloc, 2, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 		GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.sumAfterDescriptors, &lightAssignment.totalSumsNeeded, 0);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2491,8 +2493,8 @@ void CreateLightAssignments(int count)
 
 		lightAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, lightAssignment.deviceOffsetsAlloc, 0, 0);
-		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, lightAssignment.deviceSumsAlloc, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+		GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
 		GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.totalElementsCount, 0);
 
 		GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2523,10 +2525,10 @@ void CreateLightAssignments(int count)
 
 	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, lightAssignment.deviceCountsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.preWorldSpaceDivisionDescriptor, globalLightTypesBuffer, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightCount, 1);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(lightAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
@@ -2547,10 +2549,10 @@ void CreateLightAssignments(int count)
 
 	lightAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(LIGHTASSIGN, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.deviceOffsetsAlloc, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightBuffer, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, globalLightTypesBuffer, 3, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, lightAssignment.worldSpaceDivisionAlloc, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightCount, 1);
 
@@ -2641,7 +2643,7 @@ void ApplicationLoop::InitializeRuntime()
 	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	globalBlendRangesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 0);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, globalBufferLocation, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, &globalBufferLocation, nullptr, 0, 1, 0);
 
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
 
@@ -2718,7 +2720,7 @@ void ApplicationLoop::InitializeRuntime()
 	int globalPipelineBufferWhat = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, globalBufferLocation, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, &globalBufferLocation, nullptr, 0, 1, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &skyboxCubeImage, 1, 0, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
 

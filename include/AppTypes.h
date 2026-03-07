@@ -10,6 +10,11 @@
 #define MiB 1024 * KiB
 #define GiB 1024 * MiB
 
+
+#define UNBOUNDED_DESCRIPTOR_ARRAY ((uint32_t)1 << 31)
+#define UPDATE_AFTER_BIND ((uint32_t)1 << 30)
+#define DESCRIPTOR_COUNT_MASK 0x3FFFFFFF;
+
 /* Rendering State Types */
 
 enum RenderingBackend
@@ -195,6 +200,7 @@ enum ShaderStageTypeBits
 	COMPUTESHADERSTAGE = 4,
 };
 
+
 typedef int ShaderStageType;
 
 struct ShaderSetLayout
@@ -204,6 +210,8 @@ struct ShaderSetLayout
 	int bindingCount;
 	int resourceStart;
 	int samplerCount;
+	int viewCount;
+	int constantsCount;
 };
 
 struct ShaderResource
@@ -225,6 +233,8 @@ struct ShaderResourceSet
 	int setCount;
 	int barrierCount;
 	int samplerCount;
+	int viewCount;
+	int constantCount;
 };
 
 struct ShaderResourceHeader
@@ -251,14 +261,17 @@ struct ShaderResourceImage : public ShaderResourceHeader
 
 struct ShaderResourceBuffer : public ShaderResourceHeader
 {
-	int allocation;
-	int offset;
+	int* allocationIndex;
+	int* offsets;
+	int firstBuffer;
+	int bufferCount;
 };
 
 struct ShaderResourceBufferView : public ShaderResourceHeader
 {
-	int subAllocations;
-	int allocationIndex;
+	int* allocationIndex;
+	int firstView;
+	int viewCount;
 };
 
 
@@ -394,7 +407,7 @@ struct RenderAllocation
 	EntryHandle viewIndex;
 	AllocationType allocType;
 	ComponentFormatType formatType;
-	int structueCopies;
+	int structureCopies;
 };
 
 

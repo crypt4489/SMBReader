@@ -44,89 +44,89 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 	return descriptorSetLayout;
 }
 
-void DescriptorSetLayoutBuilder::AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags)
+void DescriptorSetLayoutBuilder::AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	layoutBinding.descriptorCount = 1;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = flags;
 
 	descSetBindings[binding] = layoutBinding;
 }
 
-void DescriptorSetLayoutBuilder::AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+void DescriptorSetLayoutBuilder::AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutBinding.descriptorCount = count;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = stageFlags;
 
 	const VkDescriptorBindingFlags bindingFlags =
@@ -141,12 +141,12 @@ void DescriptorSetLayoutBuilder::AddBindlessCombinedSamplersLayout(uint32_t bind
 	
 }
 
-void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	layoutBinding.descriptorCount = count;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = stageFlags;
 
 
@@ -154,12 +154,12 @@ void DescriptorSetLayoutBuilder::AddBoundSamplersLayout(uint32_t binding, VkShad
 }
 
 
-void DescriptorSetLayoutBuilder::AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+void DescriptorSetLayoutBuilder::AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-	layoutBinding.descriptorCount = count;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = stageFlags;
 
 	const VkDescriptorBindingFlags bindingFlags =
@@ -172,12 +172,12 @@ void DescriptorSetLayoutBuilder::AddSamplerStateLayout(uint32_t binding, VkShade
 	flags[binding] = bindingFlags;
 }
 
-void DescriptorSetLayoutBuilder::AddImageResourceLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count)
+void DescriptorSetLayoutBuilder::AddImageResourceLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount)
 {
 	VkDescriptorSetLayoutBinding layoutBinding{};
 	layoutBinding.binding = binding;
 	layoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-	layoutBinding.descriptorCount = count;
+	layoutBinding.descriptorCount = arrayCount;
 	layoutBinding.stageFlags = stageFlags;
 
 	const VkDescriptorBindingFlags bindingFlags =

@@ -185,19 +185,39 @@ struct ShaderResourceManager
 		return indexRet;
 	}
 
-	void BindBufferToShaderResource(int descriptorSet, int allocationIndex, int bindingIndex, int offset)
+	void SetVariableArrayCount(int descriptorSet, int bindingIndex, int varArrayCount)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		
+		uintptr_t* setOffsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
 
-		ShaderResourceBuffer* header = (ShaderResourceBuffer*)offsets[bindingIndex];
+		ShaderResourceHeader* header = (ShaderResourceHeader*)setOffsets[bindingIndex];
+
+		if (header->arrayCount != UNBOUNDED_DESCRIPTOR_ARRAY)
+		{
+			//do something
+		}
+
+		header->arrayCount = varArrayCount;
+
+	}
+
+	void BindBufferToShaderResource(int descriptorSet, int* allocationIndex, int* offsets,  int firstBuffer, int bufferCount, int bindingIndex)
+	{
+		uintptr_t head = descriptorSets[descriptorSet];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		uintptr_t* setOffsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+		ShaderResourceBuffer* header = (ShaderResourceBuffer*)setOffsets[bindingIndex];
 
 		if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER)
 			return;
 
-		header->allocation = allocationIndex;
-		header->offset = offset;
+		header->allocationIndex = allocationIndex;
+		header->offsets = offsets;
+		header->firstBuffer = firstBuffer;
+		header->bufferCount = bufferCount;
 	}
 
 	void BindImageResourceToShaderResource(int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
@@ -248,7 +268,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle* indices, uint32_t texCount, int firstTexture, int bindingIndex)
+	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle* indices, int texCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -264,7 +284,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindBufferView(int descriptorSet, int allocationIndex, int bindingIndex, int subAllocations)
+	void BindBufferView(int descriptorSet, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -276,7 +296,8 @@ struct ShaderResourceManager
 			return;
 
 
-		header->subAllocations = subAllocations;
+		header->viewCount = viewCount;
+		header->firstView = firstView;
 		header->allocationIndex = allocationIndex;
 	}
 

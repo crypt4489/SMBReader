@@ -8,27 +8,27 @@ struct DescriptorSetLayoutBuilder
 	DescriptorSetLayoutBuilder(VKDevice* d, uint32_t _bc);
 	VkDescriptorSetLayout [[maybe_unused]] CreateDescriptorSetLayout();
 
-	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddDynamicBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddDynamicStorageBufferLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddStorageImageLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddUniformBufferViewLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
+	void AddBindlessCombinedSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount);
 
-	void AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t count);
+	void AddBoundSamplersLayout(uint32_t binding, VkShaderStageFlags stageFlags, uint32_t arrayCount);
 	
-	void AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags);
+	void AddStorageBufferViewLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
+	void AddSamplerStateLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
-	void AddImageResourceLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t count);
+	void AddImageResourceLayout(uint32_t binding, VkShaderStageFlags flags, uint32_t arrayCount);
 
 	VkDescriptorSetLayoutBinding* descSetBindings;
 	VkDescriptorBindingFlags* flags;
