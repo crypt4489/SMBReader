@@ -194,12 +194,12 @@ struct ShaderResourceManager
 
 		ShaderResourceHeader* header = (ShaderResourceHeader*)setOffsets[bindingIndex];
 
-		if (header->arrayCount != UNBOUNDED_DESCRIPTOR_ARRAY)
+		if (!(header->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY))
 		{
 			//do something
 		}
 
-		header->arrayCount = varArrayCount;
+		header->arrayCount = (header->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY) | (varArrayCount & DESCRIPTOR_COUNT_MASK);
 
 	}
 
@@ -489,6 +489,7 @@ struct ShaderResourceItemXMLTag : ShaderXMLTag
 	int arrayCount;
 	int size;
 	int offset;
+	int pushRangeStage;
 };
 
 struct ShaderResourceSetXMLTag : ShaderXMLTag

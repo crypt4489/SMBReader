@@ -12,8 +12,7 @@
 
 
 #define UNBOUNDED_DESCRIPTOR_ARRAY ((uint32_t)1 << 31)
-#define UPDATE_AFTER_BIND ((uint32_t)1 << 30)
-#define DESCRIPTOR_COUNT_MASK 0x3FFFFFFF;
+#define DESCRIPTOR_COUNT_MASK 0x7FFFFFFF
 
 /* Rendering State Types */
 
@@ -203,7 +202,7 @@ enum ShaderStageTypeBits
 
 typedef int ShaderStageType;
 
-struct ShaderSetLayout
+struct ShaderResourceSetTemplate
 {
 	int vulkanDescLayout;
 	int dx12DescriptorTable;
@@ -212,6 +211,7 @@ struct ShaderSetLayout
 	int samplerCount;
 	int viewCount;
 	int constantsCount;
+	int constantStageCount;
 };
 
 struct ShaderResource
@@ -224,6 +224,7 @@ struct ShaderResource
 	int arrayCount;
 	int size;
 	int offset;
+	int rangeIndex;
 };
 
 struct ShaderResourceSet
@@ -234,7 +235,8 @@ struct ShaderResourceSet
 	int barrierCount;
 	int samplerCount;
 	int viewCount;
-	int constantCount;
+	int constantsCount;
+	int constantStageCount;
 };
 
 struct ShaderResourceHeader
@@ -280,6 +282,7 @@ struct ShaderResourceConstantBuffer : public ShaderResourceHeader
 	ShaderStageType stage;
 	int size;
 	int offset;
+	int rangeindex;
 	void* data;
 };
 

@@ -737,7 +737,7 @@ DescriptorPoolBuilder VKDevice::CreateDescriptorPoolBuilder(size_t poolSize, VkD
 	return builder;
 }
 
-DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets)
+DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets, uint32_t varDescriptorCounts)
 {
 	//std::shared_lock lock(deviceLock);
 
@@ -745,7 +745,7 @@ DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex
 
 	DescriptorSetBuilder *dsb = std::construct_at(data, this, numberofsets);
 	auto ref = GetDescriptorSetLayout(descriptorLayout);
-	dsb->AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets);
+	dsb->AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets, varDescriptorCounts);
 	return dsb;
 }
 

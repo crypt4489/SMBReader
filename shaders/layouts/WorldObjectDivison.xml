@@ -6,9 +6,9 @@
 		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="constantbuffer" used="c" size="36" offset="0">
+		<ShaderResourceItem type="constantbuffer" used="c" size="36" offset="0" pushstage="0">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="36">
+		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="36" pushstage="0">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>

@@ -738,7 +738,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 
 	for (int j = 0; j < graph->resourceSetCount; j++)
 	{
-		ShaderSetLayout* set = (ShaderSetLayout*)graph->GetSet(j);
+		ShaderResourceSetTemplate* set = (ShaderResourceSetTemplate*)graph->GetSet(j);
 		descriptorBuilders[j] = dev->CreateDescriptorSetLayoutBuilder(set->bindingCount);
 		set->vulkanDescLayout = descriptorLayoutIndex+j;
 	}
@@ -767,52 +767,65 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			bindingFlags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 		}
 
-		if (arrayCount & UPDATE_AFTER_BIND)
-		{
-			bindingFlags |= 
-				VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
-				VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
-				VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
-
-			descriptorBuilder->layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-		}
+		static bool useUpdateAfterBind = true;
 
 		arrayCount &= DESCRIPTOR_COUNT_MASK;
 
 		switch (resource->type)
 		{
 		case ShaderResourceType::UNIFORM_BUFFER:
-			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags, arrayCount);
+			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::IMAGESTORE2D:
-			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags, arrayCount);
+			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::IMAGE2D:
-			if (arrayCount > 1)
-				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, arrayCount);
+			if (useUpdateAfterBind)
+			{
+				bindingFlags |=
+					VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+				descriptorBuilder->layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			}
+			descriptorBuilder->AddImageResourceLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::SAMPLERSTATE:
-			if (arrayCount > 1)
-				descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, arrayCount);
+			if (useUpdateAfterBind)
+			{
+				bindingFlags |=
+					VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+				descriptorBuilder->layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			}
+			descriptorBuilder->AddSamplerStateLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			
 			break;
 		case ShaderResourceType::SAMPLER2D:
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLERCUBE:
-			//if (resource->arrayCount > 1)
-			descriptorBuilder->layoutFlags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, arrayCount);
+			if (useUpdateAfterBind)
+			{
+				bindingFlags |=
+					VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT |
+					VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT;
+
+				descriptorBuilder->layoutFlags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+			}
+			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::STORAGE_BUFFER:
-			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags, arrayCount);
+			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::BUFFER_VIEW:
 			if (resource->action == ShaderResourceAction::SHADERREAD)
-				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags, arrayCount);
+				descriptorBuilder->AddUniformBufferViewLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			else if (resource->action == ShaderResourceAction::SHADERWRITE)
-				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags, arrayCount);
+				descriptorBuilder->AddStorageBufferViewLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		}
 	
@@ -941,57 +954,44 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 		shaderHandle[i] = vulkanShaderGraphs.shaders[map->shaderReference];
 	}
 
-	for (int i = 0; i < graph->resourceSetCount; i++)
-	{
-		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
-		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
-	}
-
 	int pushConstantRangeCount = 0;
 
-	std::array<int, 2> pushConstantsSizes = { 0, 0 };
-	std::array<int, 2> pushConstantsOffsets = { 0, 0 };
-	std::array<VkShaderStageFlags, 2> shaderStages = { VK_SHADER_STAGE_VERTEX_BIT, VK_SHADER_STAGE_FRAGMENT_BIT };
+	for (int i = 0; i < graph->resourceSetCount; i++)
+	{
+		ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(i);
+		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
+		pushConstantRangeCount += resourceSet->constantStageCount;
+	}
 
-	int validVertex = 0, validFragment = 0;
+	std::vector<uint32_t> pushConstantsSizes(pushConstantRangeCount, 0);
+	std::vector<VkShaderStageFlags> shaderStages(pushConstantRangeCount, 0);
 
 	for (int i = 0; i < graph->resourceCount; i++)
 	{
 		ShaderResource* resource = (ShaderResource*)graph->GetResource(i);
 		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
 		{
+			int rangeIndex = resource->rangeIndex;
+			pushConstantsSizes[rangeIndex] += resource->size;
 			if (resource->stages & VERTEXSHADERSTAGE)
 			{
-				pushConstantsSizes[0] += resource->size;
-				pushConstantsOffsets[0] = std::min(pushConstantsOffsets[0], resource->offset);
-				validVertex = 1;
+				shaderStages[rangeIndex] |= VK_SHADER_STAGE_VERTEX_BIT;
 			}
 			if (resource->stages & FRAGMENTSHADERSTAGE)
 			{
-				pushConstantsSizes[1] += resource->size;
-				pushConstantsOffsets[1] = std::min(pushConstantsOffsets[1], resource->offset);
-				validFragment = 1;
+				shaderStages[rangeIndex] |= VK_SHADER_STAGE_FRAGMENT_BIT;
 			}
-		
 		}
 	}
 
+	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, pushConstantRangeCount);
 
+	uint32_t globalPushOffset = 0;
 
-	int j = graph->resourceCount;
-	int g = 0;
-
-
-
-	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, validFragment + validVertex);
-
-
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < pushConstantRangeCount; i++)
 	{
-		if (pushConstantsSizes[i])
-		{
-			pipelineBuilder->AddPushConstantRange(pushConstantsOffsets[i], pushConstantsSizes[i], shaderStages[i], i);
-		}
+		pipelineBuilder->AddPushConstantRange(globalPushOffset, pushConstantsSizes[i], shaderStages[i], i);
+		globalPushOffset += pushConstantsSizes[i];
 	}
 
 
@@ -1068,35 +1068,49 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 
 	
 	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+
 	shaderHandle = vulkanShaderGraphs.shaders[map->shaderReference];
 
+	int pushRangeSize = 0;
 
-	int j = graph->resourceCount;
-	int pushConstantSize = 0;
-	int g = 0;
-
-	while (g < j)
+	for (int a = 0; a < graph->resourceSetCount; a++)
 	{
-		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
-		if (resource->type != ShaderResourceType::CONSTANT_BUFFER)
-		{
-			break;
-		}
-		pushConstantSize += resource->size;
-		g++;
+		ShaderResourceSetTemplate* setLayout = (ShaderResourceSetTemplate*)graph->GetSet(a);
+
+		pushRangeSize += setLayout->constantStageCount;
 	}
 
-	int pushRangeSize = (pushConstantSize ? 1 : 0);
+	std::vector<int> pushConstantSize(pushRangeSize, 0);
+
+	for (int g = 0; g < graph->resourceCount; g++)
+	{
+		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
+
+		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
+		{
+			int pushRangeIndex = resource->rangeIndex;
+
+			pushConstantSize[pushRangeIndex] += resource->size;
+		}
+	}
+
 	int descriptorCount = graph->resourceSetCount;
 
 	VKComputePipelineBuilder* pipelineBuilder = dev->CreateComputePipelineBuilder(descriptorCount, pushRangeSize);
 
-	if (pushRangeSize)
-		pipelineBuilder->AddPushConstantRange(0, pushConstantSize, VK_SHADER_STAGE_COMPUTE_BIT, 0);
+	uint32_t globalOffset = 0;
 
+	for (int g = 0; g < pushRangeSize; g++)
+	{
+		pipelineBuilder->AddPushConstantRange(globalOffset, pushConstantSize[g], VK_SHADER_STAGE_COMPUTE_BIT, g);
+
+		globalOffset += pushConstantSize[g];
+	}
+	
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{
-		ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(i);
+		ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(i);
+
 		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 	}
 
@@ -1562,13 +1576,15 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
     ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 
-    ShaderSetLayout* resourceSet = (ShaderSetLayout*)graph->GetSet(targetSet);
+    ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(targetSet);
 
     set->bindingCount = resourceSet->bindingCount;
     set->layoutHandle = resourceSet->vulkanDescLayout;
     set->setCount = setCount;
 	set->barrierCount = 0;
 	set->samplerCount = resourceSet->samplerCount;
+	set->viewCount = resourceSet->viewCount;
+	set->constantsCount = resourceSet->constantsCount;
 
     uintptr_t* offset = (uintptr_t*)ptr;
 
@@ -1661,6 +1677,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			constants->size = resource->size;
 			constants->offset = resource->offset;
 			constants->stage = resource->stages;
+			constants->rangeindex = resource->rangeIndex;
 			ptr += sizeof(ShaderResourceConstantBuffer);
 			break;
 		}
@@ -1914,7 +1931,7 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 	{
 		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
 
-		int arrayCount = header->arrayCount;
+		int arrayCount = (header->arrayCount & DESCRIPTOR_COUNT_MASK);
 
 		switch (header->type)
 		{
@@ -1925,8 +1942,7 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
 
 			size += arrayCount;
-		
-
+	
 			for (int j = 0; j < arrayCount; j++)
 			{
 				if ((j < buffer->bufferCount) && buffer->allocationIndex)
@@ -1945,8 +1961,6 @@ uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, st
 		}
 		default:
 			break;
-
-	
 		}
 	}
 
@@ -1966,13 +1980,22 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 	ShaderResourceSet* set = (ShaderResourceSet*)head;
 	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
 
-	int frames = set->setCount;
+	int frames = set->setCount;	
 
-	DescriptorSetBuilder* builder = dev->CreateDescriptorSetBuilder(descriptorManager.deviceResourceHeap, vulkanDescriptorLayouts[set->layoutHandle], frames);
+	uint32_t varCountRequested = 0;
 
-	int count = set->bindingCount;
+	int bindingCount = set->bindingCount;
 
-	for (int i = 0; i < count; i++)
+	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[(set->viewCount + set->samplerCount)-1];
+
+	if (lastheader->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
+	{
+		varCountRequested = (lastheader->arrayCount & DESCRIPTOR_COUNT_MASK);
+	}
+
+	DescriptorSetBuilder* builder = dev->CreateDescriptorSetBuilder(descriptorManager.deviceResourceHeap, vulkanDescriptorLayouts[set->layoutHandle], frames, varCountRequested);
+
+	for (int i = 0; i < bindingCount; i++)
 	{
 		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
 

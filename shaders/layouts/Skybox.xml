@@ -11,7 +11,7 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="constantbuffer" used="v" size="64" offset="0">
+		<ShaderResourceItem type="constantbuffer" used="v" size="64" offset="0" pushstage="0">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="samplerCube" used="f">
 		</ShaderResourceItem>

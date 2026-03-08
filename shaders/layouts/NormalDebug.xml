@@ -11,10 +11,11 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="image2D" used="vf" count="1024">
-		</ShaderResourceItem>
 		<ShaderResourceItem type="sampler" used="vf" count="1">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="image2D" used="vf" count="1024" unbounded="true">
+		</ShaderResourceItem>
+		
 	</ShaderResourceSet>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="storage" used="v" rw="read">

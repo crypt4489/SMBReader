@@ -719,7 +719,7 @@ void ApplicationLoop::Execute()
 		samplerUpdate.dstBegin = 0;
 		samplerUpdate.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
 
-		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 
 		while (running)
@@ -1956,7 +1956,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 	update.dstBegin = index;
 	update.handles = mainDictionary.textureHandles.data() + index;
 
-	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::IMAGE2D, &update);
+	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
 
 	
 	for (int i = 0; i < totalMeshCount; i++)
@@ -2645,6 +2645,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, &globalBufferLocation, nullptr, 0, 1, 0);
 
+	GlobalRenderer::gRenderInstance->descriptorManager.SetVariableArrayCount(globalTexturesDescriptor, 1, 512);
+
 	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
 
 	GlobalRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
@@ -2924,7 +2926,7 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 	update.dstBegin = textureStart;
 	update.handles = mainDictionary.textureHandles.data() + textureStart;
 
-	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::IMAGE2D, &update);
+	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
 
 
 	return textureStart;

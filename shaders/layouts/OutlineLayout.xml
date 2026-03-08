@@ -11,15 +11,16 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="image2D" used="vf" count="1024">
-		</ShaderResourceItem>
 		<ShaderResourceItem type="sampler" used="vf" count="1">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="image2D" used="vf" count="1024" unbounded="true">
+		</ShaderResourceItem>
+		
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="constantbuffer" used="v" size="16" offset="0">
+		<ShaderResourceItem type="constantbuffer" used="v" size="16" offset="0" pushstage="0">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="constantbuffer" used="v" size="4" offset="16">
+		<ShaderResourceItem type="constantbuffer" used="v" size="4" offset="16" pushstage="0">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="vf" rw="read">
 		</ShaderResourceItem>

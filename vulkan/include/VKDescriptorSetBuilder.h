@@ -34,7 +34,7 @@ struct DescriptorSetBuilder
 
 	void AddStorageBufferView(VkBufferView buffer, uint32_t binding, uint32_t firstSet, uint32_t setCount, uint32_t dstArrayElement);
 
-	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount);
+	void AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount, uint32_t variableCount);
 
 	void AddStorageImageDescription(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 

@@ -168,7 +168,7 @@ ShaderGraph* CreateShaderGraph(
 
 	ShaderGraph* graph = (ShaderGraph*)(head);
 
-	memset(graph, 0, sizeof(ShaderGraph) + (setCount * sizeof(ShaderSetLayout)));
+	memset(graph, 0, sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)));
 
 	graph->shaderMapCount = shaderCount;
 	graph->resourceSetCount = setCount;
@@ -204,13 +204,17 @@ ShaderGraph* CreateShaderGraph(
 	for (int i = 0; i < setCount; i++)
 	{
 
-		ShaderSetLayout* setLay = (ShaderSetLayout*)graph->GetSet(i);
-		setLay->samplerCount = 0;
+		ShaderResourceSetTemplate* setLay = (ShaderResourceSetTemplate*)graph->GetSet(i);
 		int resIter = SetNodes[i] + 1;
 		ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
 		int bindingCount = 0;
 
 		setLay->resourceStart = resourceIter;
+		setLay->constantsCount = 0;
+		setLay->samplerCount = 0;
+		setLay->constantStageCount = 0;
+		setLay->viewCount = 0;
+	
 		while (tag && tag->hashCode == hash("ShaderResourceItem"))
 		{
 
@@ -218,19 +222,28 @@ ShaderGraph* CreateShaderGraph(
 			if (tag->resourceType == ShaderResourceType::CONSTANT_BUFFER)
 			{
 				resource->binding = ~0;
+				setLay->constantsCount++;
+				setLay->constantStageCount = std::max(setLay->constantStageCount, tag->pushRangeStage + 1);
 			}
 			else
 			{
 				resource->binding = bindingCount;
+
+				int checkForUnbounded = (tag->arrayCount < 1 ? 1 : tag->arrayCount);
+
+				if (tag->resourceType == ShaderResourceType::SAMPLERSTATE)
+				{
+					setLay->samplerCount += checkForUnbounded;
+				}
+				else
+				{
+					setLay->viewCount += checkForUnbounded;
+				}
 			}
 
-			if (tag->resourceType == ShaderResourceType::SAMPLERSTATE)
-			{
-				setLay->samplerCount++;
-			}
-
+			resource->rangeIndex = tag->pushRangeStage;
+			resource->arrayCount = tag->arrayCount;
 			resource->stages = tag->shaderstage;
-
 			resource->action = tag->resourceAction;
 			resource->type = tag->resourceType;
 			resource->arrayCount = tag->arrayCount;
@@ -490,6 +503,7 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 	
 		switch (hashes[count])
 		{
+		case hash("unbounded"):
 		case hash("type"):
 		case hash("used"):
 		case hash("rw"):
@@ -497,6 +511,7 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 			ret += ReadAttributeValueHash(fileData, size,  currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
+		case hash("pushstage"):
 		case hash("offset"):
 		case hash("size"):
 		case hash("count"):
@@ -593,7 +608,7 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 
 int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset)
 {
-	unsigned long hashes[12];
+	unsigned long hashes[14];
 
 	int dataSize = 0;
 
@@ -702,9 +717,16 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 
 			break;
 		}
+		
+		case hash("unbounded"):
+		{
+			if (codeV == hash("true"))
+				tag->arrayCount |= (UNBOUNDED_DESCRIPTOR_ARRAY);
+			break;
+		}
 		case hash("count"):
 		{
-			tag->arrayCount = codeV;
+			tag->arrayCount = (tag->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY) | (codeV & DESCRIPTOR_COUNT_MASK);
 			break;
 		}
 		case hash("size"):
@@ -715,6 +737,11 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 		case hash("offset"):
 		{
 			tag->offset = codeV;
+			break;
+		}
+		case hash("pushstage"):
+		{
+			tag->pushRangeStage = codeV;
 			break;
 		}
 		}

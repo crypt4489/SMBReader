@@ -305,7 +305,7 @@ struct VKDevice
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize, VkDescriptorPoolCreateFlags flags);
 
-	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets);
+	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets, uint32_t varDescriptorCount);
 
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 

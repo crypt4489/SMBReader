@@ -277,7 +277,7 @@ void DescriptorSetBuilder::AddBufferTypeDirect(VkBuffer buffer, VkDeviceSize siz
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount)
+void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount, uint32_t variableCount)
 {
 
 	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(device->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * setCount));
@@ -287,13 +287,31 @@ void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescript
 		layouts[i] = descriptorSetLayout;
 	}
 
-
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = pool;
 	allocInfo.descriptorSetCount = setCount;
 	allocInfo.pSetLayouts = layouts;
 
+	VkDescriptorSetVariableDescriptorCountAllocateInfo varAllocInfo{};
+	
+	if (variableCount)
+	{
+		varAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO;
+		varAllocInfo.descriptorSetCount = setCount;
+
+		uint32_t* lastCounts = reinterpret_cast<uint32_t*>(device->AllocFromDeviceCache(sizeof(uint32_t) * setCount));
+
+		for (uint32_t i = 0; i < setCount; i++)
+		{
+			lastCounts[i] = variableCount;
+		}
+
+		varAllocInfo.pDescriptorCounts = lastCounts;
+
+		allocInfo.pNext = &varAllocInfo;
+	}
+	
 	if (vkAllocateDescriptorSets(device->device, &allocInfo, descriptorSets) != VK_SUCCESS) {
 		throw std::runtime_error("failed to allocate descriptor sets!");
 	}
