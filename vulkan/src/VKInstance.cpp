@@ -30,8 +30,7 @@ VKInstance::VKInstance()
 	instanceTempSize(0),
 	instancePerSize(0),
 	instancePerMemory(0),
-	gpusAndLogicalDevices(nullptr),
-	allocator(new VKAllocationCB())
+	gpusAndLogicalDevices(nullptr)
 {
 }
 
@@ -44,16 +43,6 @@ VKInstance::~VKInstance() {
 	VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
 
 	vkDestroyInstance(instance, &callbacks);
-
-	if (instanceTempMemory)
-	{
-		delete[](void*)instanceTempMemory;
-	}
-
-	if (allocator->instanceData)
-	{
-		delete[] allocator->instanceData;
-	}
 }
 
 void* VKInstance::AllocFromInstanceCache(size_t size)
@@ -122,18 +111,14 @@ void VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 }
 
 
-#define TEMPCACHESIZE 512 * 1024
-#define PERCAHCESIZE 256 * 1024
-
-void VKInstance::CreateRenderInstance(OperatingSystem system)
+void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize)
 {
-	char* data = new char[TEMPCACHESIZE + PERCAHCESIZE];
-	
-	instanceTempMemory = reinterpret_cast<uintptr_t>(data);
-	instancePerMemory = reinterpret_cast<uintptr_t>(data + TEMPCACHESIZE);
+	instanceTempMemory = reinterpret_cast<uintptr_t>(dataHead);
 
-	instanceTempSize = TEMPCACHESIZE;
-	instancePerSize = PERCAHCESIZE;
+	instancePerMemory = instanceTempMemory + cacheSize;
+
+	instanceTempSize = cacheSize;
+	instancePerSize = storageSize;
 	
 	instancePerOffset = 0;
 	instanceTempOffset = 0;
@@ -502,13 +487,20 @@ uintptr_t* VKInstance::GetDeviceArray(DeviceIndex gpuIndex)
 	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
 }
 
-void VKInstance::SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize)
+void VKInstance::SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, size_t cacheSize)
 {
+
+	uintptr_t tempMemoryHead = (uintptr_t)dataHead;
+
+	allocator = (VKAllocationCB*)(tempMemoryHead);
+
+	tempMemoryHead += sizeof(VKAllocationCB);
+
 	allocator->instanceDataSize = totalDataSize-cacheSize;
-	allocator->instanceDataOffset = 0;
-	allocator->instanceData = new uint8_t[totalDataSize];
 	allocator->commandDataSize = cacheSize;
+	allocator->instanceDataOffset = 0;
 	allocator->commandDataOffset = 0;
+	allocator->instanceData = (uint8_t*)tempMemoryHead;
 	allocator->commandData = allocator->instanceData + allocator->instanceDataSize;
 }
 

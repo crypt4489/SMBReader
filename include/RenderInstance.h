@@ -43,7 +43,7 @@ namespace API {
 struct RenderInstance
 {
 
-	RenderInstance();
+	RenderInstance(SlabAllocator* instanceStorageAllocator, SlabAllocator* instanceCacheAllocator);
 
 	~RenderInstance();
 
@@ -123,7 +123,7 @@ struct RenderInstance
 
 	int AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount);
 
-	uint32_t GetDynamicOffsetsForDescriptorSet(int descriptorSet, std::vector<uint32_t>& dyanmicOffsets);
+	uint32_t GetDynamicOffsetsForDescriptorSet(int descriptorSet, uint32_t* dynamicOffsets, uint32_t topOfDynamicOffsets);
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);
 
@@ -139,7 +139,7 @@ struct RenderInstance
 
 	void ReadData(int handle, void* dest, int size, int offset);
 
-	void CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, std::vector<EntryHandle>& outHandles);
+	void CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
@@ -174,7 +174,7 @@ struct RenderInstance
 	
 	ShaderResourceManager<50> descriptorManager{};
 
-	std::array<std::vector<EntryHandle>, 25> pipelinesIdentifier{};
+	std::array<EntryHandle*, 25> pipelinesIdentifier{};
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
 	std::array<ShaderDetails*, 70> shaderDetails{};
 	char* shaderDetailsData;
@@ -212,6 +212,9 @@ struct RenderInstance
 	EntryHandle samplerIndex;
 
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos;
+
+	SlabAllocator* cacheAllocator;
+	SlabAllocator* storageAllocator;
 };
 
 namespace GlobalRenderer {

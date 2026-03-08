@@ -16,6 +16,11 @@ void* SlabAllocator::Allocate(int _allocSize)
 	return (head + out);
 }
 
+void SlabAllocator::Reset()
+{
+	dataAllocator = 0;
+}
+
 int DeviceSlabAllocator::Allocate(int _allocSize, int alignment)
 {
 

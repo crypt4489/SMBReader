@@ -357,7 +357,9 @@ struct VKDevice
 		size_t perEntriesSize,
 		size_t perCacheSize,
 		size_t driverPerSize,
-		size_t driverPerCache
+		size_t driverPerCache,
+		void* driverPoolHead,
+		void* devicePoolHead
 	);
 
 	EntryHandle CreateGraphicsOneTimeQueue(uint32_t maxObjectCount);

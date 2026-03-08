@@ -350,6 +350,12 @@ UniformGrid mainGrid = {
 static int skyboxPipeline = 0;
 static EntryHandle skyboxCubeImage = EntryHandle();
 
+static char RenderInstanceMemoryPool[256 * MiB];
+static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
+
+static char RenderInstanceTemporaryPool[64 * KiB];
+static SlabAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
+
 static int AddLight(LightSource& lightDesc, LightType type);
 static void UpdateLight(LightSource& lightDesc, int lightIndex);
 
@@ -2616,7 +2622,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainWindow->CreateMainWindow();
 
-	GlobalRenderer::gRenderInstance = new RenderInstance();
+	GlobalRenderer::gRenderInstance = new RenderInstance(&RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
 
 	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, layouts.data(), layouts.size(), pds.data(), pds.size());
 

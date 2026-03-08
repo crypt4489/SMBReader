@@ -105,7 +105,7 @@ struct VKInstance
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
 
-	void CreateRenderInstance(OperatingSystem system);
+	void CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize);
 
 	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);
 
@@ -119,7 +119,7 @@ struct VKInstance
 
 	VKDevice* GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceIndex);
 
-	void SetInstanceDataAndSize(size_t totalDataSize, size_t cacheSize);
+	void SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, size_t cacheSize);
 
 	void* AllocFromInstanceCache(size_t size);
 

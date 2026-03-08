@@ -36,6 +36,7 @@ struct SlabAllocator
 
 	}
 	void* Allocate(int _allocSize);
+	void Reset();
 };
 
 struct DeviceSlabAllocator

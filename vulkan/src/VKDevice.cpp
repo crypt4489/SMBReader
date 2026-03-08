@@ -1119,28 +1119,45 @@ void VKDevice::CreateLogicalDevice(
 	size_t perEntriesSize,
 	size_t perCacheSize,
 	size_t driverPerSize,
-	size_t driverPerCache
+	size_t driverPerCache,
+	void* driverPoolHead,
+	void* devicePoolHead
 )
 {
-	deviceDriverAllocator = new VKAllocationCB();
+
+	uintptr_t tempDriverHead = (uintptr_t)driverPoolHead;
+	uintptr_t tempDeviceHead = (uintptr_t)devicePoolHead;
+
+	deviceDriverAllocator = (VKAllocationCB*)(tempDeviceHead);
+	tempDeviceHead += sizeof(VKAllocationCB);
+
 	deviceDriverAllocator->commandDataSize = driverPerCache;
-	deviceDriverAllocator->commandData = new unsigned char[driverPerCache];
+	deviceDriverAllocator->commandData = (uint8_t*)tempDriverHead;
+
+	tempDriverHead += driverPerCache;
+
 	deviceDriverAllocator->instanceDataSize = driverPerSize;
-	deviceDriverAllocator->instanceData = new unsigned char[driverPerSize];
+	deviceDriverAllocator->instanceData = (uint8_t*)tempDriverHead;
+
+	tempDriverHead += driverPerSize;
 
 
 	deviceCacheAlloc.size = perCacheSize;
-	deviceCacheAlloc.memHead = (uintptr_t)new char[perCacheSize];
+	deviceCacheAlloc.memHead = tempDeviceHead;
+
+	tempDeviceHead += perCacheSize;
 	
 
 	deviceDataAlloc.size = perDeviceDataSize - perEntriesSize;
-	deviceDataAlloc.memHead = (uintptr_t)new char[deviceDataAlloc.size];
-	
+	deviceDataAlloc.memHead = tempDeviceHead;
 
+	tempDeviceHead += deviceDataAlloc.size;
+	
 	numberOfEntries = perEntriesSize / sizeof(HandlePoolObject);
-	entries = new HandlePoolObject[numberOfEntries];
-	
+	entries = (HandlePoolObject*)tempDeviceHead;
 
+	tempDeviceHead += perEntriesSize;
+	
 	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
 	uint32_t familyCount;
 	VkQueueFamilyProperties* famProps;
@@ -2030,25 +2047,6 @@ void VKDevice::DestroyDevice()
 	}
 
 	vkDestroyDevice(device, nullptr);
-
-	deviceDriverAllocator->Delete();
-
-	delete deviceDriverAllocator;
-
-	if (deviceDataAlloc.memHead)
-	{
-		delete[] (void*)deviceDataAlloc.memHead;
-	}
-
-	if (entries)
-	{
-		delete[] entries;
-	}
-
-	if (deviceCacheAlloc.memHead)
-	{
-		delete[](void*)deviceCacheAlloc.memHead;
-	}
 }
 
 void VKDevice::DestroyImage(EntryHandle handle)
