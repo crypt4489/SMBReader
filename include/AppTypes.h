@@ -524,3 +524,16 @@ struct PipelineHandle
 	int graphIndex;
 	int graphCount;
 };
+
+
+struct ShaderDetails
+{
+	int shaderNameSize;
+	int shaderDataSize;
+
+	ShaderDetails* GetNext();
+
+	char* GetString();
+
+	void* GetShaderData();
+};

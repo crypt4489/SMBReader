@@ -10,6 +10,8 @@
 
 #include "OSFile.h"
 
+#include "AppAllocator.h"
+
 struct FileID
 {
 
@@ -74,6 +76,10 @@ public:
 	static int CreateFileIterator(std::string searchstring, OSFileIterator* file);
 
 	static int NextFileIterator(OSFileIterator* file);
+
+	static int ReadFileInFull(const std::string& name, SlabAllocator* allocator, void** dataOut);
+
+	static int ReadFileInFull(const std::string& name, RingAllocator* allocator, void** dataOut);
 
 	static std::array<OSFileHandle, MAXFILES> filesopen;
 	static std::filesystem::path currDir;

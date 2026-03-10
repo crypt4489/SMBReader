@@ -15,7 +15,7 @@ typedef struct text_vertex_t
 	Vector2f TEXTURE;
 	Vector4f COLOR;
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 3> getAttributeDescriptions();
 
 	bool operator==(const text_vertex_t& v);
 
@@ -31,7 +31,7 @@ typedef struct vertex_type_h
 	vertex_type_h() = default;
 	vertex_type_h(Vector4f _p, Vector2f _t, Vector3f _n);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 3> getAttributeDescriptions();
 
 	bool operator==(const vertex_type_h& v);
 
@@ -45,7 +45,7 @@ typedef struct basic_vertex_type_h
 	basic_vertex_type_h() = default;
 	basic_vertex_type_h(Vector4f _p, Vector4f _t);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 2> getAttributeDescriptions();
 
 	bool operator==(const basic_vertex_type_h& v);
 
@@ -64,7 +64,7 @@ typedef struct pospack6_cnorm_c16tex1_bone2_type_h
 	pospack6_cnorm_c16tex1_bone2_type_h() = default;
 	pospack6_cnorm_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector3f& _n, const Vector2i& _b, const Vector2f& _w);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 5> getAttributeDescriptions();
 
 	bool operator==(const pospack6_cnorm_c16tex1_bone2_type_h& v);
 
@@ -82,7 +82,7 @@ typedef struct pospack6_c16tex1_bone2_type_h
 	pospack6_c16tex1_bone2_type_h() = default;
 	pospack6_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2i& _b, const Vector2f& _w);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 4> getAttributeDescriptions();
 
 	bool operator==(const pospack6_c16tex1_bone2_type_h& v);
 
@@ -105,7 +105,7 @@ typedef struct pospack6_c16tex2_bone2_type_h
 		const Vector2i& _b, 
 		const Vector2f& _w);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 5> getAttributeDescriptions();
 
 	bool operator==(const pospack6_c16tex2_bone2_type_h& v);
 
@@ -128,7 +128,7 @@ typedef struct cpospack6_cnorm_c16tex1_bone2_type_h
 		const Vector2uc& _b,
 		const Vector2uc& _w);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 5> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_cnorm_c16tex1_bone2_type_h& v) const;
 
@@ -154,7 +154,7 @@ typedef struct cpospack6_c16tex1_bone2_type_h
 		const Vector2uc& _w);
 
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 4> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_c16tex1_bone2_type_h& v) const;
 
@@ -179,7 +179,7 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 		const Vector2uc& _w
 		);
 
-	static std::vector<VertexInputDescription> getAttributeDescriptions();
+	static std::array<VertexInputDescription, 5> getAttributeDescriptions();
 
 	bool operator==(const cpospack6_c16tex2_bone2_type_h& v);
 

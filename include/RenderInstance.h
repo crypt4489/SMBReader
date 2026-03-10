@@ -43,7 +43,7 @@ namespace API {
 struct RenderInstance
 {
 
-	RenderInstance(SlabAllocator* instanceStorageAllocator, SlabAllocator* instanceCacheAllocator);
+	RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
 
 	~RenderInstance();
 
@@ -170,15 +170,12 @@ struct RenderInstance
 	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
 	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
-	ShaderGraphsHolder<50, 60> vulkanShaderGraphs{};
+	ShaderGraphsHolder<50, 60> vulkanShaderGraphs;
 	
-	ShaderResourceManager<50> descriptorManager{};
+	ShaderResourceManager<50> descriptorManager;
 
 	std::array<EntryHandle*, 25> pipelinesIdentifier{};
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
-	std::array<ShaderDetails*, 70> shaderDetails{};
-	char* shaderDetailsData;
-	std::atomic<int> shaderDetailAlloc = 0;
 
 	RenderAllocationHolder<100> allocations{};
 
@@ -213,7 +210,7 @@ struct RenderInstance
 
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos;
 
-	SlabAllocator* cacheAllocator;
+	RingAllocator* cacheAllocator;
 	SlabAllocator* storageAllocator;
 };
 

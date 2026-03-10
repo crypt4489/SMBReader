@@ -10,8 +10,8 @@ text_vertex_t::text_vertex_t(Vector2f _p, Vector2f _t, Vector4f _c) :
 
 }
 
-std::vector<VertexInputDescription> text_vertex_t::getAttributeDescriptions() {
-	std::vector<VertexInputDescription> attributeDescriptions(3);
+std::array<VertexInputDescription, 3> text_vertex_t::getAttributeDescriptions() {
+	std::array<VertexInputDescription, 3> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(text_vertex_t, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32_SFLOAT; 
@@ -40,9 +40,9 @@ vertex_type_h::vertex_type_h(Vector4f _p, Vector2f _t, Vector3f _n) :
 {
 }
 
-std::vector<VertexInputDescription> vertex_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 3> vertex_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(3);
+	std::array<VertexInputDescription, 3> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(vertex_type_h, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -74,9 +74,9 @@ basic_vertex_type_h::basic_vertex_type_h(Vector4f _p, Vector4f _t) :
 }
 
 
-std::vector<VertexInputDescription> basic_vertex_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 2> basic_vertex_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(2);
+	std::array<VertexInputDescription, 2> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(basic_vertex_type_h, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -101,9 +101,9 @@ pospack6_cnorm_c16tex1_bone2_type_h::pospack6_cnorm_c16tex1_bone2_type_h(const V
 }
 
 
-std::vector<VertexInputDescription> pospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 5> pospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(5);
+	std::array<VertexInputDescription, 5> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(pospack6_cnorm_c16tex1_bone2_type_h, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -146,9 +146,9 @@ pospack6_c16tex1_bone2_type_h::pospack6_c16tex1_bone2_type_h(const Vector4f& _p,
 {
 }
 
-std::vector<VertexInputDescription> pospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 4> pospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(4);
+	std::array<VertexInputDescription, 4> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(pospack6_c16tex1_bone2_type_h, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -183,9 +183,9 @@ pospack6_c16tex2_bone2_type_h::pospack6_c16tex2_bone2_type_h(const Vector4f& _p,
 }
 
 
-std::vector<VertexInputDescription> pospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 5> pospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(5);
+	std::array<VertexInputDescription, 5> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(pospack6_c16tex2_bone2_type_h, POSITION);
 	attributeDescriptions[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
@@ -228,9 +228,9 @@ cpospack6_cnorm_c16tex1_bone2_type_h::cpospack6_cnorm_c16tex1_bone2_type_h(
 	{
 	}
 
-std::vector<VertexInputDescription> cpospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 5> cpospack6_cnorm_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> a(5);
+	std::array<VertexInputDescription, 5> a;
 
 	a[0].byteoffset = offsetof(cpospack6_cnorm_c16tex1_bone2_type_h, BONES);
 	a[0].format = ComponentFormatType::R8G8_UINT;
@@ -274,9 +274,9 @@ cpospack6_c16tex1_bone2_type_h::cpospack6_c16tex1_bone2_type_h(
 {
 }
 
-std::vector<VertexInputDescription> cpospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 4> cpospack6_c16tex1_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> a(4);
+	std::array<VertexInputDescription, 4> a;
 
 	a[0].byteoffset = offsetof(cpospack6_c16tex1_bone2_type_h, BONES);
 	a[0].format = ComponentFormatType::R8G8_UINT;
@@ -313,9 +313,9 @@ cpospack6_c16tex2_bone2_type_h::cpospack6_c16tex2_bone2_type_h(const Vector3s& _
 
 
 
-std::vector<VertexInputDescription> cpospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
+std::array<VertexInputDescription, 5> cpospack6_c16tex2_bone2_type_h::getAttributeDescriptions()
 {
-	std::vector<VertexInputDescription> attributeDescriptions(5);
+	std::array<VertexInputDescription, 5> attributeDescriptions;
 
 	attributeDescriptions[0].byteoffset = offsetof(cpospack6_c16tex2_bone2_type_h, BONES);
 	attributeDescriptions[0].format = ComponentFormatType::R8G8_UINT;

@@ -1,6 +1,8 @@
 #pragma once
+#include "AppAllocator.h"
 #include "AppTypes.h"
 #include "IndexTypes.h"
+
 #include <array>
 
 struct ShaderMap
@@ -29,22 +31,21 @@ template <int T_ShaderGraphCount, int T_ShaderCount>
 struct ShaderGraphsHolder
 {
 	int graphCount;
+	int shaderCount;
 
-	uintptr_t shaderGraphs;
-	size_t shaderGraphOffset;
+	SlabAllocator graphAllocator;
+	SlabAllocator shaderDetailsAllocator;
 	std::array<ShaderGraph*, T_ShaderGraphCount> shaderGraphPtrs;
 	std::array<EntryHandle, T_ShaderCount> shaders;
+	std::array<ShaderDetails*, T_ShaderCount> shaderDetails{};
 	
-
-	uintptr_t GetGraph(int graphIndex)
+	ShaderGraphsHolder(void* gSlabHead, int gSlabSize, void* sSlabHead, int sSlabSize)
+		: 
+		graphCount(0), shaderCount(0),
+		graphAllocator{gSlabHead, gSlabSize},
+		shaderDetailsAllocator{sSlabHead, sSlabSize}
 	{
-		uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraphsHolder);
-		for (int i = 0; i < graphIndex; i++)
-		{
-			ShaderGraph* map = (ShaderGraph*)head;
-			head += map->GetGraphSize();
-		}
-		return head;
+
 	}
 };
 

@@ -1,6 +1,6 @@
 #include "ShaderResourceSet.h"
 
-static char readerMemBuffer[16 * MiB];
+static char* readerMemBuffer;
 static int readerMemBufferAllocate;
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
@@ -60,45 +60,47 @@ hash(const std::string& string)
 }
 
 
-ShaderGraph* CreateShaderGraph(
-	const std::string& filename, uintptr_t graphmemory, size_t *outSize, 
-	void* shaderDataOut, int *shaderDataSize, int *shaderDetailCount
-)
+ShaderGraph* CreateShaderGraph(const std::string& filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount)
 {
-
-	uintptr_t TreeNodes[50]{};
-	int SetNodes[15]{};
-	int ShaderRefs[5]{};
-	ShaderDetails* details[5]{};
+	uintptr_t* TreeNodes = (uintptr_t*)readerMemory->Allocate(sizeof(uintptr_t) * 50);
 	
-	uintptr_t shaderDeatsIter = (uintptr_t)shaderDataOut;
-	uintptr_t shaderDeatsHead = shaderDeatsIter;
+	int* SetNodes = (int*)readerMemory->Allocate(sizeof(int) * 20);
+	
+	int* ShaderRefs = SetNodes + 15;
+	
+	ShaderDetails** details = (ShaderDetails**)readerMemory->Allocate(sizeof(ShaderDetails*) * 5);
 
-	std::vector<char> fileData;
+	FileID fileID = FileManager::OpenFile(filename, READ);
 
-	auto ret = FileManager::ReadFileInFull(filename, fileData);
+	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
 
-	if (ret)
-	{
-		throw std::runtime_error("Shader Init file is unable to be opened");
-	}
+	int dataSize = fileHandle->fileLength;
+	
+	void* fileData = readerMemory->Allocate(dataSize);
 
-	char* dataStart = fileData.data();
-	int dataSize = fileData.size();
+	OSReadFile(fileHandle, dataSize, (char*)fileData);
+
+	OSCloseFile(fileHandle);
+
+	char* dataStart = (char*)fileData;
 
 	int shaderCount = 0;
 	int shaderResourceCount = 0;
 	int setCount = 0;
 
-	int lastShader = 0;
-	int shaderDetailDataStride = 0;
-
 	int tagCount = 0;
 	int curr = 0;
 
 	int stride = SkipLine(dataStart, dataSize, curr);
+	
 	curr += stride;
-	while (curr + stride < fileData.size())
+
+	int readerSizeMultiply = (dataSize / KiB) + 1;
+
+	readerMemBufferAllocate = 0;
+	readerMemBuffer = (char*)readerMemory->Allocate(readerSizeMultiply * (KiB >> 1));
+
+	while (curr + stride < dataSize)
 	{
 
 		unsigned long hashl = 0;
@@ -113,26 +115,24 @@ ShaderGraph* CreateShaderGraph(
 			tagCount++;
 		}
 
-		
-
 		switch (hashl)
 		{
 		case hash("ShaderGraph"):
 			//std::cout << "ShaderGraph" << std::endl;
 			if (!opening)
-				curr = (int)fileData.size();
+				curr = dataSize;
 			break;
 		case hash("GLSLShader"):
 			//std::cout << "GLSLShader" << std::endl;
 			if (opening) {
-				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], (void*)shaderDeatsIter, &shaderDetailDataStride);
+
+				ShaderDetails* ldetails = (ShaderDetails*)shaderAllocator->Head();
+
+				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], shaderAllocator);
 				
 				ShaderRefs[shaderCount] = tagCount;
-				details[shaderCount] = (ShaderDetails*)shaderDeatsIter;
-				
-				shaderDeatsIter += shaderDetailDataStride;
-				
-				lastShader = shaderCount;
+
+				details[shaderCount] = ldetails;
 				
 				shaderCount++;
 			}
@@ -148,6 +148,7 @@ ShaderGraph* CreateShaderGraph(
 			//std::cout << "ShaderResourceItem" << std::endl;
 			if (opening) {
 				stride = HandleShaderResourceItem(dataStart, dataSize, curr, &TreeNodes[tagCount]);
+				shaderResourceCount++;
 			}
 			break;
 		case hash("ComputeLayout"):
@@ -164,15 +165,15 @@ ShaderGraph* CreateShaderGraph(
 		
 	}
 
-	uintptr_t head = (graphmemory + *outSize);
+	int graphSizesize = sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)) + (shaderCount * sizeof(ShaderMap)) + (shaderResourceCount * sizeof(ShaderResource));
 
-	ShaderGraph* graph = (ShaderGraph*)(head);
+	ShaderGraph* graph = (ShaderGraph*)graphAllocator->Allocate(graphSizesize);
 
 	memset(graph, 0, sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)));
 
 	graph->shaderMapCount = shaderCount;
 	graph->resourceSetCount = setCount;
-	
+	graph->resourceCount = shaderResourceCount;
 
 	int shaderIndex = 0;
 
@@ -261,12 +262,6 @@ ShaderGraph* CreateShaderGraph(
 			tag = (ShaderResourceItemXMLTag*)TreeNodes[++resIter];
 		}
 	}
-
-	graph->resourceCount = resourceIter;
-
-	*outSize += graph->GetGraphSize();
-
-	*shaderDataSize = (int)(shaderDeatsIter - shaderDeatsHead);
 
 	*shaderDetailCount = shaderCount;
 
@@ -537,24 +532,21 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 	return ret;
 }
 
+#define MAX_SHADER_NAME 50
 
-
-int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, void *shaderData, int *shaderDataSize)
+int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, SlabAllocator* shaderAllocator)
 {
 	unsigned long hashes[6];
+	char nameScratch[MAX_SHADER_NAME];
 
 	int glslSize = 0;
 
 	int ret = ReadAttributes(fileData, size, currentLocation, hashes, &glslSize);
 
-	uintptr_t detailHead = (uintptr_t)shaderData;
-
-	ShaderDetails* details = (ShaderDetails*)detailHead;
+	ShaderDetails* details = (ShaderDetails*)shaderAllocator->Allocate(sizeof(ShaderDetails));
 
 	details->shaderDataSize = 0;
 	details->shaderNameSize = 0;
-
-	detailHead += sizeof(ShaderDetails);
 
 	ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
 
@@ -599,9 +591,11 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 
 	readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
 
-	ret += ReadValue(fileData, size, currentLocation + ret, details->GetString(), &details->shaderNameSize);
+	ret += ReadValue(fileData, size, currentLocation + ret, nameScratch, &details->shaderNameSize);
 
-	*shaderDataSize = (sizeof(ShaderDetails) + details->shaderNameSize + details->shaderDataSize);
+	char* nameCopy = (char*)shaderAllocator->Allocate(details->shaderNameSize + details->shaderDataSize);
+
+	memcpy(nameCopy, nameScratch, details->shaderNameSize);
 
 	return ret;
 }

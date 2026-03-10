@@ -32,7 +32,7 @@ public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
 
-	void ExecuteCommands(const std::string& command, const std::vector<std::string>& args);
+	void ExecuteCommands(const std::string& command, int argCount);
 
 	void Execute();
 
@@ -42,7 +42,7 @@ public:
 
 	void ProcessCommands();
 
-	void AddCommandTS(std::vector<std::string>& com);
+	void AddCommandTS(int wordCount);
 
 	void SetRunning(bool set = false);
 
@@ -51,7 +51,7 @@ public:
 	void LoadThreadedWrapper(std::string& file);
 
 
-	void FindWords(std::string words, std::vector<std::string>& out);
+	int FindWords(std::string words);
 
 	void UpdateCameraMatrix();
 
@@ -106,7 +106,7 @@ public:
 
 	ProgramArgs& args;
 	Semaphore queueSema;
-	std::queue<std::vector<std::string>> commands;
+	std::queue<int> wordCounts;
 	bool running, cleaned;
 	WindowManager* mainWindow = nullptr;
 	

@@ -3,6 +3,36 @@
 
 
 
+void* RingAllocator::Allocate(int _allocSize)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize);
+
+	return (head + out);
+}
+
+void* RingAllocator::CAllocate(int _allocSize)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize);
+
+	memset((head + out), 0, _allocSize);
+
+	return (head + out);
+}
+
+void RingAllocator::Reset()
+{
+	dataAllocator = 0;
+}
+
+void* RingAllocator::Head()
+{
+	char* head = (char*)dataHead;
+	return (void*)(head + dataAllocator);
+}
 
 
 
@@ -19,6 +49,12 @@ void* SlabAllocator::Allocate(int _allocSize)
 void SlabAllocator::Reset()
 {
 	dataAllocator = 0;
+}
+
+void* SlabAllocator::Head()
+{
+	char* head = (char*)dataHead;
+	return (void*)(head + dataAllocator);
 }
 
 int DeviceSlabAllocator::Allocate(int _allocSize, int alignment)

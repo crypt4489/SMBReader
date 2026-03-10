@@ -168,19 +168,25 @@ struct ShaderResourceUpdatePool
 template <int N>
 struct ShaderResourceManager
 {
-	EntryHandle deviceResourceHeap;
-	uintptr_t hostResourceHeap;
-	std::atomic<uintptr_t> hostResourceHead;
+	SlabAllocator shaderResourceInstAllocator;
 	std::array<uintptr_t, N> descriptorSets;
 	std::array<EntryHandle, N> vkDescriptorSets;
 	std::atomic<int> descriptorSetIndex;
 
-	int AddShaderToSets(uintptr_t location, size_t size)
+	EntryHandle deviceResourceHeap;
+
+	ShaderResourceManager(void* srSlabHead, int srSlabSize) :
+		shaderResourceInstAllocator{srSlabHead, srSlabSize},
+		deviceResourceHeap(EntryHandle())
+	{
+
+	}
+
+	int AddShaderToSets(uintptr_t location)
 	{
 		int indexRet = descriptorSetIndex.fetch_add(1);
 
 		descriptorSets[indexRet] = location;
-		hostResourceHead.store(hostResourceHead + size);
 
 		return indexRet;
 	}
@@ -451,17 +457,7 @@ struct ShaderResourceManager
 	}
 };
 
-struct ShaderDetails
-{
-	int shaderNameSize;
-	int shaderDataSize;
 
-	ShaderDetails* GetNext();
-
-	char* GetString();
-
-	void* GetShaderData();
-};
 
 
 
@@ -504,7 +500,7 @@ static constexpr unsigned long
 hash(const std::string& string);
 
 
-ShaderGraph* CreateShaderGraph(const std::string& filename, uintptr_t graphmemory, size_t* outSize, void* shaderDataOut, int* shaderDataSize, int* shaderDetailCount);
+ShaderGraph* CreateShaderGraph(const std::string& filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount);
 
 static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
 
@@ -519,7 +515,7 @@ static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, 
 
 static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
 
-static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, void* shaderData, int* shaderDataSize);
+static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, SlabAllocator* shaderAllocator);
 
 static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset);
 

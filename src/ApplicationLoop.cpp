@@ -354,7 +354,18 @@ static char RenderInstanceMemoryPool[256 * MiB];
 static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
 
 static char RenderInstanceTemporaryPool[64 * KiB];
-static SlabAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
+static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
+
+static char AppInstanceTempMemory[64 * KiB];
+static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
+
+
+static char GlobalInputScratchMemory[128 * MiB];
+static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
+
+static char ThreadSharedCmdMemory[4 * KiB];
+static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
+
 
 static int AddLight(LightSource& lightDesc, LightType type);
 static void UpdateLight(LightSource& lightDesc, int lightIndex);
@@ -604,7 +615,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 }
 
-void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vector<std::string>& args)
+void ApplicationLoop::ExecuteCommands(const std::string& command, int wordCount)
 {
 
 	if (command == "load")
@@ -617,24 +628,31 @@ void ApplicationLoop::ExecuteCommands(const std::string& command, const std::vec
 	} 
 	else if (command == "positionm")
 	{
-		if (args.size() != 4)
+		if (wordCount != 4)
 			return;
-		int meshIndex = std::stoi(args.at(0));
-		float x1 = std::stof(args.at(1));
-		float y1 = std::stof(args.at(2));
-		float z1 = std::stof(args.at(3));
+
+		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
+
+		int meshIndex = std::stoi(args[0]);
+		float x1 = std::stof(args[1]);
+		float y1 = std::stof(args[2]);
+		float z1 = std::stof(args[3]);
 		SetPositonOfMesh(meshIndex, Vector3f(x1, y1, z1));
 	}
 	else if (command == "positiong")
 	{
-		if (args.size() != 4)
+		if (wordCount != 4)
 			return;
-		int geomIndex = std::stoi(args.at(0));
-		float x1 = std::stof(args.at(1));
-		float y1 = std::stof(args.at(2));
-		float z1 = std::stof(args.at(3));
+		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
+
+		int geomIndex = std::stoi(args[0]);
+		float x1 = std::stof(args[1]);
+		float y1 = std::stof(args[2]);
+		float z1 = std::stof(args[3]);
 		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
 	}
+
+	ThreadSharedMessageQueue.Read();
 }
 
 
@@ -1864,13 +1882,15 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 void ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 
+	const int MAX_GEO_FILES = 10;
+	const int MAX_TEXTURES = 10;
+
 	int totalTextureCount = 0, totalMeshCount = 0;
-
-	std::vector<SMBTexture> textures;
-
 	auto& chunk = file.chunks;
 
-	std::array<SMBGeoChunk, 10> geoDefs{};
+	SMBTexture* textures = (SMBTexture*)AppInstanceTempAllocator.CAllocate(sizeof(SMBTexture) * MAX_TEXTURES);
+
+	SMBGeoChunk* geoDefs = (SMBGeoChunk*)AppInstanceTempAllocator.Allocate(sizeof(SMBGeoChunk) * MAX_GEO_FILES);
 
 	for (size_t i = 0; i<chunk.size(); i++)
 	{
@@ -1883,25 +1903,21 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 			OSFileHandle* handle = FileManager::GetFile(file.id);
 
-
 			size_t seekpos = chunk[i].offsetInHeader;
 
 			OSSeekFile(handle, seekpos, BEGIN);
 
-			std::vector<char> geomHeader(chunk[i].headerSize);
+			char* geomHeader = (char*)AppInstanceTempAllocator.Allocate(chunk[i].headerSize);
 
-			OSReadFile(handle, chunk[i].headerSize, geomHeader.data());
+			OSReadFile(handle, chunk[i].headerSize, geomHeader);
 
-		    ProcessGeometryClass(geomHeader.data(), totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset);
+		    ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset);
 	
 			break;
 		}
 		case TEXTURE:
 		{
-			SMBTexture texture(file, chunk[i]);
-
-			
-			textures.emplace_back( texture );
+			std::construct_at(&textures[totalTextureCount], file, chunk[i]);	
 			totalTextureCount++;
 			break;
 		}
@@ -1915,7 +1931,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		}
 	}
 
-	TextureDetails* details[10];
+	TextureDetails** details = (TextureDetails**)AppInstanceTempAllocator.Allocate(sizeof(TextureDetails*) * totalTextureCount);
 
 	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
 
@@ -2806,11 +2822,11 @@ EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioT
 
 	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
 
-	std::vector<char> data;
+	void* fileData;
 
-	FileManager::ReadFileInFull(name[0], data);
+	FileManager::ReadFileInFull(name[0], &GlobalInputScratchAllocator, &fileData);
 
-	int filePointer = ReadBMPDetails(data.data(), details);
+	int filePointer = ReadBMPDetails((char*)fileData, details);
 
 	details->data = (char*)mainDictionary.AllocateImageCache(details->dataSize);
 
@@ -2819,13 +2835,13 @@ EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioT
 	for (int i = 1; i < textureCount; i++)
 	{
 	
-		ReadBMPData(data.data(), filePointer, details);
+		ReadBMPData((char*)fileData, filePointer, details);
 
-		FileManager::ReadFileInFull(name[i], data);
+		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
 
 		TextureDetails stubDetails{};
 
-		filePointer = ReadBMPDetails(data.data(), &stubDetails);
+		filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
 
 		if (stubDetails.width != details->width) {
 			printf("Mismatched Image array\n");
@@ -2834,7 +2850,7 @@ EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioT
 		details->currPointer = (char*)mainDictionary.AllocateImageCache(details->dataSize);
 	}
 
-	ReadBMPData(data.data(), filePointer, details);
+	ReadBMPData((char*)fileData, filePointer, details);
 	
 	details->arrayLayers = textureCount;
 
@@ -2876,13 +2892,13 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 	for (int i = 0; i<mipCounts; i++)
 	{
 	
-		std::vector<char> data;
+		void* fileData;
 
 		TextureDetails stubDetails{};
 
-		FileManager::ReadFileInFull(name[i], data);
+		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
 
-		int filePointer = ReadBMPDetails(data.data(), &stubDetails);
+		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
 
 		stubDetails.data = (char*)mainDictionary.AllocateImageCache(stubDetails.dataSize);
 
@@ -2892,7 +2908,7 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 
 		mipSizes[i] = stubDetails.dataSize;
 
-		ReadBMPData(data.data(), filePointer, &stubDetails);
+		ReadBMPData((char*)fileData, filePointer, &stubDetails);
 
 		if (!i)
 		{
@@ -2989,28 +3005,30 @@ void ApplicationLoop::CleanupRuntime()
 void ApplicationLoop::ProcessCommands()
 {
 	queueSema.Wait();
-	if (!commands.size()) {
+	if (!wordCounts.size()) {
 		queueSema.Notify();
 		return;
 	}
-	std::vector<std::string> com = std::move(commands.front());
-	commands.pop();
+	int wordCount = wordCounts.front();
+
+	wordCounts.pop();
 	queueSema.Notify();
-	if (!com.size()) { std::cerr << "what are you doing\n"; return; }
-	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), com[0]);
+
+	std::string* commandType = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
+
+	auto mapFunc = std::find(commandsStrings.begin(), commandsStrings.end(), *commandType);
+
 	if (mapFunc == std::end(commandsStrings)) return;
-	if (com.size() > 1)
-		ExecuteCommands(*mapFunc, { com.begin()+1, com.end()});
-	else 
-		ExecuteCommands(*mapFunc, { });
+	
+	ExecuteCommands(*mapFunc, wordCount);
 }
 
 
 
-void ApplicationLoop::AddCommandTS(std::vector<std::string>& com)
+void ApplicationLoop::AddCommandTS(int wordCount)
 {
 	SemaphoreGuard lock(std::ref(queueSema));
-	commands.push(std::move(com));
+	wordCounts.push(wordCount);
 }
 
 void ApplicationLoop::SetRunning(bool set)
@@ -3047,8 +3065,9 @@ void LoadObjectThreaded(void* data)
 	loop->LoadObject(out);
 }
 
-void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out)
+int ApplicationLoop::FindWords(std::string words)
 {
+	int wordCount = 1;
 	size_t size = words.length();
 	int i = 0, j = 1;
 
@@ -3056,7 +3075,12 @@ void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out
 
 		if (words[j] == 0x20)
 		{
-			out.push_back(words.substr(i, (j - i)));
+			std::string* out = (std::string*)ThreadSharedMessageQueue.AcquireWrite(sizeof(std::string));
+
+			*out = words.substr(i, (j - i));
+
+			wordCount++;
+
 			i = j+1;
 		}
 		else if (words[j] == 0x22)
@@ -3065,7 +3089,12 @@ void ApplicationLoop::FindWords(std::string words, std::vector<std::string>& out
 		}
 		j++;
 	}
-	out.push_back(words.substr(i, (j - i)));
+
+	std::string* out = (std::string*)ThreadSharedMessageQueue.AcquireWrite(sizeof(std::string));
+
+	*out = words.substr(i, (j - i));
+
+	return wordCount;
 }
 
 void ScanSTDIN(void* data)
@@ -3130,11 +3159,9 @@ void ScanSTDIN(void* data)
 
 		std::string output(inputBuffer, numberOfBytesRead - 2);
 
-		std::vector<std::string> comandargs{};
+		int wordCount = loop->FindWords(output);
 
-		loop->FindWords(output, comandargs);
-
-		loop->AddCommandTS(comandargs);
+		loop->AddCommandTS(wordCount);
 
 		if (output == "end") break;
 

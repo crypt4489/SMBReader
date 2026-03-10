@@ -77,6 +77,58 @@ int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buff
 	return 0;
 }
 
+int FileManager::ReadFileInFull(const std::string& name, SlabAllocator* allocator, void** dataOut)
+{
+	OSFileFlags openingFlags = READ;
+
+	OSFileHandle outHandle{};
+
+	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
+
+	if (nRet)
+	{
+		return 1;
+	}
+
+	int size = outHandle.fileLength;
+
+	void* dataReadIn = allocator->Allocate(size);
+
+	OSReadFile(&outHandle, size, (char*)dataReadIn);
+
+	OSCloseFile(&outHandle);
+
+	*dataOut = dataReadIn;
+
+	return 0;
+}
+
+int FileManager::ReadFileInFull(const std::string& name, RingAllocator* allocator, void** dataOut)
+{
+	OSFileFlags openingFlags = READ;
+
+	OSFileHandle outHandle{};
+
+	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
+
+	if (nRet)
+	{
+		return 1;
+	}
+
+	int size = outHandle.fileLength;
+
+	void* dataReadIn = allocator->Allocate(size);
+
+	OSReadFile(&outHandle, size, (char*)dataReadIn);
+
+	OSCloseFile(&outHandle);
+
+	*dataOut = dataReadIn;
+
+	return 0;
+}
+
 OSFileHandle* FileManager::GetFile(const FileID& id)
 {
 	if (id() >= MAXFILES) throw std::invalid_argument("You did what?");

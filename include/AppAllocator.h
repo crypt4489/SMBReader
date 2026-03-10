@@ -25,6 +25,24 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 }
 
 
+struct RingAllocator
+{
+	void* dataHead;
+	int dataSize;
+	std::atomic<int> dataAllocator;
+	constexpr RingAllocator(void* _dataHead, int _size) :
+		dataSize(_size), dataAllocator(0), dataHead(_dataHead)
+	{
+
+	}
+
+	void* Allocate(int _allocSize);
+	void Reset();
+	void* Head();
+	void* CAllocate(int _allocSize);
+};
+
+
 struct SlabAllocator
 {
 	void* dataHead;
@@ -35,8 +53,10 @@ struct SlabAllocator
 	{
 
 	}
+
 	void* Allocate(int _allocSize);
 	void Reset();
+	void* Head();
 };
 
 struct DeviceSlabAllocator
@@ -102,3 +122,30 @@ struct ArrayAllocator
 	}
 };
 
+struct MessageQueue
+{
+	uint64_t write;
+	uintptr_t bufferLocation;
+	uint64_t bufferSize;
+
+	MessageQueue(void* data, size_t size) :
+		write(0), bufferLocation((uintptr_t)data), bufferSize(size)
+	{
+
+	}
+
+	void* AcquireWrite(size_t dataSize)
+	{
+		uint64_t head		  = write + dataSize;
+		if (head >= bufferSize) return nullptr;
+
+		void* ret = (void*)(bufferLocation + write);
+		write = head;
+		return ret;
+	}
+
+	void Read()
+	{
+		write = 0;
+	}
+};
