@@ -11,36 +11,18 @@
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
 
-template <int T_MaxRegionCopy>
 struct ShaderResourceUpdatePool
 {
-	char temparguments[32 * 1024];
 	std::array<ShaderResourceUpdate, 1000> updateRegions;
 	std::array<TransferRegionLink, 1000> updateLinks;
 	int linkHead = -1;
 	int linkCount = 0;
 	int updateRegionAlloc = 0;
-	int currentTempArgumentsPtr = 0;
 
-	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data)
+	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data, int cachedDataSize, int copies)
 	{
 		TransferRegionLink* link = nullptr;
 		ShaderResourceUpdate* region = nullptr;
-
-		int size = 0;
-
-		switch (type)
-		{
-		case ShaderResourceType::SAMPLER3D:
-		case ShaderResourceType::SAMPLER2D:
-		case ShaderResourceType::SAMPLERSTATE:
-		case ShaderResourceType::IMAGE2D:
-		{
-			ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
-			size = (sizeof(EntryHandle) * update->count) + sizeof(ResourceArrayUpdate);
-			break;
-		}
-		}
 
 
 		
@@ -53,35 +35,10 @@ struct ShaderResourceUpdatePool
 		link = &updateLinks[regionAlloc];
 
 
+		
 
-		if (currentTempArgumentsPtr + size >= sizeof(temparguments))
-		{
-			currentTempArgumentsPtr = 0;
-		}
-
-		int writeLoc = currentTempArgumentsPtr;
-
-		currentTempArgumentsPtr += size;
-
-		switch (type)
-		{
-		case ShaderResourceType::SAMPLER3D:
-		case ShaderResourceType::SAMPLER2D:
-		case ShaderResourceType::SAMPLERSTATE:
-		case ShaderResourceType::IMAGE2D:
-		{
-			ResourceArrayUpdate* update = (ResourceArrayUpdate*)data;
-			ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(temparguments + writeLoc);
-			cachedUpdate->dstBegin = update->dstBegin;
-			cachedUpdate->count = update->count;
-			cachedUpdate->handles = (EntryHandle*)(cachedUpdate + 1);
-			memcpy(cachedUpdate->handles, update->handles, sizeof(EntryHandle) * cachedUpdate->count);
-			break;
-		}
-		}
-
-		region->data = temparguments + writeLoc;
-		region->dataSize = size;
+		region->data = data;
+		region->dataSize = cachedDataSize;
 		region->descriptorSet = descriptorid;
 
 		region->bindingIndex = bindingindex;
@@ -89,18 +46,10 @@ struct ShaderResourceUpdatePool
 		link->region = regionAlloc;
 		link->next = -1;
 
-
-
 		Insert(regionAlloc);
 
-
-
-
-	
-		
-
 		region->type = type;
-		region->copyCount = T_MaxRegionCopy;
+		region->copyCount = copies;
 
 		return 0;
 	}
@@ -234,7 +183,7 @@ struct ShaderResourceManager
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
-		if (header->type != ShaderResourceType::IMAGESTORE2D || header->type != ShaderResourceType::IMAGE2D)
+		if (header->type != ShaderResourceType::IMAGESTORE2D && header->type != ShaderResourceType::IMAGE2D)
 			return;
 
 		header->textureHandles = index;
@@ -447,13 +396,6 @@ struct ShaderResourceManager
 		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
 		if (!header) return;
 		header->data = data;
-	}
-
-	void UploadConstant(int descriptorset, int allocationIndex, int bufferLocation)
-	{
-		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
-		if (!header) return;
-		//header->allocationIndex = allocationIndex;
 	}
 };
 

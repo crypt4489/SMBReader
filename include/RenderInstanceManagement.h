@@ -4,18 +4,102 @@
 #include "AppTypes.h"
 
 
-template<int T_MaxRegionCopy>
+
+enum class DriverUpdateType
+{
+	MEMORYUPDATE = 1,
+	RESOURCEUPDATE = 2,
+	IMAGEMEMORYUPDATE = 3,
+	TRANSFERCOMMAND = 4
+};
+
+struct RenderDriverUpdateCommandHeader
+{
+	DriverUpdateType updateType;
+};
+
+struct RenderDriverUpdateCommandMemory : public RenderDriverUpdateCommandHeader
+{
+	int allocationIndex;
+	int size;
+	int allocOffset;
+	int copiesWithin;
+	int pad1;
+	void* data;
+
+	RenderDriverUpdateCommandHeader* GetNext()
+	{
+		return (RenderDriverUpdateCommandHeader*)((uintptr_t)this + sizeof(RenderDriverUpdateCommandMemory));
+	}
+};
+
+struct RenderDriverUpdateCommandFill : public RenderDriverUpdateCommandHeader
+{
+	int allocationIndex;
+	int size;
+	int allocOffset;
+	int copiesWithin;
+	uint32_t fillValue; 
+	BarrierStage stage; 
+	BarrierAction action;
+
+	RenderDriverUpdateCommandHeader* GetNext()
+	{
+		return (RenderDriverUpdateCommandHeader*)((uintptr_t)this + sizeof(RenderDriverUpdateCommandFill));
+	}
+};
+
+struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
+{
+	int width; 
+	int height; 
+	int mipLevels; 
+	int layers; 
+	ImageFormat format;
+	void* data;
+	EntryHandle textureIndex;
+	uint32_t* imageSizes;
+	size_t totalSize;
+	int pad[2];
+
+	RenderDriverUpdateCommandHeader* GetNext()
+	{
+		return (RenderDriverUpdateCommandHeader*)((uintptr_t)this + sizeof(RenderDriverUpdateCommandImage));
+	}
+
+};
+
+struct RenderDriverUpdateCommandResource: public RenderDriverUpdateCommandHeader
+{
+	int descriptorid; 
+	int bindingindex; 
+	ShaderResourceType type;
+	int cachedDataSize;
+	int copies;
+	void* data; 
+
+	RenderDriverUpdateCommandHeader* GetNext()
+	{
+		return (RenderDriverUpdateCommandHeader*)((uintptr_t)this + sizeof(RenderDriverUpdateCommandResource));
+	}
+
+};
+
+static_assert(sizeof(RenderDriverUpdateCommandMemory) % 32 == 0);
+static_assert(sizeof(RenderDriverUpdateCommandResource) % 32 == 0);
+static_assert(sizeof(RenderDriverUpdateCommandImage) % 32 == 0);
+static_assert(sizeof(RenderDriverUpdateCommandFill) % 32 == 0);
+
+
 struct HostDriverTransferPool
 {
-	char stagingbuffer[32 * 1024];
 	std::array<HostTransferRegion, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
-	int currentStagingBufferWrite = 0;
 
-	int Create(void* data, int size, int allocationIndex, int allocOffset, TransferType type)
+	int Create(void* data, int size, int allocationIndex, int allocOffset, int copies)
 	{
 	
 		TransferRegionLink* link = Find(allocationIndex, allocOffset);
@@ -30,71 +114,26 @@ struct HostDriverTransferPool
 			region = &transferRegions[regionAlloc];
 
 			link = &regionLinks[regionAlloc];
-
-			if (type == TransferType::CACHED)
-			{
-				if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
-				{
-					currentStagingBufferWrite = 0;
-				}
-
-				int writeLoc = currentStagingBufferWrite;
-
-				currentStagingBufferWrite += size;
-
-				memcpy(stagingbuffer + writeLoc, data, size);
-
-				region->data = stagingbuffer + writeLoc;
-			}
-			else if (type == TransferType::MEMORY)
-			{
-				region->data = data;
-			}
-
-
+			
 			link->region = regionAlloc;
 			link->next = -1;
 
 			region->allocationIndex = allocationIndex;
 			region->allocoffset = allocOffset;
 			region->size = size;
+			region->data = data;
 
 			Insert(regionAlloc);
 		}
 		else
 		{
 			region = &transferRegions[link->region];
-
-			if (type == TransferType::CACHED)
-			{
-				if (size > region->size)
-				{
-					if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
-					{
-						currentStagingBufferWrite = 0;
-					}
-
-					int writeLoc = currentStagingBufferWrite;
-
-					currentStagingBufferWrite += size;
-
-					region->data = stagingbuffer + writeLoc;
-				}
-				memcpy(region->data, data, size);
-			}
-			else
-			{
-				region->data = data;
-			}
-
+			region->data = data;
 			region->allocoffset = allocOffset;
 			region->size = size;
 		}
 
-
-		region->type = type;
-		region->copyCount = T_MaxRegionCopy;
-
+		region->copyCount = copies;
 		return 0;
 	}
 
@@ -153,7 +192,6 @@ struct HostDriverTransferPool
 
 
 
-template<int T_MaxRegionCopy>
 struct TransferCommandsPool
 {
 	std::array<TransferCommand, 1000> transferRegions;
@@ -162,7 +200,7 @@ struct TransferCommandsPool
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
 
-	int Create(int size, int allocationIndex, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action)
+	int Create(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action, int copies)
 	{
 		TransferRegionLink* link = Find(allocationIndex, allocOffset);
 		TransferCommand* region = nullptr;
@@ -202,8 +240,7 @@ struct TransferCommandsPool
 			region->size = size;
 		}
 
-		//region->type = type;
-		region->copycount = T_MaxRegionCopy;
+		region->copycount = copies;
 		region->dstStage = stage;
 		region->dstAction = action;
 
@@ -268,16 +305,13 @@ struct TransferCommandsPool
 
 struct DeviceMemoryUpdateManager
 {
-	char stagingbuffer[32 * 1024];
 	std::array<DeviceTransferRegion, 1000> transferRegions;
 	std::array<TransferRegionLink, 1000> regionLinks;
 	int linkHead = -1;
-	int* popPrev = nullptr;
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
-	int currentStagingBufferWrite = 0;
 
-	int Create(void* data, int size, int allocationIndex, int allocOffset, int copyCount, TransferType transferType)
+	int Create(void* data, int size, int allocationIndex, int allocOffset, int copyCount)
 	{
 
 		TransferRegionLink* link = Find(allocationIndex, allocOffset);
@@ -293,68 +327,24 @@ struct DeviceMemoryUpdateManager
 
 			link = &regionLinks[regionAlloc];
 
-			if (transferType == TransferType::CACHED)
-			{
-
-				if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
-				{
-					currentStagingBufferWrite = 0;
-				}
-
-				int writeLoc = currentStagingBufferWrite;
-
-				currentStagingBufferWrite += size;
-
-				memcpy(stagingbuffer + writeLoc, data, size);
-				region->data = stagingbuffer + writeLoc;
-			}
-			else if (transferType == TransferType::MEMORY)
-			{
-				region->data = data;
-			}
-
-
 			link->region = regionAlloc;
 			link->next = -1;
 			
 			region->allocationIndex = allocationIndex;
 			region->allocoffset = allocOffset;
 			region->size = size;
+			region->data = data;
 
 			Insert(regionAlloc);
 		}
 		else
 		{
-			region = &transferRegions[link->region];
-
-			if (transferType == TransferType::CACHED)
-			{
-				if (size > region->size)
-				{
-					if (currentStagingBufferWrite + size >= sizeof(stagingbuffer))
-					{
-						currentStagingBufferWrite = 0;
-					}
-
-					int writeLoc = currentStagingBufferWrite;
-
-					currentStagingBufferWrite += size;
-
-					region->data = stagingbuffer + writeLoc;
-				}
-				memcpy(region->data, data, size);
-			}
-			else
-			{
-				region->data = data;
-			}
-
+			region = &transferRegions[link->region];		
+			region->data = data;
 			region->allocoffset = allocOffset;
 			region->size = size;
 		}
 
-
-		region->transferType = transferType;
 		region->copyCount = copyCount;
 
 		return 0;
@@ -382,12 +372,9 @@ struct DeviceMemoryUpdateManager
 		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
 	}
 
-	void SetupPop()
-	{
-		popPrev = &linkHead;
-	}
 
-	int PopLink(DeviceTransferRegion* outputRegion, int link)
+
+	int PopLink(DeviceTransferRegion* outputRegion, int link, int** popprev)
 	{
 		if (link < 0 || link >= 1000) return -1;
 		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
@@ -395,23 +382,23 @@ struct DeviceMemoryUpdateManager
 		outputRegion->copyCount = transferRegions[regionLinks[link].region].copyCount;
 		outputRegion->data = transferRegions[regionLinks[link].region].data;
 		outputRegion->allocoffset = transferRegions[regionLinks[link].region].allocoffset;
-		outputRegion->transferType = transferRegions[regionLinks[link].region].transferType;
+
 		int linkRet = regionLinks[link].next;
 		if (transferRegions[regionLinks[link].region].copyCount > 1)
 		{
 			transferRegions[regionLinks[link].region].copyCount--;
-			popPrev = &regionLinks[link].next;
+			*popprev = &regionLinks[link].next;
 		}
 		else
 		{
-			*popPrev = linkRet;
+			*(*popprev) = linkRet;
 			linkCount--;
 			transferRegions[regionLinks[link].region].allocationIndex = -1;
 			transferRegions[regionLinks[link].region].size = 0;
 			transferRegions[regionLinks[link].region].copyCount = -1;
 			transferRegions[regionLinks[link].region].allocoffset = -1;
 			transferRegions[regionLinks[link].region].data = nullptr;
-			//transferRegions[regionLinks[link].region].transferType
+	
 			regionLinks[link].next = -1;
 			regionLinks[link].region = -1;
 		}
@@ -431,10 +418,8 @@ struct ImageMemoryUpdateManager
 
 	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 	{
-		
 		TransferRegionLink* link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
-
 
 		if (link) return -1;
 		
@@ -446,7 +431,6 @@ struct ImageMemoryUpdateManager
 
 		link = &regionLinks[regionAlloc];
 
-		
 		region->data = data;
 		region->imageSizes = imageSizes;
 		region->height = height;
@@ -459,7 +443,6 @@ struct ImageMemoryUpdateManager
 
 		link->region = regionAlloc;
 		link->next = -1;
-
 
 		Insert(regionAlloc);
 		

@@ -307,9 +307,9 @@ struct ShaderResourceUpdate
 
 struct ResourceArrayUpdate
 {
-	int dstBegin;
-	int count;
-	EntryHandle* handles;
+	int resourceDstBegin;
+	int resourceCount;
+	EntryHandle* resourceHandles;
 };
 
 
@@ -351,22 +351,20 @@ struct ComputeIntermediaryPipelineInfo
 
 struct HostTransferRegion
 {
-	TransferType type;
+	void* data;
 	int size;
 	int copyCount;
 	int allocationIndex;
 	int allocoffset;
-	void* data;
 };
 
 struct DeviceTransferRegion
 {
-	TransferType transferType;
+	void* data;
 	int size;
 	int copyCount;
 	int allocationIndex;
 	int allocoffset;
-	void* data;
 };
 
 struct TextureMemoryRegion

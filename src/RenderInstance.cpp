@@ -393,12 +393,22 @@ namespace API {
 RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 	:
 	vulkanShaderGraphs{ instanceStorageAllocator->Allocate(5 * KiB), 5*KiB, instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
-	descriptorManager{ instanceStorageAllocator->Allocate(5 * KiB), 5*KiB}
+	descriptorManager{ instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
+	minStorageAlignment(0), minUniformAlignment(0)
 {
 	vkInstance = new VKInstance();
 
 	cacheAllocator = instanceCacheAllocator;
 	storageAllocator = instanceStorageAllocator;
+
+	updateCommandsCache = (RingAllocator*)instanceStorageAllocator->Allocate(sizeof(RingAllocator));
+	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(64 * KiB), 64*KiB);
+
+	for (uint32_t i = 0; i < 2; i++)
+	{
+		updateCommandBuffers[i] = (SlabAllocator*)instanceStorageAllocator->Allocate(sizeof(SlabAllocator));
+		std::construct_at(updateCommandBuffers[i], instanceStorageAllocator->Allocate(16 * KiB), 16 * KiB);
+	}
 
 };
 
@@ -1140,15 +1150,15 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 void RenderInstance::UploadHostTransfers()
 {
 	
-	int memCount = transferPool.linkCount;
+	int memCount = driverHostMemoryUpdater.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	HostTransferRegion region;
-	int link = transferPool.linkHead;
-	int* linkprev = &transferPool.linkHead;
+	int link = driverHostMemoryUpdater.linkHead;
+	int* linkprev = &driverHostMemoryUpdater.linkHead;
 	
 	EntryHandle previousBuffer = EntryHandle();
 	size_t previousMin = 0;
@@ -1162,7 +1172,7 @@ void RenderInstance::UploadHostTransfers()
 
 	while (link >= 0)
 	{
-		link = transferPool.PopLink(&region, link, &linkprev);
+		link = driverHostMemoryUpdater.PopLink(&region, link, &linkprev);
 
 		int handle = region.allocationIndex;
 
@@ -1243,21 +1253,21 @@ void RenderInstance::UploadDescriptorsUpdates()
 		{
 
 			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
-			builder->AddSamplerDescription(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
+			builder->AddSamplerDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 		case ShaderResourceType::IMAGE2D:
 		{
 
 			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
-			builder->AddImageResourceDescription(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
+			builder->AddImageResourceDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLER2D:
 		{
 			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
-			builder->AddCombinedTextureArray(update->handles, update->count, update->dstBegin, region.bindingIndex, currentFrame, 1);
+			builder->AddCombinedTextureArray(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 
@@ -1303,37 +1313,55 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 
 void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 {
-	int memCount = deviceMemoryUpdater.linkCount;
+	int memCount = driverDeviceMemoryUpdater.linkCount;
 
 	if (!memCount) return;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	deviceMemoryUpdater.SetupPop();
 	DeviceTransferRegion region;
-	int link = deviceMemoryUpdater.linkHead;
+	int link = driverDeviceMemoryUpdater.linkHead;
+	int* linkprev = &driverDeviceMemoryUpdater.linkHead;
 
-	size_t* sizes = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
-	size_t* offsets = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
-	void** data = (void**)cacheAllocator->Allocate(sizeof(void*) * (memCount));
+	size_t* batchSizes = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
+	size_t* batchOffsets = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
+	void** batchData = (void**)cacheAllocator->Allocate(sizeof(void*) * (memCount));
 
-	int counter = 0;
+	size_t batchCounter = 0;
 	size_t cumulativeSize = 0;
+
+	EntryHandle previousBuffer = EntryHandle();
 
 	while (link >= 0)
 	{
-		link = deviceMemoryUpdater.PopLink(&region, link);
-		sizes[counter] = region.size;
-		data[counter] = region.data;
-		offsets[counter] = allocations.allocations[region.allocationIndex].offset + region.allocoffset;
+		link = driverDeviceMemoryUpdater.PopLink(&region, link, &linkprev);
 		
+		EntryHandle index = allocations.allocations[region.allocationIndex].memIndex;
+	
+		if (index != previousBuffer)
+		{
+			if (previousBuffer != EntryHandle())
+			{
+				if (previousBuffer == globalDeviceBufIndex)
+					dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
+			}
+
+			previousBuffer = index;
+			batchCounter = 0;
+			cumulativeSize = 0;
+		}
+
+
+		batchSizes[batchCounter] = region.size;
+		batchData[batchCounter] = region.data;
+		batchOffsets[batchCounter] = allocations.allocations[region.allocationIndex].offset + region.allocoffset;
+
 		cumulativeSize += region.size;
 
-		counter++;
+		batchCounter++;
 	}
 
-	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], data, sizes, offsets, cumulativeSize, counter, rbo);
-	
+	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
 }
 
 void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
@@ -1363,8 +1391,6 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 
 		rsize = (rsize + align - 1) & ~(align - 1);
 
-		
-
 		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.offset;
 
 		EntryHandle index = allocations[handle].memIndex;
@@ -1393,12 +1419,10 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 			.imageMemoryBarrierCount = 0,
 			.pImageMemoryBarriers = nullptr
 		};
-	
+
 
 		rbo->BindPipelineBarrierCommand(&args);
 	}
-
-	
 }
 
 int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation)
@@ -2593,6 +2617,9 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 void RenderInstance::DrawScene(uint32_t imageIndex)
 {
+
+	SwapUpdateCommands();
+
 	UploadHostTransfers();
 
 	UploadDescriptorsUpdates();
@@ -2727,5 +2754,189 @@ void RenderInstance::ReadData(int handle, void* dest, int size, int offset)
 	if (index == globalIndex)
 		dev->ReadHostBuffer(dest, index, size, intOffset+offset);
 
+}
+
+
+
+void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType)
+{
+	void* outData = data;
+
+	int copies = 1;
+
+	if (transferType == TransferType::CACHED)
+	{
+		outData = updateCommandsCache->Allocate(size);
+		memcpy(outData, data, size);
+	}
+
+	if (allocations[allocationIndex].allocType == AllocationType::PERFRAME)
+	{
+		copies = MAX_FRAMES_IN_FLIGHT;
+	}
+
+	RenderDriverUpdateCommandMemory* rducm = (RenderDriverUpdateCommandMemory*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandMemory));
+
+	rducm->allocationIndex = allocationIndex;
+	rducm->allocOffset = allocOffset;
+	rducm->copiesWithin = copies;
+	rducm->size = size;
+	rducm->data = outData;
+	rducm->updateType = DriverUpdateType::MEMORYUPDATE;
+}
+
+void RenderInstance::UpdateImageMemory(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+{
+	uint32_t* cachedImageSizes = imageSizes;
+	
+	if (cachedImageSizes)
+	{
+		cachedImageSizes = (uint32_t*)updateCommandsCache->Allocate(mipLevels * sizeof(uint32_t));
+
+		memcpy(cachedImageSizes, imageSizes, mipLevels * sizeof(uint32_t));
+	}
+
+	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
+
+	rduci->data = data;
+	rduci->format = format;
+	rduci->height = height;
+	rduci->mipLevels = mipLevels;
+	rduci->width = width;
+	rduci->imageSizes = imageSizes;
+	rduci->layers = layers;
+	rduci->textureIndex = textureIndex;
+	rduci->updateType = DriverUpdateType::IMAGEMEMORYUPDATE;
+	rduci->totalSize = totalSize;
+}
+
+void RenderInstance::InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action)
+{
+	RenderDriverUpdateCommandFill* rducf = (RenderDriverUpdateCommandFill*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandFill));
+
+	int copies = 1;
+
+	if (allocations[allocationIndex].allocType == AllocationType::PERFRAME)
+	{
+		copies = MAX_FRAMES_IN_FLIGHT;
+	}
+
+
+	rducf->action = action;
+	rducf->allocationIndex = allocationIndex;
+	rducf->stage = stage;
+	rducf->allocOffset = allocOffset;
+	rducf->fillValue = fillValue;
+	rducf->stage = stage;
+	rducf->size = size;
+	rducf->updateType = DriverUpdateType::TRANSFERCOMMAND;
+	rducf->copiesWithin = copies;
+
+}
+
+void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, ResourceArrayUpdate* resourceArrayData)
+{
+	RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandResource));
+
+	int argSize = 0;
+
+	void* argData = nullptr;
+
+	int resCount = resourceArrayData->resourceCount;
+
+	switch (type)
+	{
+	case ShaderResourceType::SAMPLER3D:
+	case ShaderResourceType::SAMPLER2D:
+	case ShaderResourceType::SAMPLERSTATE:
+	case ShaderResourceType::IMAGE2D:
+	{
+		ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(updateCommandsCache->Allocate(sizeof(ResourceArrayUpdate)));
+		
+		cachedUpdate->resourceDstBegin = resourceArrayData->resourceDstBegin;
+		cachedUpdate->resourceCount = resCount;
+		cachedUpdate->resourceHandles = (EntryHandle*)(updateCommandsCache->Allocate(sizeof(EntryHandle) * resCount));
+		
+		memcpy(cachedUpdate->resourceHandles, resourceArrayData->resourceHandles, sizeof(EntryHandle) * resCount);
+		
+		argData = cachedUpdate;
+		argSize = (sizeof(EntryHandle) * resCount) + sizeof(ResourceArrayUpdate);
+		break;
+	}
+	}
+
+	ShaderResourceSet* set = (ShaderResourceSet*)descriptorManager.descriptorSets[descriptorid];
+
+	rducr->bindingindex = bindingindex;
+	rducr->updateType = DriverUpdateType::RESOURCEUPDATE;
+	rducr->descriptorid = descriptorid;
+	rducr->type = type;
+	rducr->cachedDataSize = argSize;
+	rducr->data = argData;
+	rducr->copies = set->setCount;
+
+}
+
+void RenderInstance::SwapUpdateCommands()
+{
+	int drainBuffer = currentUpdateCommandBuffer;
+
+	currentUpdateCommandBuffer = (currentUpdateCommandBuffer ^ 1);
+
+	RenderDriverUpdateCommandHeader* header = (RenderDriverUpdateCommandHeader*)updateCommandBuffers[drainBuffer]->dataHead;
+
+	size_t currentSize = updateCommandBuffers[drainBuffer]->dataAllocator.load();
+
+	while (currentSize)
+	{
+		switch (header->updateType)
+		{
+		case DriverUpdateType::RESOURCEUPDATE:
+		{
+			RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)header;
+			descriptorUpdatePool.Create(rducr->descriptorid, rducr->bindingindex, rducr->type, rducr->data, rducr->cachedDataSize, rducr->copies);
+			header = rducr->GetNext();
+			currentSize -= sizeof(RenderDriverUpdateCommandResource);
+			break;
+		}
+		case DriverUpdateType::TRANSFERCOMMAND:
+		{
+			RenderDriverUpdateCommandFill* rducf = (RenderDriverUpdateCommandFill*)header;
+			transferCommandPool.Create(rducf->allocationIndex, rducf->size, rducf->allocOffset, rducf->fillValue, rducf->stage, rducf->action, rducf->copiesWithin);
+			header = rducf->GetNext();
+			currentSize -= sizeof(RenderDriverUpdateCommandFill);
+			break;
+		}
+		case DriverUpdateType::IMAGEMEMORYUPDATE:
+		{
+			RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)header;
+			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->imageSizes, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layers, rduci->format);
+			header = rduci->GetNext();
+			currentSize -= sizeof(RenderDriverUpdateCommandImage);
+			break;
+		}
+		case DriverUpdateType::MEMORYUPDATE:
+		{
+			RenderDriverUpdateCommandMemory* rducm = (RenderDriverUpdateCommandMemory*)header;
+			
+
+			if (allocations.allocations[rducm->allocationIndex].memIndex == globalIndex)
+			{
+				driverHostMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
+			}
+			else if (allocations.allocations[rducm->allocationIndex].memIndex == globalDeviceBufIndex)
+			{
+				driverDeviceMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
+			}
+
+			header = rducm->GetNext();
+			currentSize -= sizeof(RenderDriverUpdateCommandMemory);
+
+			break;
+		}
+		}
+	}
+
+	updateCommandBuffers[drainBuffer]->Reset();
 }
 

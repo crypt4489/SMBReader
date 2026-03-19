@@ -141,6 +141,16 @@ struct RenderInstance
 
 	void CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer);
 
+	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
+
+	void UpdateImageMemory(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
+
+	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
+
+	void UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, ResourceArrayUpdate* resourceArrayData);
+
+	void SwapUpdateCommands();
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -194,24 +204,30 @@ struct RenderInstance
 	int minStorageAlignment; 
 
 
-	HostDriverTransferPool<3> transferPool;
+	HostDriverTransferPool driverHostMemoryUpdater;
 
-	TransferCommandsPool<3> transferCommandPool;
+	TransferCommandsPool transferCommandPool;
 
-	ShaderResourceUpdatePool<3> descriptorUpdatePool;
+	ShaderResourceUpdatePool descriptorUpdatePool;
 
-	DeviceMemoryUpdateManager deviceMemoryUpdater;
-
-	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
+	DeviceMemoryUpdateManager driverDeviceMemoryUpdater;
 
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
 
+	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
+
 	EntryHandle samplerIndex;
 
-	std::array<GenericPipelineStateInfo, 15> pipelineInfos;
+	std::array<GenericPipelineStateInfo, 15> pipelineInfos{};
 
 	RingAllocator* cacheAllocator;
 	SlabAllocator* storageAllocator;
+
+	RingAllocator* updateCommandsCache;
+
+	SlabAllocator* updateCommandBuffers[2];
+
+	int currentUpdateCommandBuffer = 0;
 };
 
 namespace GlobalRenderer {

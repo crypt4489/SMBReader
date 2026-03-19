@@ -35,8 +35,8 @@ struct ShaderGraphsHolder
 
 	SlabAllocator graphAllocator;
 	SlabAllocator shaderDetailsAllocator;
-	std::array<ShaderGraph*, T_ShaderGraphCount> shaderGraphPtrs;
-	std::array<EntryHandle, T_ShaderCount> shaders;
+	std::array<ShaderGraph*, T_ShaderGraphCount> shaderGraphPtrs{};
+	std::array<EntryHandle, T_ShaderCount> shaders{};
 	std::array<ShaderDetails*, T_ShaderCount> shaderDetails{};
 	
 	ShaderGraphsHolder(void* gSlabHead, int gSlabSize, void* sSlabHead, int sSlabSize)

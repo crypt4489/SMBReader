@@ -471,7 +471,7 @@ int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
 
 	globalMaterialRangeStart += count;
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(ids, sizeof(int) * count, globalMaterialIndicesLocation, sizeof(int) * ret, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(ids,  globalMaterialIndicesLocation, sizeof(int) * count, sizeof(int) * ret, TransferType::CACHED);
 
 	return ret;
 }
@@ -491,7 +491,7 @@ int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int mate
 	renderable->transform = mat;
 
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(renderable, sizeof(Renderable), globalRenderableLocation, sizeof(Renderable) * ret, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(renderable, globalRenderableLocation, sizeof(Renderable), sizeof(Renderable) * ret, TransferType::MEMORY);
 
 	mainIndirectDrawData.commandBufferCount++;
 
@@ -518,7 +518,7 @@ int ApplicationLoop::CreateMaterial(
 		ptr[i] = texturesIDs[i];
 	}
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&material, sizeof(Material), globalMaterialsLocation, sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material,  globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
 
 	return globalMaterialsIndex++;
 }
@@ -571,7 +571,7 @@ int ApplicationLoop::CreateMeshHandle(
 	mesh->meshInstanceDeviceMemoryCount = 1;
 	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::MEMORY);
 
 	return meshIndex;
 }
@@ -588,7 +588,7 @@ void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
 
 	//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-	rendInst->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
+	rendInst->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
 
 }
 
@@ -610,7 +610,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 		//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-		rendInst->transferPool.Create(handles, sizeof(MeshDetails), globalMeshLocation, meshSpecificAlloc, TransferType::CACHED);
+		rendInst->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
 	}
 
 }
@@ -739,11 +739,11 @@ void ApplicationLoop::Execute()
 
 		ResourceArrayUpdate samplerUpdate;
 
-		samplerUpdate.count = 1;
-		samplerUpdate.dstBegin = 0;
-		samplerUpdate.handles = &GlobalRenderer::gRenderInstance->samplerIndex;
+		samplerUpdate.resourceCount = 1;
+		samplerUpdate.resourceDstBegin = 0;
+		samplerUpdate.resourceHandles = &GlobalRenderer::gRenderInstance->samplerIndex;
 
-		GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+		GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 
 		while (running)
@@ -775,7 +775,7 @@ void ApplicationLoop::Execute()
 			{
 				if (!updatedCommand || cameraMove) {
 					updatedCommand = 3;
-					GlobalRenderer::gRenderInstance->transferCommandPool.Create(8, mainIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance->InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
 				}
 
 				updatedCommand--;
@@ -801,7 +801,7 @@ void ApplicationLoop::Execute()
 			{
 				if (!updatedDebugCommand || cameraMove)
 				{
-					GlobalRenderer::gRenderInstance->transferCommandPool.Create(8, debugIndirectDrawData.commandBufferCountAlloc, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance->InsertTransferCommand(debugIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
 					updatedDebugCommand = 3;
 				}
 				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
@@ -962,7 +962,7 @@ void ApplicationLoop::UpdateCameraMatrix()
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
 	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&c.View, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), globalBufferLocation, 0, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, TransferType::MEMORY);
 }
 EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
@@ -1642,8 +1642,8 @@ void ApplicationLoop::CreateCrateObject()
 
 	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
 
-	rendInst->deviceMemoryUpdater.Create(compVerts2, sizeof(compVerts2), globalVertexBuffer, vertexAlloc, 1, TransferType::CACHED);
-	rendInst->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+	rendInst->UpdateDriverMemory(compVerts2, globalVertexBuffer, sizeof(compVerts2),  vertexAlloc, TransferType::CACHED);
+	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::MEMORY);
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -1754,9 +1754,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		int indexAlloc = indexBufferAlloc.Allocate(sizeof(uint16_t) * indexCount, 1);
 
 		
-		rendInst->deviceMemoryUpdater.Create(indices, sizeof(uint16_t) * indexCount, globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+		rendInst->UpdateDriverMemory(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount,  indexAlloc, TransferType::MEMORY);
 
-		rendInst->deviceMemoryUpdater.Create(vertexData, vertexSize * vertexCount, globalVertexBuffer, vertexAlloc, 1, TransferType::MEMORY);
+		rendInst->UpdateDriverMemory(vertexData, globalVertexBuffer, vertexSize * vertexCount,  vertexAlloc, TransferType::MEMORY);
 		
 
 		int base = geoDef->materialStart[i];
@@ -1836,8 +1836,8 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, ui
 	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(count), 1.0, 1.0);
 
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(DebugDrawType), globalDebugTypes, sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&drawStruct,  debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type,  globalDebugTypes, sizeof(DebugDrawType), sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	return debugIndirectDrawData.commandBufferCount++;
 }
@@ -1870,9 +1870,9 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 	drawStruct.color = color;
 	drawStruct.halfExtents = halfExtents;
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&drawStruct, sizeof(DebugDrawStruct), debugAllocBuffer, sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&drawStruct,  debugAllocBuffer, sizeof(DebugDrawStruct), sizeof(DebugDrawStruct) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(DebugDrawType), globalDebugTypes, sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type,  globalDebugTypes, sizeof(DebugDrawType), sizeof(DebugDrawType) * debugIndirectDrawData.commandBufferCount, TransferType::CACHED);
 
 	return debugIndirectDrawData.commandBufferCount++;
 }
@@ -1959,7 +1959,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				GetPoolIndexByFormat(format)
 			);
 
-		GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+		GlobalRenderer::gRenderInstance->UpdateImageMemory(
 			texture.data, 
 			mainDictionary.textureHandles[ii + index], 
 			sizesCached, 
@@ -1974,11 +1974,11 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	ResourceArrayUpdate update; 
 
-	update.count = totalTextureCount;
-	update.dstBegin = index;
-	update.handles = mainDictionary.textureHandles.data() + index;
+	update.resourceCount = totalTextureCount;
+	update.resourceDstBegin = index;
+	update.resourceHandles = mainDictionary.textureHandles.data() + index;
 
-	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
 
 	
 	for (int i = 0; i < totalMeshCount; i++)
@@ -2719,8 +2719,8 @@ void ApplicationLoop::InitializeRuntime()
 	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(BoxVerts), 64);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	GlobalRenderer::gRenderInstance->deviceMemoryUpdater.Create(BoxVerts, sizeof(BoxVerts), globalVertexBuffer, vertexAlloc, 1, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance->deviceMemoryUpdater.Create(BoxIndices, sizeof(BoxIndices), globalIndexBuffer, indexAlloc, 1, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxVerts, globalVertexBuffer, sizeof(BoxVerts),  vertexAlloc, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices),  indexAlloc, TransferType::MEMORY);
 
 	std::string names[6] = {
 	"face4.bmp",
@@ -2804,16 +2804,16 @@ static int AddLight(LightSource& lightDesc, LightType type)
 {
 	int lightLocation = globalLightCount++;
 	
-	GlobalRenderer::gRenderInstance->transferPool.Create(&lightDesc, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * lightLocation, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightLocation, TransferType::CACHED);
 	
-	GlobalRenderer::gRenderInstance->transferPool.Create(&type, sizeof(LightType), globalLightTypesBuffer, sizeof(LightType) * lightLocation, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type, globalLightTypesBuffer, sizeof(LightType), sizeof(LightType) * lightLocation, TransferType::CACHED);
 	
 	return lightLocation;
 }
 
 static void UpdateLight(LightSource& lightDesc, int lightIndex)
 {
-	GlobalRenderer::gRenderInstance->transferPool.Create(&lightDesc, sizeof(LightSource), globalLightBuffer, sizeof(LightSource) * lightIndex, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightIndex, TransferType::CACHED);
 }
 
 EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioType)
@@ -2863,7 +2863,7 @@ EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioT
 			details->type,
 			loop->GetPoolIndexByFormat(details->type));
 
-	GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+	GlobalRenderer::gRenderInstance->UpdateImageMemory(
 		details->data,
 		ret,
 		nullptr,
@@ -2930,7 +2930,7 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 			details->type,
 			loop->GetPoolIndexByFormat(details->type));
 
-	GlobalRenderer::gRenderInstance->imageMemoryUpdateManager.Create(
+	GlobalRenderer::gRenderInstance->UpdateImageMemory(
 		details->data,
 		mainDictionary.textureHandles[textureStart],
 		mipSizes,
@@ -2944,11 +2944,11 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 
 	ResourceArrayUpdate update;
 
-	update.count = 1;
-	update.dstBegin = textureStart;
-	update.handles = mainDictionary.textureHandles.data() + textureStart;
+	update.resourceCount = 1;
+	update.resourceDstBegin = textureStart;
+	update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
 
-	GlobalRenderer::gRenderInstance->descriptorUpdatePool.Create(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 1, ShaderResourceType::IMAGE2D, &update);
 
 
 	return textureStart;
@@ -3178,7 +3178,7 @@ static int CreateBlendRange(int* blendIDs, int blendCount)
 
 	globalBlendRangeCount += blendCount;
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(blendIDs, sizeof(int) * blendCount, globalBlendRangesLocation, sizeof(int) * loc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(blendIDs, globalBlendRangesLocation, sizeof(int) * blendCount, sizeof(int) * loc, TransferType::CACHED);
 
 	return loc;
 }
@@ -3192,7 +3192,7 @@ static int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
 	details.type = type;
 	details.alphaBlend = constantAlpha;
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&details, sizeof(BlendDetails), globalBlendDetailsLocation, sizeof(BlendDetails) * loc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(BlendDetails),  sizeof(BlendDetails) * loc, TransferType::CACHED);
 
 	return loc;
 }
@@ -3206,7 +3206,7 @@ static int CreateBlendDetails(BlendMaterialType type, int mapID)
 	details.type = type;
 	details.alphaMapHandle = mapID;
 
-	GlobalRenderer::gRenderInstance->transferPool.Create(&details, sizeof(BlendDetails), globalBlendDetailsLocation, sizeof(BlendDetails) * loc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(BlendDetails), sizeof(BlendDetails) * loc, TransferType::CACHED);
 
 	return loc;
 }
