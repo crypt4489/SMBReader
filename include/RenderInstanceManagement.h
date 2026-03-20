@@ -91,33 +91,45 @@ static_assert(sizeof(RenderDriverUpdateCommandImage) % 32 == 0);
 static_assert(sizeof(RenderDriverUpdateCommandFill) % 32 == 0);
 
 
-struct HostDriverTransferPool
+struct MemoryDriverTransferPool
 {
-	std::array<HostTransferRegion, 1000> transferRegions;
-	std::array<TransferRegionLink, 1000> regionLinks;
+	BufferMemoryTransferRegion* transferRegions;
+	int* regionLinks;
 	int linkHead = -1;
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
+	int ddsRegionSize = 0;
+
+	int GetSize(int numberOfRegions)
+	{
+		return (sizeof(BufferMemoryTransferRegion) + sizeof(int)) * numberOfRegions;
+	}
+
+	void AllocateList(void* poolData, int poolSize)
+	{
+		ddsRegionSize = (int)((float)poolSize/(float)(sizeof(BufferMemoryTransferRegion) + sizeof(int)));
+
+		transferRegions = (BufferMemoryTransferRegion*)poolData;
+
+		regionLinks = (int*)(transferRegions + ddsRegionSize);
+	}
 
 	int Create(void* data, int size, int allocationIndex, int allocOffset, int copies)
 	{
-	
-		TransferRegionLink* link = Find(allocationIndex, allocOffset);
-		HostTransferRegion* region = nullptr;
-
-		if (!link)
+		int link = Find(allocationIndex, allocOffset);
+		
+		BufferMemoryTransferRegion* region = nullptr;
+		
+		if (link < 0)
 		{
 			int regionAlloc = ddsRegionAlloc;
 
-			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
+			ddsRegionAlloc = (ddsRegionAlloc + 1) % ddsRegionSize;
 
 			region = &transferRegions[regionAlloc];
 
-			link = &regionLinks[regionAlloc];
-			
-			link->region = regionAlloc;
-			link->next = -1;
-
+			regionLinks[regionAlloc] = -1;
+		
 			region->allocationIndex = allocationIndex;
 			region->allocoffset = allocOffset;
 			region->size = size;
@@ -127,7 +139,7 @@ struct HostDriverTransferPool
 		}
 		else
 		{
-			region = &transferRegions[link->region];
+			region = &transferRegions[link];
 			region->data = data;
 			region->allocoffset = allocOffset;
 			region->size = size;
@@ -140,50 +152,49 @@ struct HostDriverTransferPool
 	void Insert(int newlink)
 	{
 		int* test = &linkHead;
-		while ((*test >= 0) && (transferRegions[regionLinks[(*test)].region].allocationIndex <= transferRegions[regionLinks[newlink].region].allocationIndex))
+		while ((*test >= 0) && (transferRegions[(*test)].allocationIndex <= transferRegions[newlink].allocationIndex))
 		{
-			test = &(regionLinks[(*test)].next);
+			test = &(regionLinks[(*test)]);
 		}
-		regionLinks[newlink].next = *test;
+		regionLinks[newlink] = *test;
 		*test = newlink;
 		linkCount++;
 	}
 	
-	TransferRegionLink* Find(int allocationIndex, int offset)
+	int Find(int allocationIndex, int offset)
 	{
 		int link = linkHead;
-		while (link >= 0 && (transferRegions[regionLinks[link].region].allocationIndex != allocationIndex || transferRegions[regionLinks[link].region].allocoffset != offset))
+		while (link >= 0 && (transferRegions[link].allocationIndex != allocationIndex || transferRegions[link].allocoffset != offset))
 		{
-			link = regionLinks[link].next;
+			link = regionLinks[link];
 		}
-		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
+		return (link >= 1000 ? -1 : link);
 	}
 
-	int PopLink(HostTransferRegion* outputRegion, int link, int** popprev)
+	int PopLink(BufferMemoryTransferRegion* outputRegion, int link, int** popprev)
 	{
 		if (link < 0 || link >= 1000) return -1;
-		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
-		outputRegion->size = transferRegions[regionLinks[link].region].size;
-		outputRegion->copyCount = transferRegions[regionLinks[link].region].copyCount;
-		outputRegion->data = transferRegions[regionLinks[link].region].data;
-		outputRegion->allocoffset = transferRegions[regionLinks[link].region].allocoffset;
-		int linkRet = regionLinks[link].next;
-		if (transferRegions[regionLinks[link].region].copyCount > 1)
+		outputRegion->allocationIndex = transferRegions[link].allocationIndex;
+		outputRegion->size = transferRegions[link].size;
+		outputRegion->copyCount = transferRegions[link].copyCount;
+		outputRegion->data = transferRegions[link].data;
+		outputRegion->allocoffset = transferRegions[link].allocoffset;
+		int linkRet = regionLinks[link];
+		if (transferRegions[link].copyCount > 1)
 		{
-			transferRegions[regionLinks[link].region].copyCount--;
-			*popprev = &regionLinks[link].next;
+			transferRegions[link].copyCount--;
+			*popprev = &regionLinks[link];
 		}
 		else
 		{
 			*(*popprev) = linkRet;
 			linkCount--;
-			transferRegions[regionLinks[link].region].allocationIndex = -1;
-			transferRegions[regionLinks[link].region].size = 0;
-			transferRegions[regionLinks[link].region].copyCount = -1;
-			transferRegions[regionLinks[link].region].allocoffset = -1;
-			transferRegions[regionLinks[link].region].data = nullptr;
-			regionLinks[link].next = -1;
-			regionLinks[link].region = -1;
+			transferRegions[link].allocationIndex = -1;
+			transferRegions[link].size = 0;
+			transferRegions[link].copyCount = -1;
+			transferRegions[link].allocoffset = -1;
+			transferRegions[link].data = nullptr;
+			regionLinks[link] = -1;
 		}
 		return linkRet;
 	}
@@ -194,33 +205,43 @@ struct HostDriverTransferPool
 
 struct TransferCommandsPool
 {
-	std::array<TransferCommand, 1000> transferRegions;
-	std::array<TransferRegionLink, 1000> regionLinks;
+	TransferCommand* transferRegions;
+	int* regionLinks;
 	int linkHead = -1;
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
+	int ddsRegionSize = 0;
+
+	int GetSize(int numberOfRegions)
+	{
+		return (sizeof(TransferCommand) + sizeof(int)) * numberOfRegions;
+	}
+
+	void AllocateList(void* poolData, int poolSize)
+	{
+		ddsRegionSize = (int)((float)poolSize / (float)(sizeof(TransferCommand) + sizeof(int)));
+
+		transferRegions = (TransferCommand*)poolData;
+
+		regionLinks = (int*)(transferRegions + ddsRegionSize);
+	}
 
 	int Create(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action, int copies)
 	{
-		TransferRegionLink* link = Find(allocationIndex, allocOffset);
+		int link = Find(allocationIndex, allocOffset);
 		TransferCommand* region = nullptr;
 
-		if (!link)
+		if (link < 0)
 		{
 			int regionAlloc = ddsRegionAlloc;
 
-			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
+			ddsRegionAlloc = (ddsRegionAlloc + 1) % ddsRegionSize;
 
 			region = &transferRegions[regionAlloc];
 
-			link = &regionLinks[regionAlloc];
-
-
 			region->fillVal = fillValue;
 
-
-			link->region = regionAlloc;
-			link->next = -1;
+			regionLinks[regionAlloc] = -1;
 
 			region->allocationIndex = allocationIndex;
 			region->offset = allocOffset;
@@ -230,7 +251,7 @@ struct TransferCommandsPool
 		}
 		else
 		{
-			region = &transferRegions[link->region];
+			region = &transferRegions[link];
 
 
 			region->fillVal = fillValue;
@@ -250,46 +271,46 @@ struct TransferCommandsPool
 	void Insert(int newlink)
 	{
 		int* test = &linkHead;
-		while ((*test >= 0) && (transferRegions[regionLinks[*test].region].allocationIndex <= transferRegions[regionLinks[newlink].region].allocationIndex))
+		while ((*test >= 0) && (transferRegions[*test].allocationIndex <= transferRegions[newlink].allocationIndex))
 		{
-			test = &(regionLinks[*test].next);
+			test = &(regionLinks[*test]);
 		}
-		regionLinks[newlink].next = *test;
+		regionLinks[newlink] = *test;
 		*test = newlink;
 		linkCount++;
 	}
 
-	TransferRegionLink* Find(int allocationIndex, int offset)
+	int Find(int allocationIndex, int offset)
 	{
 		int link = linkHead;
-		while ((link >= 0) && (transferRegions[regionLinks[link].region].allocationIndex != allocationIndex || transferRegions[regionLinks[link].region].offset != offset))
+		while ((link >= 0) && (transferRegions[link].allocationIndex != allocationIndex || transferRegions[link].offset != offset))
 		{
-			link = regionLinks[link].next;
+			link = regionLinks[link];
 		}
-		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
+		return (link >= 1000 ? -1 : link);
 	}
 
 	int PopLink(TransferCommand* outputRegion, int link, int** popprev)
 	{
 		if (link < 0) return -1;
-		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
-		outputRegion->size = transferRegions[regionLinks[link].region].size;
-		outputRegion->copycount = transferRegions[regionLinks[link].region].copycount;
-		outputRegion->fillVal = transferRegions[regionLinks[link].region].fillVal;
-		outputRegion->offset = transferRegions[regionLinks[link].region].offset;
-		outputRegion->dstStage = transferRegions[regionLinks[link].region].dstStage;
-		outputRegion->dstAction = transferRegions[regionLinks[link].region].dstAction;
-		int linkRet = regionLinks[link].next;
-		if (transferRegions[regionLinks[link].region].copycount > 1)
+		outputRegion->allocationIndex = transferRegions[link].allocationIndex;
+		outputRegion->size = transferRegions[link].size;
+		outputRegion->copycount = transferRegions[link].copycount;
+		outputRegion->fillVal = transferRegions[link].fillVal;
+		outputRegion->offset = transferRegions[link].offset;
+		outputRegion->dstStage = transferRegions[link].dstStage;
+		outputRegion->dstAction = transferRegions[link].dstAction;
+		int linkRet = regionLinks[link];
+		if (transferRegions[link].copycount > 1)
 		{
-			transferRegions[regionLinks[link].region].copycount--;
-			*popprev = &regionLinks[link].next;
+			transferRegions[link].copycount--;
+			*popprev = &regionLinks[link];
 		}
 		else
 		{
 			*(*popprev) = linkRet;
 			linkCount--;
-			TransferCommand* region = &transferRegions[regionLinks[link].region];
+			TransferCommand* region = &transferRegions[link];
 			region->allocationIndex = -1;
 			region->size = 0;
 			region->copycount = -1;
@@ -302,134 +323,43 @@ struct TransferCommandsPool
 	}
 };
 
-
-struct DeviceMemoryUpdateManager
-{
-	std::array<DeviceTransferRegion, 1000> transferRegions;
-	std::array<TransferRegionLink, 1000> regionLinks;
-	int linkHead = -1;
-	int linkCount = 0;
-	int ddsRegionAlloc = 0;
-
-	int Create(void* data, int size, int allocationIndex, int allocOffset, int copyCount)
-	{
-
-		TransferRegionLink* link = Find(allocationIndex, allocOffset);
-		DeviceTransferRegion* region = nullptr;
-
-		if (!link)
-		{
-			int regionAlloc = ddsRegionAlloc;
-
-			ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
-
-			region = &transferRegions[regionAlloc];
-
-			link = &regionLinks[regionAlloc];
-
-			link->region = regionAlloc;
-			link->next = -1;
-			
-			region->allocationIndex = allocationIndex;
-			region->allocoffset = allocOffset;
-			region->size = size;
-			region->data = data;
-
-			Insert(regionAlloc);
-		}
-		else
-		{
-			region = &transferRegions[link->region];		
-			region->data = data;
-			region->allocoffset = allocOffset;
-			region->size = size;
-		}
-
-		region->copyCount = copyCount;
-
-		return 0;
-	}
-
-	void Insert(int newlink)
-	{
-		int* test = &linkHead;
-		while ((*test >= 0) && (transferRegions[regionLinks[*test].region].allocationIndex <= transferRegions[regionLinks[newlink].region].allocationIndex))
-		{
-			test = &(regionLinks[(*test)].next);
-		}
-		regionLinks[newlink].next = *test;
-		*test = newlink;
-		linkCount++;
-	}
-
-	TransferRegionLink* Find(int allocationIndex, int offset)
-	{
-		int link = linkHead;
-		while (link >= 0 && (transferRegions[regionLinks[link].region].allocationIndex != allocationIndex || transferRegions[regionLinks[link].region].allocoffset != offset))
-		{
-			link = regionLinks[link].next;
-		}
-		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
-	}
-
-
-
-	int PopLink(DeviceTransferRegion* outputRegion, int link, int** popprev)
-	{
-		if (link < 0 || link >= 1000) return -1;
-		outputRegion->allocationIndex = transferRegions[regionLinks[link].region].allocationIndex;
-		outputRegion->size = transferRegions[regionLinks[link].region].size;
-		outputRegion->copyCount = transferRegions[regionLinks[link].region].copyCount;
-		outputRegion->data = transferRegions[regionLinks[link].region].data;
-		outputRegion->allocoffset = transferRegions[regionLinks[link].region].allocoffset;
-
-		int linkRet = regionLinks[link].next;
-		if (transferRegions[regionLinks[link].region].copyCount > 1)
-		{
-			transferRegions[regionLinks[link].region].copyCount--;
-			*popprev = &regionLinks[link].next;
-		}
-		else
-		{
-			*(*popprev) = linkRet;
-			linkCount--;
-			transferRegions[regionLinks[link].region].allocationIndex = -1;
-			transferRegions[regionLinks[link].region].size = 0;
-			transferRegions[regionLinks[link].region].copyCount = -1;
-			transferRegions[regionLinks[link].region].allocoffset = -1;
-			transferRegions[regionLinks[link].region].data = nullptr;
-	
-			regionLinks[link].next = -1;
-			regionLinks[link].region = -1;
-		}
-		return linkRet;
-	}
-};
-
-
-
 struct ImageMemoryUpdateManager
 {
-	std::array<TextureMemoryRegion, 1000> transferRegions;
-	std::array<TransferRegionLink, 1000> regionLinks;
+	TextureMemoryRegion* transferRegions;
+	int* regionLinks;
 	int linkHead = -1;
 	int linkCount = 0;
 	int ddsRegionAlloc = 0;
+	int ddsRegionSize = 0;
+
+	int GetSize(int numberOfRegions)
+	{
+		return (sizeof(TextureMemoryRegion) + sizeof(int)) * numberOfRegions;
+	}
+
+	void AllocateList(void* poolData, int poolSize)
+	{
+		ddsRegionSize = (int)((float)poolSize / (float)(sizeof(TextureMemoryRegion) + sizeof(int)));
+
+		transferRegions = (TextureMemoryRegion*)poolData;
+
+		regionLinks = (int*)(transferRegions + ddsRegionSize);
+	}
 
 	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 	{
-		TransferRegionLink* link = Find(textureIndex);
+		int link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
 
-		if (link) return -1;
+		if (link >= 0) return -1;
 		
 		int regionAlloc = ddsRegionAlloc;
 
-		ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)transferRegions.size();
+		ddsRegionAlloc = (ddsRegionAlloc + 1) % ddsRegionSize;
 
 		region = &transferRegions[regionAlloc];
 
-		link = &regionLinks[regionAlloc];
+		regionLinks[regionAlloc] = -1;
 
 		region->data = data;
 		region->imageSizes = imageSizes;
@@ -441,9 +371,6 @@ struct ImageMemoryUpdateManager
 		region->format = format;
 		region->layers = layers;
 
-		link->region = regionAlloc;
-		link->next = -1;
-
 		Insert(regionAlloc);
 		
 		return 0; 
@@ -454,21 +381,21 @@ struct ImageMemoryUpdateManager
 		int* test = &linkHead;
 		while (*test >= 0)
 		{
-			test = &(regionLinks[(*test)].next);
+			test = &(regionLinks[(*test)]);
 		}
-		regionLinks[newlink].next = *test;
+		regionLinks[newlink] = *test;
 		*test = newlink;
 		linkCount++;
 	}
 
-	TransferRegionLink* Find(EntryHandle textureIndex)
+	int Find(EntryHandle textureIndex)
 	{
 		int link = linkHead;
-		while (link >= 0 && transferRegions[regionLinks[link].region].textureIndex != textureIndex)
+		while (link >= 0 && transferRegions[link].textureIndex != textureIndex)
 		{
-			link = regionLinks[link].next;
+			link = regionLinks[link];
 		}
-		return (link == -1 || link >= 1000 ? nullptr : &regionLinks[link]);
+		return (link >= 1000 ? -1 : link);
 	}
 
 	int PopLink(TextureMemoryRegion* outputRegion, int link)
@@ -476,7 +403,7 @@ struct ImageMemoryUpdateManager
 		if (link < 0 || link >= 1000)
 			return -1;
 
-		int regionIndex = regionLinks[link].region;
+		int regionIndex = link;
 		TextureMemoryRegion* src = &transferRegions[regionIndex];
 
 		outputRegion->data = src->data;
@@ -489,7 +416,7 @@ struct ImageMemoryUpdateManager
 		outputRegion->format = src->format;
 		outputRegion->layers = src->layers;
 
-		int linkRet = regionLinks[link].next;
+		int linkRet = regionLinks[link];
 
 		linkCount--;
 
@@ -504,14 +431,123 @@ struct ImageMemoryUpdateManager
 		src->format = {};
 		src->layers = -1;
 
-		regionLinks[link].next = -1;
-		regionLinks[link].region = -1;
+		regionLinks[link] = -1;
 
 		return linkRet;
 	}
 };
 
+struct ShaderResourceUpdatePool
+{
+	ShaderResourceUpdate* transferRegions;
+	int* regionLinks;
+	int linkHead = -1;
+	int linkCount = 0;
+	int ddsRegionAlloc = 0;
+	int ddsRegionSize = 0;
 
+	int GetSize(int numberOfRegions)
+	{
+		return (sizeof(ShaderResourceUpdate) + sizeof(int)) * numberOfRegions;
+	}
+
+	void AllocateList(void* poolData, int poolSize)
+	{
+		ddsRegionSize = (int)((float)poolSize / (float)(sizeof(ShaderResourceUpdate) + sizeof(int)));
+
+		transferRegions = (ShaderResourceUpdate*)poolData;
+
+		regionLinks = (int*)(transferRegions + ddsRegionSize);
+	}
+
+	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data, int cachedDataSize, int copies)
+	{
+		ShaderResourceUpdate* region = nullptr;
+
+		int regionAlloc = ddsRegionAlloc;
+
+		ddsRegionAlloc = (ddsRegionAlloc + 1) % (int)ddsRegionSize;
+
+		region = &transferRegions[regionAlloc];
+
+		region->data = data;
+		region->dataSize = cachedDataSize;
+		region->descriptorSet = descriptorid;
+
+		region->bindingIndex = bindingindex;
+
+		regionLinks[regionAlloc] = -1;
+
+		Insert(regionAlloc);
+
+		region->type = type;
+		region->copyCount = copies;
+
+		return 0;
+	}
+
+	void Insert(int index)
+	{
+		int newid = transferRegions[index].descriptorSet;
+		int newbindingindex = transferRegions[index].bindingIndex;
+		int* test = &linkHead;
+		while ((*test >= 0) && (transferRegions[(*test)].descriptorSet <= newid))
+		{
+			if (transferRegions[(*test)].bindingIndex < newbindingindex)
+				break;
+			test = &(regionLinks[(*test)]);
+		}
+		regionLinks[index] = *test;
+		*test = index;
+		linkCount++;
+	}
+
+	int Find(int descriptor, int bindingindex)
+	{
+		int link = linkHead;
+		while ((link >= 0) && ((transferRegions[link].descriptorSet != descriptor) || (transferRegions[link].bindingIndex != bindingindex)))
+		{
+			link = regionLinks[link];
+		}
+		return (link >= 1000 ? -1 : link);
+	}
+
+	int PopLink(ShaderResourceUpdate* outputRegion, int link, int** popprev)
+	{
+		if (link < 0) return -1;
+
+		ShaderResourceUpdate* region = &transferRegions[link];
+
+		outputRegion->type = region->type;
+		outputRegion->descriptorSet = region->descriptorSet;
+		outputRegion->bindingIndex = region->bindingIndex;
+		outputRegion->copyCount = region->copyCount;
+		outputRegion->dataSize = region->dataSize;
+		outputRegion->data = region->data;
+
+		int linkRet = regionLinks[link];
+
+		if (region->copyCount > 1)
+		{
+			region->copyCount--;
+			*popprev = &regionLinks[link];
+		}
+		else
+		{
+			*(*popprev) = linkRet;
+			linkCount--;
+			region->bindingIndex = -1;
+			region->copyCount = -1;
+			region->data = nullptr;
+			region->descriptorSet = -1;
+			region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
+			region->dataSize = -1;
+			regionLinks[link] = -1;
+		}
+
+		return linkRet;
+	}
+};
 
 
 template <int N>

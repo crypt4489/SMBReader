@@ -112,9 +112,11 @@ layout(set = 2, binding = 8) readonly buffer BLENDBuffer {
 
 layout(set = 2, binding = 9) uniform usamplerBuffer globalBlendIndices;
 
-vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable modelData, vec3 specularBase, float shininess)
+vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderable, vec3 specularBase, float shininess)
 {
-    if (modelData.lightCount == 0) return color;
+    uint lightCount = currentRenderable.lightCount;
+
+    if (lightCount == 0) return color;
 
     vec4 cumColor = vec4(0.0, 0.0, 0.0, 1.0);
 
@@ -128,11 +130,11 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable modelData, vec3
 
     vec3 viewPosToWorldPos = normalize(camPos - worldPos);
 
-    for (uint i = 0; i<modelData.lightCount; i++)
+    for (uint i = 0; i<lightCount; i++)
     {
-        LightSource light = lightBuffer.objects[modelData.lightIndices[i]];
+        LightSource light = lightBuffer.objects[currentRenderable.lightIndices[i]];
 
-        uint lType = uint(texelFetch(globalLightTypes, int(modelData.lightIndices[i])).r);
+        uint lType = uint(texelFetch(globalLightTypes, int(currentRenderable.lightIndices[i])).r);
 
         vec3 lightColor = light.color.xyz/255.0;
 
@@ -268,11 +270,11 @@ mat3 AdjointMatrix(mat4 worldTransform)
 
 void main() {
 
-    Renderable modelData = rends.renderables[renderableIndex];
+    Renderable currentRenderable = rends.renderables[renderableIndex];
 
-    uint materialStart = modelData.materialStart;
+    uint materialStart = currentRenderable.materialStart;
 
-    uint blendStart = modelData.blendLayersStart;
+    uint blendStart = currentRenderable.blendLayersStart;
 
     uint textureIndex = 0;
 
@@ -280,9 +282,9 @@ void main() {
 
     bool lightAffected = false;
 
-    mat3 normalMatrix = AdjointMatrix(modelData.transform);
+    mat3 normalMatrix = AdjointMatrix(currentRenderable.transform);
 
-    for (uint i = 0; i<modelData.materialCount; i++)
+    for (uint i = 0; i<currentRenderable.materialCount; i++)
     {
 
         uint materialIndex = uint(texelFetch(globalMaterialIndices, int(materialStart + i)).r);
@@ -349,7 +351,7 @@ void main() {
 
     if (lightAffected)
     {
-        albedoColor = DoLights(normalize(accumulatedColorData.normal), position, albedoColor, modelData, accumulatedColorData.specular, accumulatedColorData.shininess);
+        albedoColor = DoLights(normalize(accumulatedColorData.normal), position, albedoColor, currentRenderable, accumulatedColorData.specular, accumulatedColorData.shininess);
     }
 
     outColor = vertColor * (albedoColor + vec4(accumulatedColorData.emissive, 0.0));

@@ -349,16 +349,7 @@ struct ComputeIntermediaryPipelineInfo
 
 /* Host memory update */
 
-struct HostTransferRegion
-{
-	void* data;
-	int size;
-	int copyCount;
-	int allocationIndex;
-	int allocoffset;
-};
-
-struct DeviceTransferRegion
+struct BufferMemoryTransferRegion
 {
 	void* data;
 	int size;
@@ -378,12 +369,6 @@ struct TextureMemoryRegion
 	int mipLevels;
 	int layers;
 	ImageFormat format;
-};
-
-struct TransferRegionLink
-{
-	int region;
-	int next;
 };
 
 struct TransferCommand

@@ -410,6 +410,21 @@ RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllo
 		std::construct_at(updateCommandBuffers[i], instanceStorageAllocator->Allocate(16 * KiB), 16 * KiB);
 	}
 
+	int driverHostLinkedSize = driverHostMemoryUpdater.GetSize(800);
+	int commandLinkedSize = transferCommandPool.GetSize(20);
+	int resourceUpdateLinkedSize = descriptorUpdatePool.GetSize(30);
+	int driverDeviceLinkedSize = driverDeviceMemoryUpdater.GetSize(60);
+	int imageMemoryLinkedSize = imageMemoryUpdateManager.GetSize(30);
+
+	driverHostMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverHostLinkedSize), driverHostLinkedSize);
+
+	transferCommandPool.AllocateList(instanceStorageAllocator->Allocate(commandLinkedSize), commandLinkedSize);
+
+	driverDeviceMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverDeviceLinkedSize), driverDeviceLinkedSize);
+
+	imageMemoryUpdateManager.AllocateList(instanceStorageAllocator->Allocate(imageMemoryLinkedSize), imageMemoryLinkedSize);
+
+	descriptorUpdatePool.AllocateList(instanceStorageAllocator->Allocate(resourceUpdateLinkedSize), resourceUpdateLinkedSize);
 };
 
 RenderInstance::~RenderInstance()
@@ -1156,7 +1171,7 @@ void RenderInstance::UploadHostTransfers()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	HostTransferRegion region;
+	BufferMemoryTransferRegion region;
 	int link = driverHostMemoryUpdater.linkHead;
 	int* linkprev = &driverHostMemoryUpdater.linkHead;
 	
@@ -1319,7 +1334,7 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	DeviceTransferRegion region;
+	BufferMemoryTransferRegion region;
 	int link = driverDeviceMemoryUpdater.linkHead;
 	int* linkprev = &driverDeviceMemoryUpdater.linkHead;
 
