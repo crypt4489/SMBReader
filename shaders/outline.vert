@@ -63,7 +63,7 @@ struct Plane
 	vec4 planeEquation;
 };
 
-struct Frustrum
+struct Frustum
 {
 	Plane nearplane;
 	Plane farplane;
@@ -83,7 +83,7 @@ layout(location = 0) out vec4 outColor;
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
-    Frustrum f;
+    Frustum f;
     mat4 world;
 } gs;
 

@@ -65,7 +65,7 @@ enum MaterialFlags
 struct Material
 {
 	int materialFlags;
-	float shinniness;
+	float shininess;
 	int unused2;
 	int unused3;
 	Vector4f albedoColor;
@@ -523,6 +523,37 @@ int ApplicationLoop::CreateMaterial(
 	return globalMaterialsIndex++;
 }
 
+int ApplicationLoop::CreateMaterial(
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& diffuseColor,
+	const Vector4f& specularColor,
+	float shininess,
+	const Vector4f& emissiveColor
+)
+{
+	Material material{};
+
+	material.albedoColor = diffuseColor;
+	material.emissiveColor = emissiveColor;
+	material.specularColor = specularColor;
+	material.shininess = shininess;
+
+	material.materialFlags = flags;
+
+	uint32_t* ptr = material.textureHandles.comp;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		ptr[i] = texturesIDs[i];
+	}
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+
+	return globalMaterialsIndex++;
+}
+
 int ApplicationLoop::CreateMeshHandle(
 	void* vertexData, void* indexData, 
 	int vertexFlags, int vertexCount, int vertexStride, 
@@ -961,8 +992,8 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, 0, frame);
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustrum), 0, TransferType::MEMORY);
+	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, 0, frame);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 }
 EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
@@ -1632,8 +1663,8 @@ void ApplicationLoop::CreateCrateObject()
 
 	std::array arr = { alebdoMapped, normalMapped, skymapped };
 
-	std::array<int, 2> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0)),
-		CreateMaterial(ALBEDOMAPPED, arr.data()+2, 1, Vector4f(1.0, 1.0, 1.0, 1.0))};
+	std::array<int, 2> materialIDs = { CreateMaterial(ALBEDOMAPPED | TANGENTNORMALMAPPED, arr.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0)),
+		CreateMaterial(ALBEDOMAPPED, arr.data()+2, 1, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.80, .80, .80, 1.0), 256.0, Vector4f(.04, .06, 0.08, 1.0))};
 
 	int materialRangeStart = AddMaterialToDeviceMemory(2, materialIDs.data());
 	int materialRangeCount = 2;
@@ -1674,7 +1705,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
-	//*geomSpecificData = *geomSpecificData * rotation;
+	*geomSpecificData = *geomSpecificData * rotation;
 
 	for (int i = 0; i < count; i++)
 	{
@@ -1769,7 +1800,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			meshTextureHandles.Update(textureStart + i, geoDef->materialsId[base + i]);
 		}
 
-		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0))};
+		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : type == PosPack6_C16Tex1_Bone2 ? 0 : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.1, .1, .1, 1.0), 1.5, Vector4f(0.0, 0.0, 0.0, 1.0))};
 
 		//geoDef->spheres[i].sphere.w += .75f;
 
@@ -2644,7 +2675,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustrum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	globalIndexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 2);
 	globalVertexBuffer = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, 1);
 	globalBufferDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);

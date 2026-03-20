@@ -15,7 +15,7 @@ struct Camera
 	LTM LTM{};
 	Matrix4f View{};
 	Matrix4f Projection{};
-	Frustrum camFrustrum{};
+	Frustum camFrustum{};
 	Matrix4f World{};
 };
 

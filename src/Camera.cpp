@@ -83,7 +83,7 @@ void Camera::CreateCameraFrustrum(float _angle, float aspect, float near, float 
 
 	float nw = (aspect * nh);
 
-	camFrustrum.CreateFrustrumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, near, far);
+	camFrustum.CreateFrustumPlanes(Vector4f(0.0, 0.0, 1.0, 0.0), Vector4f(0.0, 1.0, 0.0, 0.0), Vector4f(1.0, 0.0, 0.0, 0.0), nw, nh, near, far);
 }
 
 
@@ -94,7 +94,7 @@ void Plane::ComputePlane(const Vector4f& point, const Vector4f& normal)
 	pointInPlane = point;
 }
 
-void Frustrum::CreateFrustrumPlanes(const Vector4f& forward, const Vector4f&up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far)
+void Frustum::CreateFrustumPlanes(const Vector4f& forward, const Vector4f&up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far)
 {
 	nearwidth = _nearwidth;
 	nearheight = _nearheight;

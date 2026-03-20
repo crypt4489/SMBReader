@@ -61,7 +61,7 @@ struct Plane
 	vec4 planeEquation;
 };
 
-struct Frustrum
+struct Frustum
 {
 	Plane nearplane;
 	Plane farplane;
@@ -86,7 +86,7 @@ layout(location = 13) out vec4 tangent;
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
-    Frustrum f;
+    Frustum f;
     mat4 world;
 } gs;
 
@@ -250,6 +250,11 @@ vec4 DecompressColor(uint offset)
     return vec4(float(r)/255.0, float(g)/255.0, float(b)/255.0, float(a)/255.0);
 }
 
+mat3 AdjointMatrix(mat4 worldTransform)
+{
+    mat3 scoped = mat3(worldTransform);
+    return transpose(determinant(scoped) * inverse(scoped));
+}
 
 void main() {
     
@@ -268,7 +273,7 @@ void main() {
 
     uint offset = (stride * gl_VertexIndex) + modelData.vertexByteOffset;
 
-
+    mat3 normalMatrix = AdjointMatrix(currentRenderable.transform);
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -298,7 +303,7 @@ void main() {
 
         if ((comp&NORMAL)==NORMAL)
         {
-            normal = normalize(transpose(inverse(mat3(currentRenderable.transform))) * convertnormal(offset));
+            normal = normalMatrix * convertnormal(offset);
 
             offset += 4;
         }
@@ -307,9 +312,9 @@ void main() {
         {
             vec4 tangentLocal = DecompressTangent(offset);
 
-            vec3 tangentLocal3 = normalize(transpose(inverse(mat3(currentRenderable.transform))) * tangentLocal.xyz);
+            vec3 tangentCopy = normalMatrix * tangentLocal.xyz;
             
-            tangent = vec4(tangentLocal3, tangentLocal.w);
+            tangent = vec4(tangentCopy, tangentLocal.w);
 
             offset += 4;
         }

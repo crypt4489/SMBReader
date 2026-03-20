@@ -974,14 +974,14 @@ struct Plane
 	void ComputePlane(const Vector4f& pointInPlane, const Vector4f& normal);
 };
 
-struct Frustrum
+struct Frustum
 {
-	Frustrum() = default;
+	Frustum() = default;
 	Plane planes[6]{};
 	float nearwidth;
 	float nearheight;
 	float farDistance;
 	float nearDistance;
-	void CreateFrustrumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far);
+	void CreateFrustumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far);
 };
 PACKED_END

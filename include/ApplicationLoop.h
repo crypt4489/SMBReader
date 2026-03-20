@@ -89,6 +89,17 @@ public:
 		const Vector4f& color
 		);
 
+
+	int CreateMaterial(
+		int flags,
+		int* texturesIDs,
+		int textureCount,
+		const Vector4f& diffuseColor,
+		const Vector4f& specularColor,
+		float shininess,
+		const Vector4f& emissiveColor
+	);
+
 	int CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color);
 	int CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color);
 	int CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color);

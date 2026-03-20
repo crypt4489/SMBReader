@@ -203,7 +203,6 @@ struct RenderInstance
 	int minUniformAlignment;
 	int minStorageAlignment; 
 
-
 	HostDriverTransferPool driverHostMemoryUpdater;
 
 	TransferCommandsPool transferCommandPool;

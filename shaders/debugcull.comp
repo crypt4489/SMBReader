@@ -20,7 +20,7 @@ struct Plane
 	vec4 planeEquation;
 };
 
-struct Frustrum
+struct Frustum
 {
 	Plane nearplane;
 	Plane farplane;
@@ -105,7 +105,7 @@ layout(set = 0, binding = 2) uniform usamplerBuffer globalDebugTypes;
 layout(set = 0, binding = 3) uniform CameraData {
      mat4 view;
      mat4 proj;
-     Frustrum f;
+     Frustum f;
      mat4 world;
 } cData;
 
@@ -119,7 +119,7 @@ layout(set = 0, binding = 5) writeonly buffer commandCounts {
 } cCounts;
 
 
-Frustrum transformFrustrum;
+Frustum transformFrustrum;
 
 void CalculateFrustrum()
 {
@@ -140,7 +140,7 @@ bool CheckAllPlanesAgainstAABB(uint index)
 
     vec4 maxBox = ((mainStruct.center + mainStruct.halfExtents) * mainStruct.scale);
     
-     Frustrum testFrustrum = transformFrustrum; //cData.f
+     Frustum testFrustrum = transformFrustrum; //cData.f
 
     vec4 transAABBMin =   minBox;
     vec4 transAABBMax =   maxBox;
@@ -208,7 +208,7 @@ bool CheckAllPlanesAgainstSphere(uint index)
 
     vec3 transPosition = sphere.xyz;
 
-    Frustrum testFrustrum = transformFrustrum; //cData.f
+    Frustum testFrustrum = transformFrustrum; //cData.f
 
     float dist = DistanceFromPlane(testFrustrum.nearplane.planeEquation, transPosition);
 
