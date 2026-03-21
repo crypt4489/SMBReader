@@ -71,7 +71,8 @@ enum class ImageLayout
 	WRITEABLE = 1,
 	SHADERREADABLE = 2,
 	COLORATTACHMENT = 3,
-	DEPTHSTENCILATTACHMENT = 4
+	DEPTHSTENCILATTACHMENT = 4, 
+	PRESENT = 5
 };
 
 enum class ImageUsage
@@ -519,4 +520,53 @@ struct ShaderDetails
 	char* GetString();
 
 	void* GetShaderData();
+};
+
+/*  
+	Attachment Descriptions
+*/
+
+
+enum class AttachmentDescriptionType
+{
+	COLORATTACH = 0,
+	RESOLVEATTACH = 1,
+	DEPTHSTENCILATTACH = 2
+};
+
+enum class AttachmentViewType
+{
+	SWAPCHAIN = 1,
+	STATIC = 2,
+};
+
+enum class AttachmentLoadUsage
+{
+	ATTACHNOCARE = 1,
+	ATTACHCLEAR = 2,
+};
+
+enum class AttachmentStoreUsage
+{
+	ATTACHDISCARD = 1,
+	ATTACHSTORE = 2
+};
+
+
+struct AttachmentDescription
+{
+	AttachmentDescriptionType attachType;
+	AttachmentViewType viewType;
+	AttachmentLoadUsage loadOp;
+	AttachmentStoreUsage storeOp;
+	ImageLayout srcLayout;
+	ImageLayout dstLayout;
+};
+
+struct AttachmentHolder
+{
+	int attachmentCount;
+	int sampLow;
+	int sampHi;
+	AttachmentDescription descs[8];
 };

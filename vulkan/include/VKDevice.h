@@ -154,8 +154,6 @@ struct RecordingBufferObject
 
 struct RenderTarget
 {
-
-	
 	RenderTarget() = default;
 	
 	RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* data);
@@ -163,7 +161,6 @@ struct RenderTarget
 	EntryHandle renderPassIndex;
 	uint32_t count;
 	EntryHandle* framebufferIndices;
-	EntryHandle* imageViews;
 };
 
 enum VKQueueCapabilities
@@ -435,10 +432,9 @@ struct VKDevice
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
-	EntryHandle CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxFramesInFlight, uint32_t renderTargetCount);
+	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight);
 
 	
-
 	//GETTERS
 
 	VkBufferView GetBufferView(EntryHandle handle, uint32_t index);

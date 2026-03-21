@@ -53,7 +53,7 @@ struct RenderInstance
 
 	int RecreateSwapChain();
 
-	void CreateRenderPass(uint32_t index, VkSampleCountFlagBits sampleCount);
+	int CreateRenderPass(uint32_t index, AttachmentHolder* holder);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
@@ -97,7 +97,10 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(WindowManager* window, std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount);
+	void CreateVulkanRenderer(WindowManager* window, 
+		std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, 
+		std::string* pipelineDescriptions, int pipelineDescriptionsCount,
+		std::string* attachmentLayouts, int attachmentGraphCount);
 
 	uint32_t GetSwapChainHeight();
 
@@ -227,6 +230,10 @@ struct RenderInstance
 	SlabAllocator* updateCommandBuffers[2];
 
 	int currentUpdateCommandBuffer = 0;
+
+	EntryHandle mainRenderTargets[8]{};
+
+	AttachmentHolder* attachmentGraphs;
 };
 
 namespace GlobalRenderer {

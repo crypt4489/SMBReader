@@ -168,12 +168,12 @@ struct MemoryDriverTransferPool
 		{
 			link = regionLinks[link];
 		}
-		return (link >= 1000 ? -1 : link);
+		return (link);
 	}
 
 	int PopLink(BufferMemoryTransferRegion* outputRegion, int link, int** popprev)
 	{
-		if (link < 0 || link >= 1000) return -1;
+		if (link < 0 || link >= ddsRegionSize) return -1;
 		outputRegion->allocationIndex = transferRegions[link].allocationIndex;
 		outputRegion->size = transferRegions[link].size;
 		outputRegion->copyCount = transferRegions[link].copyCount;
@@ -199,9 +199,6 @@ struct MemoryDriverTransferPool
 		return linkRet;
 	}
 };
-
-
-
 
 struct TransferCommandsPool
 {
@@ -239,24 +236,19 @@ struct TransferCommandsPool
 
 			region = &transferRegions[regionAlloc];
 
-			region->fillVal = fillValue;
-
 			regionLinks[regionAlloc] = -1;
 
 			region->allocationIndex = allocationIndex;
 			region->offset = allocOffset;
 			region->size = size;
+			region->fillVal = fillValue;
 
 			Insert(regionAlloc);
 		}
 		else
 		{
 			region = &transferRegions[link];
-
-
 			region->fillVal = fillValue;
-
-
 			region->offset = allocOffset;
 			region->size = size;
 		}
@@ -287,12 +279,12 @@ struct TransferCommandsPool
 		{
 			link = regionLinks[link];
 		}
-		return (link >= 1000 ? -1 : link);
+		return link;
 	}
 
 	int PopLink(TransferCommand* outputRegion, int link, int** popprev)
 	{
-		if (link < 0) return -1;
+		if (link < 0 || link >= ddsRegionSize) return -1;
 		outputRegion->allocationIndex = transferRegions[link].allocationIndex;
 		outputRegion->size = transferRegions[link].size;
 		outputRegion->copycount = transferRegions[link].copycount;
@@ -395,12 +387,12 @@ struct ImageMemoryUpdateManager
 		{
 			link = regionLinks[link];
 		}
-		return (link >= 1000 ? -1 : link);
+		return (link);
 	}
 
 	int PopLink(TextureMemoryRegion* outputRegion, int link)
 	{
-		if (link < 0 || link >= 1000)
+		if (link < 0 || link >= ddsRegionSize)
 			return -1;
 
 		int regionIndex = link;
@@ -473,15 +465,13 @@ struct ShaderResourceUpdatePool
 		region->data = data;
 		region->dataSize = cachedDataSize;
 		region->descriptorSet = descriptorid;
-
 		region->bindingIndex = bindingindex;
+		region->type = type;
+		region->copyCount = copies;
 
 		regionLinks[regionAlloc] = -1;
 
 		Insert(regionAlloc);
-
-		region->type = type;
-		region->copyCount = copies;
 
 		return 0;
 	}
@@ -509,12 +499,12 @@ struct ShaderResourceUpdatePool
 		{
 			link = regionLinks[link];
 		}
-		return (link >= 1000 ? -1 : link);
+		return (link);
 	}
 
 	int PopLink(ShaderResourceUpdate* outputRegion, int link, int** popprev)
 	{
-		if (link < 0) return -1;
+		if (link < 0 || link >= ddsRegionSize) return -1;
 
 		ShaderResourceUpdate* region = &transferRegions[link];
 

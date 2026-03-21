@@ -15,9 +15,9 @@ template <int N>
 struct ShaderResourceManager
 {
 	SlabAllocator shaderResourceInstAllocator;
-	std::array<uintptr_t, N> descriptorSets;
-	std::array<EntryHandle, N> vkDescriptorSets;
-	std::atomic<int> descriptorSetIndex;
+	std::array<uintptr_t, N> descriptorSets{};
+	std::array<EntryHandle, N> vkDescriptorSets{};
+	std::atomic<int> descriptorSetIndex{};
 
 	EntryHandle deviceResourceHeap;
 
@@ -395,7 +395,7 @@ struct CullModeXMLTag : PipelineXMLTag
 
 void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo);
 
-static int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
+
 
 static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
@@ -406,3 +406,9 @@ static int HandlePrimitiveType(char* fileData, int size, int currentLocation, Ge
 static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation);
 
 static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);
+
+
+void CreateAttachmentGraph(const std::string& filename, AttachmentHolder* holder);
+static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
+static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description);
+static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentHolder* holder);

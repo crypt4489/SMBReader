@@ -227,7 +227,6 @@ RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* da
 	EntryHandle* head = reinterpret_cast<EntryHandle*>(data);
 
 	framebufferIndices = head;
-	imageViews = std::next(head, imageCount);
 }
 
 DeviceOwnedAllocator::DeviceOwnedAllocator() {
@@ -1448,7 +1447,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 	
 	ret = AddVkTypeToEntry(renderTarget, VulkRenderTarget);
 
-	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount * 2);
+	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount);
 	
 	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
 
@@ -1770,7 +1769,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t requestedImageCount, uint32_t maxFramesInFlight, uint32_t renderTargetCount)
+EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight)
 {
 
 	//std::shared_lock lock(deviceLock);
@@ -1779,7 +1778,7 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t attachmentCount, uint32_t request
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, attachmentCount, requestedImageCount, maxFramesInFlight, swcsupport, renderTargetCount);
+	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport);
 
 	EntryHandle index = AddVkTypeToEntry(swc, VulkSwapChain);
 
@@ -2112,7 +2111,6 @@ void VKDevice::DestroyRenderTarget(EntryHandle handle)
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j<i; j++)
 	{
-		DestroyImageView(target->imageViews[j]);
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
 
@@ -2127,7 +2125,6 @@ void VKDevice::ResetRenderTarget(EntryHandle handle)
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j < i; j++)
 	{
-		DestroyImageView(target->imageViews[j]);
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
 }

@@ -65,12 +65,10 @@ static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
 static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
 
 
-VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
-	uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFrameInFlight,
-	VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount)
+VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator, uint32_t requestImages, uint32_t maxFrameInFlight,
+	VK::Utils::SwapChainSupportDetails& swapChainSupport)
 	:
-	device(_d), surface(_surface), attachmentCount(_attachmentCount),
-	renderTargetCount(_renderTargetCount), maxFrameInFlight(maxFrameInFlight) {
+	device(_d), surface(_surface), maxFrameInFlight(maxFrameInFlight) {
 
 	if (!vRelease)
 	{
@@ -81,12 +79,11 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocat
 	SetSwapChainProperties(swapChainSupport, requestImages);
 
 
-	renderTargetIndex = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * _renderTargetCount));
 	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
 	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
-
+	imageViews = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount));
 }
 
 
@@ -155,11 +152,6 @@ void VKSwapChain::CreateSwapChain(
 	CreateSyncObject();
 }
 
-void VKSwapChain::CreateRenderTarget(uint32_t index, EntryHandle renderPassIndex)
-{
-	renderTargetIndex[index] = device->CreateRenderTarget(renderPassIndex, imageCount);
-}
-
 void VKSwapChain::CreateSyncObject()
 {
 	EntryHandle* imageAvailablesIndices = device->CreateSemaphores(imageCount);
@@ -168,11 +160,9 @@ void VKSwapChain::CreateSyncObject()
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
-
 		waitSemaphores[i] = imageAvailablesIndices[i];
 		signalSemaphores[i] = renderFinishedIndices[i];
 		presentationFences[i] = fences[i];
-	
 	}
 }
 
@@ -219,63 +209,12 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 EntryHandle* VKSwapChain::CreateSwapchainViews()
 {
-	EntryHandle* imageViews = reinterpret_cast<EntryHandle*>(device->AllocFromDeviceCache(sizeof(EntryHandle) * imageCount));
-
-	VkImage* swcImages = images;
-
-	for (size_t i = 0; i < imageCount; i++) {
-		imageViews[i] = device->CreateImageView(swcImages[i], 1, 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+	for (uint32_t i = 0; i < imageCount; i++) {
+		imageViews[i] = device->CreateImageView(images[i], 1, 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 	}
 
 	return imageViews;
 }
-
-void VKSwapChain::CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCount, EntryHandle *attachments, EntryHandle *imageViews)
-{
-	auto renderTarget = device->GetRenderTarget(renderTargetIndex[index]);
-
-	for (size_t i = 0; i < imageCount; i++) {
-
-		renderTarget->imageViews[i] = imageViews[i];
-
-		for (size_t j = 0; j < aAttachmentCount; j++) {
-			if (attachments[j] == EntryHandle() || (i && attachments[j] == imageViews[i-1]))
-				attachments[j] = imageViews[i];
-		}
-
-		renderTarget->framebufferIndices[i] = device->CreateFrameBuffer(attachments, aAttachmentCount, renderTarget->renderPassIndex, swapChainExtent);
-	}
-}
-/*
-static void SanitizeSwapChainSemaphores()
-{
-	auto queueDetails = device->GetQueueHandle(GRAPHICS);
-
-	uint32_t managerIndex = std::get<0>(queueDetails);
-	uint32_t queueIndex = std::get<1>(queueDetails);
-	uint32_t queueFamilyIndex = std::get<2>(queueDetails);
-	EntryHandle poolIndex = std::get<3>(queueDetails);
-
-	VkQueue queue;
-	vkGetDeviceQueue(device->device, queueFamilyIndex, queueIndex, &queue);
-
-	VkCommandPool pool = device->GetCommandPool(poolIndex);
-
-	VkSemaphore* semas = (VkSemaphore*)device->AllocFromDeviceCache(sizeof(VkSemaphore)*1);
-	VkPipelineStageFlags* flags = (VkPipelineStageFlags*)device->AllocFromDeviceCache(sizeof(VkPipelineStageFlags) * 1);
-
-	
-	for (int i = 0; i < 1; i++)
-	{
-		flags[i] = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-		semas[i] = device->GetSemaphore(waitSemaphores[acquireSemaphore]);
-	}
-
-	VK::Utils::EndOneTimeCommandsSemaphores(device->device, queue, pool, nullptr, semas, flags, 1);
-
-	device->ReturnQueueToManager(managerIndex, queueIndex);
-
-} */
 
 void VKSwapChain::Wait()
 {
@@ -283,13 +222,11 @@ void VKSwapChain::Wait()
 	{
 		VkFence fence = device->GetFence(presentationFences[i]);
 		vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
-
 	}
 }
 
 void VKSwapChain::ResetSwapChain()
 {
-
 	Wait();
 
 	if (swapChain) {
@@ -297,11 +234,10 @@ void VKSwapChain::ResetSwapChain()
 		swapChain = VK_NULL_HANDLE;
 	}
 
-	for (uint32_t i = 0; i < renderTargetCount; i++)
-		device->ResetRenderTarget(renderTargetIndex[i]);
-
-
-
+	for (uint32_t i = 0; i < imageCount; i++)
+	{
+		device->DestroyImageView(imageViews[i]);
+	}
 }
 
 void VKSwapChain::ReleaseImageMaintenance(uint32_t imageIndex)
@@ -321,15 +257,17 @@ void VKSwapChain::DestroySwapChain()
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
 		swapChain = VK_NULL_HANDLE;
 	}
-	for (uint32_t i = 0; i<renderTargetCount; i++)
-		device->DestroyRenderTarget(renderTargetIndex[i]);
+
+	for (uint32_t i = 0; i < imageCount; i++)
+	{
+		device->DestroyImageView(imageViews[i]);
+	}
 
 	DestroySyncObject();
 }
 
 void VKSwapChain::DestroySyncObject()
 {
-	
 	for (uint32_t i = 0; i < maxFrameInFlight; i++)
 	{
 		device->DestroySemaphore(waitSemaphores[i]);

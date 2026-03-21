@@ -1540,3 +1540,271 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 
 	return ret;
 }
+#include <vector>
+
+void CreateAttachmentGraph(const std::string& filename, AttachmentHolder* holder)
+{
+
+	FileID fileID = FileManager::OpenFile(filename, READ);
+
+	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
+
+	int dataSize = fileHandle->fileLength;
+
+	std::vector<char> fileDataC(dataSize);
+
+	void* fileData = (void*)fileDataC.data();
+
+	OSReadFile(fileHandle, dataSize, (char*)fileData);
+
+	OSCloseFile(fileHandle);
+
+	char* dataStart = (char*)fileData;
+
+	int attachmentCounter = 0;
+
+	int tagCount = 0;
+	int curr = 0;
+
+	int stride = 0;
+
+	while (curr + stride < dataSize)
+	{
+
+		unsigned long hashl = 0;
+		bool opening = true;
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
+		curr += stride;
+
+		stride = SkipLine(dataStart, dataSize, curr);
+
+		if (opening)
+		{
+			tagCount++;
+		}
+
+	
+		if (opening)
+		{
+
+			switch (hashl)
+			{
+			case hash("Attachments"):
+				stride = HandleAttachmentDesc(dataStart, dataSize, curr, holder);
+				break;
+			case hash("ColorAttachment"):
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::COLORATTACH, &holder->descs[attachmentCounter]);
+				attachmentCounter++;
+				break;
+			case hash("DepthAttachment"):
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHSTENCILATTACH, &holder->descs[attachmentCounter]);
+				attachmentCounter++;
+				break;
+			case hash("ResolveAttachment"):
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::RESOLVEATTACH, &holder->descs[attachmentCounter]);
+				attachmentCounter++;
+				break;
+			}
+		}
+
+		curr += stride;
+	}
+
+
+	holder->attachmentCount = attachmentCounter;
+
+}
+
+int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description)
+{
+	unsigned long hashes[12];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	description->attachType = descType;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+		 //loadOp = "clear" storeOp = "discard" layout = "dsv"
+		switch (code)
+		{
+		case hash("imageType"):
+		{
+			switch (codeV)
+			{
+				case hash("static"):
+					description->viewType = AttachmentViewType::STATIC;
+					break;
+				case hash("swc"):
+					description->viewType = AttachmentViewType::SWAPCHAIN;
+					break;
+			}
+			break;
+		}
+		case hash("loadOp"):
+		{
+			switch (codeV)
+			{
+			case hash("clear"):
+				description->loadOp = AttachmentLoadUsage::ATTACHCLEAR;
+				break;
+			case hash("nocare"):
+				description->loadOp = AttachmentLoadUsage::ATTACHNOCARE;
+				break;
+			}
+			break;
+		}
+		case hash("storeOp"):
+		{
+			switch (codeV)
+			{
+			case hash("discard"):
+				description->storeOp = AttachmentStoreUsage::ATTACHDISCARD;
+				break;
+			case hash("store"):
+				description->storeOp = AttachmentStoreUsage::ATTACHSTORE;
+				break;
+			}
+			break;
+		}
+		case hash("srcLayout"):
+		{
+			switch (codeV)
+			{
+			case hash("present"):
+				description->srcLayout = ImageLayout::PRESENT;
+				break;
+			case hash("dsv"):
+				description->srcLayout = ImageLayout::DEPTHSTENCILATTACHMENT;
+				break;
+			case hash("rtv"):
+				description->srcLayout = ImageLayout::COLORATTACHMENT;
+				break;
+			case hash("undefined"):
+				description->srcLayout = ImageLayout::UNDEFINED;
+				break;
+			}
+			break;
+		}
+		case hash("dstLayout"):
+		{
+			switch (codeV)
+			{
+			case hash("present"):
+				description->dstLayout = ImageLayout::PRESENT;
+				break;
+			case hash("dsv"):
+				description->dstLayout = ImageLayout::DEPTHSTENCILATTACHMENT;
+				break;
+			case hash("rtv"):
+				description->dstLayout = ImageLayout::COLORATTACHMENT;
+				break;
+			case hash("undefined"):
+				description->dstLayout = ImageLayout::UNDEFINED;
+				break;
+			}
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed attahcment tag");
+			break;
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+
+int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentHolder* holder)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("sampLo"):
+		{
+			holder->sampLow = codeV;
+			break;
+		}
+		case hash("sampHi"):
+		{
+
+			if (codeV == 0) holder->sampHi = -1;
+			else holder->sampHi = codeV;
+			break;
+		}
+
+		default:
+			throw std::runtime_error("Failed Attachments handle");
+			break;
+		}
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
+{
+	int count = 0;
+	char* data = fileData + currentLocation;
+
+	int ret = 0;
+	char c = data[ret];
+
+	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	{
+		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
+
+		switch (hashes[count])
+		{
+		case hash("imageType"):
+		case hash("loadOp"):
+		case hash("storeOp"):
+		case hash("srcLayout"):
+		case hash("dstLayout"):
+		{
+			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		case hash("sampLo"):
+		case hash("sampHi"):
+		{
+			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			break;
+		}
+		}
+		c = data[ret];
+		count += 2;
+	}
+
+	*stackSize = count;
+
+	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	{
+		c = data[ret++];
+	}
+
+	return ret;
+}

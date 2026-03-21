@@ -16,16 +16,12 @@ struct VKSwapChain
 	VKSwapChain() = default;
 
 	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
-		uint32_t _attachmentCount, uint32_t requestImages, uint32_t maxFramesInFlight,
-		VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _renderTargetCount);
+		uint32_t requestImages, uint32_t maxFramesInFlight,
+		VK::Utils::SwapChainSupportDetails& swapChainSupport);
 
 	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
 
 	void RecreateSwapChain(uint32_t width, uint32_t height);
-
-	void CreateSwapChainElements(uint32_t index, uint32_t aAttachmentCount, EntryHandle* attachments, EntryHandle* imageViews);
-
-	void CreateRenderTarget(uint32_t index, EntryHandle renderPassIndex);
 
 	void CreateSwapChain(
 		uint32_t width, uint32_t height);
@@ -68,7 +64,6 @@ struct VKSwapChain
 	VkPresentModeKHR presentMode;
 	VkExtent2D swapChainExtent;
 
-	uint32_t attachmentCount;
 	uint32_t imageCount;
 	uint32_t queueFamiliesCacheCount;
 
@@ -77,14 +72,11 @@ struct VKSwapChain
 
 	VkImage* images;
 	uint32_t queueFamiliesCache[2];
-	EntryHandle* renderTargetIndex;
-	uint32_t renderTargetCount;
 	EntryHandle* waitSemaphores;
 	EntryHandle* signalSemaphores;
-
+	EntryHandle* imageViews;
 	EntryHandle* presentationFences;
 
-	
 	VkSurfaceKHR surface; //need one to draw to
 	VKDevice* device; //owner of this swapchain
 

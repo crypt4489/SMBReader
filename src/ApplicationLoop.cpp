@@ -2654,6 +2654,12 @@ static std::array<std::string, 16> layouts = {
 		"OutlineLayout.xml"
 };
 
+static std::array<std::string, 2> mainLayoutAttachments =
+{
+	"noMSAAAttachment.xml",
+	"MSAAAttachment.xml"
+};
+
 void ApplicationLoop::InitializeRuntime()
 {
 
@@ -2671,7 +2677,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance = new RenderInstance(&RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
 
-	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, layouts.data(), layouts.size(), pds.data(), pds.size());
+	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, layouts.data(), layouts.size(), pds.data(), pds.size(), mainLayoutAttachments.data(), mainLayoutAttachments.size());
 
 	CreateTexturePools();
 
