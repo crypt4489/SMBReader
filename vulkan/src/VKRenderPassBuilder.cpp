@@ -18,7 +18,7 @@ VKRenderPassBuilder::VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachmen
 	references = (VkAttachmentReference*)std::next(attachments, numberofattachments);
 }
 
-void VKRenderPassBuilder::CreateAttachment(VKRenderPassAttachmentType type, VkFormat format,
+void VKRenderPassBuilder::CreateAttachment(VkImageLayout imageReferenceLayout, VkFormat format,
 	VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
 	VkAttachmentStoreOp storeOp, VkAttachmentLoadOp stencilLoadOp,
 	VkAttachmentStoreOp stencilStoreOp, VkImageLayout initialLayout,
@@ -34,21 +34,9 @@ void VKRenderPassBuilder::CreateAttachment(VKRenderPassAttachmentType type, VkFo
 	attachmentDescription.initialLayout = initialLayout;
 	attachmentDescription.finalLayout = finalLayout;
 
-	VkImageLayout refLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	switch (type)
-	{
-	case COLORATTACH:
-	case COLORRESOLVEATTACH:
-		refLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		break;
-	case DEPTHSTENCILATTACH:
-		refLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		break;
-	}
-
 	VkAttachmentReference attachmentRef{};
 	attachmentRef.attachment = binding;
-	attachmentRef.layout = refLayout;
+	attachmentRef.layout = imageReferenceLayout;
 
 	attachments[binding] = attachmentDescription;
 	references[binding] = attachmentRef;
@@ -69,19 +57,27 @@ void VKRenderPassBuilder::CreateSubPassDependency(uint32_t srcSubpass, uint32_t 
 	subpassDependencies[subpassdepcounter++] = dependency;
 }
 
-void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint, uint32_t firstColorAttachment,
-	uint32_t numberOfColorAttachments, uint32_t colorResolveIndex, uint32_t depthAttachmentIndex)
+void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint, uint32_t numberOfColorAttachments, uint32_t numberResolveAttachments, uint32_t numberDepthStencilAttachments)
 {
 	VkSubpassDescription subpass{};
 
 	subpass.pipelineBindPoint = bindPoint;
 	subpass.colorAttachmentCount = numberOfColorAttachments;
-	subpass.pColorAttachments = &references[firstColorAttachment];
-	if (colorResolveIndex != ~0ui32)
-		subpass.pResolveAttachments = &references[colorResolveIndex];
-	else
-		subpass.pResolveAttachments = nullptr;
-	subpass.pDepthStencilAttachment = &references[depthAttachmentIndex];
+	subpass.pColorAttachments = &references[0];
+
+	uint32_t offset = numberOfColorAttachments;
+
+	if (numberDepthStencilAttachments)
+		subpass.pDepthStencilAttachment = &references[offset];
+
+	offset += numberDepthStencilAttachments;
+
+	if (numberResolveAttachments)
+		subpass.pResolveAttachments = &references[offset];
+
+	if (0)
+		subpass.pInputAttachments = nullptr;
+
 	subpassDescription[subpassdesccounter++] = subpass;
 }
 

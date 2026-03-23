@@ -5,17 +5,9 @@
 struct VKRenderPassBuilder
 {
 
-	enum VKRenderPassAttachmentType
-	{
-		COLORATTACH = 0,
-		COLORRESOLVEATTACH = 1,
-		DEPTHSTENCILATTACH = 2,
-		MAXATTACHMENT
-	};
-
 	VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachments, uint32_t numberofsubpassdependency, uint32_t numberofsubpassdescriptions);
 
-	void CreateAttachment(VKRenderPassAttachmentType type, VkFormat format,
+	void CreateAttachment(VkImageLayout imageReferenceLayout, VkFormat format,
 		VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
 		VkAttachmentStoreOp storeOp, VkAttachmentLoadOp stencilLoadOp,
 		VkAttachmentStoreOp stencilStoreOp, VkImageLayout initialLayout,
@@ -25,8 +17,7 @@ struct VKRenderPassBuilder
 		VkPipelineStageFlags srcStageMask, VkAccessFlags srcAccessFlags,
 		VkPipelineStageFlags dstStageMask, VkAccessFlags dstAccessFlags);
 
-	void CreateSubPassDescription(VkPipelineBindPoint bindPoint, uint32_t firstColorAttachment,
-		uint32_t numberOfColorAttachments, uint32_t colorResolveIndex, uint32_t depthAttachmentIndex);
+	void CreateSubPassDescription(VkPipelineBindPoint bindPoint, uint32_t numberOfColorAttachments, uint32_t numberResolveAttachments, uint32_t numberDepthStencilAttachments);
 
 	void CreateInfo();
 

@@ -72,7 +72,9 @@ enum class ImageLayout
 	SHADERREADABLE = 2,
 	COLORATTACHMENT = 3,
 	DEPTHSTENCILATTACHMENT = 4, 
-	PRESENT = 5
+	PRESENT = 5,
+	DEPTHATTACHMENT = 6,
+	STENCILATTACHMENT = 7,
 };
 
 enum class ImageUsage
@@ -531,7 +533,9 @@ enum class AttachmentDescriptionType
 {
 	COLORATTACH = 0,
 	RESOLVEATTACH = 1,
-	DEPTHSTENCILATTACH = 2
+	DEPTHATTACH = 2,
+	STENCILATTACH = 3,
+	DEPTHSTENCILATTACH = 4,
 };
 
 enum class AttachmentViewType
@@ -553,20 +557,69 @@ enum class AttachmentStoreUsage
 };
 
 
+struct AttachmentResource
+{
+	AttachmentViewType viewType;
+	ImageFormat format;
+};
+
 struct AttachmentDescription
 {
 	AttachmentDescriptionType attachType;
-	AttachmentViewType viewType;
 	AttachmentLoadUsage loadOp;
 	AttachmentStoreUsage storeOp;
 	ImageLayout srcLayout;
 	ImageLayout dstLayout;
+	int resourceIndex;
+	int msaa;
 };
+
+
 
 struct AttachmentHolder
 {
 	int attachmentCount;
-	int sampLow;
-	int sampHi;
+	int resolveCount;
+	int depthStencilCount;
+	int colorCount;
 	AttachmentDescription descs[8];
+};
+
+struct AttachmentGraph
+{
+	int passesCount;
+	int resourceCount;
+	AttachmentHolder holders[4];
+	AttachmentResource resources[12];
+};
+
+struct AttachmentResourceInstance
+{
+	EntryHandle* attachmentImage;
+	EntryHandle* attachmentImageView;
+};
+
+struct AttachmentInstance
+{
+	AttachmentDescription* descLayout;
+	int attachmentResource;
+};
+
+struct AttachmentInstanceRange
+{
+	AttachmentInstance* instances;
+};
+
+struct AttachmentInstanceHolder
+{
+	AttachmentResourceInstance* resources;
+	AttachmentInstanceRange* passes;
+	int sampleCount;
+};
+
+struct AttachmentGraphInstance
+{
+	AttachmentGraph* graphLayout;
+	AttachmentInstanceHolder* instanceDescriptions; //x is defined sample range
+	int sampleLevels;
 };

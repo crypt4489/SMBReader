@@ -47,21 +47,17 @@ struct RenderInstance
 
 	~RenderInstance();
 
-	void CreateDepthImage( uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
-
 	void DestroySwapChainAttachments();
 
 	int RecreateSwapChain();
 
-	int CreateRenderPass(uint32_t index, AttachmentHolder* holder);
+	int CreateRenderPass(uint32_t index, AttachmentGraph* graph, int sampleStride, int sampleCount);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
 	uint32_t BeginFrame();
 
 	int SubmitFrame(uint32_t imageIndex);
-
-	void CreateMSAAColorResources(uint32_t width, uint32_t height, uint32_t index, uint32_t sampleCount);
 
 	void WaitOnRender();
 
@@ -167,10 +163,6 @@ struct RenderInstance
 	uint32_t maxMSAALevels = 0;
 
 	std::array<EntryHandle, 5> swapchainRenderTargets{};
-	std::array<EntryHandle, 5> depthViews{};
-	std::array<EntryHandle, 5> colorViews{};
-	std::array<EntryHandle, 5> depthImages{};
-	std::array<EntryHandle, 5> colorImages{};
 	std::array<EntryHandle, 5> renderPasses{};
 
 	std::array<EntryHandle, 9> imagePools{};
@@ -233,7 +225,11 @@ struct RenderInstance
 
 	EntryHandle mainRenderTargets[8]{};
 
-	AttachmentHolder* attachmentGraphs;
+	AttachmentGraph* attachmentGraphs;
+
+	AttachmentGraphInstance* attachmentGraphsInstances;
+
+	int attachmentGraphInstancesCount = 0;
 };
 
 namespace GlobalRenderer {

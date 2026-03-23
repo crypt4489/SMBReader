@@ -1,0 +1,6 @@
+<Attachments sampLo="1" sampHi="1">
+	<ColorAttachment imageType="swc" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="present">
+	</ColorAttachment>
+	<DepthAttachment imageType="static" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="dsv">
+	</DepthAttachment>
+</Attachments>

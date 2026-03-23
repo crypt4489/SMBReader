@@ -1542,7 +1542,7 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 }
 #include <vector>
 
-void CreateAttachmentGraph(const std::string& filename, AttachmentHolder* holder)
+void CreateAttachmentGraph(const std::string& filename, AttachmentGraph* graph)
 {
 
 	FileID fileID = FileManager::OpenFile(filename, READ);
@@ -1562,13 +1562,21 @@ void CreateAttachmentGraph(const std::string& filename, AttachmentHolder* holder
 	char* dataStart = (char*)fileData;
 
 	int attachmentCounter = 0;
+	int resourceCounter = 0;
+	int holderCounter = 0;
+
+	int depthStencilCount = 0;
+	int colorCount = 0;
+	int resolveCount = 0;
 
 	int tagCount = 0;
 	int curr = 0;
 
 	int stride = 0;
 
-	while (curr + stride < dataSize)
+	AttachmentHolder* currentHolder = nullptr;
+
+	while (curr < dataSize)
 	{
 
 		unsigned long hashl = 0;
@@ -1583,41 +1591,80 @@ void CreateAttachmentGraph(const std::string& filename, AttachmentHolder* holder
 			tagCount++;
 		}
 
-	
+
 		if (opening)
 		{
 
 			switch (hashl)
 			{
 			case hash("Attachments"):
-				stride = HandleAttachmentDesc(dataStart, dataSize, curr, holder);
+				currentHolder = &graph->holders[holderCounter++];
+				//stride = HandleAttachmentDesc(dataStart, dataSize, curr, currentHolder);
+
 				break;
 			case hash("ColorAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::COLORATTACH, &holder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::COLORATTACH, &currentHolder->descs[attachmentCounter]);
 				attachmentCounter++;
+				colorCount++;
 				break;
 			case hash("DepthAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHSTENCILATTACH, &holder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHATTACH, &currentHolder->descs[attachmentCounter]);
 				attachmentCounter++;
+				depthStencilCount++;
 				break;
 			case hash("ResolveAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::RESOLVEATTACH, &holder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::RESOLVEATTACH, &currentHolder->descs[attachmentCounter]);
 				attachmentCounter++;
+				resolveCount++;
+				break;
+			case hash("StencilAttachment"):
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::STENCILATTACH, &currentHolder->descs[attachmentCounter]);
+				attachmentCounter++;
+				depthStencilCount++;
+				break;
+			case hash("DepthStencilAttachment"):
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHSTENCILATTACH, &currentHolder->descs[attachmentCounter]);
+				attachmentCounter++;
+				depthStencilCount++;
+				break;
+			case hash("AttachmentResource"):
+				stride = HandleAttachmentResource(dataStart, dataSize, curr, &graph->resources[resourceCounter]);
+				resourceCounter++;
+				break;
+			}
+			curr += stride;
+		}
+		else
+		{
+			switch (hashl)
+			{
+			case hash("Attachments"):
+				if (currentHolder)
+				{
+					currentHolder->attachmentCount = attachmentCounter;
+					currentHolder->colorCount = colorCount;
+					currentHolder->depthStencilCount = depthStencilCount;
+					currentHolder->resolveCount = resolveCount;
+				}
+
+				attachmentCounter = 0;
+				depthStencilCount = 0;
+				colorCount = 0;
+				resolveCount = 0;
+				currentHolder = nullptr;
 				break;
 			}
 		}
-
-		curr += stride;
 	}
 
+	graph->resourceCount = resourceCounter;
 
-	holder->attachmentCount = attachmentCounter;
-
+	graph->passesCount = holderCounter;
 }
 
 int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description)
 {
-	unsigned long hashes[12];
+	unsigned long hashes[16];
 
 	int attrSize = 0;
 
@@ -1626,6 +1673,7 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 	int stackIter = 0;
 
 	description->attachType = descType;
+	description->msaa = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1634,19 +1682,7 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 		 //loadOp = "clear" storeOp = "discard" layout = "dsv"
 		switch (code)
 		{
-		case hash("imageType"):
-		{
-			switch (codeV)
-			{
-				case hash("static"):
-					description->viewType = AttachmentViewType::STATIC;
-					break;
-				case hash("swc"):
-					description->viewType = AttachmentViewType::SWAPCHAIN;
-					break;
-			}
-			break;
-		}
+	
 		case hash("loadOp"):
 		{
 			switch (codeV)
@@ -1680,6 +1716,12 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			case hash("present"):
 				description->srcLayout = ImageLayout::PRESENT;
 				break;
+			case hash("dv"):
+				description->srcLayout = ImageLayout::DEPTHATTACHMENT;
+				break;
+			case hash("sv"):
+				description->srcLayout = ImageLayout::STENCILATTACHMENT;
+				break;
 			case hash("dsv"):
 				description->srcLayout = ImageLayout::DEPTHSTENCILATTACHMENT;
 				break;
@@ -1699,6 +1741,12 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			case hash("present"):
 				description->dstLayout = ImageLayout::PRESENT;
 				break;
+			case hash("dv"):
+				description->dstLayout = ImageLayout::DEPTHATTACHMENT;
+				break;
+			case hash("sv"):
+				description->dstLayout = ImageLayout::STENCILATTACHMENT;
+				break;
 			case hash("dsv"):
 				description->dstLayout = ImageLayout::DEPTHSTENCILATTACHMENT;
 				break;
@@ -1709,6 +1757,18 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 				description->dstLayout = ImageLayout::UNDEFINED;
 				break;
 			}
+			break;
+		}
+		
+		case hash("msaa"):
+		{
+			description->msaa = 1;
+			break;
+		}
+
+		case hash("resource"):
+		{
+			description->resourceIndex = codeV;
 			break;
 		}
 
@@ -1739,23 +1799,60 @@ int HandleAttachmentDesc(char* fileData, int size, int currentLocation, Attachme
 		unsigned long code = hashes[stackIter];
 		unsigned long codeV = hashes[stackIter + 1];
 
+
+		
+
+		stackIter += 2;
+	}
+
+	return ret;
+}
+
+static int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+
+	int stackIter = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
 		switch (code)
 		{
-		case hash("sampLo"):
+		case hash("imageType"):
 		{
-			holder->sampLow = codeV;
+			switch (codeV)
+			{
+			case hash("static"):
+				resource->viewType = AttachmentViewType::STATIC;
+				break;
+			case hash("swc"):
+				resource->viewType = AttachmentViewType::SWAPCHAIN;
+				break;
+			}
 			break;
 		}
-		case hash("sampHi"):
+		case hash("format"):
 		{
-
-			if (codeV == 0) holder->sampHi = -1;
-			else holder->sampHi = codeV;
+			switch (codeV)
+			{
+			case hash("b8g8r8a8"):
+				resource->format = ImageFormat::B8G8R8A8;
+				break;
+			case hash("d24s8"):
+				resource->format = ImageFormat::D24UNORMS8STENCIL;
+				break;
+			}
 			break;
 		}
-
 		default:
-			throw std::runtime_error("Failed Attachments handle");
+			throw std::runtime_error("Failed Attachments Resource");
 			break;
 		}
 
@@ -1784,12 +1881,13 @@ static int ReadAttributesAttachments(char* fileData, int size, int currentLocati
 		case hash("storeOp"):
 		case hash("srcLayout"):
 		case hash("dstLayout"):
+		case hash("format"):
+		case hash("msaa"):
 		{
 			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
 			break;
 		}
-		case hash("sampLo"):
-		case hash("sampHi"):
+		case hash("resource"):
 		{
 			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
 			break;

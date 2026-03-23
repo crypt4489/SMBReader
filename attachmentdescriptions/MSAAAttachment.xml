@@ -1,0 +1,8 @@
+<Attachments sampLo="2" sampHi="00">
+	<ColorAttachment imageType="static" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="rtv">
+	</ColorAttachment>
+	<DepthAttachment imageType="static" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="dsv">
+	</DepthAttachment>
+	<ResolveAttachment imageType="static" loadOp="nocare" storeOp="store" srcLayout="undefined" dstLayout="present">
+	</ResolveAttachment>
+</Attachments>

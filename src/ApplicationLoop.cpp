@@ -847,7 +847,7 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance->RecreateSwapChain();
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance->GetSwapChainWidth() / (float)GlobalRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
-				continue;
+				//continue;
 			}
 
 			auto index = GlobalRenderer::gRenderInstance->BeginFrame();
