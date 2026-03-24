@@ -35,6 +35,53 @@ namespace GlobalRenderer {
 
 namespace API {
 
+	enum AttachmentResourceInstanceUsageFlags
+	{
+		COLOR_ATTACHMENT_USAGE = 1,
+		DEPTH_ATTACHMENT_USAGE = 2,
+		STENCIL_ATTACHMENT_USAGE = 4,
+		RESOLVE_ATTACHMENT_USAGE = 8,
+		PRESERVE_ATTACHMENT_USAGE = 16,
+		INPUT_ATTACHMENT_USAGE = 32,
+	};
+
+	VkImageUsageFlags ConvertAttachmentResourceUsageToVkImageUsage(AttachmentResourceInstanceUsage usage)
+	{
+		VkImageUsageFlags flags = 0;
+
+		switch (usage)
+		{
+		case AttachmentResourceInstanceUsage::COLOR_ATTACHMENT_USAGE:
+			flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			break;
+
+		case AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE:
+			flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			break;
+
+		case AttachmentResourceInstanceUsage::STENCIL_ATTACHMENT_USAGE:
+			flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+			break;
+
+		case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
+			flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+			break;
+
+		case AttachmentResourceInstanceUsage::PRESERVE_ATTACHMENT_USAGE:
+			flags = 0; // no direct Vulkan usage flag
+			break;
+
+		case AttachmentResourceInstanceUsage::INPUT_ATTACHMENT_USAGE:
+			flags = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+			break;
+
+		default:
+			flags = 0;
+			break;
+		}
+
+		return flags;
+	}
 
 	VkAttachmentLoadOp ConvertAttachLoadOpToVulkanLoadOp(AttachmentLoadUsage loadOp)
 	{
@@ -525,26 +572,25 @@ void RenderInstance::DestroySwapChainAttachments()
 
 	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
 
-	for (uint32_t i = 0; i < maxMSAALevels; i++) 
+	for (uint32_t a = 0; a < attachmentGraphInstancesCount; a++) 
 	{
-		AttachmentGraphInstance* graph = &attachmentGraphsInstances[i];
+		AttachmentGraphInstance* graph = &attachmentGraphsInstances[a];
 		
-		for (uint32_t a = 0; a < graph->sampleLevels; a++)
+		for (uint32_t b = 0; b < graph->sampleLevels; b++)
 		{
-			AttachmentInstanceHolder* holder = &graph->instanceDescriptions[a];
-			for (uint32_t j = 0; j < graph->graphLayout->resourceCount; j++)
+			AttachmentInstanceRenderPass* holder = &graph->instanceDescriptions[b];
+			for (uint32_t c = 0; c < graph->graphLayout->resourceCount; c++)
 			{
-				AttachmentResourceInstance* inst = &holder->resources[j];
-				AttachmentResource* desc = &graph->graphLayout->resources[j];
+				AttachmentResourceInstance* inst = &holder->resources[c];
+				AttachmentResource* desc = &graph->graphLayout->resources[c];
 
 				if (desc->viewType == AttachmentViewType::SWAPCHAIN)
 					continue;
 
-				for (uint32_t g = 0; g < swc->imageCount; g++)
+				for (uint32_t d = 0; d < swc->imageCount; d++)
 				{
-
-					dev->DestroyImage(inst->attachmentImage[g]);
-					dev->DestroyImageView(inst->attachmentImageView[g]);
+					dev->DestroyImage(inst->attachmentImage[d]);
+					dev->DestroyImageView(inst->attachmentImageView[d]);
 				}
 			}
 		}
@@ -576,13 +622,9 @@ int RenderInstance::RecreateSwapChain() {
 
 int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph, int sampleStride, int sampleCount)
 {
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+	
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
-
-	VkFormat format = swapChain->GetSwapChainFormat();
-
-	VkFormat vkDepthFormat = API::ConvertImageFormatToVulkanFormat(depthFormat);
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[attachmentGraphInstancesCount];
 
@@ -590,46 +632,54 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph, int
 
 	graphInstance->sampleLevels = sampleStride;
 
-	graphInstance->instanceDescriptions = (AttachmentInstanceHolder*)storageAllocator->Allocate(sizeof(AttachmentInstanceHolder) * sampleStride);
+	graphInstance->instanceDescriptions = (AttachmentInstanceRenderPass*)storageAllocator->Allocate(sizeof(AttachmentInstanceRenderPass) * sampleStride);
 
 	graphInstance->graphLayout = graph;
 
+	graphInstance->renderTargetData = index;
+
+	AttachmentResource* resources = graph->resources;
+
 	for (int a = 0; a < sampleStride; a++)
 	{
-		AttachmentInstanceHolder* instHolder = &graphInstance->instanceDescriptions[a];
+		AttachmentInstanceRenderPass* perSampleAttachInstance = &graphInstance->instanceDescriptions[a];
 
-		instHolder->passes = (AttachmentInstanceRange*)storageAllocator->Allocate(sizeof(AttachmentInstanceRange) * graph->passesCount);
+		perSampleAttachInstance->passes = (AttachmentInstance**)storageAllocator->Allocate(sizeof(AttachmentInstance*) * graph->passesCount);
 
-		instHolder->resources = (AttachmentResourceInstance*)storageAllocator->Allocate(sizeof(AttachmentResourceInstance) * graph->resourceCount);
+		perSampleAttachInstance->resources = (AttachmentResourceInstance*)storageAllocator->Allocate(sizeof(AttachmentResourceInstance) * graph->resourceCount);
 
-		instHolder->sampleCount = sampleCount;
+		perSampleAttachInstance->sampleCount = sampleCount;
 
-		for (int i = 0; i < graph->passesCount; i++)
+		for (int b = 0; b < graph->passesCount; b++)
 		{
 
-			AttachmentHolder* holder = &graph->holders[i];
+			AttachmentRenderPass* currentPassDesc = &graph->holders[b];
 
-			int attachmentCount = holder->attachmentCount;
-
-			auto passIter = &instHolder->passes[i];
+			int attachmentCount = currentPassDesc->attachmentCount;
 
 			VKRenderPassBuilder rpb = dev->CreateRenderPassBuilder(attachmentCount, 1, 1);
 
-			uint32_t depthStencilIndex = 0;
+			uint32_t currDepthStencil = 0;
 
-			uint32_t resolveIndex = 0;
+			uint32_t currResolve = 0;
 
-			uint32_t numberOfColorattachments = 0;
+			uint32_t currPreserve = 0;
 
-			passIter->instances = (AttachmentInstance*)storageAllocator->Allocate(sizeof(AttachmentInstance) * attachmentCount);
+			uint32_t currInput = 0;
 
-			for (int j = 0; j < attachmentCount; j++)
+			uint32_t currColor = 0;
+
+			perSampleAttachInstance->passes[b] = (AttachmentInstance*)storageAllocator->Allocate(sizeof(AttachmentInstance) * attachmentCount);
+
+			AttachmentInstance* currentPassInstance = perSampleAttachInstance->passes[b];
+
+			for (int c = 0; c < attachmentCount; c++)
 			{
 				VkImageLayout referenceLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-				AttachmentDescription* desc = &holder->descs[j];
+				AttachmentDescription* desc = &currentPassDesc->descs[c];
 
-				VkFormat attachFormat = VK_FORMAT_UNDEFINED;
+				VkFormat attachFormat = API::ConvertImageFormatToVulkanFormat(resources[desc->resourceIndex].format);
 
 				VkAttachmentLoadOp stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE, dsvrtvLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
@@ -637,45 +687,48 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph, int
 
 				VkSampleCountFlagBits vkSampleCount = (VkSampleCountFlagBits)(desc->msaa ? sampleCount : VK_SAMPLE_COUNT_1_BIT);
 
-				int builderOffset = 0;
+				uint32_t vkRenderPassMappedIdx = 0;
+
+				AttachmentResourceInstance* currResource = &perSampleAttachInstance->resources[desc->resourceIndex];
+
+				currResource->attachmentImage = currResource->attachmentImageView = nullptr;
 
 				switch (desc->attachType)
 				{
 				case AttachmentDescriptionType::COLORATTACH:
 					referenceLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-					attachFormat = format;
+					currResource->usage = AttachmentResourceInstanceUsage::COLOR_ATTACHMENT_USAGE;
 					dsvrtvLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 					dsvrtvStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
-					builderOffset = numberOfColorattachments++;
+					vkRenderPassMappedIdx = currColor++;
 					break;
 				case AttachmentDescriptionType::RESOLVEATTACH:
 					referenceLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-					attachFormat = format;
+					currResource->usage = AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE;
 					dsvrtvLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 					dsvrtvStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
-					resolveIndex = (uint32_t)i;
-					builderOffset = (holder->colorCount + holder->depthStencilCount) + resolveIndex++;
+					vkRenderPassMappedIdx = (currentPassDesc->colorCount + currentPassDesc->depthStencilCount) + currResolve++;
 					break;
 				case AttachmentDescriptionType::DEPTHATTACH:
 					referenceLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
-					attachFormat = vkDepthFormat;
+					currResource->usage = AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE;
 					dsvrtvLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 					dsvrtvStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
-					builderOffset = (holder->colorCount) + depthStencilIndex++;
+					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				case AttachmentDescriptionType::DEPTHSTENCILATTACH:
 					referenceLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-					attachFormat = vkDepthFormat;
+					currResource->usage = AttachmentResourceInstanceUsage::DEPTH_STENCIL_ATTACHMENT_USAGE;
 					stencilLoad = dsvrtvLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 					stencilStore = dsvrtvStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
-					builderOffset = (holder->colorCount) + depthStencilIndex++;
+					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				case AttachmentDescriptionType::STENCILATTACH:
 					referenceLayout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
-					attachFormat = vkDepthFormat;
+					currResource->usage = AttachmentResourceInstanceUsage::STENCIL_ATTACHMENT_USAGE;
 					stencilLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 					stencilStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
-					builderOffset = (holder->colorCount) + depthStencilIndex++;
+					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				}
 
@@ -687,14 +740,14 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph, int
 					attachFormat, vkSampleCount,
 					dsvrtvLoad, dsvrtvStore,
 					stencilLoad, stencilStore,
-					srcLayout, dstLayout, (uint32_t)builderOffset
+					srcLayout, dstLayout, vkRenderPassMappedIdx, vkRenderPassMappedIdx
 				);
 
-				passIter->instances[builderOffset].descLayout = desc;
-				passIter->instances[builderOffset].attachmentResource = desc->resourceIndex;
+				currentPassInstance[vkRenderPassMappedIdx].descLayout = desc;
+				currentPassInstance[vkRenderPassMappedIdx].attachmentResource = desc->resourceIndex;
 			}
 
-			rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, numberOfColorattachments, resolveIndex, depthStencilIndex);
+			rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, currentPassDesc->colorCount, currentPassDesc->resolveCount, currentPassDesc->depthStencilCount);
 
 			rpb.CreateSubPassDependency(VK_SUBPASS_EXTERNAL, 0,
 				VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0,
@@ -704,6 +757,8 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph, int
 			rpb.CreateInfo();
 
 			renderPasses[index + (a)] = dev->CreateRenderPasses(rpb);
+
+			mainRenderTargets[index + (a)] = dev->CreateRenderTarget(renderPasses[index + (a)], swapChain->imageCount);
 
 		}
 
@@ -759,13 +814,164 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
+int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[graphIndex];
+
+	int baseRenderTarget = graphInstance->renderTargetData;
+
+	EntryHandle* attachmentViews = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * graphInstance->graphLayout->resourceCount);
+
+	for (int a = 0; a < graphInstance->sampleLevels; a++)
+	{
+		AttachmentInstanceRenderPass* holder = &graphInstance->instanceDescriptions[a];
+
+		for (int b = 0; b < graphInstance->graphLayout->resourceCount; b++)
+		{
+			AttachmentResourceInstance* resourceInst = &holder->resources[b];
+			AttachmentResource* resourceTempl = &graphInstance->graphLayout->resources[b];
+
+			if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
+			{
+				resourceInst->attachmentImageView = backBufferViews;
+			}
+			else
+			{
+				if (!resourceInst->attachmentImage)
+				{
+					resourceInst->attachmentImage = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
+				}
+
+				if (!resourceInst->attachmentImageView)
+				{
+					resourceInst->attachmentImageView = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
+				}
+
+				VkFormat attachmentFormat = API::ConvertImageFormatToVulkanFormat(resourceTempl->format);
+
+				switch (resourceInst->usage)
+				{
+
+				case AttachmentResourceInstanceUsage::COLOR_ATTACHMENT_USAGE:
+					for (int g = 0; g < imageCount; g++)
+					{
+						resourceInst->attachmentImage[g] = dev->CreateImage(
+							width, height,
+							1, attachmentFormat, 1,
+							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+							holder->sampleCount,
+							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+							VK_IMAGE_LAYOUT_UNDEFINED,
+							VK_IMAGE_TILING_OPTIMAL, 0,
+							VK_IMAGE_TYPE_2D, imagePools[0]
+						);
+
+						resourceInst->attachmentImageView[g]
+							=
+							dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+					}
+					break;
+				case AttachmentResourceInstanceUsage::DEPTH_STENCIL_ATTACHMENT_USAGE:
+					for (int g = 0; g < imageCount; g++)
+					{
+						resourceInst->attachmentImage[g] =
+							dev->CreateImage(width, height,
+								1, attachmentFormat, 1,
+								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+								holder->sampleCount,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+
+						resourceInst->attachmentImageView[g] = dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
+					}
+					break;
+				case AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE:
+					for (int g = 0; g < imageCount; g++)
+					{
+						resourceInst->attachmentImage[g] =
+							dev->CreateImage(width, height,
+								1, attachmentFormat, 1,
+								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+								holder->sampleCount,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+
+						resourceInst->attachmentImageView[g] = dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
+					}
+					break;
+
+				case AttachmentResourceInstanceUsage::STENCIL_ATTACHMENT_USAGE:
+					for (int g = 0; g < imageCount; g++)
+					{
+						resourceInst->attachmentImage[g] =
+							dev->CreateImage(width, height,
+								1, attachmentFormat, 1,
+								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+								holder->sampleCount,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+
+						resourceInst->attachmentImageView[g] = dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
+					}
+					break;
+
+				case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
+
+					break;
+
+				case AttachmentResourceInstanceUsage::PRESERVE_ATTACHMENT_USAGE:
+					//flags = 0; // no direct Vulkan usage flag
+					break;
+
+				case AttachmentResourceInstanceUsage::INPUT_ATTACHMENT_USAGE:
+					//flags = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+					break;
+
+
+
+				}
+			}
+		}
+
+		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[baseRenderTarget+a]);
+
+		for (int c = 0; c < graphInstance->graphLayout->passesCount; c++)
+		{
+			AttachmentInstance* passInstance = holder->passes[c];
+			AttachmentRenderPass* passDescriptions = &graphInstance->graphLayout->holders[c];
+
+			int attachmentCount = passDescriptions->attachmentCount;
+
+			for (int d = 0; d < imageCount; d++)
+			{
+				for (int e = 0; e < attachmentCount; e++)
+				{
+					AttachmentInstance* attachInst = &passInstance[e];
+					
+					AttachmentResourceInstance* resourceInst = &holder->resources[attachInst->attachmentResource];
+					
+					attachmentViews[e] = resourceInst->attachmentImageView[d];
+				}
+
+				renderTarget->framebufferIndices[d] =
+					dev->CreateFrameBuffer(
+						attachmentViews,
+						attachmentCount,
+						renderPasses[baseRenderTarget + a],
+						{ width, height }
+					);
+			}
+		}
+	}
+
+	return 0;
+}
+
 void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recreate)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
-
-	VkFormat vkDepthFormat = API::ConvertImageFormatToVulkanFormat(depthFormat);
 
 	if (recreate)
 	{
@@ -777,161 +983,14 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 	{
 		swapChain->CreateSwapChain(width, height);
 
-		for (uint32_t i = 0; i < maxMSAALevels; i++)
-		{
-			mainRenderTargets[i] = dev->CreateRenderTarget(renderPasses[i], swapChain->imageCount);
-			
-			swapchainRenderTargets[i] = dev->CreateRenderTargetData(mainRenderTargets[i], 2);
-		}
 	}
 	
-	EntryHandle* views = swapChain->CreateSwapchainViews();
 
-	EntryHandle* attachmentViews = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * 5);
-
-	uint32_t renderTargetIndex = 0;
-
-	for (uint32_t i = 0; i < attachmentGraphInstancesCount; i++)
+	EntryHandle* backBuffers = swapChain->CreateSwapchainViews();
+	
+	for (int i = 0; i < attachmentGraphInstancesCount; i++)
 	{
-		AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[i];
-
-		for (int j = 0; j < graphInstance->sampleLevels; j++)
-		{
-			AttachmentInstanceHolder* holder = &graphInstance->instanceDescriptions[j];
-
-			for (int g = 0; g < graphInstance->graphLayout->resourceCount; g++)
-			{
-				AttachmentResourceInstance* resourceInst = &holder->resources[g];
-				AttachmentResource* resourceTempl = &graphInstance->graphLayout->resources[g];
-
-				if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
-				{
-					resourceInst->attachmentImageView = views;
-				}
-				else
-				{
-					if (!resourceInst->attachmentImage)
-					{
-						resourceInst->attachmentImage = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * swapChain->imageCount);
-					}
-
-					if (!resourceInst->attachmentImageView)
-					{
-						resourceInst->attachmentImageView = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * swapChain->imageCount);
-					}
-
-					switch (resourceTempl->format)
-					{
-					case ImageFormat::B8G8R8A8:
-
-
-						for (int g = 0; g < swapChain->imageCount; g++)
-						{
-							resourceInst->attachmentImage[g] = dev->CreateImage(
-								width, height,
-								1, swapChain->GetSwapChainFormat(), 1,
-								VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-								VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-								holder->sampleCount,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-								VK_IMAGE_LAYOUT_UNDEFINED,
-								VK_IMAGE_TILING_OPTIMAL, 0,
-								VK_IMAGE_TYPE_2D, imagePools[0]
-							);
-
-							resourceInst->attachmentImageView[g]
-								=
-								dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, swapChain->GetSwapChainFormat(), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-						}
-						break;
-
-
-
-					case ImageFormat::D24UNORMS8STENCIL:
-						for (int g = 0; g < swapChain->imageCount; g++)
-						{
-							resourceInst->attachmentImage[g] =
-								dev->CreateImage(width, height,
-									1, vkDepthFormat, 1,
-									VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-									holder->sampleCount,
-									VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
-
-							resourceInst->attachmentImageView[g] = dev->CreateImageView(resourceInst->attachmentImage[g], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
-						}
-						break;
-						/*
-					case AttachmentDescriptionType::DEPTHSTENCILATTACH:
-						for (int g = 0; g < swapChain->imageCount; g++)
-						{
-							instCont->attachmentImage[g] = dev->CreateImage(width, height,
-								1, vkDepthFormat, 1,
-								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-								instHolder->sampleCount,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
-
-							instCont->attachmentImageView[g] = dev->CreateImageView(instCont->attachmentImage[g], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-							dev->TransitionImageLayout(
-								instCont->attachmentImage[g], vkDepthFormat,
-								VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-								1, 1
-							);
-						}
-						break;
-					case AttachmentDescriptionType::STENCILATTACH:
-						for (int g = 0; g < swapChain->imageCount; g++)
-						{
-							instCont->attachmentImage[g] =
-								dev->CreateImage(width, height,
-									1, vkDepthFormat, 1,
-									VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-									instHolder->sampleCount,
-									VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
-
-							instCont->attachmentImageView[g] = dev->CreateImageView(instCont->attachmentImage[g], 1, 1, vkDepthFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-							dev->TransitionImageLayout(
-								instCont->attachmentImage[g], vkDepthFormat,
-								VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
-								1, 1
-							);
-						}
-						break;
-					}
-					*/
-					}
-				}
-			}
-
-
-
-			auto renderTarget = dev->GetRenderTarget(mainRenderTargets[renderTargetIndex++]);
-
-			for (int f = 0; f < graphInstance->graphLayout->passesCount; f++)
-			{
-				AttachmentInstanceRange* instanceRange = &holder->passes[f];
-				AttachmentHolder* holderTempl = &graphInstance->graphLayout->holders[f];
-				for (uint32_t b = 0; b < swapChain->imageCount; b++)
-				{
-					for (int g = 0; g < holderTempl->attachmentCount; g++)
-					{
-						AttachmentInstance* instCont = &instanceRange->instances[g];
-						AttachmentResourceInstance* resourceInst = &holder->resources[instCont->attachmentResource];
-						attachmentViews[g] = resourceInst->attachmentImageView[b];
-					}
-
-					renderTarget->framebufferIndices[b] =
-						dev->CreateFrameBuffer(
-							attachmentViews,
-							holderTempl->attachmentCount,
-							renderPasses[renderTargetIndex - 1],
-							swapChain->swapChainExtent
-						);
-				}
-			}
-		}	
+		CreateAttachmentResources(i, swapChain->imageCount, backBuffers, width, height);
 	}
 }
 
@@ -2175,7 +2234,10 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 
 
 	for (uint32_t i = 0; i < maxMSAALevels; i++)
+	{
+		swapchainRenderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
 		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
+	}
 	
 }
 

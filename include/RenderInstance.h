@@ -51,6 +51,8 @@ struct RenderInstance
 
 	int RecreateSwapChain();
 
+	int CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height);
+
 	int CreateRenderPass(uint32_t index, AttachmentGraph* graph, int sampleStride, int sampleCount);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);

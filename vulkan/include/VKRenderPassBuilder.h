@@ -11,7 +11,7 @@ struct VKRenderPassBuilder
 		VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
 		VkAttachmentStoreOp storeOp, VkAttachmentLoadOp stencilLoadOp,
 		VkAttachmentStoreOp stencilStoreOp, VkImageLayout initialLayout,
-		VkImageLayout finalLayout, uint32_t binding);
+		VkImageLayout finalLayout, uint32_t binding, uint32_t insertionIndex);
 
 	void CreateSubPassDependency(uint32_t srcSubpass, uint32_t dstSubpass,
 		VkPipelineStageFlags srcStageMask, VkAccessFlags srcAccessFlags,

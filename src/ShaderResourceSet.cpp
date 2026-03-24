@@ -1574,7 +1574,7 @@ void CreateAttachmentGraph(const std::string& filename, AttachmentGraph* graph)
 
 	int stride = 0;
 
-	AttachmentHolder* currentHolder = nullptr;
+	AttachmentRenderPass* currentHolder = nullptr;
 
 	while (curr < dataSize)
 	{
@@ -1784,7 +1784,7 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 }
 
 
-int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentHolder* holder)
+int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder)
 {
 	unsigned long hashes[6];
 

@@ -576,7 +576,7 @@ struct AttachmentDescription
 
 
 
-struct AttachmentHolder
+struct AttachmentRenderPass
 {
 	int attachmentCount;
 	int resolveCount;
@@ -589,14 +589,26 @@ struct AttachmentGraph
 {
 	int passesCount;
 	int resourceCount;
-	AttachmentHolder holders[4];
+	AttachmentRenderPass holders[4];
 	AttachmentResource resources[12];
+};
+
+enum class AttachmentResourceInstanceUsage
+{
+	COLOR_ATTACHMENT_USAGE = 1,
+	DEPTH_ATTACHMENT_USAGE = 2,
+	STENCIL_ATTACHMENT_USAGE = 4,
+	RESOLVE_ATTACHMENT_USAGE = 8,
+	PRESERVE_ATTACHMENT_USAGE = 16,
+	INPUT_ATTACHMENT_USAGE = 32,
+	DEPTH_STENCIL_ATTACHMENT_USAGE = 64,
 };
 
 struct AttachmentResourceInstance
 {
 	EntryHandle* attachmentImage;
 	EntryHandle* attachmentImageView;
+	AttachmentResourceInstanceUsage usage;
 };
 
 struct AttachmentInstance
@@ -605,21 +617,17 @@ struct AttachmentInstance
 	int attachmentResource;
 };
 
-struct AttachmentInstanceRange
-{
-	AttachmentInstance* instances;
-};
-
-struct AttachmentInstanceHolder
+struct AttachmentInstanceRenderPass
 {
 	AttachmentResourceInstance* resources;
-	AttachmentInstanceRange* passes;
+	AttachmentInstance** passes;
 	int sampleCount;
 };
 
 struct AttachmentGraphInstance
 {
 	AttachmentGraph* graphLayout;
-	AttachmentInstanceHolder* instanceDescriptions; //x is defined sample range
+	AttachmentInstanceRenderPass* instanceDescriptions; //x is defined sample range
 	int sampleLevels;
+	int renderTargetData;
 };

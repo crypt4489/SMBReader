@@ -22,7 +22,7 @@ void VKRenderPassBuilder::CreateAttachment(VkImageLayout imageReferenceLayout, V
 	VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
 	VkAttachmentStoreOp storeOp, VkAttachmentLoadOp stencilLoadOp,
 	VkAttachmentStoreOp stencilStoreOp, VkImageLayout initialLayout,
-	VkImageLayout finalLayout, uint32_t binding)
+	VkImageLayout finalLayout, uint32_t binding, uint32_t insertionIndex)
 {
 	VkAttachmentDescription attachmentDescription{};
 	attachmentDescription.format = format;
@@ -39,7 +39,7 @@ void VKRenderPassBuilder::CreateAttachment(VkImageLayout imageReferenceLayout, V
 	attachmentRef.layout = imageReferenceLayout;
 
 	attachments[binding] = attachmentDescription;
-	references[binding] = attachmentRef;
+	references[insertionIndex] = attachmentRef;
 }
 
 void VKRenderPassBuilder::CreateSubPassDependency(uint32_t srcSubpass, uint32_t dstSubpass,
