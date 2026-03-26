@@ -17,9 +17,9 @@ struct VKSwapChain
 
 	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
 		uint32_t requestImages, uint32_t maxFramesInFlight,
-		VK::Utils::SwapChainSupportDetails& swapChainSupport);
+		VK::Utils::SwapChainSupportDetails& swapChainSupport, VkFormat requestedFormat);
 
-	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount);
+	void SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount, VkFormat requestedFormat);
 
 	void RecreateSwapChain(uint32_t width, uint32_t height);
 

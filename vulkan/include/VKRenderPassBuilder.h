@@ -21,6 +21,8 @@ struct VKRenderPassBuilder
 
 	void CreateInfo();
 
+	void SetSampleCount(uint32_t attachmentIndex, VkSampleCountFlagBits sampleFlags);
+
 	uint32_t subpassdesccount, subpassdesccounter;
 
 	uint32_t subpassdepcount, subpassdepcounter;

@@ -408,7 +408,7 @@ static int HandleVertexComponentInput(char* fileData, int size, int currentLocat
 static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);
 
 
-void CreateAttachmentGraph(const std::string& filename, AttachmentGraph* holder);
+void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* holder);
 static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
 static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description);
 static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder);

@@ -156,11 +156,15 @@ struct RenderTarget
 {
 	RenderTarget() = default;
 	
-	RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* data);
+	RenderTarget(EntryHandle renderPass, uint32_t imageCount, uint32_t _wSize, uint32_t _hSize, uint32_t _wOff, uint32_t _hOff, void* data);
 
 	EntryHandle renderPassIndex;
-	uint32_t count;
 	EntryHandle* framebufferIndices;
+	uint32_t count;
+	uint32_t width;
+	uint32_t height;
+	uint32_t wOffset;
+	uint32_t hOffset;
 };
 
 enum VKQueueCapabilities
@@ -389,7 +393,7 @@ struct VKDevice
 
 	VKRenderPassBuilder CreateRenderPassBuilder(uint32_t numAttaches, uint32_t numDeps, uint32_t numDescs);
 
-	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount);
+	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount, uint32_t width, uint32_t height, uint32_t wOffset, uint32_t hOffset);
 
 	EntryHandle* CreateReusableCommandBuffers(
 		uint32_t numberOfCommandBuffers,
@@ -432,7 +436,7 @@ struct VKDevice
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
-	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight);
+	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat);
 
 	
 	//GETTERS

@@ -53,7 +53,7 @@ struct RenderInstance
 
 	int CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height);
 
-	int CreateRenderPass(uint32_t index, AttachmentGraph* graph, int sampleStride, int sampleCount);
+	int CreateRenderPass(uint32_t index, AttachmentGraph* graph);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
@@ -82,12 +82,12 @@ struct RenderInstance
 	EntryHandle CreateImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type, int poolIndex);
+		uint32_t mipLevels, ImageFormat type, int poolIndex, EntryHandle samplerIndex);
 
 	EntryHandle CreateCubeImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat format, int poolIndex);
+		uint32_t mipLevels, ImageFormat format, int poolIndex, EntryHandle samplerIndex);
 
 	EntryHandle CreateStorageImage(
 		uint32_t width, uint32_t height,
@@ -95,10 +95,7 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(WindowManager* window, 
-		std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, 
-		std::string* pipelineDescriptions, int pipelineDescriptionsCount,
-		std::string* attachmentLayouts, int attachmentGraphCount);
+	void CreateVulkanRenderer(WindowManager* window,  int attachmentGraphCount);
 
 	uint32_t GetSwapChainHeight();
 
@@ -152,6 +149,18 @@ struct RenderInstance
 
 	void SwapUpdateCommands();
 
+	EntryHandle CreateSampler(uint32_t maxMipsLevel);
+
+	int CreateRSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
+	int CreateDSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
+
+	ImageFormat FindSupportedBackBufferColorFormat(ImageFormat* requestedFormats, uint32_t requestSize);
+	ImageFormat FindSupportedDepthFormat(ImageFormat* requestedFormats, uint32_t requestSize);
+
+	int CreateAttachmentGraph(std::string attachmentLayout, int* subAttachCount);
+
+	void CreateSwapchain(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -161,8 +170,12 @@ struct RenderInstance
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 	EntryHandle graphicsOTQ, computeOTQ;
 
-	uint32_t currentMSAALevel = 0;
+	
 	uint32_t maxMSAALevels = 0;
+
+
+	uint32_t currentFrameGraph = 0;
+	uint32_t currentFrameGraphMSAALevel = 0;
 
 	std::array<EntryHandle, 5> swapchainRenderTargets{};
 	std::array<EntryHandle, 5> renderPasses{};
@@ -173,9 +186,6 @@ struct RenderInstance
 	WindowManager *windowMan = nullptr;
 
 	uint32_t currentFrame = 0;
-
-	ImageFormat depthFormat = ImageFormat::IMAGE_UNKNOWN;
-	ImageFormat colorFormat = ImageFormat::IMAGE_UNKNOWN;
 
 	ShaderGraphsHolder<50, 60> vulkanShaderGraphs;
 	
@@ -194,9 +204,6 @@ struct RenderInstance
 
 	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
 
-	int width = 0; 
-	int height = 0;
-
 	int minUniformAlignment;
 	int minStorageAlignment; 
 
@@ -211,8 +218,6 @@ struct RenderInstance
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
 
 	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
-
-	EntryHandle samplerIndex;
 
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos{};
 
@@ -232,6 +237,8 @@ struct RenderInstance
 	AttachmentGraphInstance* attachmentGraphsInstances;
 
 	int attachmentGraphInstancesCount = 0;
+
+	void SetFrameGraph(uint32_t index);
 };
 
 namespace GlobalRenderer {

@@ -1542,7 +1542,7 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 }
 #include <vector>
 
-void CreateAttachmentGraph(const std::string& filename, AttachmentGraph* graph)
+void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph)
 {
 
 	FileID fileID = FileManager::OpenFile(filename, READ);

@@ -105,6 +105,8 @@ struct VKInstance
 
 	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
 
+	bool ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requestedFormat);
+
 	void CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize);
 
 	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);

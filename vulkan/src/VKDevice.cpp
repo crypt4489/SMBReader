@@ -219,7 +219,7 @@ void VKMemoryAllocator::Reset()
 }
 
 
-RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* data)
+RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, uint32_t _wSize, uint32_t _hSize, uint32_t _wOff, uint32_t _hOff, void* data)
 {
 	renderPassIndex = renderPass;
 	count = imageCount;
@@ -227,6 +227,11 @@ RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, void* da
 	EntryHandle* head = reinterpret_cast<EntryHandle*>(data);
 
 	framebufferIndices = head;
+
+	width = _wSize;
+	height = _hSize;
+	wOffset = _wOff;
+	hOffset = _hOff;
 }
 
 DeviceOwnedAllocator::DeviceOwnedAllocator() {
@@ -1438,7 +1443,7 @@ VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint
 	return { this, numAttaches, numDeps, numDescs };
 }
 
-EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount)
+EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount, uint32_t width, uint32_t height, uint32_t wOffset, uint32_t hOffset)
 {
 	//std::shared_lock lock(deviceLock);
 	auto renderTarget = reinterpret_cast<RenderTarget*>(AllocFromPerDeviceData(sizeof(RenderTarget)));
@@ -1449,7 +1454,7 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 
 	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount);
 	
-	std::construct_at(renderTarget, renderPassIndex, framebufferCount, data);
+	std::construct_at(renderTarget, renderPassIndex, framebufferCount, width, height, wOffset, hOffset, data);
 
 	return ret;
 }
@@ -1769,7 +1774,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	return ret;
 }
 
-EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight)
+EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat)
 {
 
 	//std::shared_lock lock(deviceLock);
@@ -1778,7 +1783,7 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport);
+	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
 
 	EntryHandle index = AddVkTypeToEntry(swc, VulkSwapChain);
 

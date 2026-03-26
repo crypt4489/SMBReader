@@ -6,16 +6,16 @@
 #include "VKUtilities.h"
 
 
-static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount) {
+static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount, VkFormat requestedFormat) {
 	for (uint32_t i = 0; i < formatCount; i++)
 	{
 		VkSurfaceFormatKHR availableFormat = availableFormats[i];
-		if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
 			return availableFormat;
 		}
 	}
 
-	return availableFormats[0];
+	return { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_MAX_ENUM_KHR };
 }
 
 static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, size_t presentCount) {
@@ -66,7 +66,7 @@ static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
 
 
 VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator, uint32_t requestImages, uint32_t maxFrameInFlight,
-	VK::Utils::SwapChainSupportDetails& swapChainSupport)
+	VK::Utils::SwapChainSupportDetails& swapChainSupport, VkFormat requestedFormat)
 	:
 	device(_d), surface(_surface), maxFrameInFlight(maxFrameInFlight) {
 
@@ -76,7 +76,7 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocat
 			(PFN_vkReleaseSwapchainImagesEXT)
 			vkGetDeviceProcAddr(device->device, "vkReleaseSwapchainImagesEXT");
 	}
-	SetSwapChainProperties(swapChainSupport, requestImages);
+	SetSwapChainProperties(swapChainSupport, requestImages, requestedFormat);
 
 
 	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
@@ -87,13 +87,12 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocat
 }
 
 
-void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount)
+void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount, VkFormat requestedFormat)
 {
-	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats.data(), swapChainSupport.formats.size());
+	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats.data(), swapChainSupport.formats.size(), requestedFormat);
 	presentMode = chooseSwapPresentMode(swapChainSupport.presentModes.data(), swapChainSupport.presentModes.size());
 	
 	preTransform = swapChainSupport.capabilities.currentTransform;
-
 
 	if (!_imageCount)
 	{

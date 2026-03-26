@@ -370,6 +370,9 @@ static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(Thre
 static int AddLight(LightSource& lightDesc, LightType type);
 static void UpdateLight(LightSource& lightDesc, int lightIndex);
 
+
+static EntryHandle mainLinearSampler = EntryHandle();
+
 static void CreateUniformGrid()
 {
 	float div = (float)(mainGrid.numberOfDivision);
@@ -772,7 +775,7 @@ void ApplicationLoop::Execute()
 
 		samplerUpdate.resourceCount = 1;
 		samplerUpdate.resourceDstBegin = 0;
-		samplerUpdate.resourceHandles = &GlobalRenderer::gRenderInstance->samplerIndex;
+		samplerUpdate.resourceHandles = &mainLinearSampler;
 
 		GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
@@ -1987,7 +1990,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				texture.height,
 				texture.miplevels,
 				format,
-				GetPoolIndexByFormat(format)
+				GetPoolIndexByFormat(format),
+				mainLinearSampler
 			);
 
 		GlobalRenderer::gRenderInstance->UpdateImageMemory(
@@ -2677,7 +2681,28 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance = new RenderInstance(&RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
 
-	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, layouts.data(), layouts.size(), pds.data(), pds.size(), mainLayoutAttachments.data(), mainLayoutAttachments.size());
+	GlobalRenderer::gRenderInstance->CreateVulkanRenderer(mainWindow, mainLayoutAttachments.size());
+
+	ImageFormat requestedColorFormats = ImageFormat::B8G8R8A8;
+
+	ImageFormat mainColorFormat = GlobalRenderer::gRenderInstance->FindSupportedBackBufferColorFormat(&requestedColorFormats, 1);
+
+	ImageFormat requestedDSVFormats = ImageFormat::D24UNORMS8STENCIL;
+
+	ImageFormat mainDepthFormat = GlobalRenderer::gRenderInstance->FindSupportedDepthFormat(&requestedDSVFormats, 1);
+
+	int mainRTVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(512 * MiB, mainColorFormat, 4096, 4096);
+
+	int mainDSVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(512 * MiB, mainDepthFormat, 4096, 4096);
+
+	int graphNoMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[0], nullptr);
+	int graphMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[1], nullptr);
+
+	GlobalRenderer::gRenderInstance->CreateSwapchain(mainColorFormat, 800, 600);
+
+	GlobalRenderer::gRenderInstance->CreatePipelines(layouts.data(), layouts.size(), pds.data(), pds.size());
+
+	mainLinearSampler = GlobalRenderer::gRenderInstance->CreateSampler(7);
 
 	CreateTexturePools();
 
@@ -2898,7 +2923,8 @@ EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioT
 			details->height,
 			details->miplevels,
 			details->type,
-			loop->GetPoolIndexByFormat(details->type));
+			loop->GetPoolIndexByFormat(details->type),
+			mainLinearSampler);
 
 	GlobalRenderer::gRenderInstance->UpdateImageMemory(
 		details->data,
@@ -2965,7 +2991,8 @@ int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
 			details->height,
 			details->miplevels,
 			details->type,
-			loop->GetPoolIndexByFormat(details->type));
+			loop->GetPoolIndexByFormat(details->type),
+			mainLinearSampler);
 
 	GlobalRenderer::gRenderInstance->UpdateImageMemory(
 		details->data,
@@ -3020,6 +3047,14 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 	if (keyActions[KC_ONE].state == PRESSED)
 	{
 		GlobalRenderer::gRenderInstance->DecreaseMSAA();
+	}
+
+	static int currentFrameGraphIndex = 0;
+
+	if (keyActions[KC_Q].state == PRESSED)
+	{
+		currentFrameGraphIndex ^= 1;
+		GlobalRenderer::gRenderInstance->SetFrameGraph(currentFrameGraphIndex);
 	}
 }
 

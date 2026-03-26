@@ -509,6 +509,7 @@ struct PipelineHandle
 	int numHandles;
 	int graphIndex;
 	int graphCount;
+	int renderPassIndex;
 };
 
 
@@ -561,6 +562,8 @@ struct AttachmentResource
 {
 	AttachmentViewType viewType;
 	ImageFormat format;
+	int sampLo;
+	int sampHi;
 };
 
 struct AttachmentDescription
@@ -606,9 +609,12 @@ enum class AttachmentResourceInstanceUsage
 
 struct AttachmentResourceInstance
 {
-	EntryHandle* attachmentImage;
-	EntryHandle* attachmentImageView;
+	EntryHandle** attachmentImage;
+	EntryHandle** attachmentImageView;
 	AttachmentResourceInstanceUsage usage;
+	int sampLo;
+	int sampHi;
+	int imageCount;
 };
 
 struct AttachmentInstance
@@ -617,17 +623,17 @@ struct AttachmentInstance
 	int attachmentResource;
 };
 
-struct AttachmentInstanceRenderPass
+struct AttachmentRenderPassInstance
 {
-	AttachmentResourceInstance* resources;
-	AttachmentInstance** passes;
-	int sampleCount;
+	AttachmentInstance* attachInst;
+	int attachInstCount;
+	int maxSampleCount;
 };
 
 struct AttachmentGraphInstance
 {
 	AttachmentGraph* graphLayout;
-	AttachmentInstanceRenderPass* instanceDescriptions; //x is defined sample range
-	int sampleLevels;
+	AttachmentResourceInstance* resources;
+	AttachmentRenderPassInstance* passes;
 	int renderTargetData;
 };

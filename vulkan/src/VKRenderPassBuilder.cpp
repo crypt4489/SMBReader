@@ -18,6 +18,11 @@ VKRenderPassBuilder::VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachmen
 	references = (VkAttachmentReference*)std::next(attachments, numberofattachments);
 }
 
+void VKRenderPassBuilder::SetSampleCount(uint32_t attachmentIndex, VkSampleCountFlagBits sampleFlags)
+{
+	attachments[attachmentIndex].samples = sampleFlags;
+}
+
 void VKRenderPassBuilder::CreateAttachment(VkImageLayout imageReferenceLayout, VkFormat format,
 	VkSampleCountFlagBits sampleCount, VkAttachmentLoadOp loadOp,
 	VkAttachmentStoreOp storeOp, VkAttachmentLoadOp stencilLoadOp,

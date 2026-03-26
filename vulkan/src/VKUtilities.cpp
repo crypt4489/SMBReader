@@ -182,7 +182,7 @@ namespace VK {
 					}
 				}
 
-				throw std::runtime_error("failed to find supported format!");
+				return VK_FORMAT_UNDEFINED;
 		}
 
 		VkShaderModule createShaderModule(VkDevice& device, char* code, size_t size) {

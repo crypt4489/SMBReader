@@ -96,6 +96,23 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDev
 	return ret;
 }
 
+bool VKInstance::ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requestedFormat)
+{
+	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
+	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
+
+	for (int i = 0; i < ret.formats.size(); i++)
+	{
+		VkSurfaceFormatKHR availableFormat = ret.formats[i];
+		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 void VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 {
 	VkWin32SurfaceCreateInfoKHR infoStruct{};
