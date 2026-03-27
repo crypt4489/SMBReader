@@ -1673,7 +1673,7 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 	int stackIter = 0;
 
 	description->attachType = descType;
-	description->msaa = 0;
+	
 
 	while (attrSize > stackIter)
 	{
@@ -1760,11 +1760,7 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			break;
 		}
 		
-		case hash("msaa"):
-		{
-			description->msaa = 1;
-			break;
-		}
+		
 
 		case hash("resource"):
 		{
@@ -1818,6 +1814,8 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 
 	int stackIter = 0;
 
+	resource->msaa = 0;
+
 	while (attrSize > stackIter)
 	{
 		unsigned long code = hashes[stackIter];
@@ -1849,6 +1847,11 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 				resource->format = ImageFormat::D24UNORMS8STENCIL;
 				break;
 			}
+			break;
+		}
+		case hash("msaa"):
+		{
+			resource->msaa = 1;
 			break;
 		}
 		default:

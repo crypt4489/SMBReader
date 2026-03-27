@@ -2700,9 +2700,32 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->CreateSwapchain(mainColorFormat, 800, 600);
 
-	GlobalRenderer::gRenderInstance->CreatePipelines(layouts.data(), layouts.size(), pds.data(), pds.size());
+	GlobalRenderer::gRenderInstance->CreatePipelines(pds.data(), pds.size());
+
+	GlobalRenderer::gRenderInstance->CreateShaderGraphs(layouts.data(), layouts.size());
 
 	mainLinearSampler = GlobalRenderer::gRenderInstance->CreateSampler(7);
+
+	std::array<int, 2> frameGraphs = { 0, 1 };
+	std::array<int, 2> frameRenderPassSelection = { 0, 0 };
+
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(0, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(1, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(5, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(13, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(14, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(2);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(3);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(4);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(6);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(7);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(8);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(9);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(10);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(11);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(12);
 
 	CreateTexturePools();
 

@@ -507,9 +507,7 @@ struct PipelineHandle
 	int group;
 	int indexForHandles;
 	int numHandles;
-	int graphIndex;
-	int graphCount;
-	int renderPassIndex;
+	int pipelineIdentifierGroup;
 };
 
 
@@ -562,8 +560,7 @@ struct AttachmentResource
 {
 	AttachmentViewType viewType;
 	ImageFormat format;
-	int sampLo;
-	int sampHi;
+	int msaa;
 };
 
 struct AttachmentDescription
@@ -574,7 +571,6 @@ struct AttachmentDescription
 	ImageLayout srcLayout;
 	ImageLayout dstLayout;
 	int resourceIndex;
-	int msaa;
 };
 
 
@@ -628,6 +624,8 @@ struct AttachmentRenderPassInstance
 	AttachmentInstance* attachInst;
 	int attachInstCount;
 	int maxSampleCount;
+	int baseRenderTargetData;
+	int baseRenderPassData;
 };
 
 struct AttachmentGraphInstance
@@ -635,5 +633,16 @@ struct AttachmentGraphInstance
 	AttachmentGraph* graphLayout;
 	AttachmentResourceInstance* resources;
 	AttachmentRenderPassInstance* passes;
-	int renderTargetData;
+	int consecutiveRenderPassBase;
+	int consecutiveRenderTargetsBase;
+};
+
+
+struct PipelineInstanceData
+{
+	int frameGraphIndices[4];
+	int frameGraphRenderPasses[4];
+	int frameGraphPipelineIndices[4];
+	int frameGraphCount;
+	int pipelineCount;
 };

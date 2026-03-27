@@ -53,7 +53,9 @@ struct RenderInstance
 
 	int CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height);
 
-	int CreateRenderPass(uint32_t index, AttachmentGraph* graph);
+	int CreateFrameGraphInstance(AttachmentGraph* graph);
+
+	int CreateRenderPass(uint32_t index, AttachmentGraphInstance* graph);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
@@ -63,7 +65,7 @@ struct RenderInstance
 
 	void WaitOnRender();
 
-	void CreatePipelines(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount);
+	void CreatePipelines(std::string* pipelineDescriptions, int pipelineDescriptionsCount);
 
 	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
 
@@ -137,7 +139,7 @@ struct RenderInstance
 
 	void ReadData(int handle, void* dest, int size, int offset);
 
-	void CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer);
+	int CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer, AttachmentGraphInstance* graphInstance, uint32_t graphRenderPassIndex);
 
 	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
 
@@ -160,6 +162,11 @@ struct RenderInstance
 	int CreateAttachmentGraph(std::string attachmentLayout, int* subAttachCount);
 
 	void CreateSwapchain(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
+
+	void CreateShaderGraphs(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount);
+
+	int CreateGraphicRenderStateObject(int shaderGraphIndex, int pipelineDescriptionIndex, int* frameGraphAttachments, int* perFrameRenderPassSelection, int frameGraphCount);
+	int CreateComputePipelineStateObject(int shaderGraphIndex);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
@@ -192,6 +199,9 @@ struct RenderInstance
 	ShaderResourceManager<50> descriptorManager;
 
 	std::array<EntryHandle*, 25> pipelinesIdentifier{};
+	std::array<PipelineInstanceData, 25> pipelinesInstancesInfo{};
+
+
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
 
 	RenderAllocationHolder<100> allocations{};
@@ -199,8 +209,6 @@ struct RenderInstance
 	ArrayAllocator<EntryHandle, 100> renderStateObjects{};
 
 	ArrayAllocator<EntryHandle, 100> computeStateObjects{};
-
-	ArrayAllocator<int, 100> graphIndices{};
 
 	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
 
@@ -237,6 +245,8 @@ struct RenderInstance
 	AttachmentGraphInstance* attachmentGraphsInstances;
 
 	int attachmentGraphInstancesCount = 0;
+
+	int pipelineIdentifierCount = 0;
 
 	void SetFrameGraph(uint32_t index);
 };

@@ -633,18 +633,20 @@ int RenderInstance::RecreateSwapChain() {
 	return ret;
 }
 
-int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
+int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 {
+
+	static int renderTargetDataAlloc = 0;
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[attachmentGraphInstancesCount];
 
 	attachmentGraphInstancesCount++;
 
-
 	graphInstance->graphLayout = graph;
 
-	graphInstance->renderTargetData = index;
+	graphInstance->consecutiveRenderTargetsBase = renderTargetDataAlloc;
 
 	AttachmentResource* resources = graph->resources;
 
@@ -652,11 +654,95 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 
 	graphInstance->resources = (AttachmentResourceInstance*)storageAllocator->Allocate(sizeof(AttachmentResourceInstance) * graph->resourceCount);
 
-	int totalRenderPassesCreated = 0;
+	int totalRenderTargetsCreated = 0;
 
 	for (int b = 0; b < graph->passesCount; b++)
 	{
 
+		AttachmentRenderPass* currentPassDesc = &graph->holders[b];
+
+		int attachmentCount = currentPassDesc->attachmentCount;
+
+		AttachmentRenderPassInstance* rpInst = &graphInstance->passes[b];
+
+		AttachmentInstance* currentPassInstance = rpInst->attachInst = (AttachmentInstance*)storageAllocator->Allocate(sizeof(AttachmentInstance) * attachmentCount);
+
+		rpInst->attachInstCount = attachmentCount;
+
+		int sampLo = 1, sampHi = 1;
+
+		for (int c = 0; c < attachmentCount; c++)
+		{
+			AttachmentDescription* desc = &currentPassDesc->descs[c];
+
+			AttachmentResource* resDesc = &graph->resources[desc->resourceIndex];
+
+			AttachmentResourceInstance* currResource = &graphInstance->resources[desc->resourceIndex];
+
+			int sampleCountLo = (resDesc->msaa ? 2 : 1);
+
+			int sampleCountHi = (resDesc->msaa ? (1 << maxMSAALevels) : 1);
+
+			sampHi = std::max(sampleCountHi, sampHi);
+
+			sampLo = std::max(sampleCountLo, sampLo);
+
+			currResource->attachmentImage = currResource->attachmentImageView = nullptr;
+
+			switch (desc->attachType)
+			{
+			case AttachmentDescriptionType::COLORATTACH:
+				currResource->usage = AttachmentResourceInstanceUsage::COLOR_ATTACHMENT_USAGE;
+				break;
+			case AttachmentDescriptionType::RESOLVEATTACH:
+				currResource->usage = AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE;
+				break;
+			case AttachmentDescriptionType::DEPTHATTACH:
+				currResource->usage = AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE;
+				break;
+			case AttachmentDescriptionType::DEPTHSTENCILATTACH:
+				currResource->usage = AttachmentResourceInstanceUsage::DEPTH_STENCIL_ATTACHMENT_USAGE;			
+				break;
+			case AttachmentDescriptionType::STENCILATTACH:
+				currResource->usage = AttachmentResourceInstanceUsage::STENCIL_ATTACHMENT_USAGE;
+				break;
+			}
+
+			currResource->sampLo = sampleCountLo;
+			currResource->sampHi = sampleCountHi;
+		}
+
+	
+		int renderPassSampleCount = std::max(std::bit_width((unsigned)sampHi)-1, 1);
+
+		rpInst->maxSampleCount = renderPassSampleCount;
+
+		rpInst->baseRenderTargetData = totalRenderTargetsCreated;
+
+		totalRenderTargetsCreated += renderPassSampleCount;
+	}
+
+	renderTargetDataAlloc += totalRenderTargetsCreated;
+
+	return attachmentGraphInstancesCount-1;
+}
+
+
+
+int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraphInstance* graphInstance)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	graphInstance->consecutiveRenderPassBase = index;
+
+	AttachmentGraph* graph = graphInstance->graphLayout;
+
+	AttachmentResource* resources = graph->resources;
+
+	int totalRenderPassesCreated = 0;
+
+	for (int b = 0; b < graph->passesCount; b++)
+	{
 		AttachmentRenderPass* currentPassDesc = &graph->holders[b];
 
 		int attachmentCount = currentPassDesc->attachmentCount;
@@ -675,11 +761,9 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 
 		AttachmentRenderPassInstance* rpInst = &graphInstance->passes[b];
 
-		AttachmentInstance* currentPassInstance = rpInst->attachInst = (AttachmentInstance*)storageAllocator->Allocate(sizeof(AttachmentInstance) * attachmentCount);
+		AttachmentInstance* currentPassInstance = rpInst->attachInst;
 
-		rpInst->attachInstCount = attachmentCount;
-
-		int sampLo = 1, sampHi = 1;
+		int sampLo = 1;
 
 		for (int c = 0; c < attachmentCount; c++)
 		{
@@ -687,20 +771,18 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 
 			AttachmentDescription* desc = &currentPassDesc->descs[c];
 
+			AttachmentResource* resDesc = &graph->resources[desc->resourceIndex];
+
 			VkFormat attachFormat = API::ConvertImageFormatToVulkanFormat(resources[desc->resourceIndex].format);
 
 			VkAttachmentLoadOp stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE, dsvrtvLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 
 			VkAttachmentStoreOp stencilStore = VK_ATTACHMENT_STORE_OP_DONT_CARE, dsvrtvStore = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-			VkSampleCountFlags vkSampleCountLo = (desc->msaa ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT);
-
-			VkSampleCountFlags vkSampleCountHi = (desc->msaa ? (VkSampleCountFlagBits)(1 << maxMSAALevels) : VK_SAMPLE_COUNT_1_BIT);
-
-			sampHi = std::max((int)vkSampleCountHi, sampHi);
+			VkSampleCountFlags vkSampleCountLo = (resDesc->msaa ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT);
 
 			sampLo = std::max((int)vkSampleCountLo, sampLo);
-	
+
 			uint32_t vkRenderPassMappedIdx = 0;
 
 			AttachmentResourceInstance* currResource = &graphInstance->resources[desc->resourceIndex];
@@ -759,8 +841,6 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 
 			currentPassInstance[vkRenderPassMappedIdx].descLayout = desc;
 			currentPassInstance[vkRenderPassMappedIdx].attachmentResource = desc->resourceIndex;
-			resources[desc->resourceIndex].sampLo = (int)vkSampleCountLo;
-			resources[desc->resourceIndex].sampHi = (int)vkSampleCountHi;
 		}
 
 		rpb.CreateSubPassDescription(VK_PIPELINE_BIND_POINT_GRAPHICS, currentPassDesc->colorCount, currentPassDesc->resolveCount, currentPassDesc->depthStencilCount);
@@ -774,9 +854,11 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 
 		int renderPassSampleCount = 0;
 
-		while (sampLo <= sampHi)
+		int sampleCount = rpInst->maxSampleCount;
+
+		while (sampleCount--)
 		{
-			renderPasses[index + (renderPassSampleCount)] = dev->CreateRenderPasses(rpb);
+			renderPasses[index + totalRenderPassesCreated + renderPassSampleCount] = dev->CreateRenderPasses(rpb);
 
 			sampLo <<= 1;
 
@@ -794,9 +876,11 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 			{
 				AttachmentDescription* desc = &currentPassDesc->descs[c];
 
+				AttachmentResource* resDesc = &graph->resources[desc->resourceIndex];
+
 				VkSampleCountFlags sampleCount = VK_SAMPLE_COUNT_1_BIT;
 
-				if (desc->msaa)
+				if (resDesc->msaa)
 				{
 					sampleCount = sampLo;
 				}
@@ -806,23 +890,18 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 				switch (desc->attachType)
 				{
 				case AttachmentDescriptionType::COLORATTACH:
-					
 					vkRenderPassMappedIdx = currColor++;
 					break;
-				case AttachmentDescriptionType::RESOLVEATTACH:
-					
+				case AttachmentDescriptionType::RESOLVEATTACH:	
 					vkRenderPassMappedIdx = (currentPassDesc->colorCount + currentPassDesc->depthStencilCount) + currResolve++;
 					break;
 				case AttachmentDescriptionType::DEPTHATTACH:
-					
 					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				case AttachmentDescriptionType::DEPTHSTENCILATTACH:
-					
 					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				case AttachmentDescriptionType::STENCILATTACH:
-				
 					vkRenderPassMappedIdx = (currentPassDesc->colorCount) + currDepthStencil++;
 					break;
 				}
@@ -834,16 +913,13 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraph* graph)
 			renderPassSampleCount++;
 		}
 
-		rpInst->maxSampleCount = renderPassSampleCount;
+		rpInst->baseRenderPassData = totalRenderPassesCreated;
 
 		totalRenderPassesCreated += renderPassSampleCount;
 	}
 
 	return totalRenderPassesCreated;
 }
-
-
-
 
 uint32_t RenderInstance::BeginFrame()
 {
@@ -895,10 +971,11 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[graphIndex];
 
-	int baseRenderTarget = graphInstance->renderTargetData;
+	int baseRenderTarget = graphInstance->consecutiveRenderTargetsBase;
+
+	int baseRenderPass = graphInstance->consecutiveRenderPassBase;
 
 	EntryHandle* attachmentViews = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * graphInstance->graphLayout->resourceCount);
-
 
 	for (int b = 0; b < graphInstance->graphLayout->resourceCount; b++)
 	{
@@ -906,8 +983,8 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 		
 		AttachmentResource* resourceTempl = &graphInstance->graphLayout->resources[b];
 
-		int sampHi = resourceInst->sampHi = resourceTempl->sampHi;
-		int sampLo = resourceInst->sampLo = resourceTempl->sampLo;
+		int sampHi = resourceInst->sampHi;
+		int sampLo = resourceInst->sampLo;
 
 		int sampleCount = std::max(std::bit_width((unsigned)sampHi)-1, 1);
 
@@ -1039,14 +1116,9 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 			case AttachmentResourceInstanceUsage::INPUT_ATTACHMENT_USAGE:
 				//flags = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 				break;
-
-
-
 			}
 		}
 	}
-
-
 
 	for (int c = 0; c < graphInstance->graphLayout->passesCount; c++)
 	{
@@ -1054,13 +1126,21 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 
 		int attachmentCount = passInstance->attachInstCount;
 
+		int basePassRenderTarget = passInstance->baseRenderTargetData;
+
+		int basePassRenderPass = passInstance->baseRenderPassData;
+
 		AttachmentInstance* attachInsts = passInstance->attachInst;
 
 		for (int sampleCount = 0; sampleCount < passInstance->maxSampleCount; sampleCount++)
 		{
-			mainRenderTargets[baseRenderTarget + sampleCount] = dev->CreateRenderTarget(renderPasses[baseRenderTarget + sampleCount], imageCount, width, height, 0, 0);
+			int absoluteRTIndex = baseRenderTarget + basePassRenderTarget + sampleCount;
 
-			RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[baseRenderTarget + sampleCount]);
+			int absoluteRPIndex = baseRenderPass + basePassRenderPass + sampleCount;
+
+			mainRenderTargets[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRTIndex], imageCount, width, height, 0, 0);
+
+			RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRTIndex]);
 
 			for (int d = 0; d < imageCount; d++)
 			{
@@ -1084,14 +1164,12 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 					dev->CreateFrameBuffer(
 						attachmentViews,
 						attachmentCount,
-						renderPasses[baseRenderTarget + sampleCount],
+						renderPasses[absoluteRPIndex],
 						{ width, height }
 					);
 			}
 		}
 	}
-	
-
 	return 0;
 }
 
@@ -1229,16 +1307,8 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 	}
 }
 
-
-void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount, std::string* pipelineDescriptions, int pipelineDescriptionsCount)
+void RenderInstance::CreateShaderGraphs(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount)
 {
-	static int pipelineInfoIndex = 0;
-
-	for (int i = 0; i < pipelineDescriptionsCount; i++)
-	{
-		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++]);
-	}
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	int detailsSize = 0, totalDetailSize = 0;
@@ -1247,16 +1317,16 @@ void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shader
 
 	for (int i = 0; i < shaderGraphLayoutsCount; i++)
 	{
-		vulkanShaderGraphs.shaderGraphPtrs[i] = 
+		vulkanShaderGraphs.shaderGraphPtrs[i] =
 			CreateShaderGraph(shaderGraphLayouts[i],
-							  cacheAllocator,
-							  &vulkanShaderGraphs.graphAllocator,
-							  &vulkanShaderGraphs.shaderDetailsAllocator, &detailsSize);
+				cacheAllocator,
+				&vulkanShaderGraphs.graphAllocator,
+				&vulkanShaderGraphs.shaderDetailsAllocator, &detailsSize);
 
 		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
 
 		totalDetailSize += detailsSize;
-	} 
+	}
 
 	int shaderGraph = 0;
 
@@ -1279,7 +1349,7 @@ void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shader
 		}
 
 		ShaderMap* map = (ShaderMap*)graph->GetMap(mapIter++);
-		
+
 		map->shaderReference = i;
 
 		std::string shaderNameString = std::string(str);
@@ -1311,52 +1381,108 @@ void RenderInstance::CreatePipelines(std::string* shaderGraphLayouts, int shader
 
 			shaderLength = handle->fileLength;
 
-			shaderData = (char*)cacheAllocator->CAllocate(shaderLength+1);
+			shaderData = (char*)cacheAllocator->CAllocate(shaderLength + 1);
 
 			OSReadFile(handle, shaderLength, shaderData);
 
-			if (shaderData[shaderLength-1] != '\0')
+			if (shaderData[shaderLength - 1] != '\0')
 			{
 				shaderData[shaderLength] = '\0';
 				shaderLength++;
 			}
 		}
 
-		vulkanShaderGraphs.shaders[outputShaderIndexHead+i] = dev->CreateShader(shaderData, shaderLength, dev->ConvertShaderFlags(shaderNameString));
+		vulkanShaderGraphs.shaders[outputShaderIndexHead + i] = dev->CreateShader(shaderData, shaderLength, dev->ConvertShaderFlags(shaderNameString));
 
-		vulkanShaderGraphs.shaderDetails[outputShaderIndexHead+i] = deats;
+		vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + i] = deats;
 
 		deats = deats->GetNext();
 
 		OSCloseFile(handle);
 	}
+}
 
-	int computeIter = 0;
+int RenderInstance::CreateGraphicRenderStateObject(int shaderGraphIndex, int pipelineDescriptionIndex, int* frameGraphAttachments, int* perFrameRenderPassSelection, int frameGraphCount)
+{
+	int retVal = pipelineIdentifierCount;
 
-	int pipelineDescription = 0;
+	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 
-	for (int i = 0; i < shaderGraphLayoutsCount; i++)
+	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+
+	if (map->type != COMPUTESHADERSTAGE)
 	{
-		ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[i];
-		ShaderMap* map = (ShaderMap*)graph->GetMap(0);
-		if (map->type == COMPUTESHADERSTAGE)
-		{
-			EntryHandle* pipelineID = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle));
+		uint32_t pipelineVariationsCounter = 0;
 
-			*pipelineID = CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[i]);
+		uint32_t totalPiplineVariations = 0;
 
-			pipelinesIdentifier[i] = pipelineID;
-		}
-		else 
+		PipelineInstanceData* instData = &pipelinesInstancesInfo[shaderGraphIndex];
+
+		instData->frameGraphCount = frameGraphCount;
+
+		for (int i = 0; i < frameGraphCount; i++)
 		{
-			EntryHandle* pipelineHandles = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * maxMSAALevels+1);
-			CreatePipelineFromGraphAndSpec(&pipelineInfos[pipelineDescription++], vulkanShaderGraphs.shaderGraphPtrs[i], pipelineHandles, 0);
-			pipelinesIdentifier[i] = pipelineHandles;
+			totalPiplineVariations += attachmentGraphsInstances[frameGraphAttachments[i]].passes[perFrameRenderPassSelection[i]].maxSampleCount;
+			instData->frameGraphIndices[i] = frameGraphAttachments[i];
+			instData->frameGraphRenderPasses[i] = perFrameRenderPassSelection[i];
 		}
+
+		EntryHandle* pipelineHandles = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * totalPiplineVariations);
+
+		instData->pipelineCount = totalPiplineVariations;
+
+		for (int i = 0; i < frameGraphCount; i++)
+		{
+			instData->frameGraphPipelineIndices[i] = pipelineVariationsCounter;
+
+			pipelineVariationsCounter += CreatePipelineFromGraphAndSpec(
+				&pipelineInfos[pipelineDescriptionIndex], vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex], 
+				pipelineHandles, pipelineVariationsCounter, 
+				&attachmentGraphsInstances[frameGraphAttachments[i]], perFrameRenderPassSelection[i]
+			);
+		}
+		
+		pipelinesIdentifier[shaderGraphIndex] = pipelineHandles;
+
+		pipelineIdentifierCount++;
+	}
+
+	return retVal;
+}
+
+int RenderInstance::CreateComputePipelineStateObject(int shaderGraphIndex)
+{
+	int retVal = pipelineIdentifierCount;
+
+	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+	
+	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	
+	if (map->type == COMPUTESHADERSTAGE)
+	{
+		EntryHandle* pipelineID = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle));
+
+		*pipelineID = CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex]);
+
+		pipelinesIdentifier[shaderGraphIndex] = pipelineID;
+
+		pipelineIdentifierCount++;
+	}
+
+	return retVal;
+}
+
+void RenderInstance::CreatePipelines(std::string* pipelineDescriptions, int pipelineDescriptionsCount)
+{
+	static int pipelineInfoIndex = 0;
+
+	for (int i = 0; i < pipelineDescriptionsCount; i++)
+	{
+		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++]);
 	}
 }
 
-void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer)
+int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer, AttachmentGraphInstance* graphInstance, uint32_t graphRenderPassIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1411,8 +1537,8 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 
 	std::array<VkDynamicState, 2> dynamicStates = {
-	VK_DYNAMIC_STATE_VIEWPORT,
-	VK_DYNAMIC_STATE_SCISSOR
+		VK_DYNAMIC_STATE_VIEWPORT,
+		VK_DYNAMIC_STATE_SCISSOR
 	};
 
 
@@ -1455,23 +1581,33 @@ void RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* st
 
 	pipelineBuilder->CreateColorBlending(VK_LOGIC_OP_COPY);
 
-
 	VkStencilOpState frontState = API::ConvertFaceStencilDataToVulkan(stateInfo->frontFace);
 	VkStencilOpState backState = API::ConvertFaceStencilDataToVulkan(stateInfo->backFace);
 
 	pipelineBuilder->CreateDepthStencil(API::ConvertRasterizerTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
 
-	for (uint32_t i = 0; i < maxMSAALevels+1; i++)
+	AttachmentRenderPassInstance* rendPassInst = &graphInstance->passes[graphRenderPassIndex];
+
+	uint32_t sampleCount = (uint32_t)rendPassInst->maxSampleCount;
+
+	uint32_t lowSample = (sampleCount > 1) ? 1 : 0;
+
+	uint32_t vkRenderPassIndex = graphInstance->consecutiveRenderPassBase + graphInstance->passes[graphRenderPassIndex].baseRenderPassData;
+	
+	uint32_t pipelinesCreated = 0;
+
+	for (; pipelinesCreated < sampleCount; pipelinesCreated++)
 	{
-		int msaaLevel = (1 << i);
+		int msaaLevel = (1 << (lowSample + pipelinesCreated));
 		if (msaaLevel > stateInfo->sampleCountHigh) break;
 
 		pipelineBuilder->CreateMultiSampling((VkSampleCountFlagBits)msaaLevel);
-		pipelineBuilder->renderPass = dev->GetRenderPass(renderPasses[i]);
+		pipelineBuilder->renderPass = dev->GetRenderPass(renderPasses[vkRenderPassIndex + pipelinesCreated]);
 
-		outHandles[outHandlePointer+i] = pipelineBuilder->CreateGraphicsPipeline(layoutHandles, graph->resourceSetCount, shaderHandle, graph->shaderMapCount);
+		outHandles[outHandlePointer + pipelinesCreated] = pipelineBuilder->CreateGraphicsPipeline(layoutHandles, graph->resourceSetCount, shaderHandle, graph->shaderMapCount);
 	}
 
+	return pipelinesCreated;
 }
 
 EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* graph)
@@ -2171,18 +2307,18 @@ int RenderInstance::CreateAttachmentGraph(std::string attachmentLayout, int* sub
 
 	static int rpIndexAlloc = 0;
 
-	int returnedGraphTemplateIndex = graphTemplateAlloc;
-
 	CreateAttachmentGraphFromFile(attachmentLayout, &attachmentGraphs[graphTemplateAlloc]);
 
-	int currentRenderPassCount = CreateRenderPass(rpIndexAlloc, &attachmentGraphs[graphTemplateAlloc++]);
+	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc++]);
+	
+	int currentRenderPassCount = CreateRenderPass(rpIndexAlloc, &attachmentGraphsInstances[currentGraphInstance]);
 
 	rpIndexAlloc += currentRenderPassCount;
 
 	if (subAttachCount)
 		*subAttachCount = currentRenderPassCount;
 
-	return returnedGraphTemplateIndex;
+	return currentGraphInstance;
 }
 
 
@@ -2693,60 +2829,76 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 			.indirectCountBufferStride = indirectCountBufferPerFrameSize
 	};
 
-	int renderStateCount = maxMSAALevels+1;
+	int renderStateCount = 0;
+
+	int renderstateObjHead = renderStateObjects.allocatorPtr.load();
+
+	EntryHandle* ref = pipelinesIdentifier[info->pipelinename];
+
+	PipelineInstanceData* pid = &pipelinesInstancesInfo[info->pipelinename];
+
+	for (uint32_t a = 0; a < pid->frameGraphCount; a++)
+	{
+		AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[pid->frameGraphIndices[a]];
+
+		int baseRenderTargetData = graphInstance->consecutiveRenderTargetsBase;
+
+		AttachmentRenderPassInstance* renderPassInstance = &graphInstance->passes[pid->frameGraphRenderPasses[a]];
+
+		int baseRenderTargetRenderPass = renderPassInstance->baseRenderTargetData;
+
+		int pipelineBase = pid->frameGraphPipelineIndices[a];
+
+		renderStateCount += renderPassInstance->maxSampleCount;
+
+		for (uint32_t b = 0; b < renderPassInstance->maxSampleCount; b++) {
+
+			int graphIndex = baseRenderTargetData + baseRenderTargetRenderPass + b;
+			
+			create.pipelinename = ref[b+pipelineBase];
+
+			EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
+
+			VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
+
+			vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
+
+			for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
+			{
+				ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
+				if (!pushArgs)
+				{
+					j++;
+					constantBufferPerSet = 0;
+					continue;
+				}
+
+				vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
+				i++;
+			}
+
+
+			AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
+
+			if (addToGraph)
+			{
+				auto graph = dev->GetRenderGraph(swapchainRenderTargets[graphIndex]);
+				graph->AddObject(pipelineIndex);
+			}
+
+			renderStateObjects.Allocate(pipelineIndex);
+		}
+	}
 
 	auto pso = stateObjectHandles.Allocate();
 
 	int ret = pso.first;
+	
 	PipelineHandle* posStruct = pso.second;
-
-	posStruct->graphIndex = graphIndices.AllocateN(renderStateCount);
-	posStruct->graphCount = renderStateCount;
 	posStruct->numHandles = renderStateCount;
 	posStruct->group = GRAPHICSO;
-	posStruct->indexForHandles = renderStateObjects.AllocateN(renderStateCount);
-	posStruct->renderPassIndex = 0;
-
-	int pipeInsertIndex = posStruct->indexForHandles;
-	int graphInsertIndex = posStruct->graphIndex;
-
-	auto& ref = pipelinesIdentifier[info->pipelinename];
-
-	for (uint32_t i = 0; i < maxMSAALevels+1; i++) {
-
-		create.pipelinename = ref[i];
-
-		EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
-
-		VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
-
-		vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
-
-		for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
-		{
-			ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
-			if (!pushArgs)
-			{
-				j++;
-				constantBufferPerSet = 0;
-				continue;
-			}
-		
-			vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
-			i++;
-		}
-
-		
-		AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
-		
-		if (addToGraph)
-		{
-			auto graph = dev->GetRenderGraph(swapchainRenderTargets[i]);
-			graphIndices.Update(graphInsertIndex++, (int)graph->AddObject(pipelineIndex));
-		}
-		
-		renderStateObjects.Update(pipeInsertIndex++, pipelineIndex);
-	}
+	posStruct->indexForHandles = renderstateObjHead;
+	posStruct->pipelineIdentifierGroup = info->pipelinename;
 
 	return ret;
 }
@@ -2806,11 +2958,10 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 
 	EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
 
-	
-	posStruct->graphCount = 1;
 	posStruct->numHandles = 1;
 	posStruct->group = COMPUTESO;
 	posStruct->indexForHandles = computeStateObjects.Allocate(pipelineIndex);
+	posStruct->pipelineIdentifierGroup = info->pipelinename;
 
 	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
@@ -2833,8 +2984,6 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
 	
 	auto graph = dev->GetComputeGraph(computeGraphIndex);
-
-	posStruct->graphIndex = graphIndices.Allocate((int)graph->AddObject(pipelineIndex));
 
 	return ret;
 }
@@ -3082,22 +3231,24 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[currentFrameGraph];
 
-	int currentRenderTargetPointer = 0;
-
 	for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 	{
 		uint32_t sampleLevelForRenderPass = currentFrameGraphMSAALevel;
 
-		if ((currentGraphInstance->passes[i].maxSampleCount-1) < sampleLevelForRenderPass)
+		AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
+
+		if ((rpInst->maxSampleCount-1) < sampleLevelForRenderPass)
 		{
-			sampleLevelForRenderPass = currentGraphInstance->passes[i].maxSampleCount-1;
+			sampleLevelForRenderPass = rpInst->maxSampleCount-1;
 		}
 
-		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->renderTargetData + currentRenderTargetPointer + sampleLevelForRenderPass]);
+		int renderTargetPerPassBase = rpInst->baseRenderTargetData;
 
-		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[currentGraphInstance->renderTargetData + currentRenderTargetPointer + sampleLevelForRenderPass]);
+		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass]);
 
-		rcb.BeginRenderPassCommand(mainRenderTargets[currentGraphInstance->renderTargetData + sampleLevelForRenderPass], imageIndex, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
+		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass]);
+
+		rcb.BeginRenderPassCommand(mainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + sampleLevelForRenderPass], imageIndex, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
 
 		float x = static_cast<float>(renderTarget->width), y = static_cast<float>(renderTarget->height);
 
@@ -3112,8 +3263,6 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 		graph->DrawScene(&rcb, currentFrame);
 
 		rcb.EndRenderPassCommand();
-
-		currentRenderTargetPointer += currentGraphInstance->passes[i].maxSampleCount;
 	}
 
 	rcb.EndRecordingCommand();
@@ -3150,10 +3299,13 @@ void RenderInstance::EndFrame()
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[currentFrameGraph];
 
+	uint32_t totalPassIter = 0;
+
 	for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 	{
-		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->renderTargetData + currentFrameGraphMSAALevel]);
+		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + totalPassIter + currentFrameGraphMSAALevel]);
 		graph->UpdateLists();
+		totalPassIter += currentGraphInstance->passes[i].maxSampleCount;
 	}
 
 	VKGraphicsOneTimeQueue* graphicsQueue = dev->GetGraphicsOTQ(graphicsOTQ);
@@ -3178,14 +3330,14 @@ void RenderInstance::AddPipelineToMainQueue(int psoIndex, int computeorgraphics)
 	{
 		uint32_t MSAALevel = currentFrameGraphMSAALevel;
 
-		AttachmentRenderPassInstance* rendPassInst = &currentGraphInstance->passes[handle->renderPassIndex];
+		AttachmentRenderPassInstance* rendPassInst = &currentGraphInstance->passes[0];
 
 		if ((rendPassInst->maxSampleCount - 1) < MSAALevel)
 		{
 			MSAALevel = rendPassInst->maxSampleCount - 1;
 		}
 
-		EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentGraphInstance->renderTargetData + MSAALevel];
+		EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentGraphInstance->consecutiveRenderTargetsBase + MSAALevel];
 
 		VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
 
