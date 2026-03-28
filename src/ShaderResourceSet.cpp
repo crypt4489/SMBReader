@@ -836,6 +836,11 @@ void CreatePipelineDescription(const std::string& filename, GenericPipelineState
 
 	int currentVertexInput = 0;
 	int currentVertexInputDescription = 0;
+
+	stateInfo->depthEnable = false;
+	stateInfo->depthWrite = false;
+	stateInfo->StencilEnable = false;
+
 	while (curr + stride < dataSize)
 	{
 
@@ -1728,6 +1733,9 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			case hash("rtv"):
 				description->srcLayout = ImageLayout::COLORATTACHMENT;
 				break;
+			case hash("shader"):
+				description->srcLayout = ImageLayout::SHADERREADABLE;
+				break;
 			case hash("undefined"):
 				description->srcLayout = ImageLayout::UNDEFINED;
 				break;
@@ -1752,6 +1760,9 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 				break;
 			case hash("rtv"):
 				description->dstLayout = ImageLayout::COLORATTACHMENT;
+				break;
+			case hash("shader"):
+				description->dstLayout = ImageLayout::SHADERREADABLE;
 				break;
 			case hash("undefined"):
 				description->dstLayout = ImageLayout::UNDEFINED;

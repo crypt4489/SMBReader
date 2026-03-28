@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="vert">
+		fullscreen.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		fullscreen.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="f" size="4" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="image2D" used="f" count="3">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="sampler" used="f" count="1">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

@@ -190,16 +190,18 @@ void DescriptorSetBuilder::AddBufferTypePerFrame(VkBuffer buffer, VkDeviceSize s
 
 void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
-
-
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
 
 	for (uint32_t i = 0; i < texCount; i++)
 	{
 		VkDescriptorImageInfo* imageInfo = &imageInfos[i];
-		VKTexture* tex = device->GetTexture(textureHandles[i]);
 		imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		imageInfo->imageView = device->GetImageViewByTexture(textureHandles[i], 0);
+
+		if (!imageInfo->imageView)
+		{
+			imageInfo->imageView = device->GetImageViewByHandle(textureHandles[i]);
+		}
 	}
 
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));

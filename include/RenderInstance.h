@@ -178,19 +178,19 @@ struct RenderInstance
 
 	void AddCommandQueue(int index, GPUCommandStreamType type);
 
+	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorSet, int bindingIndex, int textureStart);
 
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
 	EntryHandle swapChainIndex;
 	EntryHandle globalIndex, globalDeviceBufIndex;
-	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 
 	uint32_t maxMSAALevels = 0;
 
-	std::array<EntryHandle, 5> renderTargets{};
-	std::array<EntryHandle, 5> renderPasses{};
+	std::array<EntryHandle, 10> renderTargets{};
+	std::array<EntryHandle, 10> renderPasses{};
 
 	std::array<EntryHandle, 9> imagePools{};
 	int imagePoolCounter = 0;
@@ -206,7 +206,6 @@ struct RenderInstance
 	std::array<EntryHandle*, 25> pipelinesIdentifier{};
 	std::array<PipelineInstanceData, 25> pipelinesInstancesInfo{};
 
-
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
 
 	RenderAllocationHolder<100> allocations{};
@@ -219,11 +218,8 @@ struct RenderInstance
 
 	ArrayAllocator<EntryHandle, 10> computeQueues{};
 
-
 	std::array<GPUCommand, 10> gpuCommands{};
 	int gpuCommandCount = 0;
-
-	
 
 	int minUniformAlignment;
 	int minStorageAlignment; 
@@ -262,8 +258,6 @@ struct RenderInstance
 	int attachmentGraphInstancesCount = 0;
 
 	int pipelineIdentifierCount = 0;
-
-	
 };
 
 namespace GlobalRenderer {

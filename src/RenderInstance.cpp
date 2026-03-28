@@ -36,15 +36,6 @@ namespace GlobalRenderer {
 
 namespace API {
 
-	enum AttachmentResourceInstanceUsageFlags
-	{
-		COLOR_ATTACHMENT_USAGE = 1,
-		DEPTH_ATTACHMENT_USAGE = 2,
-		STENCIL_ATTACHMENT_USAGE = 4,
-		RESOLVE_ATTACHMENT_USAGE = 8,
-		PRESERVE_ATTACHMENT_USAGE = 16,
-		INPUT_ATTACHMENT_USAGE = 32,
-	};
 
 	VkImageUsageFlags ConvertAttachmentResourceUsageToVkImageUsage(AttachmentResourceInstanceUsage usage)
 	{
@@ -1110,7 +1101,24 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 				break;
 
 			case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
+				for (int g = 0; g < imageCount; g++)
+				{
+					resourceInst->attachmentImage[0][g] = dev->CreateImage(
+						width, height,
+						1, attachmentFormat, 1,
+						VK_IMAGE_USAGE_SAMPLED_BIT |
+						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+						sampLo,
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+						VK_IMAGE_LAYOUT_UNDEFINED,
+						VK_IMAGE_TILING_OPTIMAL, 0,
+						VK_IMAGE_TYPE_2D, imagePools[0]
+					);
 
+					resourceInst->attachmentImageView[0][g]
+						=
+						dev->CreateImageView(resourceInst->attachmentImage[0][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+				}
 				break;
 
 			case AttachmentResourceInstanceUsage::PRESERVE_ATTACHMENT_USAGE:
@@ -1588,7 +1596,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 	VkStencilOpState frontState = API::ConvertFaceStencilDataToVulkan(stateInfo->frontFace);
 	VkStencilOpState backState = API::ConvertFaceStencilDataToVulkan(stateInfo->backFace);
 
-	pipelineBuilder->CreateDepthStencil(API::ConvertRasterizerTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
+	pipelineBuilder->CreateDepthStencil(API::ConvertRasterizerTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthEnable, stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
 
 	AttachmentRenderPassInstance* rendPassInst = &graphInstance->passes[graphRenderPassIndex];
 
@@ -2431,8 +2439,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	attachmentGraphs = (AttachmentGraph*)storageAllocator->Allocate(sizeof(AttachmentGraph) * attachmentGraphCount);
 
-	computeGraphIndex = majorDevice->CreateComputeGraph(0, 50, 0);
-
 	cacheAllocator->Reset();
 }
 
@@ -2520,7 +2526,7 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 	}
 
 
-	for (uint32_t i = 0; i < maxMSAALevels+1; i++)
+	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 2); i++)
 	{
 		renderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
 		majorDevice->UpdateRenderGraph(renderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
@@ -2612,7 +2618,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 	int bindingCount = set->bindingCount;
 
-	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[(set->viewCount + set->samplerCount)-1];
+	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[set->bindingCount-1];
 
 	if (lastheader->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
 	{
@@ -2906,13 +2912,6 @@ ShaderComputeLayout* RenderInstance::GetComputeLayout(int shaderGraphIndex)
 	return (ShaderComputeLayout*)deats->GetShaderData();
 }
 
-void RenderInstance::SetActiveComputePipeline(uint32_t objectIndex, bool active)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	auto graph = dev->GetComputeGraph(computeGraphIndex);
-	graph->SetActive(objectIndex, active);
-}
-
 int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
@@ -2977,8 +2976,6 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	
 	
 	AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
-	
-	auto graph = dev->GetComputeGraph(computeGraphIndex);
 
 	return ret;
 }
@@ -3637,5 +3634,25 @@ void RenderInstance::SwapUpdateCommands()
 	}
 
 	updateCommandBuffers[drainBuffer]->Reset();
+}
+
+
+int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorSet, int bindingIndex, int textureStart)
+{
+	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[frameGraph];
+
+	EntryHandle* imageViews = currentGraphInstance->resources[resourceIndex].attachmentImageView[0];
+
+	ResourceArrayUpdate update;
+
+	int imageCount = currentGraphInstance->resources[resourceIndex].imageCount;
+
+	update.resourceCount = imageCount;
+	update.resourceDstBegin = textureStart;
+	update.resourceHandles = imageViews;
+
+	UpdateShaderResourceArray(descriptorSet, bindingIndex, ShaderResourceType::IMAGE2D, &update);
+
+	return imageCount;
 }
 

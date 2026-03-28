@@ -39,7 +39,12 @@ bld/
 [Bb]uild
 
 *.dll
-
+*.jpg
+*.png
+*.webp
+*.bmp
+*.msi
+*.zip
 3rdparty/
 
 shaders/compiled/*.spv

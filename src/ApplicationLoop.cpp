@@ -448,8 +448,9 @@ static bool stopThreadServer = false;
 static OSThreadHandle threadHandle;
 
 
-static int currentFrameGraphIndex = 1;
+static int currentFrameGraphIndex = 2;
 static int mainComputeQueueIndex = 0;
+static int mainFullScreenPipeline = 0;
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -860,6 +861,11 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 0);
 
 				GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
+
+				if (currentFrameGraphIndex == 2)
+				{
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
+				}
 
 				GlobalRenderer::gRenderInstance->DrawScene(index);
 
@@ -2630,16 +2636,17 @@ void CreateLightAssignments(int count)
 	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 }
 
-static std::array<std::string, 6> pds = {
+static std::array<std::string, 7> pds = {
 	"GenericPipeline.xml",
 	"TextPipeline.xml",
 	"DebugPipeline.xml",
 	"NormalDebugPipeline.xml",
 	"SkyboxPipeline.xml",
-	"OutlinePipeline.xml"
+	"OutlinePipeline.xml",
+	"FullscreenPipeline.xml"
 };
 
-static std::array<std::string, 16> layouts = {
+static std::array<std::string, 17> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
@@ -2655,13 +2662,15 @@ static std::array<std::string, 16> layouts = {
 		"LightWorldAssignment.xml",
 		"NormalDebug.xml",
 		"Skybox.xml",
-		"OutlineLayout.xml"
+		"OutlineLayout.xml",
+		"FullscreenLayout.xml"
 };
 
-static std::array<std::string, 2> mainLayoutAttachments =
+static std::array<std::string, 3> mainLayoutAttachments =
 {
 	"noMSAAAttachment.xml",
-	"MSAAAttachment.xml"
+	"MSAAAttachment.xml",
+	"MSAAPostProcess.xml"
 };
 
 void ApplicationLoop::InitializeRuntime()
@@ -2697,6 +2706,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	int graphNoMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[0], nullptr);
 	int graphMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[1], nullptr);
+	int MSAAPost = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[2], nullptr);
 
 	GlobalRenderer::gRenderInstance->CreateSwapchain(mainColorFormat, 800, 600);
 
@@ -2706,15 +2716,18 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainLinearSampler = GlobalRenderer::gRenderInstance->CreateSampler(7);
 
-	std::array<int, 2> frameGraphs = { 0, 1 };
-	std::array<int, 2> frameRenderPassSelection = { 0, 0 };
+	std::array<int, 3> frameGraphs = { 0, 1, 2 };
+	std::array<int, 3> frameRenderPassSelection = { 0, 0, 0 };
 
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(0, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(1, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(5, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(13, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(14, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	int postRenderPass = 1;
+
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(0, 0, frameGraphs.data(), frameRenderPassSelection.data(),  3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(1, 1, frameGraphs.data(), frameRenderPassSelection.data(), 3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(5, 2, frameGraphs.data(), frameRenderPassSelection.data(), 3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(13, 3, frameGraphs.data(), frameRenderPassSelection.data(), 3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(14, 4, frameGraphs.data(), frameRenderPassSelection.data(), 3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 3);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(16, 6, &MSAAPost, &postRenderPass, 1);
 
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(2);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(3);
@@ -2729,6 +2742,8 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphNoMSAAIndex, 0, 10);
 	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphMSAAIndex, 0, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance->CreateComputeQueue(15);
 
@@ -2866,6 +2881,41 @@ void ApplicationLoop::InitializeRuntime()
 	CreateMeshWorldAssignment(256);
 	CreateGenericMeshCommandBuffers(256);
 
+	int fullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	ResourceArrayUpdate samplerUpdate;
+
+	samplerUpdate.resourceCount = 1;
+	samplerUpdate.resourceDstBegin = 0;
+	samplerUpdate.resourceHandles = &mainLinearSampler;
+
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(MSAAPost, 1, fullScreen, 0, 0);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(fullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(fullScreen, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+
+	std::array<int, 1> fullScreenDesc = { fullScreen };
+
+	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = ~0,
+		.vertexCount = 4,
+		.pipelinename = 16,
+		.descCount = 1,
+		.descriptorsetid = fullScreenDesc.data(),
+		.indexBufferHandle = ~0,
+		.indexCount = 0,
+		.instanceCount = 1,
+		.indexSize = 0,
+		.indexOffset = (uint32_t)0,
+
+		.vertexOffset = (uint32_t)0,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
+
+	mainFullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
 
 	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
 	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
@@ -3077,9 +3127,25 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 		GlobalRenderer::gRenderInstance->DecreaseMSAA(currentFrameGraphIndex, 0);
 	}
 
+	static int dir = -1;
+
 	if (keyActions[KC_Q].state == PRESSED)
 	{
-		currentFrameGraphIndex ^= 1;
+		int next = currentFrameGraphIndex + dir;
+
+		if (next < 0)
+		{
+			dir = 1;
+			next = 0;
+		}
+		else if (next > 2)
+		{
+			dir = -1;
+			next = 2;
+		}
+
+		currentFrameGraphIndex = next;
+
 		GlobalRenderer::gRenderInstance->ResetCommandList();
 		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
 		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
