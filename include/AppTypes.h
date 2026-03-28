@@ -626,6 +626,8 @@ struct AttachmentRenderPassInstance
 	int maxSampleCount;
 	int baseRenderTargetData;
 	int baseRenderPassData;
+	int currentSampleCount;
+	int graphicsOTQIndex;
 };
 
 struct AttachmentGraphInstance
@@ -638,6 +640,7 @@ struct AttachmentGraphInstance
 };
 
 
+
 struct PipelineInstanceData
 {
 	int frameGraphIndices[4];
@@ -645,4 +648,16 @@ struct PipelineInstanceData
 	int frameGraphPipelineIndices[4];
 	int frameGraphCount;
 	int pipelineCount;
+};
+
+enum GPUCommandStreamType
+{
+	ATTACHMENT_COMMANDS = 1,
+	COMPUTE_QUEUE_COMMANDS = 2,
+};
+
+struct GPUCommand
+{
+	GPUCommandStreamType streamType;
+	int indexForStreamType;
 };

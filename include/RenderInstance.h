@@ -115,9 +115,9 @@ struct RenderInstance
 
 	void DestoryTexture(EntryHandle handle);
 
-	void IncreaseMSAA();
+	void IncreaseMSAA(int frameGraph, int renderPassIndex);
 
-	void DecreaseMSAA();
+	void DecreaseMSAA(int frameGraph, int renderPassIndex);
 
 	void CreateShaderResourceMap(ShaderGraph *graph);
 
@@ -135,7 +135,9 @@ struct RenderInstance
 
 	void EndFrame();
 
-	void AddPipelineToMainQueue(int psoIndex, int computeorgraphics);
+	void AddPipelineToRPGraphicsQueue(int psoIndex, int frameGraphIndex, int renderPass);
+
+	void AddPipelineToComputeQueue(int queueIndex, int psoIndex);
 
 	void ReadData(int handle, void* dest, int size, int offset);
 
@@ -168,6 +170,15 @@ struct RenderInstance
 	int CreateGraphicRenderStateObject(int shaderGraphIndex, int pipelineDescriptionIndex, int* frameGraphAttachments, int* perFrameRenderPassSelection, int frameGraphCount);
 	int CreateComputePipelineStateObject(int shaderGraphIndex);
 
+	void ResetCommandList();
+
+	void CreateGraphicsQueueForAttachments(int frameGraphIndex, int renderPassIndex, uint32_t pipelineCount);
+
+	int CreateComputeQueue(uint32_t maxNumPipelines);
+
+	void AddCommandQueue(int index, GPUCommandStreamType type);
+
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -175,16 +186,10 @@ struct RenderInstance
 	EntryHandle globalIndex, globalDeviceBufIndex;
 	EntryHandle computeGraphIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
-	EntryHandle graphicsOTQ, computeOTQ;
 
-	
 	uint32_t maxMSAALevels = 0;
 
-
-	uint32_t currentFrameGraph = 0;
-	uint32_t currentFrameGraphMSAALevel = 0;
-
-	std::array<EntryHandle, 5> swapchainRenderTargets{};
+	std::array<EntryHandle, 5> renderTargets{};
 	std::array<EntryHandle, 5> renderPasses{};
 
 	std::array<EntryHandle, 9> imagePools{};
@@ -212,6 +217,14 @@ struct RenderInstance
 
 	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
 
+	ArrayAllocator<EntryHandle, 10> computeQueues{};
+
+
+	std::array<GPUCommand, 10> gpuCommands{};
+	int gpuCommandCount = 0;
+
+	
+
 	int minUniformAlignment;
 	int minStorageAlignment; 
 
@@ -238,7 +251,9 @@ struct RenderInstance
 
 	int currentUpdateCommandBuffer = 0;
 
-	EntryHandle mainRenderTargets[8]{};
+	EntryHandle mainRenderTargets[10]{};
+
+	ArrayAllocator<EntryHandle, 10> renderTargetQueues{};
 
 	AttachmentGraph* attachmentGraphs;
 
@@ -248,7 +263,7 @@ struct RenderInstance
 
 	int pipelineIdentifierCount = 0;
 
-	void SetFrameGraph(uint32_t index);
+	
 };
 
 namespace GlobalRenderer {

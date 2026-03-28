@@ -669,6 +669,10 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 		rpInst->attachInstCount = attachmentCount;
 
+		rpInst->currentSampleCount = 0;
+
+		rpInst->graphicsOTQIndex = -1;
+
 		int sampLo = 1, sampHi = 1;
 
 		for (int c = 0; c < attachmentCount; c++)
@@ -1668,13 +1672,8 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 	return pipelineBuilder->CreateComputePipeline(layoutHandles, graph->resourceSetCount, shaderHandle);
 }
 
-
-
-
-
 void RenderInstance::UploadHostTransfers()
 {
-	
 	int memCount = driverHostMemoryUpdater.linkCount;
 
 	if (!memCount) return;
@@ -2434,10 +2433,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	computeGraphIndex = majorDevice->CreateComputeGraph(0, 50, 0);
 
-	graphicsOTQ = majorDevice->CreateGraphicsOneTimeQueue(50);
-
-	computeOTQ = majorDevice->CreateComputeOneTimeQueue(50);
-
 	cacheAllocator->Reset();
 }
 
@@ -2527,8 +2522,8 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 
 	for (uint32_t i = 0; i < maxMSAALevels+1; i++)
 	{
-		swapchainRenderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
-		majorDevice->UpdateRenderGraph(swapchainRenderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
+		renderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
+		majorDevice->UpdateRenderGraph(renderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
 	}
 	
 }
@@ -2882,7 +2877,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 			if (addToGraph)
 			{
-				auto graph = dev->GetRenderGraph(swapchainRenderTargets[graphIndex]);
+				auto graph = dev->GetRenderGraph(renderTargets[graphIndex]);
 				graph->AddObject(pipelineIndex);
 			}
 
@@ -3202,9 +3197,9 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 void RenderInstance::DrawScene(uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	
+
 	dev->ResetBufferAllocator(stagingBuffers[currentFrame]);
-	
+
 	EntryHandle cbindex = currentCBIndex[currentFrame];
 	RecordingBufferObject rcb = dev->GetRecordingBufferObject(cbindex);
 	rcb.ResetCommandPoolForBuffer();
@@ -3223,137 +3218,227 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	UploadImageMemoryTransfers(&rcb);
 
-	VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeOTQ);
+	int commandCountIter = 0;
 
-	VKGraphicsOneTimeQueue* graphicsQueue = dev->GetGraphicsOTQ(graphicsOTQ);
-
-	computeQueue->DispatchWork(&rcb, currentFrame);
-
-	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[currentFrameGraph];
-
-	for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
+	while (commandCountIter <= gpuCommandCount)
 	{
-		uint32_t sampleLevelForRenderPass = currentFrameGraphMSAALevel;
-
-		AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
-
-		if ((rpInst->maxSampleCount-1) < sampleLevelForRenderPass)
+		GPUCommand* command = &gpuCommands[commandCountIter];
+		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
-			sampleLevelForRenderPass = rpInst->maxSampleCount-1;
+			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
+
+			computeQueue->DispatchWork(&rcb, currentFrame);
+		}
+		else if (command->streamType == GPUCommandStreamType::ATTACHMENT_COMMANDS)
+		{
+
+			AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[command->indexForStreamType];
+
+			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
+			{
+				AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
+
+				int sampleLevelForRenderPass = rpInst->currentSampleCount;
+
+				int possibleQueueIndex = rpInst->graphicsOTQIndex;
+
+				int renderTargetPerPassBase = rpInst->baseRenderTargetData;
+
+				int absoluteRenderTargetIndex = currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass;
+
+				VKRenderGraph* graph = dev->GetRenderGraph(renderTargets[absoluteRenderTargetIndex]);
+
+				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
+
+				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], imageIndex, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
+
+				float x = static_cast<float>(renderTarget->width), y = static_cast<float>(renderTarget->height);
+
+				float xOff = static_cast<float>(renderTarget->wOffset), yOff = static_cast<float>(renderTarget->hOffset);
+
+				rcb.SetViewportCommand(xOff, yOff, x, y, 0.0f, 1.0f);
+
+				rcb.SetScissorCommand(renderTarget->wOffset, renderTarget->hOffset, renderTarget->width, renderTarget->height);
+
+				if (possibleQueueIndex >= 0)
+				{
+					VKGraphicsOneTimeQueue* graphicsQueue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[possibleQueueIndex]);
+
+					graphicsQueue->DrawScene(&rcb, currentFrame);
+				}
+
+				graph->DrawScene(&rcb, currentFrame);
+
+				rcb.EndRenderPassCommand();
+			}
 		}
 
-		int renderTargetPerPassBase = rpInst->baseRenderTargetData;
-
-		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass]);
-
-		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass]);
-
-		rcb.BeginRenderPassCommand(mainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + sampleLevelForRenderPass], imageIndex, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
-
-		float x = static_cast<float>(renderTarget->width), y = static_cast<float>(renderTarget->height);
-
-		float xOff = static_cast<float>(renderTarget->wOffset), yOff = static_cast<float>(renderTarget->hOffset);
-
-		rcb.SetViewportCommand(xOff, yOff, x, y, 0.0f, 1.0f);
-
-		rcb.SetScissorCommand(renderTarget->wOffset, renderTarget->hOffset, renderTarget->width, renderTarget->height);
-
-		graphicsQueue->DrawScene(&rcb, currentFrame);
-
-		graph->DrawScene(&rcb, currentFrame);
-
-		rcb.EndRenderPassCommand();
+		commandCountIter++;
 	}
 
 	rcb.EndRecordingCommand();
 }
 
-void RenderInstance::IncreaseMSAA()
+void RenderInstance::IncreaseMSAA(int frameGraph, int renderPassIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	uint32_t next = currentFrameGraphMSAALevel + 1;
+
+	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraph];
+
+	AttachmentRenderPassInstance* passInstance = &graphInstance->passes[renderPassIndex];
+
+	int next = passInstance->currentSampleCount + 1;
+
 	if (next >= maxMSAALevels)
 		return;
-	currentFrameGraphMSAALevel = next;
+
+	if (next >= passInstance->maxSampleCount)
+		return;
+
+	passInstance->currentSampleCount = next;
 }
 
-void RenderInstance::DecreaseMSAA()
+void RenderInstance::DecreaseMSAA(int frameGraph, int renderPassIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	int32_t next = currentFrameGraphMSAALevel - 1;
+
+	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraph];
+
+	AttachmentRenderPassInstance* passInstance = &graphInstance->passes[renderPassIndex];
+
+	int next = passInstance->currentSampleCount - 1;
+
 	if (next < 0)
 		return;
-	currentFrameGraphMSAALevel = next;
+
+	passInstance->currentSampleCount = next;
 }
 
-void RenderInstance::SetFrameGraph(uint32_t index)
+void RenderInstance::ResetCommandList()
 {
-	currentFrameGraph = index;
-	currentFrameGraphMSAALevel = 0;
+	gpuCommandCount = 0;
+}
+
+void RenderInstance::CreateGraphicsQueueForAttachments(int frameGraphIndex, int renderPassIndex, uint32_t pipelineCount)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	EntryHandle graphicsOTQ = dev->CreateGraphicsOneTimeQueue(pipelineCount);
+
+	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraphIndex];
+
+	AttachmentRenderPassInstance* passInstance = &graphInstance->passes[renderPassIndex];
+
+	passInstance->graphicsOTQIndex = renderTargetQueues.Allocate(graphicsOTQ);
+}
+
+int RenderInstance::CreateComputeQueue(uint32_t maxNumPipelines)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	EntryHandle computeOTQ = dev->CreateComputeOneTimeQueue(maxNumPipelines);
+
+	return computeQueues.Allocate(computeOTQ);
+}
+
+
+void RenderInstance::AddCommandQueue(int index, GPUCommandStreamType type)
+{
+	GPUCommand* command = &gpuCommands[gpuCommandCount++];
+	command->indexForStreamType = index;
+	command->streamType = type;
 }
 
 void RenderInstance::EndFrame()
 {
-	EntryHandle cbindex = currentCBIndex[currentFrame];
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[currentFrameGraph];
 
-	uint32_t totalPassIter = 0;
+	int commandCountIter = 0;
 
-	for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
+	while (commandCountIter <= gpuCommandCount)
 	{
-		VKRenderGraph* graph = dev->GetRenderGraph(swapchainRenderTargets[currentGraphInstance->consecutiveRenderTargetsBase + totalPassIter + currentFrameGraphMSAALevel]);
-		graph->UpdateLists();
-		totalPassIter += currentGraphInstance->passes[i].maxSampleCount;
+		GPUCommand* command = &gpuCommands[commandCountIter];
+		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
+		{
+			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
+
+			computeQueue->UpdateQueue();
+		}
+		else if (command->streamType == GPUCommandStreamType::ATTACHMENT_COMMANDS)
+		{
+
+			AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[command->indexForStreamType];
+
+			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
+			{
+				VKRenderGraph* graph = dev->GetRenderGraph(renderTargets[currentGraphInstance->consecutiveRenderTargetsBase + currentGraphInstance->passes[i].baseRenderTargetData + currentGraphInstance->passes[i].currentSampleCount]);
+
+				graph->UpdateLists();
+
+				if (currentGraphInstance->passes[i].graphicsOTQIndex >= 0)
+				{
+					VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[currentGraphInstance->passes[i].graphicsOTQIndex]);
+
+					queue->UpdateQueue();
+				}
+
+			}
+		}
+
+		commandCountIter++;
 	}
-
-	VKGraphicsOneTimeQueue* graphicsQueue = dev->GetGraphicsOTQ(graphicsOTQ);
-	VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeOTQ);
-
-	graphicsQueue->UpdateQueue();
-	computeQueue->UpdateQueue();
 
 	cacheAllocator->Reset();
 }
 
-
-void RenderInstance::AddPipelineToMainQueue(int psoIndex, int computeorgraphics)
+void RenderInstance::AddPipelineToRPGraphicsQueue(int psoIndex, int frameGraphIndex, int renderPass)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
 
-	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[currentFrameGraph];
+	PipelineInstanceData* instanceData = &pipelinesInstancesInfo[handle->pipelineIdentifierGroup];
 
-	if (computeorgraphics)
+	uint32_t pipelineOffset = 0;
+
+	for (int i = 0; i < instanceData->frameGraphCount; i++)
 	{
-		uint32_t MSAALevel = currentFrameGraphMSAALevel;
-
-		AttachmentRenderPassInstance* rendPassInst = &currentGraphInstance->passes[0];
-
-		if ((rendPassInst->maxSampleCount - 1) < MSAALevel)
+		if (frameGraphIndex == instanceData->frameGraphIndices[i])
 		{
-			MSAALevel = rendPassInst->maxSampleCount - 1;
+			pipelineOffset = instanceData->frameGraphPipelineIndices[i];
+			break;
 		}
+	}
 
-		EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + currentGraphInstance->consecutiveRenderTargetsBase + MSAALevel];
+	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[frameGraphIndex];
 
-		VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(graphicsOTQ);
+	AttachmentRenderPassInstance* rendPassInst = &currentGraphInstance->passes[renderPass];
 
-		queue->AddObject(ret);
-	} 
-	else
+	int MSAALevel = rendPassInst->currentSampleCount;
+
+	EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + pipelineOffset + MSAALevel];
+
+	if (rendPassInst->graphicsOTQIndex >= 0)
 	{
-		EntryHandle ret = computeStateObjects.dataArray[handle->indexForHandles];
-
-		VKComputeOneTimeQueue* queue = dev->GetComputeOTQ(computeOTQ);
+		VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[rendPassInst->graphicsOTQIndex]);
 
 		queue->AddObject(ret);
 	}
-
-
 }
+
+void RenderInstance::AddPipelineToComputeQueue(int queueIndex, int psoIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
+
+	EntryHandle ret = computeStateObjects.dataArray[handle->indexForHandles];
+
+	VKComputeOneTimeQueue* queue = dev->GetComputeOTQ(computeQueues.dataArray[queueIndex]);
+
+	queue->AddObject(ret);
+}
+
 
 void RenderInstance::ReadData(int handle, void* dest, int size, int offset)
 {

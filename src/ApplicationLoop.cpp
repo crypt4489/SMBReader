@@ -447,6 +447,10 @@ static bool stopThreadServer = false;
 
 static OSThreadHandle threadHandle;
 
+
+static int currentFrameGraphIndex = 1;
+static int mainComputeQueueIndex = 0;
+
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	queueSema(Semaphore()),
@@ -779,6 +783,8 @@ void ApplicationLoop::Execute()
 
 		GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
+		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 
 		while (running)
 		{
@@ -796,11 +802,11 @@ void ApplicationLoop::Execute()
 
 				lightCountPrev = globalLightCount;
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.preWorldSpaceDivisionPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.preWorldSpaceDivisionPipeline);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.prefixSumPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.prefixSumPipeline);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(lightAssignment.postWorldSpaceDivisionPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.postWorldSpaceDivisionPipeline);
 
 				updateLights--;
 			}
@@ -813,23 +819,17 @@ void ApplicationLoop::Execute()
 				}
 
 				updatedCommand--;
-				 
+
 				commandCountPrev = mainIndirectDrawData.commandBufferCount;
-				
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.preWorldSpaceDivisionPipeline, 0);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.prefixSumPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.preWorldSpaceDivisionPipeline);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(worldSpaceAssignment.postWorldSpaceDivisionPipeline, 0);
-				
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.prefixSumPipeline);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(mainIndirectDrawData.indirectCullPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.postWorldSpaceDivisionPipeline);
 
-				
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, mainIndirectDrawData.indirectCullPipeline);
 			}
-
-
-		
 
 			if (cameraMove || debugIndirectDrawData.commandBufferCount != debugCommandCountPrev || updatedDebugCommand > 0)
 			{
@@ -839,10 +839,10 @@ void ApplicationLoop::Execute()
 					updatedDebugCommand = 3;
 				}
 				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectCullPipeline, 0);
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, debugIndirectDrawData.indirectCullPipeline);
 				updatedDebugCommand--;
 			}
-			
+
 
 
 			if (mainWindow->windowData.info.HandleResizeRequested())
@@ -857,9 +857,9 @@ void ApplicationLoop::Execute()
 
 			if (index != ~0ui32) {
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(skyboxPipeline, 1);
+				GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 0);
 
-				GlobalRenderer::gRenderInstance->AddPipelineToMainQueue(debugIndirectDrawData.indirectDrawPipeline, 1);
+				GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
 				GlobalRenderer::gRenderInstance->DrawScene(index);
 
@@ -2727,6 +2727,11 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(11);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(12);
 
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphNoMSAAIndex, 0, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphMSAAIndex, 0, 10);
+
+	mainComputeQueueIndex = GlobalRenderer::gRenderInstance->CreateComputeQueue(15);
+
 	CreateTexturePools();
 
 	globalBufferLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer((sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
@@ -3064,20 +3069,20 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 	if (keyActions[KC_TWO].state == PRESSED)
 	{
-		GlobalRenderer::gRenderInstance->IncreaseMSAA();
+		GlobalRenderer::gRenderInstance->IncreaseMSAA(currentFrameGraphIndex, 0);
 	}
 
 	if (keyActions[KC_ONE].state == PRESSED)
 	{
-		GlobalRenderer::gRenderInstance->DecreaseMSAA();
+		GlobalRenderer::gRenderInstance->DecreaseMSAA(currentFrameGraphIndex, 0);
 	}
-
-	static int currentFrameGraphIndex = 0;
 
 	if (keyActions[KC_Q].state == PRESSED)
 	{
 		currentFrameGraphIndex ^= 1;
-		GlobalRenderer::gRenderInstance->SetFrameGraph(currentFrameGraphIndex);
+		GlobalRenderer::gRenderInstance->ResetCommandList();
+		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 	}
 }
 
