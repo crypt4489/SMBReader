@@ -801,7 +801,7 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraphInstance* gr
 				vkRenderPassMappedIdx = (currentPassDesc->colorCount + currentPassDesc->depthStencilCount) + currResolve++;
 				break;
 			case AttachmentDescriptionType::DEPTHATTACH:
-				referenceLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+				referenceLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 				currResource->usage = AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE;
 				dsvrtvLoad = API::ConvertAttachLoadOpToVulkanLoadOp(desc->loadOp);
 				dsvrtvStore = API::ConvertAttachStoreOpToVulkanStoreOp(desc->storeOp);
@@ -960,7 +960,23 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
-int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height)
+int RenderInstance::CreateSwapChainAttachment(int graphIndex, int renderPassIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
+
+	EntryHandle* backBuffers = swapChain->CreateSwapchainViews();
+
+	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT);
+}
+
+int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height)
+{
+	return CreateAttachmentResources(graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT);
+}
+
+int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -970,18 +986,37 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 
 	int baseRenderPass = graphInstance->consecutiveRenderPassBase;
 
-	EntryHandle* attachmentViews = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * graphInstance->graphLayout->resourceCount);
+	AttachmentRenderPassInstance* currentRenderPass = &graphInstance->passes[renderPassIndex];
 
-	for (int b = 0; b < graphInstance->graphLayout->resourceCount; b++)
+	int attachmentCount = currentRenderPass->attachInstCount;
+
+	EntryHandle* attachmentViews = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * attachmentCount);
+
+	int basePassRenderTarget = currentRenderPass->baseRenderTargetData;
+
+	int basePassRenderPass = currentRenderPass->baseRenderPassData;
+
+	AttachmentInstance* attachInsts = currentRenderPass->attachInst;
+
+	currentRenderPass->rpType = rpType;
+
+	for (int b = 0; b < attachmentCount; b++)
 	{
-		AttachmentResourceInstance* resourceInst = &graphInstance->resources[b];
+		AttachmentInstance* attachDesc = &attachInsts[b];
+
+		int resourceIndex = attachDesc->attachmentResource;
+
+		AttachmentResourceInstance* resourceInst = &graphInstance->resources[resourceIndex];
 		
-		AttachmentResource* resourceTempl = &graphInstance->graphLayout->resources[b];
+		AttachmentResource* resourceTempl = &graphInstance->graphLayout->resources[resourceIndex];
 
 		int sampHi = resourceInst->sampHi;
 		int sampLo = resourceInst->sampLo;
 
 		int sampleCount = std::max(std::bit_width((unsigned)sampHi)-1, 1);
+
+		int imageWidth = width;
+		int imageHeight = height;
 
 		if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
 		{
@@ -1025,7 +1060,7 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 					for (int g = 0; g < imageCount; g++)
 					{
 						resourceInst->attachmentImage[v][g] = dev->CreateImage(
-							width, height,
+							imageWidth, imageHeight,
 							1, attachmentFormat, 1,
 							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1050,7 +1085,7 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 					for (int g = 0; g < imageCount; g++)
 					{
 						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(width, height,
+							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
 								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 								sampLo,
@@ -1068,9 +1103,9 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 					for (int g = 0; g < imageCount; g++)
 					{
 						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(width, height,
+							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
-								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
 								sampLo,
 								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
 
@@ -1087,7 +1122,7 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 					for (int g = 0; g < imageCount; g++)
 					{
 						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(width, height,
+							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
 								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 								sampLo,
@@ -1104,7 +1139,7 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 				for (int g = 0; g < imageCount; g++)
 				{
 					resourceInst->attachmentImage[0][g] = dev->CreateImage(
-						width, height,
+						imageWidth, imageHeight,
 						1, attachmentFormat, 1,
 						VK_IMAGE_USAGE_SAMPLED_BIT |
 						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1132,56 +1167,47 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int imageCount, En
 		}
 	}
 
-	for (int c = 0; c < graphInstance->graphLayout->passesCount; c++)
+	int rtWidth =  width;
+	int rtHeight = height;
+
+	for (int sampleCount = 0; sampleCount < currentRenderPass->maxSampleCount; sampleCount++)
 	{
-		AttachmentRenderPassInstance* passInstance = &graphInstance->passes[c];
+		int absoluteRTIndex = baseRenderTarget + basePassRenderTarget + sampleCount;
 
-		int attachmentCount = passInstance->attachInstCount;
+		int absoluteRPIndex = baseRenderPass + basePassRenderPass + sampleCount;
 
-		int basePassRenderTarget = passInstance->baseRenderTargetData;
+		mainRenderTargets[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRTIndex], imageCount, rtWidth, rtHeight, 0, 0);
 
-		int basePassRenderPass = passInstance->baseRenderPassData;
+		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRTIndex]);
 
-		AttachmentInstance* attachInsts = passInstance->attachInst;
-
-		for (int sampleCount = 0; sampleCount < passInstance->maxSampleCount; sampleCount++)
+		for (int d = 0; d < imageCount; d++)
 		{
-			int absoluteRTIndex = baseRenderTarget + basePassRenderTarget + sampleCount;
-
-			int absoluteRPIndex = baseRenderPass + basePassRenderPass + sampleCount;
-
-			mainRenderTargets[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRTIndex], imageCount, width, height, 0, 0);
-
-			RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRTIndex]);
-
-			for (int d = 0; d < imageCount; d++)
+			for (int e = 0; e < attachmentCount; e++)
 			{
-				for (int e = 0; e < attachmentCount; e++)
+				AttachmentInstance* attachInst = &attachInsts[e];
+
+				AttachmentResourceInstance* resourceInst = &graphInstance->resources[attachInst->attachmentResource];
+
+				int sampleIndex = sampleCount;
+
+				if (resourceInst->sampHi < (1 << sampleCount))
 				{
-					AttachmentInstance* attachInst = &attachInsts[e];
-
-					AttachmentResourceInstance* resourceInst = &graphInstance->resources[attachInst->attachmentResource];
-
-					int sampleIndex = sampleCount;
-
-					if (resourceInst->sampHi < (1 << sampleCount))
-					{
-						sampleIndex = std::bit_width((unsigned)resourceInst->sampHi) - 1;
-					}
-
-					attachmentViews[e] = resourceInst->attachmentImageView[sampleIndex][d];
+					sampleIndex = std::bit_width((unsigned)resourceInst->sampHi) - 1;
 				}
 
-				renderTarget->framebufferIndices[d] =
-					dev->CreateFrameBuffer(
-						attachmentViews,
-						attachmentCount,
-						renderPasses[absoluteRPIndex],
-						{ width, height }
-					);
+				attachmentViews[e] = resourceInst->attachmentImageView[sampleIndex][d];
 			}
+
+			renderTarget->framebufferIndices[d] =
+				dev->CreateFrameBuffer(
+					attachmentViews,
+					attachmentCount,
+					renderPasses[absoluteRPIndex],
+					{ width, height }
+				);
 		}
 	}
+	
 	return 0;
 }
 
@@ -1200,13 +1226,7 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 	{
 		swapChain->CreateSwapChain(width, height);
 	}
-	
-	EntryHandle* backBuffers = swapChain->CreateSwapchainViews();
-	
-	for (int i = 0; i < attachmentGraphInstancesCount; i++)
-	{
-		CreateAttachmentResources(i, swapChain->imageCount, backBuffers, width, height);
-	}
+
 }
 
 void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
@@ -2526,7 +2546,7 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 	}
 
 
-	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 2); i++)
+	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 4); i++)
 	{
 		renderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
 		majorDevice->UpdateRenderGraph(renderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
@@ -3235,6 +3255,8 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 			{
 				AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
 
+				int SubRenderTargetSelection = rpInst->rpType == RenderPassType::SWAPCHAIN_IMAGE_COUNT ? imageIndex : currentFrame;
+
 				int sampleLevelForRenderPass = rpInst->currentSampleCount;
 
 				int possibleQueueIndex = rpInst->graphicsOTQIndex;
@@ -3247,7 +3269,7 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
 
-				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], imageIndex, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
+				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], SubRenderTargetSelection, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
 
 				float x = static_cast<float>(renderTarget->width), y = static_cast<float>(renderTarget->height);
 

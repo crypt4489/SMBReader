@@ -573,7 +573,11 @@ struct AttachmentDescription
 	int resourceIndex;
 };
 
-
+enum class RenderPassType
+{
+	SWAPCHAIN_IMAGE_COUNT = 1,
+	PER_FRAME_IMAGE_COUNT = 2
+};
 
 struct AttachmentRenderPass
 {
@@ -628,6 +632,7 @@ struct AttachmentRenderPassInstance
 	int baseRenderPassData;
 	int currentSampleCount;
 	int graphicsOTQIndex;
+	RenderPassType rpType;
 };
 
 struct AttachmentGraphInstance

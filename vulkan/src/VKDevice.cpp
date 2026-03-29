@@ -386,8 +386,8 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 	renderPassInfo.renderArea = rect;
 
 	std::array<VkClearValue, 2> clearValues{};
-	clearValues[0].color = color;
-	clearValues[1].depthStencil = depthStencil;
+	//clearValues[0].color = color;
+	clearValues[0].depthStencil = depthStencil;
 
 	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
 	renderPassInfo.pClearValues = clearValues.data();

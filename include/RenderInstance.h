@@ -51,7 +51,11 @@ struct RenderInstance
 
 	int RecreateSwapChain();
 
-	int CreateAttachmentResources(int graphIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height);
+	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType);
+
+	int CreateSwapChainAttachment(int graphIndex, int renderPassIndex);
+
+	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height);
 
 	int CreateFrameGraphInstance(AttachmentGraph* graph);
 
@@ -130,8 +134,6 @@ struct RenderInstance
 	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int* descriptorid, int descriptorcount);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
-
-	void SetActiveComputePipeline(uint32_t objectIndex, bool active);
 
 	void EndFrame();
 

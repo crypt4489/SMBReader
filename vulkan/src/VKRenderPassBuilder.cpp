@@ -67,8 +67,13 @@ void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint
 	VkSubpassDescription subpass{};
 
 	subpass.pipelineBindPoint = bindPoint;
-	subpass.colorAttachmentCount = numberOfColorAttachments;
-	subpass.pColorAttachments = &references[0];
+
+	if (numberOfColorAttachments)
+	{
+		subpass.colorAttachmentCount = numberOfColorAttachments;
+		subpass.pColorAttachments = &references[0];
+	}
+	
 
 	uint32_t offset = numberOfColorAttachments;
 

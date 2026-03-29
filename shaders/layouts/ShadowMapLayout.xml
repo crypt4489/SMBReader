@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ShaderGraph>
+	<GLSLShader type="vert">
+		3dshadowmap.vert
+	</GLSLShader>
+	<GLSLShader type="frag">
+		3dshadowmap.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="v" size="64" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="constantbuffer" used="v" size="64" offset="64" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

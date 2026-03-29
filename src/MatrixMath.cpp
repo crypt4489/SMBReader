@@ -368,6 +368,28 @@ Matrix3f CreateRotationMatrix(const Vector3f& up, float angle)
 
 }
 
+Matrix4f CreateProjectionMatrix(float aspect, float n, float f, float angle)
+{
+	Matrix4f Projection = Identity4f();
+
+	float FoyYDiv2 = angle * 0.5f;
+	float cotFov = 1.0f / (tanf(FoyYDiv2));
+
+	float w = cotFov / aspect;
+	float h = cotFov;
+
+	Projection = Identity4f();
+
+	Projection[0][0] = w;
+	Projection[1][1] = -h;
+	Projection[2][2] = -(f + n) / (f - n);
+	Projection[2][3] = -1.0f;
+	Projection[3][2] = -(2 * f * n) / (f - n);
+	Projection[3][3] = 0.0f;
+
+	return Projection;
+}
+
 Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle)
 {
 	Matrix4f ret = Identity4f();

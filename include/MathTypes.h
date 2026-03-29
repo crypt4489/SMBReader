@@ -965,6 +965,8 @@ Matrix3f CreateRotationMatrix(const Vector3f& up, float angle);
 
 Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle);
 
+Matrix4f CreateProjectionMatrix(float aspect, float n, float f, float angle);
+
 PACKED_BEGIN
 struct Plane
 {

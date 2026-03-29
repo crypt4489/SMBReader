@@ -4,4 +4,6 @@
 	</PrimitiveType>
 	<CullMode mode="none" winding="ccw">
 	</CullMode>
+	<DepthTest op="always" write="true">
+	</DepthTest>
 </PipelineDescription>

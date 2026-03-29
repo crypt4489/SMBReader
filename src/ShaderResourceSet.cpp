@@ -1545,7 +1545,6 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 
 	return ret;
 }
-#include <vector>
 
 void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph)
 {
@@ -1558,13 +1557,11 @@ void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph*
 
 	std::vector<char> fileDataC(dataSize);
 
-	void* fileData = (void*)fileDataC.data();
-
-	OSReadFile(fileHandle, dataSize, (char*)fileData);
+	OSReadFile(fileHandle, dataSize, fileDataC.data());
 
 	OSCloseFile(fileHandle);
 
-	char* dataStart = (char*)fileData;
+	char* dataStart = fileDataC.data();
 
 	int attachmentCounter = 0;
 	int resourceCounter = 0;
@@ -1770,9 +1767,6 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			}
 			break;
 		}
-		
-		
-
 		case hash("resource"):
 		{
 			description->resourceIndex = codeV;
@@ -1805,10 +1799,25 @@ int HandleAttachmentDesc(char* fileData, int size, int currentLocation, Attachme
 	{
 		unsigned long code = hashes[stackIter];
 		unsigned long codeV = hashes[stackIter + 1];
+		/*
+		switch (code)
+		{
 
-
-		
-
+		case hash("imageCount"):
+		{
+			switch (codeV)
+			{
+			case hash("swc"):
+				holder->rpType = RenderPassType::SWAPCHAIN_IMAGE_COUNT;
+				break;
+			case hash("sys"):
+				holder->rpType = RenderPassType::PER_FRAME_IMAGE_COUNT;
+				break;
+			}
+			break;
+		}
+		}
+		*/
 		stackIter += 2;
 	}
 
@@ -1826,6 +1835,8 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 	int stackIter = 0;
 
 	resource->msaa = 0;
+	//resource->width = -1;
+	//resource->height = -1;
 
 	while (attrSize > stackIter)
 	{
@@ -1857,6 +1868,9 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 			case hash("d24s8"):
 				resource->format = ImageFormat::D24UNORMS8STENCIL;
 				break;
+			case hash("d32f"):
+				resource->format = ImageFormat::D32FLOAT;
+				break;
 			}
 			break;
 		}
@@ -1865,6 +1879,18 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 			resource->msaa = 1;
 			break;
 		}
+		/*
+		case hash("height"):
+		{
+			resource->height = codeV;
+			break;
+		}
+		case hash("width"):
+		{
+			resource->width = codeV;
+			break;
+		}
+		*/
 		default:
 			throw std::runtime_error("Failed Attachments Resource");
 			break;
@@ -1902,6 +1928,8 @@ static int ReadAttributesAttachments(char* fileData, int size, int currentLocati
 			break;
 		}
 		case hash("resource"):
+		//case hash("height"):
+		//case hash("width"):
 		{
 			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
 			break;

@@ -1,8 +1,14 @@
-<Attachments sampLo="2" sampHi="00">
-	<ColorAttachment imageType="static" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="rtv">
-	</ColorAttachment>
-	<DepthAttachment imageType="static" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="dsv">
-	</DepthAttachment>
-	<ResolveAttachment imageType="static" loadOp="nocare" storeOp="store" srcLayout="undefined" dstLayout="present">
+<AttachmentResource imageType="swc" format="b8g8r8a8">
+</AttachmentResource>
+<AttachmentResource imageType="static" format="b8g8r8a8" msaa="true">
+</AttachmentResource>
+<AttachmentResource imageType="static" format="d24s8" msaa="true">
+</AttachmentResource>
+<Attachments>
+	<ResolveAttachment resource="0" loadOp="nocare" storeOp="store" srcLayout="undefined" dstLayout="present">
 	</ResolveAttachment>
+	<ColorAttachment resource = "1" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="rtv">
+	</ColorAttachment>
+	<DepthStencilAttachment resource = "2" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="dsv">
+	</DepthStencilAttachment>
 </Attachments>
