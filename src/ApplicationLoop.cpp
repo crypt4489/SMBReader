@@ -378,6 +378,31 @@ static uint32_t imageIndex = 0;
 static Matrix4f shadowMapView;
 static Matrix4f shadowMapProj;
 
+
+struct ShadowMapBase
+{
+	int frameGraphIndex;
+	int resourceIndex;
+	int atlasWidth;
+	int atlasHeight;
+	int avgShadowWidth;
+	int avgShadowHeight;
+	int totalShadowMaps;
+	int zoneAlloc;
+};
+
+
+struct ShadowMapDebugPipelineData
+{
+	int fullScreenPipeline;
+	int fullScreenDescriptorSet;
+	int shadowMapPipeline;
+	int shadowMapDescriptorSet;
+};
+
+
+ShadowMapDebugPipelineData smdpd{};
+
 static void CreateUniformGrid()
 {
 	float div = (float)(mainGrid.numberOfDivision);
@@ -771,6 +796,9 @@ void ApplicationLoop::Execute()
 
 		int lightCountPrev = globalLightCount;
 
+		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
+
 		GlobalRenderer::gRenderInstance->EndFrame();
 
 		float x = 230.0f;
@@ -788,9 +816,6 @@ void ApplicationLoop::Execute()
 		samplerUpdate.resourceHandles = &mainLinearSampler;
 
 		GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
-
-		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
-		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 
 		
 
@@ -858,25 +883,32 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance->RecreateSwapChain();
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance->GetSwapChainWidth() / (float)GlobalRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(0, 0);
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0);
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1);
-				GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, GlobalRenderer::gRenderInstance->GetSwapChainWidth(), GlobalRenderer::gRenderInstance->GetSwapChainHeight());
+				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(0, 0, nullptr);
+				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0, nullptr);
+				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1, nullptr);
+				GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, GlobalRenderer::gRenderInstance->GetSwapChainWidth(), GlobalRenderer::gRenderInstance->GetSwapChainHeight(), nullptr);
+				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(3, 0, nullptr);
 			}
 
 			imageIndex = GlobalRenderer::gRenderInstance->BeginFrame();
 
 			if (imageIndex != ~0ui32) {
 
-				//GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 0);
-
-				//GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
+	
 
 				if (currentFrameGraphIndex == 3)
 				{
-					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(smdpd.shadowMapPipeline, currentFrameGraphIndex, 0);
 
-					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(smdpd.fullScreenPipeline, currentFrameGraphIndex, 1);
+				}
+				else {
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 0);
+
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
+
+					if (currentFrameGraphIndex == 2)
+						GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
 				}
 
 				GlobalRenderer::gRenderInstance->DrawScene(imageIndex);
@@ -1016,8 +1048,22 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, 0, frame);
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 
-	shadowMapView = c.View;
-	shadowMapProj = c.Projection;
+	Vector3f pos;
+
+	float distance = 25.0f;
+
+	pos = Vector3f(-mainDirectionalLight.direction.x, -mainDirectionalLight.direction.y, -mainDirectionalLight.direction.z);
+
+	pos = pos * distance;
+
+	LTM ltm{};
+
+	LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
+
+
+
+	shadowMapView = CreateViewMatrix(&ltm);
+	shadowMapProj =  CreateOrthographicMatrix(-10.0, 10.0f, -10.0f, 10.0f, 1.0f, 100.0f);
 }
 EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
@@ -2199,20 +2245,30 @@ void CreateGenericMeshCommandBuffers(int count)
 
 
 
-	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(17, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	smdpd.shadowMapDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(17, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalMeshLocation, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalVertexBuffer, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalRenderableLocation, nullptr, 0, 1, 3);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.shadowMapDescriptorSet, &shadowMapProj, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.shadowMapDescriptorSet, &shadowMapView, 1);
+
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalLightTypesBuffer,  0, 1, 4);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialsLocation, nullptr, 0, 1, 5);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
-	//GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectDrawDescriptor, &shadowMapProj, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectDrawDescriptor, &shadowMapView, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalLightTypesBuffer,  0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialsLocation, nullptr, 0, 1, 5);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalRenderableLocation, nullptr, 0, 1, 6);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
+	
 
 	std::array<int, 1> indirectDrawDescriptors = {
 		mainIndirectDrawData.indirectDrawDescriptor,
@@ -2222,7 +2278,7 @@ void CreateGenericMeshCommandBuffers(int count)
 		.drawType = 0,
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
-		.pipelinename = 17,
+		.pipelinename = GENERIC,
 		.descCount = 1,
 		.descriptorsetid = indirectDrawDescriptors.data(),
 		.indexBufferHandle = globalIndexBuffer,
@@ -2235,7 +2291,12 @@ void CreateGenericMeshCommandBuffers(int count)
 	};
 
 
-	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, false);
+	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, true);
+
+	indirectDrawCreate.descriptorsetid = &smdpd.shadowMapDescriptorSet;
+	indirectDrawCreate.pipelinename = 17;
+
+	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, false);
 
 	int cullLightDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -2730,12 +2791,24 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->CreateSwapchain(mainColorFormat, 800, 600);
 
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(0, 0);
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0);
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1);
-	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 800, 600);
-	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(3, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 1024, 1024);
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(3, 1);
+	std::array<AttachmentClear, 3> basicclears{
+		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
+		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
+		CLEARDEPTH, {1.0, 0}
+	};
+	std::array<AttachmentClear, 4> clears2{
+		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
+		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
+		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
+		CLEARDEPTH, {1.0, 0}
+	};
+
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(0, 0, basicclears.data() + 1);
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0, basicclears.data());
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1, clears2.data());
+	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 800, 600, clears2.data());
+	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(3, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 1024, 1024, clears2.data() + 2);
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(3, 1, clears2.data()+2);
 
 	GlobalRenderer::gRenderInstance->CreatePipelines(pds.data(), pds.size());
 
@@ -2904,14 +2977,7 @@ void ApplicationLoop::InitializeRuntime()
 		.indirectCountAllocation = ~0
 	};
 
-//	skyboxPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&skyboxInfo, false);
-
-	CreateDebugCommandBuffers(256);
-	CreateLightAssignments(128);
-	CreateMeshWorldAssignment(256);
-	CreateGenericMeshCommandBuffers(256);
-
-	int fullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	skyboxPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&skyboxInfo, false);
 
 	ResourceArrayUpdate samplerUpdate;
 
@@ -2919,12 +2985,28 @@ void ApplicationLoop::InitializeRuntime()
 	samplerUpdate.resourceDstBegin = 0;
 	samplerUpdate.resourceHandles = &mainLinearSampler;
 
-	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(BasicShadow, 1, fullScreen, 0, 0);
-	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(fullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+	CreateDebugCommandBuffers(256);
+	CreateLightAssignments(128);
+	CreateMeshWorldAssignment(256);
+	CreateGenericMeshCommandBuffers(256);
 
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(fullScreen, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	std::array<int, 1> fullScreenDesc = { fullScreen };
+	int mainFullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(MSAAPost, 1, mainFullScreen, 0, 0);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainFullScreen, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+
+
+
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(BasicShadow, 1, smdpd.fullScreenDescriptorSet, 0, 0);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+
+	std::array<int, 1> fullScreenDesc = { smdpd.fullScreenDescriptorSet };
 
 	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
 		.drawType = 0,
@@ -2944,6 +3026,10 @@ void ApplicationLoop::InitializeRuntime()
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
 	};
+
+	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
+
+	fullscreenInfo.descriptorsetid = &mainFullScreen;
 
 	mainFullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
 
@@ -3168,10 +3254,10 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 			dir = 1;
 			next = 0;
 		}
-		else if (next > 2)
+		else if (next > 3)
 		{
 			dir = -1;
-			next = 2;
+			next = 3;
 		}
 
 		currentFrameGraphIndex = next;

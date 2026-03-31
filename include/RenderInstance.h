@@ -51,11 +51,11 @@ struct RenderInstance
 
 	int RecreateSwapChain();
 
-	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType);
+	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType, AttachmentClear* clears);
 
-	int CreateSwapChainAttachment(int graphIndex, int renderPassIndex);
+	int CreateSwapChainAttachment(int graphIndex, int renderPassIndex, AttachmentClear* clears);
 
-	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height);
+	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears);
 
 	int CreateFrameGraphInstance(AttachmentGraph* graph);
 

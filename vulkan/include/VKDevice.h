@@ -112,8 +112,7 @@ struct RecordingBufferObject
 	void BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 		VkSubpassContents contents,
 		VkRect2D rect,
-		VkClearColorValue color = { {0.0f, 0.0f, 0.0f, 1.0f} },
-		VkClearDepthStencilValue depthStencil = { 1.0f, 0 });
+		VkClearValue* clearVals, uint32_t clearValCount);
 
 	void BindIndexBuffer(EntryHandle bufferIndex, uint32_t indexOffset, VkIndexType indexType);
 

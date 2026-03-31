@@ -1,4 +1,5 @@
 #include "MathTypes.h"
+#include "LTM.h"
 #include <cmath>
 
 Matrix2f Add(Matrix2f a, Matrix2f b)
@@ -390,6 +391,21 @@ Matrix4f CreateProjectionMatrix(float aspect, float n, float f, float angle)
 	return Projection;
 }
 
+Matrix4f CreateOrthographicMatrix(float left, float right, float bottom, float top, float n, float f)
+{
+	Matrix4f ortho = Identity4f();
+
+	ortho[0][0] = 2.0f / (right - left);
+	ortho[1][1] = 2.0f / (bottom - top);
+	ortho[2][2] = 1.0f / (n - f);
+
+	ortho[0][3] = -(right + left) / (right - left);
+	ortho[1][3] = -(top + bottom) / (bottom - top);
+	ortho[2][3] =  (n) / (n - f);
+
+	return ortho;
+}
+
 Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle)
 {
 	Matrix4f ret = Identity4f();
@@ -421,4 +437,56 @@ Matrix4f CreateRotationMatrixMat4(const Vector3f& up, float angle)
 
 	return ret;
 
+}
+
+void LookAt(LTM* ltm, const Vector3f& pos, const Vector3f& target, const Vector3f& up)
+{
+	Vector3f camLook = pos - target;
+
+	camLook = Normalize(camLook);
+
+	Vector3f camRight = Cross(up, camLook);
+
+	camRight = Normalize(camRight);
+
+	Vector3f camUp = Cross(camLook, camRight);
+
+	ltm->SetPos(Vector4f(pos.x, pos.y, pos.z, 1.0f));
+	ltm->SetForward(camLook);
+	ltm->SetRight(camRight);
+	ltm->SetUp(camUp);
+}
+
+Matrix4f CreateViewMatrix(LTM* ltm)
+{
+	float x, y, z;
+
+	Matrix4f View = Identity4f();
+
+	Vector3f lPos = ltm->GetPos(), lRight = ltm->GetRight(), lUp = ltm->GetUp(), lForward = ltm->GetForward();
+
+	x = -Dot(lRight, lPos);
+	y = -Dot(lUp, lPos);
+	z = -Dot(lForward, lPos);
+
+
+	View[0][0] = lRight.x;
+	View[1][0] = lRight.y;
+	View[2][0] = lRight.z;
+
+	View[0][1] = lUp.x;
+	View[1][1] = lUp.y;
+	View[2][1] = lUp.z;
+
+	View[0][2] = lForward.x;
+	View[1][2] = lForward.y;
+	View[2][2] = lForward.z;
+
+
+	View[3][0] = x;
+	View[3][1] = y;
+	View[3][2] = z;
+	View[3][3] = 1.0f;
+
+	return View;
 }

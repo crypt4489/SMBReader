@@ -617,10 +617,34 @@ struct AttachmentResourceInstance
 	int imageCount;
 };
 
+enum RPClearType
+{
+	NOCLEAR = 0,
+	CLEARCOLOR = 1,
+	CLEARDEPTH = 2
+};
+
+union ClearVal {
+	struct {
+		float cdata[4];
+	};
+	struct {
+		float ddata;
+		uint32_t sdata;
+	};
+};
+
+struct AttachmentClear
+{
+	RPClearType type;
+	ClearVal val;
+};
+
 struct AttachmentInstance
 {
 	AttachmentDescription* descLayout;
 	int attachmentResource;
+	AttachmentClear clear;
 };
 
 struct AttachmentRenderPassInstance
@@ -633,6 +657,7 @@ struct AttachmentRenderPassInstance
 	int currentSampleCount;
 	int graphicsOTQIndex;
 	RenderPassType rpType;
+	
 };
 
 struct AttachmentGraphInstance

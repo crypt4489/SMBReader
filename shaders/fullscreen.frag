@@ -12,6 +12,6 @@ layout(set = 0, binding = 1) uniform sampler samplerLinear;
 
 void main() 
 {
-    outColor.r = texture(sampler2D(Textures[si.imageIndex], samplerLinear), texCoords).r;
+    outColor = texture(sampler2D(Textures[si.imageIndex], samplerLinear), texCoords);
  
 }

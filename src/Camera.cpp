@@ -1,55 +1,14 @@
 #include "Camera.h"
 void Camera::CamLookAt(const Vector3f& pos, const Vector3f& target, const Vector3f& up)
 {
-	Vector3f camLook = pos - target;
-
-	camLook = Normalize(camLook);
-
-	Vector3f camRight = Cross(up, camLook);
-
-	camRight = Normalize(camRight);
-
-	Vector3f camUp = Cross(camLook, camRight);
-
-	LTM.SetPos(Vector4f(pos.x, pos.y, pos.z, 1.0f));
-	LTM.SetForward(camLook);
-	LTM.SetRight(camRight);
-	LTM.SetUp(camUp);
+	LookAt(&LTM, pos, target, up);
 }
 
 void Camera::UpdateCamera()
 {
-	float x, y, z;
-
-	View = Identity4f();
-
-	Vector3f lPos = LTM.GetPos(), lRight = LTM.GetRight(), lUp = LTM.GetUp(), lForward = LTM.GetForward();
-
-	x = -Dot(lRight, lPos);
-	y = -Dot(lUp, lPos);
-	z = -Dot(lForward, lPos);
-
-
-	View[0][0] = lRight.x;
-	View[1][0] = lRight.y;
-	View[2][0] = lRight.z;
-
-	View[0][1] = lUp.x;
-	View[1][1] = lUp.y;
-	View[2][1] = lUp.z;
-
-	View[0][2] = lForward.x;
-	View[1][2] = lForward.y;
-	View[2][2] = lForward.z;
-
-
-	View[3][0] = x;
-	View[3][1] = y;
-	View[3][2] = z;
-	View[3][3] = 1.0f;
+	View = CreateViewMatrix(&LTM);
 
 	World = LTM.GetWorldMatrix();
-
 }
 
 void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)

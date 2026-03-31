@@ -374,8 +374,7 @@ void RecordingBufferObject::DispatchCommand(uint32_t x, uint32_t y, uint32_t z)
 void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 	VkSubpassContents contents,
 	VkRect2D rect,
-	VkClearColorValue color,
-	VkClearDepthStencilValue depthStencil)
+	VkClearValue* clearVals, uint32_t clearValCount)
 {
 
 	VkRenderPassBeginInfo renderPassInfo{};
@@ -385,12 +384,8 @@ void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex
 	renderPassInfo.framebuffer = vkDeviceHandle->GetFrameBuffer(ref->framebufferIndices[imageIndex]);
 	renderPassInfo.renderArea = rect;
 
-	std::array<VkClearValue, 2> clearValues{};
-	//clearValues[0].color = color;
-	clearValues[0].depthStencil = depthStencil;
-
-	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-	renderPassInfo.pClearValues = clearValues.data();
+	renderPassInfo.clearValueCount = clearValCount;
+	renderPassInfo.pClearValues = clearVals;
 
 	vkCmdBeginRenderPass(cbBufferHandler.buffer, &renderPassInfo, contents);
 }

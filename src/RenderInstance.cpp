@@ -960,7 +960,7 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
-int RenderInstance::CreateSwapChainAttachment(int graphIndex, int renderPassIndex)
+int RenderInstance::CreateSwapChainAttachment(int graphIndex, int renderPassIndex, AttachmentClear* clears)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -968,15 +968,15 @@ int RenderInstance::CreateSwapChainAttachment(int graphIndex, int renderPassInde
 
 	EntryHandle* backBuffers = swapChain->CreateSwapchainViews();
 
-	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT);
+	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears);
 }
 
-int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height)
+int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears)
 {
-	return CreateAttachmentResources(graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT);
+	return CreateAttachmentResources(graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT, clears);
 }
 
-int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType)
+int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType, AttachmentClear* clears)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1017,6 +1017,11 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 
 		int imageWidth = width;
 		int imageHeight = height;
+
+		if (clears)
+		{
+			attachDesc->clear = clears[resourceIndex];
+		}
 
 		if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
 		{
@@ -3269,7 +3274,35 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
 
-				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], SubRenderTargetSelection, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} });
+				VkClearValue* clears = (VkClearValue*)cacheAllocator->CAllocate(sizeof(VkClearValue) * rpInst->attachInstCount);
+
+				AttachmentInstance* instances = rpInst->attachInst;
+
+				uint32_t clearCount = 0;
+
+				for (int g = 0; g < rpInst->attachInstCount; g++)
+				{
+					VkClearValue* currClear = &clears[clearCount];
+					switch (instances[g].clear.type)
+					{
+					case NOCLEAR:
+						break;
+					case CLEARCOLOR:
+						currClear->color.float32[0] = instances[g].clear.val.cdata[0];
+						currClear->color.float32[1] = instances[g].clear.val.cdata[1];
+						currClear->color.float32[2] = instances[g].clear.val.cdata[2];
+						currClear->color.float32[3] = instances[g].clear.val.cdata[3];
+						clearCount++;
+						break;
+					case CLEARDEPTH:
+						currClear->depthStencil.depth = instances[g].clear.val.ddata;
+						currClear->depthStencil.stencil = instances[g].clear.val.sdata;
+						clearCount++;
+						break;
+					}
+				}
+
+				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], SubRenderTargetSelection, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} }, clears, clearCount);
 
 				float x = static_cast<float>(renderTarget->width), y = static_cast<float>(renderTarget->height);
 
