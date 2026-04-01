@@ -52,10 +52,7 @@ struct PerModel
     vec4 sphere;
 };
 
-layout(push_constant) uniform ShadowMap {
-    mat4 shadowMapProj;
-    mat4 shadowMapView;
-} sm;
+
 
 layout(set = 0, binding = 0) readonly buffer PMBuffer {
     PerModel objects[];
@@ -71,6 +68,19 @@ layout(set = 0, binding = 3) readonly buffer RENDBuffer
 {
     Renderable renderables[];
 } rends;
+
+layout(set = 0, binding = 4) uniform usamplerBuffer globalSMRenderableStart;
+layout(set = 0, binding = 5) uniform usamplerBuffer globalSMPerRendIndices;
+
+struct ShadowMapViewProj
+{
+    mat4 shadowMapView;
+    mat4 shadowMapProj;
+};
+
+layout(set = 0, binding = 6) readonly buffer ShadowMap {
+    ShadowMapViewProj viewProjs[];
+} sm;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -220,6 +230,12 @@ void main()
 {    
     uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
+    uint shadowMapBase = uint(texelFetch(globalSMRenderableStart, int(renderableIndex)).r);
+
+    uint shadowViewProjOffset = uint(texelFetch(globalSMPerRendIndices, int(shadowMapBase) + gl_InstanceIndex).r);
+
+    ShadowMapViewProj viewProj = sm.viewProjs[shadowViewProjOffset];
+
     Renderable currentRenderable = rends.renderables[renderableIndex];
 
     PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
@@ -235,7 +251,7 @@ void main()
       
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = sm.shadowMapProj * sm.shadowMapView * currentRenderable.transform;
+            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
             gl_Position = MVP * intPos;
         }
@@ -244,7 +260,7 @@ void main()
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = sm.shadowMapProj * sm.shadowMapView * currentRenderable.transform;
+            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
         }

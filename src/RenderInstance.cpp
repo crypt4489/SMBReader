@@ -461,8 +461,8 @@ namespace API {
 
 RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 	:
-	vulkanShaderGraphs{ instanceStorageAllocator->Allocate(5 * KiB), 5*KiB, instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
-	descriptorManager{ instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
+	vulkanShaderGraphs{ instanceStorageAllocator->Allocate(10 * KiB), 10*KiB, instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
+	descriptorManager{ instanceStorageAllocator->Allocate(10 * KiB), 10*KiB},
 	minStorageAlignment(0), minUniformAlignment(0), attachmentGraphs(nullptr), attachmentGraphsInstances(nullptr)
 {
 	vkInstance = new VKInstance();

@@ -1,0 +1,230 @@
+#version 450
+
+struct IndexedIndirectCommand
+{
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int vertexOffset;
+	uint firstInstance;
+};
+
+struct AABB
+{
+    vec4 min;
+    vec4 max;
+};
+
+struct Plane
+{
+	vec4 pointInPlane;
+	vec4 planeEquation;
+};
+
+struct Frustum
+{
+	Plane nearplane;
+	Plane farplane;
+	Plane topplane;
+	Plane bottomplane;
+	Plane rightplane;
+	Plane leftplane;
+	float nearwidth;
+	float nearheight;
+	float farDistance;
+    float nearDistance;
+};
+
+struct LightSource
+{
+	vec4 color; //w is intensity;
+	vec4 pos; //w is radius for point right
+	vec4 direction; //w is unused;
+	vec4 ancillary; //for spot, x, y are cosine theta cutoffs
+};
+
+Plane ComputePlane(vec3 normal, vec4 pip)
+{
+    float d = -dot(pip.xyz, normal);
+    Plane plane;
+    plane.planeEquation = vec4(normal, d);
+    plane.pointInPlane = pip;
+    return plane;
+}
+
+Plane TransformPlane(mat4 transform, Plane inputPlane)
+{
+    vec3 tNormal = normalize(mat3(transform) * inputPlane.planeEquation.xyz);
+    vec4 tPip = transform * inputPlane.pointInPlane;
+    return ComputePlane(tNormal, tPip);
+}
+
+vec3 FindVert(vec4 lerpStart, vec4 lerpEnd, vec3 normal)
+{
+   vec3 Vert = mix(lerpStart.xyz, lerpEnd.xyz,  greaterThan(normal, vec3(0.0)));
+   return Vert;
+}
+
+float DistanceFromPlane(vec4 planeNormal, vec3 point)
+{
+    return dot(planeNormal.xyz, point) + planeNormal.w;
+}
+
+bool CheckAABB(vec4 AABBMin, vec4 AABBMax, vec4 planeEquation)
+{
+    vec3 pVert = FindVert(AABBMin, AABBMax, planeEquation.xyz);
+
+    vec3 nVert = FindVert(AABBMax, AABBMin, planeEquation.xyz);
+
+    float pDist = DistanceFromPlane(planeEquation, pVert);
+
+    float nDist = DistanceFromPlane(planeEquation, nVert);
+
+    /*nDist < 0  */
+
+    if ( pDist < 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+
+
+layout(push_constant) uniform GlobalContext {
+	uint objCount;
+	uint lightCount;
+} gs;
+
+
+struct Renderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint pad1;
+	uint lightIndices[4];
+	uint materialStart;
+	uint blendLayersStart;
+	uint materialCount;
+    uint pad2;
+	mat4 transform;
+};
+
+struct PerModel
+{
+    uint vertexComponents;
+    uint vertexStride;
+    uint indexCount;
+	uint firstIndex;
+    uint vertexByteOffset;
+    uint pad1;
+	uint pad2;
+	uint pad3;
+    AABB minMaxBox;
+    vec4 sphere;
+};
+
+
+layout(set = 0, binding = 0) writeonly buffer Commands {
+	IndexedIndirectCommand commands[];
+} cmdBuffer;
+
+layout(set = 0, binding = 1) buffer PMBuffer {
+    PerModel objects[];
+} perModelBuffer;
+
+layout(set = 0, binding = 2, r32ui) uniform uimageBuffer globalSMRenderableIndices;
+
+layout(set = 0, binding = 3) writeonly buffer commandCounts {
+    uint visibleCount;
+    uint invisibleCount;
+} cCounts;
+
+layout(set = 0, binding = 4) buffer RENDBuffer
+{
+    Renderable renderables[];
+} rends;
+
+
+layout(set = 1, binding = 0) readonly buffer GLBuffer {
+    LightSource objects[];
+} lightBuffer;
+
+layout(set = 1, binding = 1, r32ui) uniform uimageBuffer globalSMRenderableStart;
+layout(set = 1, binding = 2, r32ui) uniform uimageBuffer globalSMRenderableCount;
+layout(set = 1, binding = 3, r32ui) uniform uimageBuffer globalSMPerRendIndices;
+layout(set = 1, binding = 4) uniform usamplerBuffer globalLightTypes;
+
+const uint MAX_SHADOW_SAMPLES = 16u;
+shared uint allocIndex;
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint index = (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
+
+    if (index >= gs.objCount)  {
+        return;
+    }
+
+    uint tempShadowIndices[MAX_SHADOW_SAMPLES];
+
+    uint viewableByShadowMap = 0;
+
+    for (uint light = 0; light<gs.lightCount; light++)
+    {
+        uint lType = uint(texelFetch(globalLightTypes, int(light)).r);
+
+        if (lType == 0)
+        {
+           tempShadowIndices[viewableByShadowMap] = light;
+           viewableByShadowMap += 1;
+        }
+        else if (lType == 1)
+        {
+            
+        }
+        else if (lType == 2)
+        {
+            
+        }
+
+        if (viewableByShadowMap == MAX_SHADOW_SAMPLES)
+        {
+            break; 
+        }
+    }
+
+    if (viewableByShadowMap == 0)
+    {
+        uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
+        cmdBuffer.commands[gs.objCount-(1+invisibleIndex)].instanceCount = 0;
+        return;
+    } 
+
+    uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
+    uint smStartIndex = atomicAdd(allocIndex, viewableByShadowMap);
+
+    imageStore(globalSMRenderableIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
+    imageStore(globalSMRenderableStart, int(index), uvec4(smStartIndex, 0, 0, 0));
+    imageStore(globalSMRenderableCount, int(index), uvec4(viewableByShadowMap, 0, 0, 0));
+
+    uint meshIndex = rends.renderables[index].meshIndex;
+   
+    cmdBuffer.commands[visibleIndex].instanceCount = viewableByShadowMap;
+    cmdBuffer.commands[visibleIndex].firstIndex = perModelBuffer.objects[meshIndex].firstIndex;
+    cmdBuffer.commands[visibleIndex].indexCount = perModelBuffer.objects[meshIndex].indexCount;
+    cmdBuffer.commands[visibleIndex].firstInstance = 0;
+    cmdBuffer.commands[visibleIndex].vertexOffset = 0;
+
+    for (uint light = 0; light<viewableByShadowMap; light++)
+    { 
+        imageStore(globalSMPerRendIndices, int(smStartIndex), uvec4(tempShadowIndices[light], 0, 0, 0));
+        smStartIndex += 1;   
+    }
+    return;
+}
+

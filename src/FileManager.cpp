@@ -131,7 +131,8 @@ int FileManager::ReadFileInFull(const std::string& name, RingAllocator* allocato
 
 OSFileHandle* FileManager::GetFile(const FileID& id)
 {
-	if (id() >= MAXFILES) throw std::invalid_argument("You did what?");
+	if (id() >= MAXFILES) 
+		throw std::invalid_argument("You did what?");
 
 	OSFileHandle* handle = &filesopen[id()];
 

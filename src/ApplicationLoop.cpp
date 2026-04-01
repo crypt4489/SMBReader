@@ -375,8 +375,6 @@ static EntryHandle mainLinearSampler = EntryHandle();
 
 static uint32_t imageIndex = 0;
 
-static Matrix4f shadowMapView;
-static Matrix4f shadowMapProj;
 
 
 struct ShadowMapBase
@@ -389,6 +387,26 @@ struct ShadowMapBase
 	int avgShadowHeight;
 	int totalShadowMaps;
 	int zoneAlloc;
+
+	int shadowMapCountsAlloc;
+	int shadowMapCountsAllocSize;
+	int shadowMapOffsetsAlloc;
+	int shadowMapOffsetsAllocSize;
+	int shadowMapAssignmentsAlloc;
+	int shadowMapAssignmentsAllocSize;
+	int shadowMapAtlasViewsAlloc;
+	int shadowMapAtlasViewsAllocSize;
+	int shadowMapViewProjAlloc;
+	int shadowMapViewProjAllocSize;
+	int shadowMapObjectIDsAlloc;
+	int shadowMapObjectIDsAllocSize;
+	int shadowMapObjectCountAlloc;
+	int shadowMapIndirectBufferAlloc;
+	int shadowMapIndirectBufferAllocSize;
+
+	int shadowClippingDescriptor1;
+	int shadowClippingDescriptor2;
+	int shadowClippingPipeline;
 };
 
 
@@ -400,6 +418,8 @@ struct ShadowMapDebugPipelineData
 	int shadowMapDescriptorSet;
 };
 
+
+ShadowMapBase mainShadowMapManager{};
 
 ShadowMapDebugPipelineData smdpd{};
 
@@ -841,6 +861,8 @@ void ApplicationLoop::Execute()
 
 				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.postWorldSpaceDivisionPipeline);
 
+				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, mainShadowMapManager.shadowClippingPipeline);
+
 				updateLights--;
 			}
 
@@ -1048,22 +1070,7 @@ void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, 0, frame);
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 
-	Vector3f pos;
 
-	float distance = 25.0f;
-
-	pos = Vector3f(-mainDirectionalLight.direction.x, -mainDirectionalLight.direction.y, -mainDirectionalLight.direction.z);
-
-	pos = pos * distance;
-
-	LTM ltm{};
-
-	LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
-
-
-
-	shadowMapView = CreateViewMatrix(&ltm);
-	shadowMapProj =  CreateOrthographicMatrix(-10.0, 10.0f, -10.0f, 10.0f, 1.0f, 100.0f);
 }
 EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
@@ -2246,16 +2253,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 
 	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(GENERIC, 2, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	smdpd.shadowMapDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(17, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalMeshLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalVertexBuffer, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalRenderableLocation, nullptr, 0, 1, 3);
-
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.shadowMapDescriptorSet, &shadowMapProj, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.shadowMapDescriptorSet, &shadowMapView, 1);
+	
 
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
@@ -2293,10 +2291,7 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, true);
 
-	indirectDrawCreate.descriptorsetid = &smdpd.shadowMapDescriptorSet;
-	indirectDrawCreate.pipelinename = 17;
 
-	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, false);
 
 	int cullLightDescriptor = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -2713,6 +2708,181 @@ void CreateLightAssignments(int count)
 	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 }
 
+
+/*
+struct ShadowMapBase
+{
+	int frameGraphIndex;
+	int resourceIndex;
+	int atlasWidth;
+	int atlasHeight;
+	int avgShadowWidth;
+	int avgShadowHeight;
+	int totalShadowMaps;
+	int zoneAlloc;
+
+	int shadowMapCountsAlloc;
+	int shadowMapCountsAllocSize;
+	int shadowMapOffsetsAlloc;
+	int shadowMapOffsetsAllocSize;
+	int shadowMapAssignmentsAlloc;
+	int shadowMapAssignmentsAllocSize;
+	int shadowMapAtlasViewsAlloc;
+	int shadowMapAtlasViewsAllocSize;
+	int shadowMapViewProjAlloc;
+	int shadowMapViewProjAllocSize;
+	int shadowMapObjectIDsAlloc;
+	int shadowMapObjectIDsAllocSize;
+	int shadowMapObjectCountAlloc;
+
+	int shadowMapIndirectBufferAlloc;
+	int shadowMapIndirectBufferAllocSize;
+
+};
+
+*/
+
+void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shadowMapHeight, int shadowMapWidth, int shadowMapAtlasHeight, int shadowMapAtlasWidth)
+{
+	mainShadowMapManager.atlasHeight = shadowMapAtlasHeight;
+	mainShadowMapManager.atlasWidth = shadowMapAtlasWidth;
+	mainShadowMapManager.avgShadowHeight = shadowMapHeight;
+	mainShadowMapManager.avgShadowWidth = shadowMapWidth;
+	mainShadowMapManager.frameGraphIndex = 3;
+	mainShadowMapManager.resourceIndex = 1;
+	mainShadowMapManager.totalShadowMaps = (int)((float)(shadowMapAtlasHeight * shadowMapAtlasWidth) / (float)(shadowMapWidth * shadowMapHeight));
+	mainShadowMapManager.zoneAlloc = 0;
+
+	
+
+	mainShadowMapManager.shadowMapCountsAllocSize =  maxObjCount;
+	mainShadowMapManager.shadowMapCountsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapCountsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapOffsetsAllocSize =  maxObjCount;
+	mainShadowMapManager.shadowMapOffsetsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapOffsetsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapAssignmentsAllocSize = maxShadowMapAssignment * maxObjCount;
+	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapViewProjAllocSize = mainShadowMapManager.totalShadowMaps;
+	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(Matrix4f)*2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
+	mainShadowMapManager.shadowMapAtlasViewsAllocSize = mainShadowMapManager.totalShadowMaps;
+	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t)*2, mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapObjectIDsAllocSize = maxObjCount;
+	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
+	mainShadowMapManager.shadowMapIndirectBufferAllocSize = maxObjCount;
+	mainShadowMapManager.shadowMapIndirectBufferAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(VkDrawIndexedIndirectCommand), mainShadowMapManager.shadowMapIndirectBufferAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1); ;
+	
+	
+	mainShadowMapManager.shadowClippingDescriptor1 = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(18, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	mainShadowMapManager.shadowClippingDescriptor2 = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(18, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapIndirectBufferAlloc, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &globalMeshLocation, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectCountAlloc, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &globalRenderableLocation, nullptr, 0, 1, 4);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor2, &globalLightBuffer, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapCountsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor2, &globalLightTypesBuffer, 0, 1, 4);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainShadowMapManager.shadowClippingDescriptor1, &mainIndirectDrawData.commandBufferCount, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainShadowMapManager.shadowClippingDescriptor1, &globalLightCount, 1);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor1, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor1, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor1, 3, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor2, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor2, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBarrier(mainShadowMapManager.shadowClippingDescriptor2, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+	std::array shadowClipDesc = { mainShadowMapManager.shadowClippingDescriptor1, mainShadowMapManager.shadowClippingDescriptor2 };
+
+	ComputeIntermediaryPipelineInfo shadowClipPipelineInfo = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = 18,
+			.descCount = 2,
+			.descriptorsetid = shadowClipDesc.data()
+	};
+	
+	mainShadowMapManager.shadowClippingPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&shadowClipPipelineInfo);
+
+	smdpd.shadowMapDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(17, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalMeshLocation, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalVertexBuffer, nullptr, 0, 1, 1);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalRenderableLocation, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 5);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapViewProjAlloc, nullptr, 0, 1, 6);
+	
+	GraphicsIntermediaryPipelineInfo indirectShadowDrawCreate = {
+		.drawType = 0,
+		.vertexBufferHandle = ~0,
+		.vertexCount = 0,
+		.pipelinename = 17,
+		.descCount = 1,
+		.descriptorsetid = &smdpd.shadowMapDescriptorSet,
+		.indexBufferHandle = globalIndexBuffer,
+		.indexSize = 2,
+		.indexOffset = 0,
+		.vertexOffset = 0,
+		.indirectAllocation = mainShadowMapManager.shadowMapIndirectBufferAlloc,
+		.indirectDrawCount = mainShadowMapManager.shadowMapIndirectBufferAllocSize,
+		.indirectCountAllocation = mainShadowMapManager.shadowMapObjectCountAlloc
+	};
+
+
+	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&indirectShadowDrawCreate, false);
+
+
+	ResourceArrayUpdate samplerUpdate;
+
+	samplerUpdate.resourceCount = 1;
+	samplerUpdate.resourceDstBegin = 0;
+	samplerUpdate.resourceHandles = &mainLinearSampler;
+
+
+	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(3, 1, smdpd.fullScreenDescriptorSet, 0, 0);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+
+
+	std::array<int, 1> fullScreenDesc = { smdpd.fullScreenDescriptorSet };
+
+	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = ~0,
+		.vertexCount = 4,
+		.pipelinename = 16,
+		.descCount = 1,
+		.descriptorsetid = fullScreenDesc.data(),
+		.indexBufferHandle = ~0,
+		.indexCount = 0,
+		.instanceCount = 1,
+		.indexSize = 0,
+		.indexOffset = 0,
+		.vertexOffset = 0,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
+
+	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
+
+}
+
 static std::array<std::string, 8> pds = {
 	"GenericPipeline.xml",
 	"TextPipeline.xml",
@@ -2724,7 +2894,7 @@ static std::array<std::string, 8> pds = {
 	"ShadowMap.xml"
 };
 
-static std::array<std::string, 18> layouts = {
+static std::array<std::string, 19> layouts = {
 		"3DTexturedLayout.xml",
 		"TextLayout.xml",
 		"InterpolateMeshLayout.xml",
@@ -2742,7 +2912,8 @@ static std::array<std::string, 18> layouts = {
 		"Skybox.xml",
 		"OutlineLayout.xml",
 		"FullscreenLayout.xml",
-		"ShadowMapLayout.xml"
+		"ShadowMapLayout.xml",
+		"ShadowMapClipping.xml"
 };
 
 static std::array<std::string, 4> mainLayoutAttachments =
@@ -2838,6 +3009,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(10);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(11);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(12);
+	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(18);
 
 	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphNoMSAAIndex, 0, 10);
 	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphMSAAIndex, 0, 10);
@@ -2989,8 +3161,8 @@ void ApplicationLoop::InitializeRuntime()
 	CreateLightAssignments(128);
 	CreateMeshWorldAssignment(256);
 	CreateGenericMeshCommandBuffers(256);
+	CreateShadowMapManager(1, 256, 1024, 1024, 4096, 4096);
 
-	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
 	int mainFullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
@@ -3001,12 +3173,9 @@ void ApplicationLoop::InitializeRuntime()
 
 
 
-	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(BasicShadow, 1, smdpd.fullScreenDescriptorSet, 0, 0);
-	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+	
 
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance->currentFrame, 0);
-
-	std::array<int, 1> fullScreenDesc = { smdpd.fullScreenDescriptorSet };
+	std::array<int, 1> fullScreenDesc = { mainFullScreen };
 
 	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
 		.drawType = 0,
@@ -3026,10 +3195,6 @@ void ApplicationLoop::InitializeRuntime()
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
 	};
-
-	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
-
-	fullscreenInfo.descriptorsetid = &mainFullScreen;
 
 	mainFullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
 
@@ -3063,6 +3228,34 @@ static int AddLight(LightSource& lightDesc, LightType type)
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightLocation, TransferType::CACHED);
 	
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type, globalLightTypesBuffer, sizeof(LightType), sizeof(LightType) * lightLocation, TransferType::CACHED);
+
+	if (type == LightType::DIRECTIONAL)
+	{
+
+		Vector3f pos;
+
+		float distance = 25.0f;
+
+		pos = Vector3f(-mainDirectionalLight.direction.x, -mainDirectionalLight.direction.y, -mainDirectionalLight.direction.z);
+
+		pos = pos * distance;
+
+		LTM ltm{};
+
+		LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
+
+
+		struct
+		{
+			Matrix4f view;
+			Matrix4f proj;
+		} Upload{
+			.view = CreateViewMatrix(&ltm),
+			.proj = CreateOrthographicMatrix(-10.0, 10.0f, -10.0f, 10.0f, 1.0f, 100.0f)
+		};
+
+		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&Upload, mainShadowMapManager.shadowMapViewProjAlloc, sizeof(Upload), sizeof(Upload) * lightLocation, TransferType::CACHED);
+	}
 	
 	return lightLocation;
 }
