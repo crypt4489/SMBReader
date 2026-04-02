@@ -576,7 +576,7 @@ int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
 	return ret;
 }
 
-int ApplicationLoop::CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
+int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
 {
 	Renderable* renderable = &renderablesObjects[globalRenderableCount];
 
@@ -809,6 +809,8 @@ void ApplicationLoop::Execute()
 		name = args.inputFile.string();
 
 		CreateCrateObject();
+
+		CreateGrid(10.0f, 10.0f, 2.0f, 1.0f, { {1.0, 0.0, 0.0, 0.0}, {0.0, 1.0, 0.0, 0.0} , {0.0 , 0.0, 1.0, 0.0}, {10.0f, -2.0, -10.0, 1.0} });
 
 		LoadObject(name);
 
@@ -1551,6 +1553,130 @@ int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCoun
 	}
 
 	return locationInStreamOut;
+}
+
+
+void ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDiv, const Matrix4f& world)
+{
+	VertexInputDescription inputDescription[1];
+
+	inputDescription[0].byteoffset = 0;
+	inputDescription[0].format = ComponentFormatType::R32G32B32A32_SFLOAT;
+	inputDescription[0].vertexusage = VertexUsage::POSITION;
+
+	AxisBox box;
+
+	xDiv = max(xDiv, 1.0f);
+	yDiv = max(yDiv, 1.0f);
+
+	int vertexCount = (int)(width / xDiv) * (int)(height / yDiv);
+
+	int vertexTotalSize = vertexCount * sizeof(Vector4f);
+
+	float xStart = -width / 2.0f;
+	float xEnd = width / 2.0f;
+	float zStart = -height / 2.0f;
+	float zEnd = height / 2.0f;
+
+	Vector4f* poses = (Vector4f*)GlobalInputScratchAllocator.Allocate(vertexTotalSize);
+
+	void* compPoses = GlobalInputScratchAllocator.Allocate(vertexCount * 6);
+
+	box.min = Vector4f(xStart, 0.0f, zStart, 1.0);
+	box.max = Vector4f(xEnd, 0.0f, zEnd, 1.0);
+
+	Vector3f xstep = Vector3f(width / xDiv, 0.0, 0.0);
+	Vector3f ystep = Vector3f(0.0, 0.0, height / yDiv);
+
+	Vector3f base = Vector3f(xStart, 0.0f, zStart);
+
+	int index = 0;
+
+	int totalRow= (int)(yDiv + 1.0f);
+	int totalColumn = (int)(xDiv + 1.0f);
+
+	for (float i = 0; i < (float)totalRow; i++)
+	{
+		for (float j = 0; j < (float)totalColumn; j++)
+		{
+			Vector3f where = base + (xstep * j);
+			poses[index++] = Vector4f(where.x, where.y, where.z, 1.0);
+		}
+
+		base =  base + (ystep);
+	}
+
+	int16_t indexCount = (totalRow * totalColumn) + ((totalColumn - 2) * 2);
+
+	int16_t* indices = (int16_t*)GlobalInputScratchAllocator.Allocate(totalRow * totalColumn * 2);
+
+	int indicesAlloc = 0;
+
+	for (int j = 0; j < (int)xDiv; j++)
+	{
+		int16_t topleft = (j);
+		int16_t topright = (j + 1);
+		int16_t bottomleft = j + totalColumn;
+		int16_t bottomright = (j + 1) + totalColumn;
+
+		indices[indicesAlloc++] = topleft;
+		indices[indicesAlloc++] = topright;
+		indices[indicesAlloc++] = bottomleft;
+		indices[indicesAlloc++] = bottomright;
+	}
+
+	for (int i = 1; i < (int)yDiv; i++)
+	{
+		//int16_t bottomleft = totalColumn - 2 + (totalColumn * i + 1);
+		int16_t stitch1 = (totalColumn - 1) + (totalColumn * i);
+		int16_t stitch2 = (totalColumn * i);
+
+		indices[indicesAlloc++] = stitch1;
+		indices[indicesAlloc++] = stitch2;
+
+		for (int j = 0; j < (int)xDiv; j++)
+		{
+
+			int16_t topleft = (j) + (totalColumn * i);
+			int16_t topright = (j + 1) + (totalColumn * i);
+			int16_t bottomleft = j + (totalColumn * i+1);
+			int16_t bottomright = (j + 1) + (totalColumn*i+1);
+
+			indices[indicesAlloc++] = topleft;
+			indices[indicesAlloc++] = topright;
+			indices[indicesAlloc++] = bottomleft;
+			indices[indicesAlloc++] = bottomright;
+		}
+
+		
+	}
+
+	int compressedSize = 0, vertexFlags = 0;
+
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 1, sizeof(Vector4f), vertexCount, box, poses, compPoses, &compressedSize, &vertexFlags);
+
+
+	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * vertexCount, 16);
+	int indexAlloc = indexBufferAlloc.Allocate(indexCount * 2, 64);
+
+	auto rendInst = GlobalRenderer::gRenderInstance;
+
+	Sphere sphere;
+
+	sphere.sphere = Vector4f(0.0, 0.0, 0.0, width);
+
+	std::array<int, 1> materialIDs = { CreateMaterial(0, nullptr, 0, Vector4f(1.0, 0.0, 0.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0)) };
+
+	int materialRangeStart = AddMaterialToDeviceMemory(1, materialIDs.data());
+	int materialRangeCount = 1;
+
+	int meshIndex = CreateMeshHandle(compPoses, indices, vertexFlags, vertexCount, compressedSize, 2, indexCount, box, sphere, vertexAlloc, indexAlloc);
+
+	int renderableIndex = CreateRenderable(world, materialRangeStart, materialRangeCount, -1, meshIndex, 1);
+
+	rendInst->UpdateDriverMemory(compPoses, globalVertexBuffer, vertexCount * compressedSize, vertexAlloc, TransferType::CACHED);
+	rendInst->UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::MEMORY);
+
 }
 
 void ApplicationLoop::CreateCrateObject()
@@ -3251,10 +3377,10 @@ void ApplicationLoop::InitializeRuntime()
 	//AddLight(source2, LightType::POINT);
 	//mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
 	AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
-	AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
-	AddLight(mainDirectionalLight3, LightType::DIRECTIONAL);
-	AddLight(mainDirectionalLight4, LightType::DIRECTIONAL);
-	AddLight(mainDirectionalLight5, LightType::DIRECTIONAL);
+	//AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
+	//AddLight(mainDirectionalLight3, LightType::DIRECTIONAL);
+	//AddLight(mainDirectionalLight4, LightType::DIRECTIONAL);
+	//AddLight(mainDirectionalLight5, LightType::DIRECTIONAL);
 	//AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
 	//AddLight(source4, LightType::POINT);
 

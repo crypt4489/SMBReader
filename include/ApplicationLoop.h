@@ -111,9 +111,9 @@ public:
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
 	int AddMaterialToDeviceMemory(int count, int* ids);
-	int CreateRenderable(Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
+	int CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
-	
+	void CreateGrid(float width, float height, float xDiv, float yDiv, const Matrix4f& world);
 
 	ProgramArgs& args;
 	Semaphore queueSema;
