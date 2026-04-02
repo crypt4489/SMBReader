@@ -82,6 +82,19 @@ layout(set = 0, binding = 6) readonly buffer ShadowMap {
     ShadowMapViewProj viewProjs[];
 } sm;
 
+struct ShadowMapView
+{
+	float xOff;
+	float yOff;
+	float xScale;
+	float yScale;
+};
+
+layout(set = 0, binding = 7) uniform shadowViews
+{
+    ShadowMapView views[128];
+} sv;
+
 vec4 ReconstructVEC4(uint offset)
 {
    uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
@@ -236,6 +249,8 @@ void main()
 
     ShadowMapViewProj viewProj = sm.viewProjs[shadowViewProjOffset];
 
+    ShadowMapView viewSize = sv.views[shadowViewProjOffset];
+
     Renderable currentRenderable = rends.renderables[renderableIndex];
 
     PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
@@ -246,14 +261,19 @@ void main()
 
     uint offset = ((stride * (gl_VertexIndex+1)) + modelData.vertexByteOffset) - 6;
 
+    vec2 viewBase = 2.0 * vec2(viewSize.xOff, viewSize.yOff) - 1.0;
+
+    vec4 scale = vec4(viewSize.xScale, viewSize.yScale, 1.0, 1.0);
+
+    vec4 ndcOff = vec4(1.0, 1.0, 0.0, 0.0);
+
     if ((comp&COMPRESSED)==COMPRESSED)
     {
-      
         if ((comp & POSITION) == POSITION)
         {
             mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = MVP * intPos;
+            gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
         }
     } 
     else 
@@ -262,7 +282,7 @@ void main()
         {
             mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
-            gl_Position = MVP * intPos;
+            gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
         }
     }
 }

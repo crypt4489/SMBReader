@@ -177,6 +177,38 @@ LightSource mainDirectionalLight =
 	Vector4f(0.001,0.0018,0.0012,0.0),
 };
 
+LightSource mainDirectionalLight2 =
+{
+	Vector4f(229.0, 211.0, 191.0, 2.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(-.75, -0.33, -.25, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
+};
+LightSource mainDirectionalLight3 =
+{
+	Vector4f(229.0, 211.0, 191.0, 2.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(0.0, 0.0, -1.0, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
+};
+
+LightSource mainDirectionalLight4 =
+{
+	Vector4f(229.0, 211.0, 191.0, 2.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(-1.0, 0.0, 0.0, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
+};
+
+LightSource mainDirectionalLight5 =
+{
+	Vector4f(229.0, 211.0, 191.0, 2.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(1.0, 0.0, 0.0, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
+};
+
+
 
 LightSource mainSpotLight =
 {
@@ -418,10 +450,20 @@ struct ShadowMapDebugPipelineData
 	int shadowMapDescriptorSet;
 };
 
+struct ShadowMapView
+{
+	float xOff;
+	float yOff;
+	float xScale;
+	float yScale;
+};
 
 ShadowMapBase mainShadowMapManager{};
 
 ShadowMapDebugPipelineData smdpd{};
+
+static int mainShadowWidth = 4096;
+static int mainShadowHeight = 4096;
 
 static void CreateUniformGrid()
 {
@@ -2763,8 +2805,8 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 	mainShadowMapManager.shadowMapViewProjAllocSize = mainShadowMapManager.totalShadowMaps;
 	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(Matrix4f)*2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
-	mainShadowMapManager.shadowMapAtlasViewsAllocSize = mainShadowMapManager.totalShadowMaps;
-	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t)*2, mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
+	mainShadowMapManager.shadowMapAtlasViewsAllocSize = maxObjCount;
+	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(ShadowMapView), mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 0);
 	mainShadowMapManager.shadowMapObjectIDsAllocSize = maxObjCount;
 	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, 1);
 	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, 1);
@@ -2823,6 +2865,7 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 4);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 5);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapViewProjAlloc, nullptr, 0, 1, 6);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAtlasViewsAlloc, nullptr, 0, 1, 7);
 	
 	GraphicsIntermediaryPipelineInfo indirectShadowDrawCreate = {
 		.drawType = 0,
@@ -2978,7 +3021,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0, basicclears.data());
 	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1, clears2.data());
 	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 800, 600, clears2.data());
-	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(3, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 1024, 1024, clears2.data() + 2);
+	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(3, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, clears2.data() + 2);
 	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(3, 1, clears2.data()+2);
 
 	GlobalRenderer::gRenderInstance->CreatePipelines(pds.data(), pds.size());
@@ -3161,7 +3204,7 @@ void ApplicationLoop::InitializeRuntime()
 	CreateLightAssignments(128);
 	CreateMeshWorldAssignment(256);
 	CreateGenericMeshCommandBuffers(256);
-	CreateShadowMapManager(1, 256, 1024, 1024, 4096, 4096);
+	CreateShadowMapManager(16, 256, 1024, 1024, mainShadowWidth, mainShadowHeight);
 
 
 	int mainFullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
@@ -3208,6 +3251,11 @@ void ApplicationLoop::InitializeRuntime()
 	//AddLight(source2, LightType::POINT);
 	//mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
 	AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
+	AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
+	AddLight(mainDirectionalLight3, LightType::DIRECTIONAL);
+	AddLight(mainDirectionalLight4, LightType::DIRECTIONAL);
+	AddLight(mainDirectionalLight5, LightType::DIRECTIONAL);
+	//AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
 	//AddLight(source4, LightType::POINT);
 
 	c.CamLookAt(Vector3f(0.0f, 0.0f, 15.0f), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
@@ -3236,14 +3284,13 @@ static int AddLight(LightSource& lightDesc, LightType type)
 
 		float distance = 25.0f;
 
-		pos = Vector3f(-mainDirectionalLight.direction.x, -mainDirectionalLight.direction.y, -mainDirectionalLight.direction.z);
+		pos = Vector3f(-lightDesc.direction.x, -lightDesc.direction.y, -lightDesc.direction.z);
 
 		pos = pos * distance;
 
 		LTM ltm{};
 
 		LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
-
 
 		struct
 		{
@@ -3255,6 +3302,22 @@ static int AddLight(LightSource& lightDesc, LightType type)
 		};
 
 		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&Upload, mainShadowMapManager.shadowMapViewProjAlloc, sizeof(Upload), sizeof(Upload) * lightLocation, TransferType::CACHED);
+
+		ShadowMapView view{};
+
+		int shadowXScale = mainShadowMapManager.atlasWidth / mainShadowMapManager.avgShadowWidth;
+		int shadowYScale = mainShadowMapManager.atlasHeight / mainShadowMapManager.avgShadowHeight;
+
+		view.xOff = (float)(mainShadowMapManager.avgShadowWidth) * (mainShadowMapManager.zoneAlloc % shadowXScale);
+		view.xOff /= (float)mainShadowMapManager.atlasWidth;
+
+		view.yOff = (float)(mainShadowMapManager.avgShadowHeight) * (mainShadowMapManager.zoneAlloc++ / shadowYScale);
+		view.yOff /= (float)mainShadowMapManager.atlasHeight;
+		view.xScale = 1.0f / (float)shadowXScale;
+		view.yScale = 1.0f / (float)shadowYScale;
+
+		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&view, mainShadowMapManager.shadowMapAtlasViewsAlloc, sizeof(view), sizeof(view) * lightLocation, TransferType::CACHED);
+
 	}
 	
 	return lightLocation;

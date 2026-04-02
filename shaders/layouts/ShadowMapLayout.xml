@@ -3,9 +3,6 @@
 	<GLSLShader type="vert">
 		3dshadowmap.vert
 	</GLSLShader>
-	<GLSLShader type="frag">
-		3dshadowmap.frag
-	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
@@ -20,6 +17,8 @@
 		<ShaderResourceItem type="bufferView" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="uniform" used="v" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
