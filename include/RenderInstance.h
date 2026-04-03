@@ -191,8 +191,8 @@ struct RenderInstance
 
 	uint32_t maxMSAALevels = 0;
 
-	std::array<EntryHandle, 10> renderTargets{};
-	std::array<EntryHandle, 10> renderPasses{};
+	std::array<EntryHandle, 15> renderTargets{};
+	std::array<EntryHandle, 15> renderPasses{};
 
 	std::array<EntryHandle, 9> imagePools{};
 	int imagePoolCounter = 0;

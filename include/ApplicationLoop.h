@@ -113,7 +113,9 @@ public:
 	int AddMaterialToDeviceMemory(int count, int* ids);
 	int CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
-	void CreateGrid(float width, float height, float xDiv, float yDiv, const Matrix4f& world);
+	int CreateGrid(float width, float height, float xDiv, float yDiv);
+
+	int CreateGridRenderable(int meshIndex, int materialIndex, const Matrix4f& world);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

@@ -1275,7 +1275,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			bindingFlags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;
 		}
 
-		static bool useUpdateAfterBind = true;
+		static bool useUpdateAfterBind = false;
 
 		arrayCount &= DESCRIPTOR_COUNT_MASK;
 
@@ -2551,7 +2551,7 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 	}
 
 
-	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 4); i++)
+	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 4 + maxMSAALevels); i++)
 	{
 		renderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
 		majorDevice->UpdateRenderGraph(renderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
@@ -2643,7 +2643,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 	int bindingCount = set->bindingCount;
 
-	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[set->bindingCount-1];
+	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[set->bindingCount - set->constantsCount - 1];
 
 	if (lastheader->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
 	{

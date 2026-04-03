@@ -1,0 +1,20 @@
+<AttachmentResource imageType="swc" format="b8g8r8a8">
+</AttachmentResource>
+<AttachmentResource imageType="static" format="d32f">
+</AttachmentResource>
+<AttachmentResource imageType="static" format="b8g8r8a8" msaa="true">
+</AttachmentResource>
+<AttachmentResource imageType="static" format="d24s8" msaa="true">
+</AttachmentResource>
+<Attachments>
+	<DepthAttachment resource="1" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="shader">
+	</DepthAttachment>
+</Attachments>
+<Attachments>
+	<ResolveAttachment resource="0" loadOp="nocare" storeOp="store" srcLayout="undefined" dstLayout="present">
+	</ResolveAttachment>
+	<ColorAttachment resource = "2" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="rtv">
+	</ColorAttachment>
+	<DepthStencilAttachment resource = "3" loadOp="clear" storeOp="discard" srcLayout="undefined" dstLayout="dsv">
+	</DepthStencilAttachment>
+</Attachments>

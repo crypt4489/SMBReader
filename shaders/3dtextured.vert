@@ -76,12 +76,12 @@ struct Frustum
 };
 
 
-layout(location = 0) out vec3 position;
+layout(location = 0) out vec4 worldPosition;
 layout(location = 1) out vec2 texCoords[8];
-layout(location = 10) out vec3 normal;
-layout(location = 11) out vec4 outColor;
-layout(location = 12) flat out uint renderableIndex;
-layout(location = 13) out vec4 tangent;
+layout(location = 9) out vec3 normal;
+layout(location = 10) out vec4 outColor;
+layout(location = 11) flat out uint renderableIndex;
+layout(location = 12) out vec4 tangent;
 
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
@@ -329,10 +329,9 @@ void main() {
         {
             mat4 VP = gs.proj * gs.view;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = VP * currentRenderable.transform* intPos;
-            position = vec3(currentRenderable.transform * intPos);
+            gl_Position = VP * currentRenderable.transform * intPos;
+            worldPosition = currentRenderable.transform * intPos;
         }
-
     } 
     else 
     {

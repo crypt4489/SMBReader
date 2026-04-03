@@ -12,9 +12,12 @@ int TextureDictionary::AllocateNTextureHandles(int n, TextureDetails** details)
 {
 	int outIndex = allocationIndex.fetch_add(n);
 
-	for (int i = 0; i < n; i++)
+	if (details)
 	{
-		details[i] = &textureAllocations[outIndex + i];
+		for (int i = 0; i < n; i++)
+		{
+			details[i] = &textureAllocations[outIndex + i];
+		}
 	}
 
 	return outIndex;

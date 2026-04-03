@@ -263,9 +263,8 @@ void main()
 
     vec2 viewBase = 2.0 * vec2(viewSize.xOff, viewSize.yOff) - 1.0;
 
-    vec4 scale = vec4(viewSize.xScale, viewSize.yScale, 1.0, 1.0);
+    vec4 scale = vec4(2.0 * viewSize.xScale, 2.0 * viewSize.yScale, 1.0, 1.0);
 
-    vec4 ndcOff = vec4(1.0, 1.0, 0.0, 0.0);
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -273,7 +272,16 @@ void main()
         {
             mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
+            
+            vec4 outPos = (MVP * intPos);
+
+            vec4 ndcScale = vec4(0.5, 0.5, 1.0, 1.0);
+            vec4 ndcOffset = vec4(0.5, 0.5, 0.0, 0.0);
+
+            vec4 outPosNormalize = ndcScale * outPos + ndcOffset;
+
+
+            gl_Position = scale * outPosNormalize + vec4(viewBase, 0.0, 0.0);
         }
     } 
     else 
@@ -282,7 +290,15 @@ void main()
         {
             mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
-            gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
+            vec4 outPos = (MVP * intPos);
+
+            vec4 ndcScale = vec4(0.5, 0.5, 1.0, 1.0);
+            vec4 ndcOffset = vec4(0.5, 0.5, 0.0, 0.0);
+
+            vec4 outPosNormalize = ndcScale * outPos + ndcOffset;
+
+
+            gl_Position = scale * outPosNormalize + vec4(viewBase, 0.0, 0.0);
         }
     }
 }

@@ -1,11 +1,11 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
-layout(location = 0) in vec3 position;
+layout(location = 0) in vec4 worldPosition;
 layout(location = 1) in vec2 texCoords[8];
-layout(location = 10) in vec3 inNormal;
-layout(location = 11) in vec4 vertColor;
-layout(location = 12) flat in uint renderableIndex;
-layout(location = 13) in vec4 inTangent;
+layout(location = 9) in vec3 inNormal;
+layout(location = 10) in vec4 vertColor;
+layout(location = 11) flat in uint renderableIndex;
+layout(location = 12) in vec4 inTangent;
 layout(location = 0) out vec4 outColor;
 
 
@@ -49,6 +49,11 @@ struct Frustum
     float nearDistance;
 };
 
+layout(push_constant) uniform ShadowImageConstants {
+    uint imageIndex;
+    uint currentFrame;
+} sic;
+
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
@@ -56,8 +61,34 @@ layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 world;
 } gs;
 
-layout(set = 1, binding = 1) uniform texture2D Textures[];
+struct ShadowMapViewProj
+{
+    mat4 view;
+    mat4 proj;
+};
+
+
+
+struct ShadowMapView
+{
+	float xOff;
+	float yOff;
+	float xScale;
+	float yScale;
+};
+
+
+
+layout(set = 1, binding = 3) uniform texture2D Textures[];
 layout(set = 1, binding = 0) uniform sampler samplerLinear;
+layout(set = 1, binding = 1) readonly buffer ShadowMap {
+    ShadowMapViewProj viewProjs[];
+} sm;
+
+layout(set = 1, binding = 2) uniform shadowViews
+{
+    ShadowMapView views[128];
+} sv;
 
 struct LightSource
 {
@@ -130,11 +161,15 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
 
     vec3 viewPosToWorldPos = normalize(camPos - worldPos);
 
+    float shadowColor = 0.0;
+
     for (uint i = 0; i<lightCount; i++)
     {
-        LightSource light = lightBuffer.objects[currentRenderable.lightIndices[i]];
+        uint currentLightIndex = currentRenderable.lightIndices[i];
 
-        uint lType = uint(texelFetch(globalLightTypes, int(currentRenderable.lightIndices[i])).r);
+        LightSource light = lightBuffer.objects[currentLightIndex];
+
+        uint lType = uint(texelFetch(globalLightTypes, int(currentLightIndex)).r);
 
         vec3 lightColor = light.color.xyz/255.0;
 
@@ -144,7 +179,6 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
 
         vec3 lightDirection = light.direction.xyz;
         
-
         if (lType == 0)
         {
             vec3 lightingDir = normalize(-lightDirection); 
@@ -162,6 +196,29 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
             AmbientColor += light.ancillary.xyz;
 
             SpecularColor += lightColor * specularBase * specFactor * specularIntensity;
+
+            uint shadowMapIndex = sic.imageIndex + sic.currentFrame;
+
+            ShadowMapViewProj sViewProj = sm.viewProjs[currentLightIndex];
+            ShadowMapView sViewRange = sv.views[currentLightIndex];
+
+            vec4 smTransCoords = sViewProj.proj * sViewProj.view * worldPosition;
+
+            vec3 projCoords = smTransCoords.xyz / smTransCoords.w;
+
+            vec2 projCoordsPair = projCoords.xy * 0.5 + 0.5;
+
+            vec2 sViewOff = vec2(sViewRange.xOff, sViewRange.yOff);
+            vec2 sViewScale = vec2(sViewRange.xScale, sViewRange.yScale);
+
+            projCoordsPair = (sViewScale * projCoordsPair.xy) + sViewOff;
+
+            float closestDepth = texture(sampler2D(Textures[shadowMapIndex], samplerLinear), projCoordsPair).r;
+
+            float currentDepth = projCoords.z;
+
+            shadowColor = (currentDepth >= closestDepth) ? 1.0 : 0.0; 
+         
         }
         else if (lType == 1)
         {
@@ -214,7 +271,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
         }
     }
 
-    return vec4(color.xyz * (AmbientColor + DiffuseColor + SpecularColor), color.w);
+    return vec4(color.xyz *  (1.0 - shadowColor) * (AmbientColor +  (DiffuseColor + SpecularColor)), color.w);
 }
 
 struct PixelColorData
@@ -351,7 +408,7 @@ void main() {
 
     if (lightAffected)
     {
-        albedoColor = DoLights(normalize(accumulatedColorData.normal), position, albedoColor, currentRenderable, accumulatedColorData.specular, accumulatedColorData.shininess);
+        albedoColor = DoLights(normalize(accumulatedColorData.normal), worldPosition.xyz, albedoColor, currentRenderable, accumulatedColorData.specular, accumulatedColorData.shininess);
     }
 
     outColor = vertColor * (albedoColor + vec4(accumulatedColorData.emissive, 0.0));
