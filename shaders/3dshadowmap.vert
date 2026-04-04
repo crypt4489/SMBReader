@@ -275,11 +275,12 @@ void main()
             
             vec4 outPos = (MVP * intPos);
 
+            outPos = vec4(outPos.xyz / outPos.w, 1.0);
+
             vec4 ndcScale = vec4(0.5, 0.5, 1.0, 1.0);
             vec4 ndcOffset = vec4(0.5, 0.5, 0.0, 0.0);
 
             vec4 outPosNormalize = ndcScale * outPos + ndcOffset;
-
 
             gl_Position = scale * outPosNormalize + vec4(viewBase, 0.0, 0.0);
         }
@@ -290,15 +291,7 @@ void main()
         {
             mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
             vec4 intPos = ReconstructVEC4(offset);
-            vec4 outPos = (MVP * intPos);
-
-            vec4 ndcScale = vec4(0.5, 0.5, 1.0, 1.0);
-            vec4 ndcOffset = vec4(0.5, 0.5, 0.0, 0.0);
-
-            vec4 outPosNormalize = ndcScale * outPos + ndcOffset;
-
-
-            gl_Position = scale * outPosNormalize + vec4(viewBase, 0.0, 0.0);
+            //gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
         }
     }
 }

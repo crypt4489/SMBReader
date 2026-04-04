@@ -185,7 +185,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
 
             vec3 lightReflect = normalize(reflect(lightingDir, normal));
 
-            float diffuse = max(dot(normal.xyz, lightingDir), 0.0);
+            float diffuse = max(dot(normal, lightingDir), 0.0);
 
             float specFactor = max(dot(viewPosToWorldPos, lightReflect), 0.0);
 
@@ -211,14 +211,22 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
             vec2 sViewOff = vec2(sViewRange.xOff, sViewRange.yOff);
             vec2 sViewScale = vec2(sViewRange.xScale, sViewRange.yScale);
 
-            projCoordsPair = (sViewScale * projCoordsPair.xy) + sViewOff;
+            projCoordsPair  = (sViewScale * projCoordsPair) + sViewOff;
 
             float closestDepth = texture(sampler2D(Textures[shadowMapIndex], samplerLinear), projCoordsPair).r;
 
             float currentDepth = projCoords.z;
 
-            shadowColor = (currentDepth >= closestDepth) ? 1.0 : 0.0; 
-         
+            float bias = max(0.05 * (1.0 - dot(normal, lightingDir)), 0.005);  
+
+            if ((currentDepth-bias) >= closestDepth)
+            {
+                shadowColor = 1.0;
+            } 
+            else if ((projCoords.z > 1.0))
+            {
+                shadowColor = 0.0;
+            }
         }
         else if (lType == 1)
         {
@@ -271,7 +279,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderab
         }
     }
 
-    return vec4(color.xyz *  (1.0 - shadowColor) * (AmbientColor +  (DiffuseColor + SpecularColor)), color.w);
+    return vec4(color.xyz *   (AmbientColor + (1.0 - shadowColor) * (DiffuseColor + SpecularColor)), color.w);
 }
 
 struct PixelColorData
