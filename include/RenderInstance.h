@@ -111,7 +111,7 @@ struct RenderInstance
 
 	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
-	void CreateRenderTargetData(int* desc, int descCount);
+	void CreateRenderGraphData(int frameGraph, int* descsSets, int descCount);
 
 	void DrawScene(uint32_t imageIndex);
 
@@ -191,8 +191,8 @@ struct RenderInstance
 
 	uint32_t maxMSAALevels = 0;
 
-	std::array<EntryHandle, 15> renderTargets{};
-	std::array<EntryHandle, 15> renderPasses{};
+	std::array<EntryHandle, 20> renderTargets{};
+	std::array<EntryHandle, 20> renderPasses{};
 
 	std::array<EntryHandle, 9> imagePools{};
 	int imagePoolCounter = 0;
@@ -249,7 +249,7 @@ struct RenderInstance
 
 	int currentUpdateCommandBuffer = 0;
 
-	EntryHandle mainRenderTargets[10]{};
+	EntryHandle mainRenderTargets[20]{};
 
 	ArrayAllocator<EntryHandle, 10> renderTargetQueues{};
 

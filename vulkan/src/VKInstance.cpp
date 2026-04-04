@@ -86,13 +86,19 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuI
 {
 	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
 	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
 	return ret;
 }
 
 VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDevice gpu)
 {
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
 	return ret;
 }
 
@@ -100,9 +106,12 @@ bool VKInstance::ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requ
 {
 	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
 	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface);
 
-	for (int i = 0; i < ret.formats.size(); i++)
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
+
+	for (int i = 0; i < ret.formatCount; i++)
 	{
 		VkSurfaceFormatKHR availableFormat = ret.formats[i];
 		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -449,9 +458,12 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 	{
 		VK::Utils::SwapChainSupportDetails supportDetails;
 
-		supportDetails = VK::Utils::querySwapChainSupport(device, renderSurface);
+		VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+		VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
 
-		if (supportDetails.formats.empty() || supportDetails.presentModes.empty())
+		supportDetails = VK::Utils::querySwapChainSupport(device, renderSurface, formatsDataSpace, presentModesDataSpace);
+
+		if (supportDetails.formatCount == 0 || supportDetails.presentModeCount == 0)
 		{
 			return false;
 		}

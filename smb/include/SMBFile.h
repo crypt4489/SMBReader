@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include "AppTypes.h"
 #include "FileManager.h"
 #include "MathTypes.h"
 
@@ -39,14 +40,6 @@ enum SMBImageFormat : uint32_t
 #define RenderableByIndexNonPB 5292387491162064043
 #define RenderableByIndex 5792287050554945273
 
-
-constexpr float dx = 3.051851e-05f;
-constexpr float ax = 0.0009770395f;
-constexpr float bx = 0.0019550342f;
-
-
-
-
 enum RenderableFlags
 {
 	IVRENDERABLE = 0,
@@ -58,17 +51,6 @@ enum SMBVertexTypes
 	PosPack6_CNorm_C16Tex1_Bone2 = 122,
 	PosPack6_C16Tex2_Bone2 = 119,
 	PosPack6_C16Tex1_Bone2 = 114
-};
-
-struct AxisBox
-{
-	Vector4f min;
-	Vector4f max;
-};
-
-struct Sphere
-{
-	Vector4f sphere;
 };
 
 struct SMBGeoChunk
@@ -144,20 +126,20 @@ public:
 	uint32_t ioMode;
 	uint32_t endcode;
 	std::string name;
-	std::vector<SMBChunk> chunks;
+	SMBChunk* chunks;
 	FileID id;
 
 	SMBFile() = delete;
 
-	SMBFile(const std::filesystem::path& path);
+	SMBFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator);
 
-	SMBFile(const std::string& file);
+	SMBFile(const std::string& file, SlabAllocator* inputDataAllocator);
 
 	~SMBFile();
 
-	FileID LoadFile(const std::filesystem::path& path);
+	FileID LoadFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator);
 
-	FileID LoadFile(const std::string& name);
+	FileID LoadFile(const std::string& name, SlabAllocator* inputDataAllocator);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
 	{
@@ -165,7 +147,6 @@ public:
 			<< "File Header Ends " << file.headerStreamEnd << "\n"
 			<< "Something " << file.numContiguousBytes << "\n"
 			<< "Number of Resources " << file.numResources << "\n"
-			<< "Number of Chunks " << file.chunks.size() << "\n"
 			<< "------------------" << "\n";
 		return os;
 	}
@@ -176,7 +157,7 @@ private:
 
 	void ReadChunk(OSFileHandle* fh, SMBChunk& chunk);
 
-	void ProcessFile(OSFileHandle* fh);
+	void ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator);
 };
 
 
@@ -186,8 +167,6 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
 int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed);
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, SlabAllocator* tempMemoryPool);
 
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
-
-void CreateBitTangent(SMBGeoChunk* geoDefinition, void* vertexDataOut, int vertexCount, uint16_t* indices, int indexCount, int decompressed);

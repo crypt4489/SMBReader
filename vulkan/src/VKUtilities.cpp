@@ -9,7 +9,7 @@ namespace VK {
 
 	namespace Utils {
 
-		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface) {
+		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace) {
 				SwapChainSupportDetails details;
 
 				vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -18,17 +18,20 @@ namespace VK {
 				vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
 
 				if (formatCount) {
-					details.formats.resize(formatCount);
-					vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
+					vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, formatsDataSpace);
 				}
 
 				uint32_t presentModeCount;
 				vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
 
 				if (presentModeCount) {
-					details.presentModes.resize(presentModeCount);
-					vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
+					vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, presentModesDataSpace);
 				}
+
+				details.formatCount = formatCount;
+				details.presentModeCount = presentModeCount;
+				details.formats = formatsDataSpace;
+				details.presentModes = presentModesDataSpace;
 
 				return details;
 		}

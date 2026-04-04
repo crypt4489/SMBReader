@@ -5,17 +5,6 @@ SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, 
 	
 }
 
-void SMBTexture::MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data)
-{
-	int offset = 0;
-	for (uint32_t i = 0; i < miplevel; i++)
-	{
-		offset += imageSizes[i];
-	}
-	auto ref = data + offset;
-	memcpy(ref, _data.data(), _data.size());
-}
-
 SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) 
 	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), data(nullptr)
 {

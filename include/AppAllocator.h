@@ -5,14 +5,32 @@
 #include <atomic>
 
 template <typename T_AtomicType>
+T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride, T_AtomicType wrapAroundSize, T_AtomicType alignment)
+{
+	T_AtomicType val, desired, out;
+	val = atomic.load(std::memory_order_relaxed);
+	do {
+		out = (val + alignment - 1) & ~(alignment - 1);
+		desired = val + stride;
+		if (wrapAroundSize && desired >= wrapAroundSize)
+		{
+			out = 0;
+			desired = out + stride;
+		}
+	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
+		std::memory_order_relaxed));
+
+	return out;
+}
+
+template <typename T_AtomicType>
 T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride, T_AtomicType wrapAroundSize)
 {
 	T_AtomicType val, desired, out;
 	val = atomic.load(std::memory_order_relaxed);
 	do {
-
-		desired = val + stride;
 		out = val;
+		desired = val + stride;
 		if (wrapAroundSize && desired >= wrapAroundSize)
 		{
 			out = 0;
@@ -35,10 +53,11 @@ struct RingAllocator
 	{
 
 	}
-
 	void* Allocate(int _allocSize);
+	void* Allocate(int _allocSize, int alignment);
 	void Reset();
 	void* Head();
+	void* CAllocate(int _allocSize, int alignment);
 	void* CAllocate(int _allocSize);
 };
 
@@ -54,9 +73,12 @@ struct SlabAllocator
 
 	}
 
+	void* Allocate(int _allocSize, int alignment);
 	void* Allocate(int _allocSize);
 	void Reset();
 	void* Head();
+	void* CAllocate(int _allocSize, int alignment);
+	void* CAllocate(int _allocSize);
 };
 
 struct DeviceSlabAllocator

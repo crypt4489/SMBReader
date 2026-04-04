@@ -53,30 +53,6 @@ FileID FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags
 	return FileID(index);
 }
 
-int FileManager::ReadFileInFull(const std::string& name, std::vector<char>& buffer)
-{
-	OSFileFlags openingFlags = READ;
-
-	OSFileHandle outHandle{};
-
-	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
-
-	if (nRet)
-	{
-		return 1;
-	}
-
-	int size = outHandle.fileLength;
-
-	buffer.resize(size);
-
-	OSReadFile(&outHandle, size, buffer.data());
-
-	OSCloseFile(&outHandle);
-
-	return 0;
-}
-
 int FileManager::ReadFileInFull(const std::string& name, SlabAllocator* allocator, void** dataOut)
 {
 	OSFileFlags openingFlags = READ;
@@ -185,7 +161,7 @@ void FileManager::SetFileCurrentDirectory(std::filesystem::path& path)
 	currDir = path;
 }
 
-std::string FileManager::ExtractFileNameFromPath(const std::string& path)
+std::string FileManager::ExtractFileNameFromPath(const std::string path)
 {
 	std::smatch match;
 

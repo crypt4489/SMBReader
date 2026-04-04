@@ -10,12 +10,14 @@ namespace VK {
 	namespace Utils {
 
 		struct SwapChainSupportDetails {
+				VkSurfaceFormatKHR* formats;
+				VkPresentModeKHR* presentModes;
+				uint32_t formatCount;
+				uint32_t presentModeCount;
 				VkSurfaceCapabilitiesKHR capabilities{};
-				std::vector<VkSurfaceFormatKHR> formats;
-				std::vector<VkPresentModeKHR> presentModes;
 		};
 
-		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
+		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace);
 
 		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props);
 

@@ -42,8 +42,6 @@ public:
 
 	static FileID OpenFile(const std::filesystem::path name, OSFileFlags flags);
 
-	static int ReadFileInFull(const std::string& name, std::vector<char>& buffer);
-
 	static OSFileHandle* GetFile(const FileID& id);
 
 	static void RemoveOpenFile(const FileID& id);
@@ -56,7 +54,7 @@ public:
 
 	static void SetFileCurrentDirectory(std::filesystem::path& path);
 
-	static std::string ExtractFileNameFromPath(const std::string& path);
+	static std::string ExtractFileNameFromPath(const std::string path);
 
 	static std::string ExtractFileNameFromPath(std::filesystem::path& path);
 

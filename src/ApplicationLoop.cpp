@@ -4,13 +4,19 @@
 #include <Windows.h>
 #endif
 #include "Camera.h"
-
-
+#include "Exporter.h"
+#include "TextureDictionary.h"
 #include "SMBTexture.h"
 #include "AppAllocator.h"
 
+#include <cassert>
 
 ApplicationLoop* loop;
+
+#define MAX_GEOMETRY 2048
+#define MAX_MESHES 4096
+#define MAX_MESH_TEXTURES 8192
+#define MAX_IMAGE_DIM 4096
 
 enum PipelineHandles
 {
@@ -32,25 +38,52 @@ enum PipelineHandles
 	OUTLINE
 };
 
-enum VertexComponents
-{
-	POSITION = 1,
-	TEXTURE0 = 2,
-	TEXTURE1 = 4,
-	TEXTURE2 = 8,
-	NORMAL = 16,
-	BONES2 = 32,
-	COLOR = 64,
-	TANGENT = 128,
-	COMPRESSED = 0x80000000,
-};
-
 std::array<std::string, 4> commandsStrings =
 {
 	"end",
 	"load",
 	"positionm",
 	"positiong",
+};
+
+static std::array<std::string, 8> pds = {
+	"GenericPipeline.xml",
+	"TextPipeline.xml",
+	"DebugPipeline.xml",
+	"NormalDebugPipeline.xml",
+	"SkyboxPipeline.xml",
+	"OutlinePipeline.xml",
+	"FullscreenPipeline.xml",
+	"ShadowMap.xml"
+};
+
+static std::array<std::string, 19> layouts = {
+		"3DTexturedLayout.xml",
+		"TextLayout.xml",
+		"InterpolateMeshLayout.xml",
+		"PolynomialLayout.xml",
+		"IndirectCull.xml",
+		"DebugDraw.xml",
+		"IndirectDebug.xml",
+		"PrefixSum.xml",
+		"PrefixSumAdd.xml",
+		"WorldObjectDivison.xml",
+		"MeshWorldAssignments.xml",
+		"LightObjectDivision.xml",
+		"LightWorldAssignment.xml",
+		"NormalDebug.xml",
+		"Skybox.xml",
+		"OutlineLayout.xml",
+		"FullscreenLayout.xml",
+		"ShadowMapLayout.xml",
+		"ShadowMapClipping.xml"
+};
+
+static std::array<std::string, 5> mainLayoutAttachments =
+{
+	"MSAAPostProcess.xml",
+	"BasicShadowMapAtt.xml",
+	"ShadowAtlasUse.xml"
 };
 
 enum MaterialFlags
@@ -169,79 +202,6 @@ struct LightSource
 };
 
 
-LightSource mainDirectionalLight =
-{
-	Vector4f(229.0, 211.0, 191.0, 2.0),
-	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(.75, -0.33, -.25, 1.0),
-	Vector4f(0.001,0.0018,0.0012,0.0),
-};
-
-LightSource mainDirectionalLight2 =
-{
-	Vector4f(229.0, 211.0, 191.0, 2.0),
-	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(-.75, -0.33, -.25, 1.0),
-	Vector4f(0.001,0.0018,0.0012,0.0),
-};
-LightSource mainDirectionalLight3 =
-{
-	Vector4f(229.0, 211.0, 191.0, 2.0),
-	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(0.0, 0.0, -1.0, 1.0),
-	Vector4f(0.001,0.0018,0.0012,0.0),
-};
-
-LightSource mainDirectionalLight4 =
-{
-	Vector4f(229.0, 211.0, 191.0, 2.0),
-	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(-1.0, 0.0, 0.0, 1.0),
-	Vector4f(0.001,0.0018,0.0012,0.0),
-};
-
-LightSource mainDirectionalLight5 =
-{
-	Vector4f(229.0, 211.0, 191.0, 2.0),
-	Vector4f(0.0,0.0,0.0,0.0),
-	Vector4f(1.0, 0.0, 0.0, 1.0),
-	Vector4f(0.001,0.0018,0.0012,0.0),
-};
-
-
-
-LightSource mainSpotLight =
-{
-	Vector4f(229.0, 211.0, 191.0, 50.5),
-	Vector4f(-10.0,5.0, 4.0,15.0),
-	Vector4f(0.0, 0.0, -1.0, 0.0),
-	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
-};
-
-
-static IndirectDrawData mainIndirectDrawData;
-
-static IndirectDrawData debugIndirectDrawData;
-
-static WorldSpaceGPUPartition worldSpaceAssignment;
-static WorldSpaceGPUPartition lightAssignment;
-
-
-static int globalIndexBuffer = 0;
-static int globalIndexBufferSize = 1024 * KiB;
-static int globalVertexBuffer = 0;
-static int globalVertexBufferSize = 1024 * KiB;
-
-static int globalLightTypesBuffer = 0;
-static int globalLightBuffer = 0;
-static int globalLightBufferSize = 1024 * KiB;
-static int globalLightSize = globalLightBufferSize / sizeof(LightSource);
-static int globalLightTypesBufferSize = globalLightSize * sizeof(LightType);
-static int globalLightCount = 0;
-
-
-static int normalDebugAlloc;
-
 struct DebugDrawStruct
 {
 	Vector4f center; // fourth component is radius for sphere type
@@ -250,173 +210,6 @@ struct DebugDrawStruct
 	Vector4f halfExtents;
 };
 
-static int debugAllocBuffer = 0;
-static int debugAllocBufferSize = 10 * KiB;
-
-static int globalDebugMeshIDs = 0;
-static int globalDebugTypes = 0;
-
-
-
-static int globalBufferLocation;
-static int globalBufferDescriptor;
-static int globalTexturesDescriptor;
-
-static int globalMeshLocation;
-static int globalMeshSize = 24 * KiB;
-
-static int globalRenderableLocation;
-static int globalRenderableSize = 24 * KiB;
-
-static int globalMaterialIndicesLocation;
-static int globalMaterialIndicesSize = 4 * KiB;
-
-static int globalMaterialsLocation; 
-static int globalMaterialsSize = 4 * KiB;
-static int globalMaterialsIndex = 0;
-
-static int globalBlendDetailsLocation;
-static int globalBlendRangesLocation;
-static int globalBlendDetailsSize = 1 * KiB;
-static int globalBlendRangesSize = 1 * KiB;
-static int globalBlendDetailCount = 0;
-static int globalBlendRangeCount = 0;
-
-static int CreateBlendRange(int* blendIDs, int blendCount);
-static int CreateBlendDetails(BlendMaterialType type, float constantAlpha);
-static int CreateBlendDetails(BlendMaterialType type, int mapID);
-
-static char vertexAndIndicesMemory[16 * MiB];
-static char meshObjectSpecificMemory[2 * MiB];
-static char geometryObjectSpecificMemory[1 * MiB];
-static char mainTextureCacheMemory[256 * MiB];
-
-
-static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
-static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
-static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
-static DeviceSlabAllocator meshDeviceSpecificAlloc(globalMeshSize);
-
-
-static DeviceSlabAllocator indexBufferAlloc(globalIndexBufferSize);
-
-static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
-
-static TextureDictionary mainDictionary;
-
-static int mainPointLightIndex = 0;
-
-Vector4f mainPointLightPosition = Vector4f(0.0f, 5.0f, 0.0f, 15.0f);
-
-
-static int grid1Index = -1;
-static int grid1Material = -1;
-static int gridRenderables[3] = {-1, -1, -1};
-
-LightSource mainPointLight = { 
-	.color = Vector4f(229, 211, 191, 130.0), 
-	.pos = mainPointLightPosition, 
-	.direction= Vector4f(0.54,0.75,0.38,0.0), 
-	.ancillary= Vector4f(0.04,0.07,0.03,0.0) 
-};
-
-#define MAX_GEOMETRY 2048
-#define MAX_MESHES 4096
-#define MAX_MESH_TEXTURES 8192
-
-
-std::array<Renderable, 150> renderablesObjects;
-static int globalRenderableCount = 0;
-static int globalMaterialRangeStart = 0;
-
-struct Geometry
-{
-	int meshCount;
-	int meshStart;
-	int geometryInstanceLocalMemoryCount;
-	int geometryInstanceLocalMemoryStart;
-};
-
-struct Mesh
-{
-	int vertexId;
-	int verticesCount;
-	int vertexSize;
-	int indexId;
-	int indicesCount;
-	int indexSize;
-	int texuresCount;
-	int texturesStart;
-	int drawableIndex;
-	int meshInstanceLocalMemoryCount;
-	int meshInstanceLocalMemoryStart;
-	int meshInstanceDeviceMemoryCount;
-	int meshInstanceDeviceMemoryStart;
-	int meshDescriptor;
-	int deviceIndices;
-	int deviceVertices;
-};
-
-static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
-static ArrayAllocator<int, MAX_MESHES * 2> meshDeviceMemoryData{};
-static ArrayAllocator<void*, MAX_MESHES> meshIndexData{};
-static ArrayAllocator<void*, MAX_MESHES> meshVertexData{};
-static ArrayAllocator<void*, MAX_MESHES * 2> meshObjectData{};
-static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
-static ArrayAllocator<Mesh, MAX_MESHES> meshInstanceData{};
-static ArrayAllocator<Geometry, MAX_GEOMETRY> geometryInstanceData{};
-
-static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
-
-struct UniformGrid
-{
-	
-	Vector4f max;
-	Vector4f min;
-	int numberOfDivision;
-};
-
-
-UniformGrid mainGrid = {
-	
-	.max = Vector4f(100.0f, 50.0f, 100.0f, 0.0),
-	.min = Vector4f(-100.0f, -50.0f, -100.0f, 0.0),
-	.numberOfDivision = 5,
-};
-
-static int skyboxPipeline = 0;
-static EntryHandle skyboxCubeImage = EntryHandle();
-
-static char RenderInstanceMemoryPool[256 * MiB];
-static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
-
-static char RenderInstanceTemporaryPool[64 * KiB];
-static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
-
-static char AppInstanceTempMemory[64 * KiB];
-static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
-
-
-static char GlobalInputScratchMemory[128 * MiB];
-static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
-
-static char ThreadSharedCmdMemory[4 * KiB];
-static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
-
-
-static int AddLight(LightSource& lightDesc, LightType type);
-static void UpdateLight(LightSource& lightDesc, int lightIndex);
-
-
-static EntryHandle mainLinearSampler = EntryHandle();
-
-static uint32_t imageIndex = 0;
-
-static int graphNoMSAAIndex = -1;
-static int graphMSAAIndex = -1;
-static int MSAAPost = -1;
-//static int BasicShadow = -1;
-static int MSAAShadowMapping = -1;
 
 struct ShadowMapBase
 {
@@ -467,91 +260,225 @@ struct ShadowMapView
 	float yScale;
 };
 
-ShadowMapBase mainShadowMapManager{};
+struct Geometry
+{
+	int meshCount;
+	int meshStart;
+	int geometryInstanceLocalMemoryCount;
+	int geometryInstanceLocalMemoryStart;
+};
 
-ShadowMapDebugPipelineData smdpd{};
+struct Mesh
+{
+	int vertexId;
+	int verticesCount;
+	int vertexSize;
+	int indexId;
+	int indicesCount;
+	int indexSize;
+	int texuresCount;
+	int texturesStart;
+	int drawableIndex;
+	int meshInstanceLocalMemoryCount;
+	int meshInstanceLocalMemoryStart;
+	int meshInstanceDeviceMemoryCount;
+	int meshInstanceDeviceMemoryStart;
+	int meshDescriptor;
+	int deviceIndices;
+	int deviceVertices;
+};
+
+struct UniformGrid
+{
+	Vector4f max;
+	Vector4f min;
+	int numberOfDivision;
+};
+
+static IndirectDrawData mainIndirectDrawData;
+static IndirectDrawData debugIndirectDrawData;
+
+static WorldSpaceGPUPartition worldSpaceAssignment;
+static WorldSpaceGPUPartition lightAssignment;
+
+
+static int globalIndexBuffer = 0;
+static int globalIndexBufferSize = 1024 * KiB;
+static int globalVertexBuffer = 0;
+static int globalVertexBufferSize = 1024 * KiB;
+
+static int globalLightTypesBuffer = 0;
+static int globalLightBuffer = 0;
+static int globalLightBufferSize = 1024 * KiB;
+static int globalLightSize = globalLightBufferSize / sizeof(LightSource);
+static int globalLightTypesBufferSize = globalLightSize * sizeof(LightType);
+static int globalLightCount = 0;
+
+
+static int normalDebugAlloc;
+
+static int debugAllocBuffer = 0;
+static int debugAllocBufferSize = 10 * KiB;
+
+static int globalDebugMeshIDs = 0;
+static int globalDebugTypes = 0;
+
+static int globalBufferLocation;
+static int globalBufferDescriptor;
+static int globalTexturesDescriptor;
+
+static int globalMeshLocation;
+static int globalMeshSize = 24 * KiB;
+
+static int globalRenderableLocation;
+static int globalRenderableSize = 24 * KiB;
+
+static int globalMaterialIndicesLocation;
+static int globalMaterialIndicesSize = 4 * KiB;
+
+static int globalMaterialsLocation; 
+static int globalMaterialsSize = 4 * KiB;
+static int globalMaterialsIndex = 0;
+
+static int globalBlendDetailsLocation;
+static int globalBlendRangesLocation;
+static int globalBlendDetailsSize = 1 * KiB;
+static int globalBlendRangesSize = 1 * KiB;
+static int globalBlendDetailCount = 0;
+static int globalBlendRangeCount = 0;
+
+
+
+static char vertexAndIndicesMemory[16 * MiB];
+static char meshObjectSpecificMemory[2 * MiB];
+static char geometryObjectSpecificMemory[1 * MiB];
+static char mainTextureCacheMemory[256 * MiB];
+
+
+static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
+static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
+static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
+static DeviceSlabAllocator meshDeviceSpecificAlloc(globalMeshSize);
+
+
+static DeviceSlabAllocator indexBufferAlloc(globalIndexBufferSize);
+
+static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
+
+static TextureDictionary mainDictionary;
+
+static OSThreadHandle threadHandle;
+
+static int currentFrameGraphIndex = 4;
+static int mainComputeQueueIndex = 0;
+static int mainFullScreenPipeline = 0;
+
+static int grid1Index = -1;
+static int grid1Material = -1;
+static int gridRenderables[3] = {-1, -1, -1};
+
+static LightSource mainPointLight = { 
+	.color = Vector4f(229, 211, 191, 130.0), 
+	.pos = Vector4f(0.0f, 5.0f, 0.0f, 15.0f),
+	.direction= Vector4f(0.54,0.75,0.38,0.0), 
+	.ancillary= Vector4f(0.04,0.07,0.03,0.0) 
+};
+
+static LightSource mainDirectionalLight =
+{
+	Vector4f(229.0, 211.0, 191.0, 2.0),
+	Vector4f(0.0,0.0,0.0,0.0),
+	Vector4f(.75, -0.33, -.25, 1.0),
+	Vector4f(0.001,0.0018,0.0012,0.0),
+};
+
+static LightSource mainSpotLight =
+{
+	Vector4f(229.0, 211.0, 191.0, 50.5),
+	Vector4f(-10.0,5.0, 4.0,15.0),
+	Vector4f(0.0, 0.0, -1.0, 0.0),
+	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
+};
+
+
+static std::array<Renderable, 150> renderablesObjects;
+static int globalRenderableCount = 0;
+static int globalMaterialRangeStart = 0;
+
+static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
+static ArrayAllocator<int, MAX_MESHES * 2> meshDeviceMemoryData{};
+static ArrayAllocator<void*, MAX_MESHES> meshIndexData{};
+static ArrayAllocator<void*, MAX_MESHES> meshVertexData{};
+static ArrayAllocator<void*, MAX_MESHES * 2> meshObjectData{};
+static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
+static ArrayAllocator<Mesh, MAX_MESHES> meshInstanceData{};
+static ArrayAllocator<Geometry, MAX_GEOMETRY> geometryInstanceData{};
+
+static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
+
+static UniformGrid mainGrid = {
+	
+	.max = Vector4f(100.0f, 50.0f, 100.0f, 0.0),
+	.min = Vector4f(-100.0f, -50.0f, -100.0f, 0.0),
+	.numberOfDivision = 5,
+};
+
+static int skyboxPipeline = 0;
+static EntryHandle skyboxCubeImage = EntryHandle();
+
+static char RenderInstanceMemoryPool[256 * MiB];
+static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
+
+static char RenderInstanceTemporaryPool[64 * KiB];
+static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
+
+static char AppInstanceTempMemory[64 * KiB];
+static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
+
+
+static char GlobalInputScratchMemory[128 * MiB];
+static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
+
+static char ThreadSharedCmdMemory[4 * KiB];
+static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
+
+
+static EntryHandle mainLinearSampler = EntryHandle();
+
+static uint32_t imageIndex = 0;
+
+static int graphNoMSAAIndex = -1;
+static int graphMSAAIndex = -1;
+static int MSAAPost = -1;
+static int BasicShadow = -1;
+static int MSAAShadowMapping = -1;
+static int frameGraphsCount = 0;
+
+static ShadowMapBase mainShadowMapManager{};
+
+static ShadowMapDebugPipelineData smdpd{};
 
 static int mainShadowWidth = 4096;
 static int mainShadowHeight = 4096;
 
-static void CreateUniformGrid()
-{
-	float div = (float)(mainGrid.numberOfDivision);
-
-	int count = mainGrid.numberOfDivision;
-
-	Vector4f extent = (mainGrid.max - mainGrid.min) / div;
-
-	float xMove = extent.x;
-	float yMove = extent.y;
-	float zMove = extent.z;
-
-	Vector4f maxHalf = mainGrid.max - (extent * 0.5);
-
-	Vector4f half = extent/2.0;
-
-	for (int i = 0; i < count; i++)
-	{
-		for (int j = 0; j < count; j++)
-		{
-			for (int g = 0; g < count; g++)
-			{
-				Vector3f center = Vector3f(maxHalf.x - (i * xMove), maxHalf.y - (j * yMove), maxHalf.z - (g * zMove));
-
-				loop->CreateAABBDebugStruct(center, half, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 0.0, 0.0, 0.0));
-			}
-		}
-	}
-}
-
-static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
-{
-	switch (format)
-	{
-	case X8L8U8V8:         return SMB_X8L8U8V8;
-	case DXT1:             return SMB_DXT1;
-	case DXT3:             return SMB_DXT3;
-	case R8G8B8A8_UNORM:        return SMB_R8G8B8A8_UNORM;
-	case B8G8R8A8_UNORM:        return SMB_B8G8R8A8_UNORM;
-
-		// Formats that have no SMB equivalent:
-	case B8G8R8A8:
-	case D24UNORMS8STENCIL:
-	case D32FLOATS8STENCIL:
-	case D32FLOAT:
-	case R8G8B8A8:
-	case R8G8B8:
-	case IMAGE_UNKNOWN:
-	default:
-		return SMB_IMAGEUNKNOWN;
-	}
-}
-
-ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
-{
-	switch (fmt)
-	{
-	case SMB_X8L8U8V8:     return X8L8U8V8;
-	case SMB_DXT1:         return DXT1;
-	case SMB_DXT3:         return DXT3;
-	case SMB_R8G8B8A8_UNORM:    return R8G8B8A8_UNORM;
-	case SMB_B8G8R8A8_UNORM:    return B8G8R8A8_UNORM;
-
-	case SMB_IMAGEUNKNOWN:
-	default:
-		return IMAGE_UNKNOWN;
-	}
-}
-
-static void ScanSTDIN(void*);
 static bool stopThreadServer = false;
 
-static OSThreadHandle threadHandle;
+static void ScanSTDIN(void*);
+static int AddLight(LightSource& lightDesc, LightType type);
+static void UpdateLight(LightSource& lightDesc, int lightIndex);
+static int CreateBlendRange(int* blendIDs, int blendCount);
+static int CreateBlendDetails(BlendMaterialType type, float constantAlpha);
+static int CreateBlendDetails(BlendMaterialType type, int mapID);
+static EntryHandle ReadCubeImage(std::string* name, int textureCount, TextureIOType ioType);
+static int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType);
+static void CreateUniformGrid();
+static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
+static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
+static void LoadObjectThreaded(void* data);;
 
 
-static int currentFrameGraphIndex = 3;
-static int mainComputeQueueIndex = 0;
-static int mainFullScreenPipeline = 0;
+
+
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -562,6 +489,7 @@ ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	loop = this;
 	Execute();
 }
+
 ApplicationLoop::~ApplicationLoop() { 
 	if (!cleaned) 
 	{ 
@@ -574,248 +502,21 @@ ApplicationLoop::~ApplicationLoop() {
 	}
 }
 
-int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
-{
-	int ret = globalMaterialRangeStart;
-
-	globalMaterialRangeStart += count;
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(ids,  globalMaterialIndicesLocation, sizeof(int) * count, sizeof(int) * ret, TransferType::CACHED);
-
-	return ret;
-}
-
-int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
-{
-	Renderable* renderable = &renderablesObjects[globalRenderableCount];
-
-	int ret = globalRenderableCount++;
-
-	renderable->instanceCount = instanceCount;
-	renderable->materialStart = materialStart;
-	renderable->meshIndex = meshIndex;
-	renderable->blendLayersStart = blendStart;
-	renderable->materialStart = materialStart;
-	renderable->materialCount = materialCount;
-	renderable->transform = mat;
-
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(renderable, globalRenderableLocation, sizeof(Renderable), sizeof(Renderable) * ret, TransferType::MEMORY);
-
-	mainIndirectDrawData.commandBufferCount++;
-
-	return ret;
-}
-
-int ApplicationLoop::CreateMaterial(
-	int flags,
-	int* texturesIDs,
-	int textureCount,
-	const Vector4f& color
-)
-{
-	Material material{};
-
-	material.albedoColor = color;
-
-	material.materialFlags = flags;
-
-	uint32_t* ptr = material.textureHandles.comp;
-
-	for (int i = 0; i < textureCount; i++)
-	{
-		ptr[i] = texturesIDs[i];
-	}
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material,  globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
-
-	return globalMaterialsIndex++;
-}
-
-int ApplicationLoop::CreateMaterial(
-	int flags,
-	int* texturesIDs,
-	int textureCount,
-	const Vector4f& diffuseColor,
-	const Vector4f& specularColor,
-	float shininess,
-	const Vector4f& emissiveColor
-)
-{
-	Material material{};
-
-	material.albedoColor = diffuseColor;
-	material.emissiveColor = emissiveColor;
-	material.specularColor = specularColor;
-	material.shininess = shininess;
-
-	material.materialFlags = flags;
-
-	uint32_t* ptr = material.textureHandles.comp;
-
-	for (int i = 0; i < textureCount; i++)
-	{
-		ptr[i] = texturesIDs[i];
-	}
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
-
-	return globalMaterialsIndex++;
-}
-
-int ApplicationLoop::CreateMeshHandle(
-	void* vertexData, void* indexData, 
-	int vertexFlags, int vertexCount, int vertexStride, 
-	int indexStride, int indexCount, 
-	AxisBox& box, Sphere& sphere,
-	int vertexAlloc, int indexAlloc
-)
-{
-	Mesh* mesh = nullptr;
-
-	uint32_t meshIndex;
-
-	std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
-
-	mesh->indicesCount = indexCount;
-
-	mesh->verticesCount = vertexCount;
-
-	mesh->vertexSize = vertexStride;
-
-	mesh->indexSize = indexStride;
-
-	mesh->meshInstanceLocalMemoryCount = 1;
-
-
-	MeshDetails* handles = (MeshDetails*)meshObjectSpecificAlloc.Allocate(sizeof(MeshDetails));
-
-	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
-
-	mesh->vertexId = globalVertexBuffer;
-	mesh->indexId = globalIndexBuffer;
-
-	handles->vertexFlags = vertexFlags;
-	handles->stride = vertexStride;
-
-	handles->indexCount = mesh->indicesCount;
-	handles->firstIndex = indexAlloc / mesh->indexSize;
-	handles->vertexByteOffset = vertexAlloc;
-
-
-	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
-	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
-
-	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(MeshDetails), 1);
-
-	mesh->meshInstanceDeviceMemoryCount = 1;
-	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::MEMORY);
-
-	return meshIndex;
-}
-
-void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
-{
-	auto rendInst = GlobalRenderer::gRenderInstance;
-
-	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
-	MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
-
-
-	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
-
-	//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
-
-	rendInst->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
-
-}
-
-void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
-{
-	auto rendInst = GlobalRenderer::gRenderInstance;
-	Geometry* geom = &geometryInstanceData.dataArray[geomIndex];
-	
-	int meshCount = geom->meshCount;
-	int meshStart = geom->meshStart;
-
-	for (int i = 0; i < meshCount; i++)
-	{
-		Mesh* mesh = &meshInstanceData.dataArray[meshStart + i];
-
-		MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
-
-		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
-
-		//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
-
-		rendInst->UpdateDriverMemory(handles,  globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
-	}
-
-}
-
-void ApplicationLoop::ExecuteCommands(const std::string& command, int wordCount)
-{
-
-	if (command == "load")
-	{
-		//LoadThreadedWrapper(args.at(0));
-	}
-	else if (command == "end")
-	{
-		SetRunning(false);
-	} 
-	else if (command == "positionm")
-	{
-		if (wordCount != 4)
-			return;
-
-		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
-
-		int meshIndex = std::stoi(args[0]);
-		float x1 = std::stof(args[1]);
-		float y1 = std::stof(args[2]);
-		float z1 = std::stof(args[3]);
-		SetPositonOfMesh(meshIndex, Vector3f(x1, y1, z1));
-	}
-	else if (command == "positiong")
-	{
-		if (wordCount != 4)
-			return;
-		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
-
-		int geomIndex = std::stoi(args[0]);
-		float x1 = std::stof(args[1]);
-		float y1 = std::stof(args[2]);
-		float z1 = std::stof(args[3]);
-		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
-	}
-
-	ThreadSharedMessageQueue.Read();
-}
-
-
-std::string name;
-
 void ApplicationLoop::Execute()
 {
 
 	if (args.justexport)
 	{
-		SMBFile mainSMB(args.inputFile);
+		SMBFile mainSMB(args.inputFile, &GlobalInputScratchAllocator);
 		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));
-		Exporter::ExportChunksFromFile(mainSMB);
+		ExportChunksFromFile(mainSMB, &GlobalInputScratchAllocator);
 		cleaned = true;
 	}
 	else
 	{
-
 		InitializeRuntime();
 
-		//ExecuteCommands("load", { args.inputFile.string() });
-
-		name = args.inputFile.string();
+		std::string name = args.inputFile.string();
 
 		CreateCrateObject();
 
@@ -837,11 +538,7 @@ void ApplicationLoop::Execute()
 
 		LoadObject(name);
 
-		
-
 		CreateUniformGrid();
-
-		int i = 0, j = 1;
 
 		LARGE_INTEGER startTime;
 		LARGE_INTEGER currentTime;
@@ -875,26 +572,20 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		int updatedCommand = 3, updatedDebugCommand = 3, updateLights = 3;
+		uint32_t framesInFlight = GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT;
 
-		int commandCountPrev = mainIndirectDrawData.commandBufferCount;
+		int updateMainDrawCommand = framesInFlight, updateMainDebugCommand = framesInFlight, updateLights = framesInFlight;
 
-		int debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
+		int mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
 
-		int lightCountPrev = globalLightCount;
+		int mainDebugDrawRenderableCount = debugIndirectDrawData.commandBufferCount;
+
+		int previousGlobalLightCount = globalLightCount;
 
 		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
 		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 
 		GlobalRenderer::gRenderInstance->EndFrame();
-
-		float x = 230.0f;
-
-		mainPointLight.pos.x = mainPointLightPosition.x + cosf(DegToRad(-90.0f)) * 5.0f;
-		mainPointLight.pos.y = 0.0f;
-		mainPointLight.pos.z = mainPointLightPosition.z + -sinf(DegToRad(-90.0f)) * 10.0f;
-
-		//UpdateLight(mainPointLight, mainPointLightIndex);
 
 		ResourceArrayUpdate samplerUpdate;
 
@@ -903,8 +594,6 @@ void ApplicationLoop::Execute()
 		samplerUpdate.resourceHandles = &mainLinearSampler;
 
 		GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
-
-		
 
 		while (running)
 		{
@@ -916,11 +605,11 @@ void ApplicationLoop::Execute()
 
 			bool cameraMove = MoveCamera(FPS);
 
-			if (lightCountPrev != globalLightCount || updateLights > 0)
+			if (previousGlobalLightCount != globalLightCount || updateLights > 0)
 			{
-				if (!updateLights) updateLights = 3;
+				if (!updateLights) updateLights = framesInFlight;
 
-				lightCountPrev = globalLightCount;
+				previousGlobalLightCount = globalLightCount;
 
 				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.preWorldSpaceDivisionPipeline);
 
@@ -933,16 +622,16 @@ void ApplicationLoop::Execute()
 				updateLights--;
 			}
 
-			if (cameraMove || commandCountPrev != mainIndirectDrawData.commandBufferCount || updatedCommand > 0)
+			if (cameraMove || mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount || updateMainDrawCommand > 0)
 			{
-				if (!updatedCommand || cameraMove) {
-					updatedCommand = 3;
+				if (!updateMainDrawCommand || cameraMove) {
+					updateMainDrawCommand = framesInFlight;
 					GlobalRenderer::gRenderInstance->InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
 				}
 
-				updatedCommand--;
+				updateMainDrawCommand--;
 
-				commandCountPrev = mainIndirectDrawData.commandBufferCount;
+				mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
 
 				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.preWorldSpaceDivisionPipeline);
 
@@ -953,54 +642,49 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, mainIndirectDrawData.indirectCullPipeline);
 			}
 
-			if (cameraMove || debugIndirectDrawData.commandBufferCount != debugCommandCountPrev || updatedDebugCommand > 0)
+			if (cameraMove || debugIndirectDrawData.commandBufferCount != mainDebugDrawRenderableCount || updateMainDebugCommand > 0)
 			{
-				if (!updatedDebugCommand || cameraMove)
+				if (!updateMainDebugCommand || cameraMove)
 				{
 					GlobalRenderer::gRenderInstance->InsertTransferCommand(debugIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
-					updatedDebugCommand = 3;
+					updateMainDebugCommand = framesInFlight;
 				}
-				debugCommandCountPrev = debugIndirectDrawData.commandBufferCount;
+				mainDebugDrawRenderableCount = debugIndirectDrawData.commandBufferCount;
 				GlobalRenderer::gRenderInstance->AddPipelineToComputeQueue(mainComputeQueueIndex, debugIndirectDrawData.indirectCullPipeline);
-				updatedDebugCommand--;
+				updateMainDebugCommand--;
 			}
-
-
 
 			if (mainWindow->windowData.info.HandleResizeRequested())
 			{
 				GlobalRenderer::gRenderInstance->RecreateSwapChain();
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance->GetSwapChainWidth() / (float)GlobalRenderer::gRenderInstance->GetSwapChainHeight(), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(0, 0, nullptr);
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(1, 0, nullptr);
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(2, 1, nullptr);
-				GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(2, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, GlobalRenderer::gRenderInstance->GetSwapChainWidth(), GlobalRenderer::gRenderInstance->GetSwapChainHeight(), nullptr);
-				GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(3, 0, nullptr);
+				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance->GetSwapChainWidth(), GlobalRenderer::gRenderInstance->GetSwapChainHeight());
 			}
 
 			imageIndex = GlobalRenderer::gRenderInstance->BeginFrame();
 
-			if (imageIndex != ~0ui32) {
-
-	
-
-				if (currentFrameGraphIndex == 3)
+			if (imageIndex != ~0ui32) 
+			{
+				if (currentFrameGraphIndex == MSAAShadowMapping)
 				{
 					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(smdpd.shadowMapPipeline, currentFrameGraphIndex, 0);
-
-					//GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(smdpd.fullScreenPipeline, currentFrameGraphIndex, 1);
 
 					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 1);
 
 					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 1);
 				}
-				else {
+				else if (currentFrameGraphIndex == BasicShadow)
+				{
+					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(smdpd.fullScreenPipeline, currentFrameGraphIndex, 0);
+				}
+				else 
+				{
 					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 0);
 
 					GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
-					if (currentFrameGraphIndex == 2)
+					if (currentFrameGraphIndex == MSAAPost)
 						GlobalRenderer::gRenderInstance->AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
 				}
 
@@ -1015,21 +699,6 @@ void ApplicationLoop::Execute()
 
 			ThreadManager::ASyncThreadsDone();
 
-			/*
-			std::array<Renderable, 10> arr{};
-			std::array<Handles, 10> arr3{};
-
-			std::array<int, 10> arr2{};
-
-			std::array<VkDrawIndexedIndirectCommand, 10> arr4;
-
-			GlobalRenderer::gRenderInstance->ReadData(globalMaterialIndicesLocation, arr2.data(), sizeof(int) * 10, 0);
-		//	GlobalRenderer::gRenderInstance->ReadData(globalRenderableLocation, arr.data(), sizeof(Renderable) * 10, 0);
-		//	GlobalRenderer::gRenderInstance->ReadData(globalMeshLocation, arr3.data(), sizeof(Handles) * 10, 0);
-		//	GlobalRenderer::gRenderInstance->ReadData(mainIndirectDrawData.commandBufferAlloc, arr4.data(), sizeof(VkDrawIndexedIndirectCommand) * 10, 0);
-
-		*/
-
 			fps();
 
 			frameCounter++;
@@ -1037,8 +706,6 @@ void ApplicationLoop::Execute()
 		}
 	}
 }
-
-#define MAX_IMAGE_DIM 4096
 
 void ApplicationLoop::CreateTexturePools()
 {
@@ -1062,11 +729,6 @@ void ApplicationLoop::CreateTexturePools()
 		);
 	}
 }
-
-int instanceAlloc;
-std::array<Matrix4f, 64 * 64> instanceMatrices;
-
-static EntryHandle storageBuffer;
 
 bool ApplicationLoop::MoveCamera(double fps)
 {
@@ -1138,11 +800,9 @@ void ApplicationLoop::UpdateCameraMatrix()
 
 void ApplicationLoop::WriteCameraMatrix(uint32_t frame)
 {
-	//GlobalRenderer::gRenderInstance->UpdateAllocation(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, 0, frame);
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
-
-
 }
+
 EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 {
 	EntryHandle ret = EntryHandle();
@@ -1164,425 +824,6 @@ EntryHandle ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
-
-
-
-EntryHandle ReadCubeImage(std::string* name, int textureCount, TextureIOType ioType);
-int Read2DImage(std::string *name, int mipCounts, TextureIOType ioType);
-
-
-
-static Vector3s pack6comp(float* vector, AxisBox& box)
-{
-	float x = vector[0];
-	float y = vector[1];
-	float z = vector[2];
-
-	float x1 = ((((x - box.min.x) / (box.max.x - box.min.x)) * 2.0) - 1.0);
-	float y1 = ((((y - box.min.y) / (box.max.y - box.min.y)) * 2.0) - 1.0);
-	float z1 = ((((z - box.min.z) / (box.max.z - box.min.z)) * 2.0) - 1.0);
-
-	int16_t xs = x1 * 32767;
-	int16_t ys = y1 * 32767;
-	int16_t zs = z1 * 32767;
-   
-	return Vector3s(xs, ys, zs);
-}
-
-static int32_t compressnormal(Vector3f normal)
-{
-	int32_t reg = 0;
-
-	float denom = pow(2.0, 31.0);
-
-	float x = normal.x;
-	float y = normal.y;
-	float z = normal.z;
-
-	int16_t xs = (1023.5 * x);
-	int16_t ys = (1023.5 * y);
-	int16_t zs = (511.5 * z);
-
-	reg = ((zs & 0x3ff) << 22) | ((ys & 0x7ff) << 11) | ((xs & 0x7ff));
-
-	return reg;
-}
-
-static Vector2s compresstexcoords(float* in)
-{
-	int16_t x = ((in[0] / 16.0f) * 32767.5);
-	int16_t y = ((in[1] / 16.0f) * 32767.5);
-
-
-	return Vector2s(x, y);
-}
-
-static Vector2f converttexcoords16(int16_t* huh)
-{
-	float x = huh[0] * dx * 16.0f;
-	float y = huh[1] * dx * 16.0f;
-
-
-	return Vector2f(x, y);
-}
-
-static int32_t CompressTangent(Vector4f tangent)
-{
-
-	int wc = (tangent.w > 0.0) ? 1 : 0;
-
-	int xc = (tangent.x * 511.5);
-	int yc = (tangent.y * 511.5);
-	int zc = (tangent.z * 511.5);
-
-	int32_t ret = ((zc & 0x3ff) << 22) | ((yc & 0x3ff) << 12) | ((xc & 0x3ff) << 2) | (wc & 1);
-
-	return ret;
-}
-
-static int32_t CompressColor(Vector4f color)
-{
-	int r = (int)(color.x * 255.5);
-	int g = (int)(color.y * 255.5);
-	int b = (int)(color.z * 255.5);
-	int a = (int)(color.w * 255.5);
-
-	return (a << 24) | (b << 16) | (g << 8) | (r);
-}
-
-static Vector4f DecompressTangent(int32_t ctangent)
-{
-
-	float w = (ctangent & 1) ? 1.0f : -1.0f;
-
-	int zi = (int)(ctangent & 0xffc00000);
-	int yi = (int)(ctangent & 0x003ff000)<<10;
-	int xi = (int)(ctangent & 0x00000ffc)<<20;
-
-	float x = (float)(xi) / 2143289344.0f;
-	float y = (float)(yi) / 2143289344.0f;
-	float z = (float)(zi) / 2143289344.0f;
-
-	return Vector4f(x, y, z, w);
-}
-
-#include <cassert>
-
-void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, Vector3f* normals, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents)
-{
-	
-	Vector3f* totalTangents = (Vector3f*)calloc(sizeof(Vector3f), totalVertCount);
-	float* signBitTangents = (float*)calloc(sizeof(float), totalVertCount);
-	//Vector3f* totalNormals = (Vector3f*)calloc(sizeof(Vector3f), totalVertCount);
-
-	assert(signBitTangents);
-	assert(totalTangents);
-
-	memset(normals, 0, sizeof(Vector3f) * totalVertCount);
-
-	for (int lead = 0; lead < totalIndexCount-2; lead++)
-	{
-		uint16_t index1 = indices[lead];
-		uint16_t index2 = indices[lead + 1];
-		uint16_t index3 = indices[lead + 2];
-
-		Vector3f vert1 = Vector3f(pos[index1].x, pos[index1].y, pos[index1].z);
-		Vector3f vert2 = Vector3f(pos[index2].x, pos[index2].y, pos[index2].z);
-		Vector3f vert3 = Vector3f(pos[index3].x, pos[index3].y, pos[index3].z);
-
-
-		Vector3f e1 = vert2 - vert1;
-		Vector3f e2 = vert3 - vert1;
-
-		Vector3f normal = Cross(e1, e2);
-
-		float area2 = Dot(normal, normal);
-
-		if (area2 <= 0.0f) {
-			continue;
-		}
-
-		normals[index1] = normals[index1] + normal;
-		normals[index2] = normals[index2] + normal;
-		normals[index3] = normals[index3] + normal;
-
-		Vector2f uv1 = uvs[index1];
-		Vector2f uv2 = uvs[index2];
-		Vector2f uv3 = uvs[index3];
-
-		Vector2f duv1 = uv2 - uv1;
-		Vector2f duv2 = uv3 - uv1;
-
-		float f_det = (duv1.x * duv2.y - duv2.x * duv1.y);
-
-		
-
-		float f = 1.0f / f_det;
-
-		Vector3f tangent;
-		tangent = Normalize((e1 * duv2.y - e2 * duv1.y) * f);
-
-		Vector3f bitangent = Normalize((e2 * duv1.x - e1 * duv2.x) * f);
-
-
-		Vector3f n = Normalize(normal);
-		float sign = (Dot(Cross(n, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
-
-		totalTangents[index1] = totalTangents[index1] + tangent;
-		totalTangents[index2] = totalTangents[index2] + tangent;
-		totalTangents[index3] = totalTangents[index3] + tangent;
-
-		signBitTangents[index1] += sign;
-		signBitTangents[index2] += sign;
-		signBitTangents[index3] += sign;
-	}
-
-
-	for (int lead = 0; lead < totalVertCount; lead++)
-	{
-		Vector3f normal = normals[lead];
-
-		normal = Normalize(normal);
-
-		Vector3f tangent = totalTangents[lead];
-
-		tangent = Normalize(tangent - (normal * Dot(normal, tangent)));
-
-		float handedness = signBitTangents[lead] < 0.0f ? -1.0f : 1.0f;
-
-		Vector4f outTangent = Vector4f(tangent.x, tangent.y, tangent.z, handedness);
-
-		tangents[lead] = outTangent;
-
-		normals[lead] = normal;
-	}
-
-	free(totalTangents);
-	free(signBitTangents);
-
-
-}
-
-int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCount, int vertexStride, int vertexCount, 
-	AxisBox& box, void* vertexStream, void* memoryOut, int* compressedSize, int* vertexFlags)
-{
-	char* streamStart = (char*)vertexStream;
-	int locationInVertexStream = 0;
-
-	char* dataStreamOut = (char*)memoryOut;
-	int locationInStreamOut = 0;
-
-	enum VertexPosition
-	{
-		PPOSITION = 8,
-		PCOLOR0 = 7,
-		BONESWEIGHTS = 0,
-		PTEX0 = 1,
-		PTEX1 = 2,
-		PTEX2 = 3,
-		PTEX3 = 4,
-		PNORMAL = 5,
-		PTANGENT = 6,
-	};
-
-	std::array<int, 9> positionalOffsets;
-
-	memset(positionalOffsets.data(), 0, sizeof(int) * positionalOffsets.size());
-
-	*vertexFlags |= COMPRESSED;
-
-	for (int j = 0; j < descCount; j++)
-	{
-		VertexInputDescription* desc = &inputDesc[j];
-
-		size_t size = 0;
-
-		int positionIndex = 0;
-		
-		switch (desc->vertexusage)
-		{
-		case VertexUsage::POSITION:
-		{
-			size = sizeof(Vector3s);
-			positionIndex = PPOSITION;
-			*vertexFlags |= POSITION;
-			break;
-		}
-		case VertexUsage::NORMAL:
-		{
-			size = sizeof(int32_t);
-			positionIndex = PNORMAL;
-			*vertexFlags |= NORMAL;
-			break;
-		}
-		case VertexUsage::COLOR0:
-		{
-			size = sizeof(int32_t);
-			positionIndex = PCOLOR0;
-			*vertexFlags |= COLOR;
-			break;
-		}
-		case VertexUsage::TEX0:
-		{
-			size = sizeof(Vector2s);
-			positionIndex = PTEX0;
-			*vertexFlags |= TEXTURE0;
-			break;
-		}
-		case VertexUsage::TEX1:
-		{
-			size = sizeof(Vector2s);
-			positionIndex = PTEX1;
-			*vertexFlags |= TEXTURE1;
-			break;
-		}
-		case VertexUsage::TEX2:
-		{
-			size = sizeof(Vector2s);
-			positionIndex = PTEX2;
-			*vertexFlags |= TEXTURE2;
-			break;
-		}
-		case VertexUsage::TANGENTS:
-		{
-			size = sizeof(int32_t);
-			positionIndex = PTANGENT;
-			*vertexFlags |= TANGENT;
-			break;
-		}
-		}
-
-		positionalOffsets[positionIndex] = size;
-		*compressedSize += size;
-	}
-
-	int prev = *compressedSize;
-
-	for (int i = 8; i >= 0; i--)
-	{
-		prev -= positionalOffsets[i];
-		positionalOffsets[i] = prev;
-	}
-
-
-	for (int i = 0; i < vertexCount; i++)
-	{
-		for (int j = 0; j < descCount; j++)
-		{
-			VertexInputDescription* desc = &inputDesc[j];
-			char* genericInput = streamStart + locationInVertexStream + desc->byteoffset;
-			switch (desc->vertexusage)
-			{
-			case VertexUsage::POSITION:
-			{
-				switch (desc->format)
-				{
-				case ComponentFormatType::R32G32B32A32_SFLOAT:
-				{
-
-					Vector4f* pos = (Vector4f*)genericInput;
-					Vector3s pack = pack6comp(pos->comp, box);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PPOSITION], &pack, sizeof(Vector3s));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::NORMAL:
-			{
-				switch (desc->format)
-				{
-				case ComponentFormatType::R32G32B32_SFLOAT:
-				{
-					Vector3f* pos = (Vector3f*)genericInput;
-					int32_t pack = compressnormal(*pos);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PNORMAL], &pack, sizeof(int32_t));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::COLOR0:
-			{
-				switch (desc->format)
-				{
-
-				case ComponentFormatType::R32G32B32A32_SFLOAT:
-				{
-					Vector4f* color = (Vector4f*)genericInput;
-					int32_t pack = CompressColor(*color);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PCOLOR0], &pack, sizeof(int32_t));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::TEX0:
-			{
-				switch (desc->format)
-				{
-
-				case ComponentFormatType::R32G32_SFLOAT:
-				{
-					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX0], &packed, sizeof(Vector2s));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::TEX1:
-			{
-				switch (desc->format)
-				{
-
-				case ComponentFormatType::R32G32_SFLOAT:
-				{
-					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX1], &packed, sizeof(Vector2s));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::TEX2:
-			{
-				switch (desc->format)
-				{
-
-				case ComponentFormatType::R32G32_SFLOAT:
-				{
-					Vector2s packed = compresstexcoords(((Vector2f*)genericInput)->comp);
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTEX2], &packed, sizeof(Vector2s));
-					break;
-				}
-				}
-				break;
-			}
-			case VertexUsage::TANGENTS:
-			{
-				switch (desc->format)
-				{
-				case ComponentFormatType::R32G32B32A32_SFLOAT:
-				{
-					int32_t packed = CompressTangent(*((Vector4f*)genericInput));
-					memcpy(dataStreamOut + locationInStreamOut + positionalOffsets[PTANGENT], &packed, sizeof(int32_t));
-					break;
-				}
-				}
-				break;
-			}
-			}
-		}
-
-		locationInVertexStream += vertexStride;
-		locationInStreamOut += *compressedSize;
-	}
-
-	return locationInStreamOut;
-}
-
-
 int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDiv)
 {
 	VertexInputDescription inputDescription[2];
@@ -1600,7 +841,7 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 	xDiv = max(xDiv, 1.0f);
 	yDiv = max(yDiv, 1.0f);
 
-	int vertexCount = (int)(width / xDiv) * (int)(height / yDiv);
+	int vertexCount = (int)(xDiv+1.0f) * (int)( yDiv+1.0f);
 
 	float xStart = -width / 2.0f;
 	float xEnd = width / 2.0f;
@@ -1615,12 +856,10 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 
 	int vertexTotalSize = vertexCount * sizeof(GridVertex);
 
-	GridVertex* poses = (GridVertex*)GlobalInputScratchAllocator.Allocate(vertexTotalSize);
-
-	void* compPoses = GlobalInputScratchAllocator.Allocate(vertexCount * 10);
+	GridVertex* poses = (GridVertex*)AppInstanceTempAllocator.CAllocate(vertexTotalSize, 16);
 
 	box.min = Vector4f(xStart, 0.0f, zStart, 1.0);
-	box.max = Vector4f(xEnd, 0.0f, zEnd, 1.0);
+	box.max = Vector4f(xEnd, 1.0f, zEnd, 1.0);
 
 	Vector3f xstep = Vector3f(width / xDiv, 0.0, 0.0);
 	Vector3f ystep = Vector3f(0.0, 0.0, height / yDiv);
@@ -1629,7 +868,7 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 
 	int index = 0;
 
-	int totalRow= (int)(yDiv + 1.0f);
+	int totalRow = (int)(yDiv + 1.0f);
 	int totalColumn = (int)(xDiv + 1.0f);
 
 	for (float i = 0; i < (float)totalRow; i++)
@@ -1646,7 +885,7 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 
 	int16_t indexCount = (totalRow * totalColumn) + ((totalColumn - 2) * 2);
 
-	int16_t* indices = (int16_t*)GlobalInputScratchAllocator.Allocate(totalRow * totalColumn * 2);
+	int16_t* indices = (int16_t*)AppInstanceTempAllocator.CAllocate(indexCount * 2, 2);
 
 	int indicesAlloc = 0;
 
@@ -1665,7 +904,6 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 
 	for (int i = 1; i < (int)yDiv; i++)
 	{
-		//int16_t bottomleft = totalColumn - 2 + (totalColumn * i + 1);
 		int16_t stitch1 = (totalColumn - 1) + (totalColumn * i);
 		int16_t stitch2 = (totalColumn * i);
 
@@ -1685,17 +923,16 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 			indices[indicesAlloc++] = bottomleft;
 			indices[indicesAlloc++] = bottomright;
 		}
-
-		
 	}
 
-	int compressedSize = 0, vertexFlags = 0;
+	int compressedSize = GetCompressedSize(inputDescription, 2), vertexFlags = 0;
 
-	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 2, sizeof(GridVertex), vertexCount, box, poses, compPoses, &compressedSize, &vertexFlags);
-
+	void* compPoses = (void*)AppInstanceTempAllocator.CAllocate(vertexCount * compressedSize, 16);
 
 	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * vertexCount, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(indexCount * 2, 64);
+
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 2, sizeof(GridVertex), vertexCount, box, poses, compPoses, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1708,10 +945,9 @@ int ApplicationLoop::CreateGrid(float width, float height, float xDiv, float yDi
 	int meshIndex = CreateMeshHandle(compPoses, indices, vertexFlags, vertexCount, compressedSize, 2, indexCount, box, sphere, vertexAlloc, indexAlloc);
 
 	rendInst->UpdateDriverMemory(compPoses, globalVertexBuffer, vertexCount * compressedSize, vertexAlloc, TransferType::CACHED);
-	rendInst->UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::MEMORY);
+	rendInst->UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::CACHED);
 
 	return meshIndex;
-
 }
 
 int ApplicationLoop::CreateGridRenderable(int meshIndex, int materialIndex, const Matrix4f& world)
@@ -1758,7 +994,7 @@ void ApplicationLoop::CreateCrateObject()
 
 
 
-	static uint16_t BoxIndices[52] = {
+	uint16_t BoxIndices[52] = {
 		2,  1,  0, 1, 
 		1,  2,  3, 3, 4,
 		4,  5,  6, 6,
@@ -1773,7 +1009,7 @@ void ApplicationLoop::CreateCrateObject()
 	   23, 22, 21
 	};
 
-	static Vector4f BoxVerts[24] =
+	Vector4f BoxVerts[24] =
 	{
 		Vector4f(1.0,  1.0,  1.0, 1.0),
 		Vector4f(1.0,  1.0, -1.0, 1.0),
@@ -1802,7 +1038,7 @@ void ApplicationLoop::CreateCrateObject()
 	};
 
 
-	static Vector4f BoxColors[24] =
+	Vector4f BoxColors[24] =
 	{
 		Vector4f(1,1,1,1),
 		Vector4f(1,1,1,1),
@@ -1842,8 +1078,6 @@ void ApplicationLoop::CreateCrateObject()
 
 
 	Vector2f texturesCoordinate[24] = {
-
-
 		Vector2f(1.0, 0.0),
 		Vector2f(0.0, 0.0),
 		Vector2f(1.0, 1.0),
@@ -1868,13 +1102,12 @@ void ApplicationLoop::CreateCrateObject()
 		Vector2f(0.0, 0.0),
 		Vector2f(1.0, 1.0),
 		Vector2f(0.0, 1.0),
-		
 	};
 
 	Vector3f totalNormals[24];
 	Vector4f tangents[24];
 
-	CreateBitTangentFromNormal(BoxVerts, texturesCoordinate, totalNormals, BoxIndices, 52, 24, tangents);
+	CreateBitTangentFromNormal(BoxVerts, texturesCoordinate, BoxIndices, 52, 24, tangents, totalNormals, &AppInstanceTempAllocator);
 
 	struct MyVertex
 	{
@@ -1887,9 +1120,7 @@ void ApplicationLoop::CreateCrateObject()
 		Vector4f tangent;
 	};
 
-
 	MyVertex compVerts[24];
-	char compVerts2[4*KiB];
 
 	AxisBox BOX =
 	{
@@ -1908,9 +1139,11 @@ void ApplicationLoop::CreateCrateObject()
 		compVerts[i].tangent = tangents[i];
 	}
 
-	int compressedSize = 0, vertexFlags = 0;
+	int compressedSize = GetCompressedSize(inputDescription, 7), vertexFlags = 0;
 
-	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 7, sizeof(MyVertex), 24, BOX, compVerts, compVerts2, &compressedSize, &vertexFlags);
+	void* compressedVertexData = AppInstanceTempAllocator.Allocate(compressedSize * 24, 16);
+
+	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 7, sizeof(MyVertex), 24, BOX, compVerts, compressedVertexData, &compressedSize, &vertexFlags);
 
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1959,8 +1192,8 @@ void ApplicationLoop::CreateCrateObject()
 
 	int renderableIndex = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
 
-	rendInst->UpdateDriverMemory(compVerts2, globalVertexBuffer, sizeof(compVerts2),  vertexAlloc, TransferType::CACHED);
-	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::MEMORY);
+	rendInst->UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
+	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -2032,7 +1265,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
-		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed);
+		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed, &GlobalInputScratchAllocator);
 
 		int vertexFlags = POSITION | TEXTURE0;
 
@@ -2209,7 +1442,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	SMBGeoChunk* geoDefs = (SMBGeoChunk*)AppInstanceTempAllocator.Allocate(sizeof(SMBGeoChunk) * MAX_GEO_FILES);
 
-	for (size_t i = 0; i<chunk.size(); i++)
+	for (size_t i = 0; i<file.numResources; i++)
 	{
 		switch (chunk[i].chunkType)
 		{
@@ -2339,8 +1572,6 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 	
 }
-
-static int frameCount = RenderInstance::MAX_FRAMES_IN_FLIGHT;
 
 void CreateDebugCommandBuffers(int count)
 {
@@ -2926,40 +2157,6 @@ void CreateLightAssignments(int count)
 	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance->CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
 }
 
-
-/*
-struct ShadowMapBase
-{
-	int frameGraphIndex;
-	int resourceIndex;
-	int atlasWidth;
-	int atlasHeight;
-	int avgShadowWidth;
-	int avgShadowHeight;
-	int totalShadowMaps;
-	int zoneAlloc;
-
-	int shadowMapCountsAlloc;
-	int shadowMapCountsAllocSize;
-	int shadowMapOffsetsAlloc;
-	int shadowMapOffsetsAllocSize;
-	int shadowMapAssignmentsAlloc;
-	int shadowMapAssignmentsAllocSize;
-	int shadowMapAtlasViewsAlloc;
-	int shadowMapAtlasViewsAllocSize;
-	int shadowMapViewProjAlloc;
-	int shadowMapViewProjAllocSize;
-	int shadowMapObjectIDsAlloc;
-	int shadowMapObjectIDsAllocSize;
-	int shadowMapObjectCountAlloc;
-
-	int shadowMapIndirectBufferAlloc;
-	int shadowMapIndirectBufferAllocSize;
-
-};
-
-*/
-
 void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shadowMapHeight, int shadowMapWidth, int shadowMapAtlasHeight, int shadowMapAtlasWidth)
 {
 	mainShadowMapManager.atlasHeight = shadowMapAtlasHeight;
@@ -3064,7 +2261,7 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 
 	
 
-	/*
+	
 	ResourceArrayUpdate samplerUpdate;
 
 	samplerUpdate.resourceCount = 1;
@@ -3074,7 +2271,7 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 
 	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(3, 1, smdpd.fullScreenDescriptorSet, 0, 0);
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(MSAAShadowMapping, 1, smdpd.fullScreenDescriptorSet, 0, 0);
 	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance->currentFrame, 0);
@@ -3101,55 +2298,166 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 	};
 
 	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
-	*/
-
 }
 
-static std::array<std::string, 8> pds = {
-	"GenericPipeline.xml",
-	"TextPipeline.xml",
-	"DebugPipeline.xml",
-	"NormalDebugPipeline.xml",
-	"SkyboxPipeline.xml",
-	"OutlinePipeline.xml",
-	"FullscreenPipeline.xml",
-	"ShadowMap.xml"
-};
-
-static std::array<std::string, 19> layouts = {
-		"3DTexturedLayout.xml",
-		"TextLayout.xml",
-		"InterpolateMeshLayout.xml",
-		"PolynomialLayout.xml",
-		"IndirectCull.xml",
-		"DebugDraw.xml",
-		"IndirectDebug.xml",
-		"PrefixSum.xml",
-		"PrefixSumAdd.xml",
-		"WorldObjectDivison.xml",
-		"MeshWorldAssignments.xml",
-		"LightObjectDivision.xml",
-		"LightWorldAssignment.xml",
-		"NormalDebug.xml",
-		"Skybox.xml",
-		"OutlineLayout.xml",
-		"FullscreenLayout.xml",
-		"ShadowMapLayout.xml",
-		"ShadowMapClipping.xml"
-};
-
-static std::array<std::string, 5> mainLayoutAttachments =
+void ApplicationLoop::RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 {
-	"noMSAAAttachment.xml",
-	"MSAAAttachment.xml",
-	"MSAAPostProcess.xml",
-	"BasicShadowMapAtt.xml",
-	"ShadowAtlasUse.xml"
-};
+	if (BasicShadow >= 0)
+	{
+		GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(BasicShadow, 0, nullptr);
+	}
+
+	if (MSAAPost >= 0)
+	{
+		GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, width, height, nullptr);
+		GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAPost, 1, nullptr);
+	}
+	
+	if (MSAAShadowMapping >= 0)
+	{
+		GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAShadowMapping, 1, nullptr);
+	}
+}
+
+void ApplicationLoop::CreateMSAAPostFullScreen()
+{
+	ResourceArrayUpdate samplerUpdate;
+
+	samplerUpdate.resourceCount = 1;
+	samplerUpdate.resourceDstBegin = 0;
+	samplerUpdate.resourceHandles = &mainLinearSampler;
+
+	int mainFullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(MSAAPost, 1, mainFullScreen, 0, 0);
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainFullScreen, &GlobalRenderer::gRenderInstance->currentFrame, 0);
+
+	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = ~0,
+		.vertexCount = 4,
+		.pipelinename = 16,
+		.descCount = 1,
+		.descriptorsetid = &mainFullScreen,
+		.indexBufferHandle = ~0,
+		.indexCount = 0,
+		.instanceCount = 1,
+		.indexSize = 0,
+		.indexOffset = (uint32_t)0,
+
+		.vertexOffset = (uint32_t)0,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
+
+	mainFullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
+}
+
+void ApplicationLoop::CreateSkyBox()
+{
+	uint16_t BoxIndices[36] = {
+		2,  1,  0,
+		1,  2,  3,
+		4,  5,  6,
+		7,  6,  5,
+		8,  9,  10,
+		11, 10, 9,
+	   14, 13, 12,
+	   13, 14, 15,
+	   18, 17, 16,
+	   17, 18, 19,
+	   20, 21, 22,
+	   23, 22, 21
+	};
+
+	Vector4f BoxVerts[24] =
+	{
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0),
+		Vector4f(-1.0,  1.0,  1.0, 1.0),
+		Vector4f(1.0,  1.0,  1.0, 1.0),
+		Vector4f(-1.0, -1.0,  1.0, 1.0),
+		Vector4f(1.0, -1.0,  1.0, 1.0),
+		Vector4f(-1.0,  1.0, -1.0, 1.0),
+		Vector4f(1.0,  1.0, -1.0, 1.0),
+		Vector4f(-1.0, -1.0, -1.0, 1.0),
+		Vector4f(1.0, -1.0, -1.0, 1.0)
+	};
+
+	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(BoxVerts), 64);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxVerts, globalVertexBuffer, sizeof(BoxVerts), vertexAlloc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
+
+	std::string names[6] = {
+	"face4.bmp",
+	"face1.bmp",
+	"face5.bmp",
+	"face2.bmp",
+	"face6.bmp",
+	"face3.bmp",
+
+
+
+	};
+
+	skyboxCubeImage = ReadCubeImage(names, 6, BMP);
+
+	static Matrix4f matrix = Identity4f();
+
+	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
+
+	int camSkyboxData = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	int skyboxDesc = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(camSkyboxData, &globalBufferLocation, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &skyboxCubeImage, 1, 0, 0);
+	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
+
+	std::array<int, 2> skyboxDescs = { camSkyboxData, skyboxDesc };
+
+	GraphicsIntermediaryPipelineInfo skyboxInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = globalVertexBuffer,
+		.vertexCount = 24,
+		.pipelinename = SKYBOX,
+		.descCount = 2,
+		.descriptorsetid = skyboxDescs.data(),
+		.indexBufferHandle = globalIndexBuffer,
+		.indexCount = 36,
+		.instanceCount = 1,
+		.indexSize = 2,
+		.indexOffset = (uint32_t)indexAlloc,
+
+		.vertexOffset = (uint32_t)vertexAlloc,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
+
+	skyboxPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&skyboxInfo, false);
+}
 
 void ApplicationLoop::InitializeRuntime()
 {
-
 	queueSema.Create();
 
 	threadHandle = ThreadManager::LaunchOSBackgroundThread(ScanSTDIN, &stopThreadServer);
@@ -3178,39 +2486,45 @@ void ApplicationLoop::InitializeRuntime()
 
 	int mainDSVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(512 * MiB, mainDepthFormat, 4096, 4096);
 
-	graphNoMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[0], nullptr);
-	graphMSAAIndex = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[1], nullptr);
-	MSAAPost = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[2], nullptr);
-	//BasicShadow = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[3], nullptr);
-	MSAAShadowMapping = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[4], nullptr);
+	MSAAPost = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[0], nullptr);
+	BasicShadow = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[1], nullptr);
+	MSAAShadowMapping = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[2], nullptr);
+
+	currentFrameGraphIndex = MSAAShadowMapping;
+
+	frameGraphsCount = 3;
 
 	GlobalRenderer::gRenderInstance->CreateSwapchain(mainColorFormat, 800, 600);
 
-	std::array<AttachmentClear, 3> basicclears{
-		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
+	std::array<AttachmentClear, 1> ShadowMapViewerClears {
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
-		CLEARDEPTH, {1.0, 0}
 	};
-	std::array<AttachmentClear, 4> clears2{
+	std::array<AttachmentClear, 4> MSAAPostClears {
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
 		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
 		CLEARDEPTH, {1.0, 0}
 	};
 
-	std::array<AttachmentClear, 4> clears3{
+	std::array<AttachmentClear, 4> MSAAShadowMappingClears {
 		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
 		CLEARDEPTH, {1.0, 0},
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
 		CLEARDEPTH, {1.0, 0}
 	};
 
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(graphNoMSAAIndex, 0, basicclears.data() + 1);
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(graphMSAAIndex, 0, basicclears.data());
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAPost, 1, clears2.data());
-	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 800, 600, clears2.data());
-	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, clears3.data());
-	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAShadowMapping, 1, clears3.data());
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(BasicShadow, 0, ShadowMapViewerClears.data());
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAPost, 1, MSAAPostClears.data());
+	GlobalRenderer::gRenderInstance->CreateSwapChainAttachment(MSAAShadowMapping, 1, MSAAShadowMappingClears.data());
+	
+	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data());
+	GlobalRenderer::gRenderInstance->CreatePerFrameAttachment(MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data());
+
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAShadowMapping, 0, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAShadowMapping, 1, 10);
+	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(BasicShadow, 0, 1);
 
 	GlobalRenderer::gRenderInstance->CreatePipelines(pds.data(), pds.size());
 
@@ -3218,17 +2532,19 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainLinearSampler = GlobalRenderer::gRenderInstance->CreateSampler(7);
 
-	std::array<int, 4> frameGraphs = { 0, 1, 2, 3 };
-	std::array<int, 5> frameRenderPassSelection = { 0, 0, 0, 1, 1 };
+	std::array frameGraphs = { MSAAPost, MSAAShadowMapping, BasicShadow };
+	std::array frameRenderPassSelection = { 0, 1, 0 };
 
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(0, 0, frameGraphs.data(), frameRenderPassSelection.data(),  4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(1, 1, frameGraphs.data(), frameRenderPassSelection.data(), 4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(5, 2, frameGraphs.data(), frameRenderPassSelection.data(), 4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(13, 3, frameGraphs.data(), frameRenderPassSelection.data(), 4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(14, 4, frameGraphs.data(), frameRenderPassSelection.data(), 4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 4);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(16, 6, frameGraphs.data() + 2, frameRenderPassSelection.data() + 3, 1);
-	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(17, 7, frameGraphs.data() + 3, frameRenderPassSelection.data(), 1);
+	std::array fullScreenFrameGraphs = { MSAAPost, BasicShadow };
+
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(0, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(1, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(5, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(13, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(14, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(16, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
+	GlobalRenderer::gRenderInstance->CreateGraphicRenderStateObject(17, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
 
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(2);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(3);
@@ -3241,15 +2557,6 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(11);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(12);
 	GlobalRenderer::gRenderInstance->CreateComputePipelineStateObject(18);
-
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphNoMSAAIndex, 0, 10);
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(graphMSAAIndex, 0, 10);
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
-	
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
-
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAShadowMapping, 0, 10);
-	GlobalRenderer::gRenderInstance->CreateGraphicsQueueForAttachments(MSAAShadowMapping, 1, 10);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance->CreateComputeQueue(15);
 
@@ -3288,172 +2595,24 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance->descriptorManager.SetVariableArrayCount(globalTexturesDescriptor, 3, 512);
 
-	std::array arr = { globalBufferDescriptor, globalTexturesDescriptor };
+	std::array mainDrawBindGroups = { globalBufferDescriptor, globalTexturesDescriptor };
 
-	GlobalRenderer::gRenderInstance->CreateRenderTargetData(arr.data(), 2);
-
-	static uint16_t BoxIndices[36] = {
-		2,  1,  0,
-		1,  2,  3,
-		4,  5,  6,
-		7,  6,  5,
-	    8,  9,  10,
-		11, 10, 9,
-	   14, 13, 12,
-	   13, 14, 15,
-	   18, 17, 16,
-	   17, 18, 19,
-	   20, 21, 22,
-	   23, 22, 21
-	};
-
-	static Vector4f BoxVerts[24] =
-	{
-		Vector4f(1.0,  1.0,  1.0, 1.0),
-		Vector4f(1.0,  1.0, -1.0, 1.0),
-		Vector4f(1.0, -1.0,  1.0, 1.0),
-		Vector4f(1.0, -1.0, -1.0, 1.0),
-		Vector4f(-1.0,  1.0,  1.0, 1.0),
-		Vector4f(-1.0,  1.0, -1.0, 1.0),
-		Vector4f(-1.0, -1.0,  1.0, 1.0),
-		Vector4f(-1.0, -1.0, -1.0, 1.0),
-		Vector4f(-1.0,  1.0,  1.0, 1.0),
-		Vector4f(1.0,  1.0,  1.0, 1.0),
-		Vector4f(-1.0,  1.0, -1.0, 1.0),
-		Vector4f(1.0,  1.0, -1.0, 1.0),
-		Vector4f(-1.0, -1.0,  1.0, 1.0),
-		Vector4f(1.0, -1.0,  1.0, 1.0),
-		Vector4f(-1.0, -1.0, -1.0, 1.0),
-		Vector4f(1.0, -1.0, -1.0, 1.0),
-		Vector4f(-1.0,  1.0,  1.0, 1.0),
-		Vector4f(1.0,  1.0,  1.0, 1.0),
-		Vector4f(-1.0, -1.0,  1.0, 1.0),
-		Vector4f(1.0, -1.0,  1.0, 1.0),
-		Vector4f(-1.0,  1.0, -1.0, 1.0),
-		Vector4f(1.0,  1.0, -1.0, 1.0),
-		Vector4f(-1.0, -1.0, -1.0, 1.0),
-		Vector4f(1.0, -1.0, -1.0, 1.0)
-	};
-
-	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(BoxVerts), 64);
-	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
-
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxVerts, globalVertexBuffer, sizeof(BoxVerts),  vertexAlloc, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices),  indexAlloc, TransferType::MEMORY);
-
-	std::string names[6] = {
-	"face4.bmp",
-	"face1.bmp",
-	"face5.bmp",
-	"face2.bmp",
-	"face6.bmp",
-	"face3.bmp",
-	
-	
-	
-	};
-
-	skyboxCubeImage = ReadCubeImage(names, 6, BMP);
-
-	static Matrix4f matrix = Identity4f();
-
-	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
-
-	int skyboxDesc = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 1, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-	int globalPipelineBufferWhat = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(SKYBOX, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
+	GlobalRenderer::gRenderInstance->CreateRenderGraphData(MSAAPost, mainDrawBindGroups.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateRenderGraphData(MSAAShadowMapping, mainDrawBindGroups.data(), 2);
+	GlobalRenderer::gRenderInstance->CreateRenderGraphData(BasicShadow, nullptr, 0);
 
 
-	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalPipelineBufferWhat, &globalBufferLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.BindSampledImageToShaderResource(skyboxDesc, &skyboxCubeImage, 1, 0, 0);
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(skyboxDesc, &matrix, 0);
-
-	std::array<int, 2> skyboxDescs = { globalPipelineBufferWhat, skyboxDesc };
-
-	GraphicsIntermediaryPipelineInfo skyboxInfo = {
-		.drawType = 0,
-		.vertexBufferHandle = globalVertexBuffer,
-		.vertexCount = 24,
-		.pipelinename = SKYBOX,
-		.descCount = 2,
-		.descriptorsetid = skyboxDescs.data(),
-		.indexBufferHandle = globalIndexBuffer,
-		.indexCount = 36,
-		.instanceCount = 1,
-		.indexSize = 2,
-		.indexOffset = (uint32_t)indexAlloc,
-		
-		.vertexOffset = (uint32_t)vertexAlloc,
-		.indirectAllocation = ~0,
-		.indirectDrawCount = 0,
-		.indirectCountAllocation = ~0
-	};
-
-	skyboxPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&skyboxInfo, false);
-
-	ResourceArrayUpdate samplerUpdate;
-
-	samplerUpdate.resourceCount = 1;
-	samplerUpdate.resourceDstBegin = 0;
-	samplerUpdate.resourceHandles = &mainLinearSampler;
-
+	CreateSkyBox();
 	CreateDebugCommandBuffers(256);
 	CreateLightAssignments(128);
 	CreateMeshWorldAssignment(256);
 	CreateGenericMeshCommandBuffers(256);
 	CreateShadowMapManager(16, 256, 1024, 1024, mainShadowWidth, mainShadowHeight);
-
-
-	int mainFullScreen = GlobalRenderer::gRenderInstance->AllocateShaderResourceSet(16, 0, GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);
-
-	GlobalRenderer::gRenderInstance->UploadFrameAttachmentResource(MSAAPost, 1, mainFullScreen, 0, 0);
-	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
-
-	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainFullScreen, &GlobalRenderer::gRenderInstance->currentFrame, 0);
-
-
-
-	
-
-	std::array<int, 1> fullScreenDesc = { mainFullScreen };
-
-	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
-		.drawType = 0,
-		.vertexBufferHandle = ~0,
-		.vertexCount = 4,
-		.pipelinename = 16,
-		.descCount = 1,
-		.descriptorsetid = fullScreenDesc.data(),
-		.indexBufferHandle = ~0,
-		.indexCount = 0,
-		.instanceCount = 1,
-		.indexSize = 0,
-		.indexOffset = (uint32_t)0,
-
-		.vertexOffset = (uint32_t)0,
-		.indirectAllocation = ~0,
-		.indirectDrawCount = 0,
-		.indirectCountAllocation = ~0
-	};
-
-	mainFullScreenPipeline = GlobalRenderer::gRenderInstance->CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
-
-	LightSource source1 = { .color = Vector4f(1.0f, 0.0, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -80.0f, 9.0f) };
-	LightSource source2 = { .color = Vector4f(1.0f, 1.0, 1.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, -40.0f, 9.0f) };
-	LightSource source4 = { .color = Vector4f(1.0f, 1.0f, 0.0, 0.0f), .pos = Vector4f(-5.0f, 0.0f, 40.0f, 9.0f) };
-
+	CreateMSAAPostFullScreen();
 
 	AddLight(mainSpotLight, LightType::SPOT);
-	//AddLight(source1, LightType::POINT);
-	//AddLight(source2, LightType::POINT);
-	//mainPointLightIndex = AddLight(mainPointLight, LightType::POINT);
 	AddLight(mainDirectionalLight, LightType::DIRECTIONAL);
-	//AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
-	//AddLight(mainDirectionalLight3, LightType::DIRECTIONAL);
-	//AddLight(mainDirectionalLight4, LightType::DIRECTIONAL);
-	//AddLight(mainDirectionalLight5, LightType::DIRECTIONAL);
-	//AddLight(mainDirectionalLight2, LightType::DIRECTIONAL);
-	//AddLight(source4, LightType::POINT);
-
+	
 	c.CamLookAt(Vector3f(25.0 * -mainDirectionalLight.direction.x, 25.0 * -mainDirectionalLight.direction.y,  25.0 * -mainDirectionalLight.direction.z), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
 	c.UpdateCamera();
@@ -3462,262 +2621,6 @@ void ApplicationLoop::InitializeRuntime()
 
 	WriteCameraMatrix(GlobalRenderer::gRenderInstance->MAX_FRAMES_IN_FLIGHT);	
 	
-}
-
-
-static int AddLight(LightSource& lightDesc, LightType type)
-{
-	int lightLocation = globalLightCount++;
-	
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightLocation, TransferType::CACHED);
-	
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type, globalLightTypesBuffer, sizeof(LightType), sizeof(LightType) * lightLocation, TransferType::CACHED);
-
-	if (type == LightType::DIRECTIONAL)
-	{
-
-		Vector3f pos;
-
-		float distance = 25.0f;
-
-		pos = Vector3f(-lightDesc.direction.x, -lightDesc.direction.y, -lightDesc.direction.z);
-
-		pos = pos * distance;
-
-		LTM ltm{};
-
-		LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
-
-		struct
-		{
-			Matrix4f view;
-			Matrix4f proj;
-		} Upload{
-			.view = CreateViewMatrix(&ltm),
-			.proj = CreateOrthographicMatrix(-10.0, 10.0f, -10.0f, 10.0f, 1.0f, 100.0f)
-		};
-
-		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&Upload, mainShadowMapManager.shadowMapViewProjAlloc, sizeof(Upload), sizeof(Upload) * lightLocation, TransferType::CACHED);
-
-		ShadowMapView view{};
-
-		int shadowXScale = mainShadowMapManager.atlasWidth / mainShadowMapManager.avgShadowWidth;
-		int shadowYScale = mainShadowMapManager.atlasHeight / mainShadowMapManager.avgShadowHeight;
-
-		view.xOff = (float)(mainShadowMapManager.avgShadowWidth) * (mainShadowMapManager.zoneAlloc % shadowXScale);
-		view.xOff /= (float)mainShadowMapManager.atlasWidth;
-
-		view.yOff = (float)(mainShadowMapManager.avgShadowHeight) * (mainShadowMapManager.zoneAlloc++ / shadowYScale);
-		view.yOff /= (float)mainShadowMapManager.atlasHeight;
-		view.xScale = 1.0f / (float)shadowXScale;
-		view.yScale = 1.0f / (float)shadowYScale;
-
-		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&view, mainShadowMapManager.shadowMapAtlasViewsAlloc, sizeof(view), sizeof(view) * lightLocation, TransferType::CACHED);
-
-	}
-	
-	return lightLocation;
-}
-
-static void UpdateLight(LightSource& lightDesc, int lightIndex)
-{
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightIndex, TransferType::CACHED);
-}
-
-EntryHandle ReadCubeImage(std::string *name, int textureCount, TextureIOType ioType)
-{
-	TextureDetails* details;
-
-	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
-
-	void* fileData;
-
-	FileManager::ReadFileInFull(name[0], &GlobalInputScratchAllocator, &fileData);
-
-	int filePointer = ReadBMPDetails((char*)fileData, details);
-
-	details->data = (char*)mainDictionary.AllocateImageCache(details->dataSize);
-
-	details->currPointer = details->data;
-
-	for (int i = 1; i < textureCount; i++)
-	{
-	
-		ReadBMPData((char*)fileData, filePointer, details);
-
-		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
-
-		TextureDetails stubDetails{};
-
-		filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
-
-		if (stubDetails.width != details->width) {
-			printf("Mismatched Image array\n");
-		}
-
-		details->currPointer = (char*)mainDictionary.AllocateImageCache(details->dataSize);
-	}
-
-	ReadBMPData((char*)fileData, filePointer, details);
-	
-	details->arrayLayers = textureCount;
-
-	EntryHandle ret = mainDictionary.textureHandles[textureStart] =
-		GlobalRenderer::gRenderInstance->CreateCubeImageHandle(
-			textureCount * details->dataSize,
-			details->width,
-			details->height,
-			details->miplevels,
-			details->type,
-			loop->GetPoolIndexByFormat(details->type),
-			mainLinearSampler);
-
-	GlobalRenderer::gRenderInstance->UpdateImageMemory(
-		details->data,
-		ret,
-		nullptr,
-		textureCount * details->dataSize,
-		details->width,
-		details->height,
-		details->miplevels,
-		details->arrayLayers,
-		details->type
-	);
-
-	return ret;
-}
-
-int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
-{
-	TextureDetails* details;
-
-	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
-
-	uint32_t* mipSizes = (uint32_t*)mainDictionary.AllocateImageCache(sizeof(uint32_t) * mipCounts);
-
-	int totalBlobSize = 0;
-	EntryHandle ret;
-
-	for (int i = 0; i<mipCounts; i++)
-	{
-	
-		void* fileData;
-
-		TextureDetails stubDetails{};
-
-		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
-
-		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
-
-		stubDetails.data = (char*)mainDictionary.AllocateImageCache(stubDetails.dataSize);
-
-		stubDetails.currPointer = stubDetails.data;
-
-		totalBlobSize += stubDetails.dataSize;
-
-		mipSizes[i] = stubDetails.dataSize;
-
-		ReadBMPData((char*)fileData, filePointer, &stubDetails);
-
-		if (!i)
-		{
-			memcpy(details, &stubDetails, sizeof(TextureDetails));
-		}
-		
-	}
-
-
-	details->miplevels = mipCounts;
-	details->arrayLayers = 1;
-
-	ret = mainDictionary.textureHandles[textureStart] =
-		GlobalRenderer::gRenderInstance->CreateImageHandle(
-			totalBlobSize,
-			details->width,
-			details->height,
-			details->miplevels,
-			details->type,
-			loop->GetPoolIndexByFormat(details->type),
-			mainLinearSampler);
-
-	GlobalRenderer::gRenderInstance->UpdateImageMemory(
-		details->data,
-		mainDictionary.textureHandles[textureStart],
-		mipSizes,
-		totalBlobSize,
-		details->width,
-		details->height,
-		details->miplevels,
-		details->arrayLayers,
-		details->type
-	);
-
-	ResourceArrayUpdate update;
-
-	update.resourceCount = 1;
-	update.resourceDstBegin = textureStart;
-	update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
-
-	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
-
-
-	return textureStart;
-}
-
-
-void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
-{
-
-	loop->camMovements[ApplicationLoop::RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
-
-	loop->camMovements[ApplicationLoop::LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
-
-	loop->camMovements[ApplicationLoop::FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
-	
-	loop->camMovements[ApplicationLoop::BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
-
-	loop->camMovements[ApplicationLoop::PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
-	
-	loop->camMovements[ApplicationLoop::PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
-	
-	loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
-	
-	loop->camMovements[ApplicationLoop::ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
-
-
-	if (keyActions[KC_TWO].state == PRESSED)
-	{
-		GlobalRenderer::gRenderInstance->IncreaseMSAA(currentFrameGraphIndex, 0);
-	}
-
-	if (keyActions[KC_ONE].state == PRESSED)
-	{
-		GlobalRenderer::gRenderInstance->DecreaseMSAA(currentFrameGraphIndex, 0);
-	}
-
-	static int dir = -1;
-
-	if (keyActions[KC_Q].state == PRESSED)
-	{
-		int next = currentFrameGraphIndex + dir;
-
-		if (next < 0)
-		{
-			dir = 1;
-			next = 0;
-		}
-		else if (next > 3)
-		{
-			dir = -1;
-			next = 3;
-		}
-
-		currentFrameGraphIndex = next;
-
-		GlobalRenderer::gRenderInstance->ResetCommandList();
-		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
-		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
-	}
 }
 
 void ApplicationLoop::CleanupRuntime()
@@ -3757,8 +2660,6 @@ void ApplicationLoop::ProcessCommands()
 	ExecuteCommands(*mapFunc, wordCount);
 }
 
-
-
 void ApplicationLoop::AddCommandTS(int wordCount)
 {
 	SemaphoreGuard lock(std::ref(queueSema));
@@ -3772,31 +2673,14 @@ void ApplicationLoop::SetRunning(bool set)
 
 void ApplicationLoop::LoadObject(const std::string& file)
 {
-	SMBFile SMB(file);
+	SMBFile SMB(file, &GlobalInputScratchAllocator);
 
 	LoadSMBFile(SMB);
-
 }
-
-void LoadObjectThreaded(void* data);
 
 void ApplicationLoop::LoadThreadedWrapper(std::string& file)
 {
 	ThreadManager::LaunchOSASyncThread(LoadObjectThreaded, &file);
-}
-
-void LoadObjectThreaded(void* data)
-{
-	std::string* file = (std::string*)data;
-
-	std::string out = *file;
-
-	if (out[0] == 0x22)
-	{
-		out = out.substr(1, out.length() - 2);
-	}
-
-	loop->LoadObject(out);
 }
 
 int ApplicationLoop::FindWords(std::string words)
@@ -3829,6 +2713,226 @@ int ApplicationLoop::FindWords(std::string words)
 	*out = words.substr(i, (j - i));
 
 	return wordCount;
+}
+
+int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
+{
+	int ret = globalMaterialRangeStart;
+
+	globalMaterialRangeStart += count;
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(ids, globalMaterialIndicesLocation, sizeof(int) * count, sizeof(int) * ret, TransferType::CACHED);
+
+	return ret;
+}
+
+int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
+{
+	Renderable* renderable = &renderablesObjects[globalRenderableCount];
+
+	int ret = globalRenderableCount++;
+
+	renderable->instanceCount = instanceCount;
+	renderable->materialStart = materialStart;
+	renderable->meshIndex = meshIndex;
+	renderable->blendLayersStart = blendStart;
+	renderable->materialStart = materialStart;
+	renderable->materialCount = materialCount;
+	renderable->transform = mat;
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(renderable, globalRenderableLocation, sizeof(Renderable), sizeof(Renderable) * ret, TransferType::MEMORY);
+
+	mainIndirectDrawData.commandBufferCount++;
+
+	return ret;
+}
+
+int ApplicationLoop::CreateMaterial(
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& color
+)
+{
+	Material material{};
+
+	material.albedoColor = color;
+
+	material.materialFlags = flags;
+
+	uint32_t* ptr = material.textureHandles.comp;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		ptr[i] = texturesIDs[i];
+	}
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+
+	return globalMaterialsIndex++;
+}
+
+int ApplicationLoop::CreateMaterial(
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& diffuseColor,
+	const Vector4f& specularColor,
+	float shininess,
+	const Vector4f& emissiveColor
+)
+{
+	Material material{};
+
+	material.albedoColor = diffuseColor;
+	material.emissiveColor = emissiveColor;
+	material.specularColor = specularColor;
+	material.shininess = shininess;
+
+	material.materialFlags = flags;
+
+	uint32_t* ptr = material.textureHandles.comp;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		ptr[i] = texturesIDs[i];
+	}
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(Material), sizeof(Material) * globalMaterialsIndex, TransferType::CACHED);
+
+	return globalMaterialsIndex++;
+}
+
+int ApplicationLoop::CreateMeshHandle(
+	void* vertexData, void* indexData,
+	int vertexFlags, int vertexCount, int vertexStride,
+	int indexStride, int indexCount,
+	AxisBox& box, Sphere& sphere,
+	int vertexAlloc, int indexAlloc
+)
+{
+	Mesh* mesh = nullptr;
+
+	uint32_t meshIndex;
+
+	std::tie(meshIndex, mesh) = meshInstanceData.Allocate();
+
+	mesh->indicesCount = indexCount;
+
+	mesh->verticesCount = vertexCount;
+
+	mesh->vertexSize = vertexStride;
+
+	mesh->indexSize = indexStride;
+
+	mesh->meshInstanceLocalMemoryCount = 1;
+
+
+	MeshDetails* handles = (MeshDetails*)meshObjectSpecificAlloc.Allocate(sizeof(MeshDetails));
+
+	mesh->meshInstanceLocalMemoryStart = meshObjectData.Allocate(handles);
+
+	mesh->vertexId = globalVertexBuffer;
+	mesh->indexId = globalIndexBuffer;
+
+	handles->vertexFlags = vertexFlags;
+	handles->stride = vertexStride;
+
+	handles->indexCount = mesh->indicesCount;
+	handles->firstIndex = indexAlloc / mesh->indexSize;
+	handles->vertexByteOffset = vertexAlloc;
+
+
+	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
+	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
+
+	int meshSpecificAlloc = meshDeviceSpecificAlloc.Allocate(sizeof(MeshDetails), 1);
+
+	mesh->meshInstanceDeviceMemoryCount = 1;
+	mesh->meshInstanceDeviceMemoryStart = meshDeviceMemoryData.Allocate(meshSpecificAlloc);
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(handles, globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::MEMORY);
+
+	return meshIndex;
+}
+
+void ApplicationLoop::SetPositonOfMesh(int meshIndex, const Vector3f& pos)
+{
+	auto rendInst = GlobalRenderer::gRenderInstance;
+
+	Mesh* mesh = &meshInstanceData.dataArray[meshIndex];
+	MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+
+
+	int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
+
+	//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+
+	rendInst->UpdateDriverMemory(handles, globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
+
+}
+
+void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
+{
+	auto rendInst = GlobalRenderer::gRenderInstance;
+	Geometry* geom = &geometryInstanceData.dataArray[geomIndex];
+
+	int meshCount = geom->meshCount;
+	int meshStart = geom->meshStart;
+
+	for (int i = 0; i < meshCount; i++)
+	{
+		Mesh* mesh = &meshInstanceData.dataArray[meshStart + i];
+
+		MeshDetails* handles = (MeshDetails*)meshObjectData.dataArray[mesh->meshInstanceLocalMemoryStart];
+
+		int meshSpecificAlloc = meshDeviceMemoryData.dataArray[mesh->meshInstanceDeviceMemoryStart];
+
+		//handles->m.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+
+		rendInst->UpdateDriverMemory(handles, globalMeshLocation, sizeof(MeshDetails), meshSpecificAlloc, TransferType::CACHED);
+	}
+
+}
+
+void ApplicationLoop::ExecuteCommands(const std::string& command, int wordCount)
+{
+
+	if (command == "load")
+	{
+		//LoadThreadedWrapper(args.at(0));
+	}
+	else if (command == "end")
+	{
+		SetRunning(false);
+	}
+	else if (command == "positionm")
+	{
+		if (wordCount != 4)
+			return;
+
+		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
+
+		int meshIndex = std::stoi(args[0]);
+		float x1 = std::stof(args[1]);
+		float y1 = std::stof(args[2]);
+		float z1 = std::stof(args[3]);
+		SetPositonOfMesh(meshIndex, Vector3f(x1, y1, z1));
+	}
+	else if (command == "positiong")
+	{
+		if (wordCount != 4)
+			return;
+		std::string* args = (std::string*)(ThreadSharedMessageQueue.bufferLocation);
+
+		int geomIndex = std::stoi(args[0]);
+		float x1 = std::stof(args[1]);
+		float y1 = std::stof(args[2]);
+		float z1 = std::stof(args[3]);
+		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
+	}
+
+	ThreadSharedMessageQueue.Read();
 }
 
 void ScanSTDIN(void* data)
@@ -3906,7 +3010,7 @@ void ScanSTDIN(void* data)
 	return;
 }
 
-static int CreateBlendRange(int* blendIDs, int blendCount)
+int CreateBlendRange(int* blendIDs, int blendCount)
 {
 	int loc = globalBlendRangeCount;
 
@@ -3917,7 +3021,7 @@ static int CreateBlendRange(int* blendIDs, int blendCount)
 	return loc;
 }
 
-static int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
+int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
 {
 	int loc = globalBlendDetailCount++;
 
@@ -3931,7 +3035,7 @@ static int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
 	return loc;
 }
 
-static int CreateBlendDetails(BlendMaterialType type, int mapID)
+int CreateBlendDetails(BlendMaterialType type, int mapID)
 {
 	int loc = globalBlendDetailCount++;
 
@@ -3943,4 +3047,341 @@ static int CreateBlendDetails(BlendMaterialType type, int mapID)
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(BlendDetails), sizeof(BlendDetails) * loc, TransferType::CACHED);
 
 	return loc;
+}
+
+void CreateUniformGrid()
+{
+	float div = (float)(mainGrid.numberOfDivision);
+
+	int count = mainGrid.numberOfDivision;
+
+	Vector4f extent = (mainGrid.max - mainGrid.min) / div;
+
+	float xMove = extent.x;
+	float yMove = extent.y;
+	float zMove = extent.z;
+
+	Vector4f maxHalf = mainGrid.max - (extent * 0.5);
+
+	Vector4f half = extent / 2.0;
+
+	for (int i = 0; i < count; i++)
+	{
+		for (int j = 0; j < count; j++)
+		{
+			for (int g = 0; g < count; g++)
+			{
+				Vector3f center = Vector3f(maxHalf.x - (i * xMove), maxHalf.y - (j * yMove), maxHalf.z - (g * zMove));
+
+				loop->CreateAABBDebugStruct(center, half, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 0.0, 0.0, 0.0));
+			}
+		}
+	}
+}
+
+SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format)
+{
+	switch (format)
+	{
+	case X8L8U8V8:         return SMB_X8L8U8V8;
+	case DXT1:             return SMB_DXT1;
+	case DXT3:             return SMB_DXT3;
+	case R8G8B8A8_UNORM:        return SMB_R8G8B8A8_UNORM;
+	case B8G8R8A8_UNORM:        return SMB_B8G8R8A8_UNORM;
+
+		// Formats that have no SMB equivalent:
+	case B8G8R8A8:
+	case D24UNORMS8STENCIL:
+	case D32FLOATS8STENCIL:
+	case D32FLOAT:
+	case R8G8B8A8:
+	case R8G8B8:
+	case IMAGE_UNKNOWN:
+	default:
+		return SMB_IMAGEUNKNOWN;
+	}
+}
+
+ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt)
+{
+	switch (fmt)
+	{
+	case SMB_X8L8U8V8:     return X8L8U8V8;
+	case SMB_DXT1:         return DXT1;
+	case SMB_DXT3:         return DXT3;
+	case SMB_R8G8B8A8_UNORM:    return R8G8B8A8_UNORM;
+	case SMB_B8G8R8A8_UNORM:    return B8G8R8A8_UNORM;
+
+	case SMB_IMAGEUNKNOWN:
+	default:
+		return IMAGE_UNKNOWN;
+	}
+}
+
+void LoadObjectThreaded(void* data)
+{
+	std::string* file = (std::string*)data;
+
+	std::string out = *file;
+
+	if (out[0] == 0x22)
+	{
+		out = out.substr(1, out.length() - 2);
+	}
+
+	loop->LoadObject(out);
+}
+
+void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
+{
+
+	loop->camMovements[ApplicationLoop::RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
+
+	loop->camMovements[ApplicationLoop::ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
+
+
+	if (keyActions[KC_TWO].state == PRESSED)
+	{
+		GlobalRenderer::gRenderInstance->IncreaseMSAA(currentFrameGraphIndex, 0);
+	}
+
+	if (keyActions[KC_ONE].state == PRESSED)
+	{
+		GlobalRenderer::gRenderInstance->DecreaseMSAA(currentFrameGraphIndex, 0);
+	}
+
+	static int dir = -1;
+
+	if (keyActions[KC_Q].state == PRESSED)
+	{
+		int next = currentFrameGraphIndex + dir;
+
+		if (next < 0)
+		{
+			dir = 1;
+			next = 0;
+		}
+		else if (next >= frameGraphsCount)
+		{
+			dir = -1;
+			next = frameGraphsCount - 1;
+		}
+
+		currentFrameGraphIndex = next;
+
+		GlobalRenderer::gRenderInstance->ResetCommandList();
+		GlobalRenderer::gRenderInstance->AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance->AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
+	}
+}
+
+
+void UpdateLight(LightSource& lightDesc, int lightIndex)
+{
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightIndex, TransferType::CACHED);
+}
+
+EntryHandle ReadCubeImage(std::string* name, int textureCount, TextureIOType ioType)
+{
+	TextureDetails* details;
+
+	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
+
+	void* fileData;
+
+	FileManager::ReadFileInFull(name[0], &GlobalInputScratchAllocator, &fileData);
+
+	int filePointer = ReadBMPDetails((char*)fileData, details);
+
+	details->data = (char*)mainDictionary.AllocateImageCache(details->dataSize);
+
+	details->currPointer = details->data;
+
+	for (int i = 1; i < textureCount; i++)
+	{
+
+		ReadBMPData((char*)fileData, filePointer, details);
+
+		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
+
+		TextureDetails stubDetails{};
+
+		filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
+
+		if (stubDetails.width != details->width) {
+			printf("Mismatched Image array\n");
+		}
+
+		details->currPointer = (char*)mainDictionary.AllocateImageCache(details->dataSize);
+	}
+
+	ReadBMPData((char*)fileData, filePointer, details);
+
+	details->arrayLayers = textureCount;
+
+	EntryHandle ret = mainDictionary.textureHandles[textureStart] =
+		GlobalRenderer::gRenderInstance->CreateCubeImageHandle(
+			textureCount * details->dataSize,
+			details->width,
+			details->height,
+			details->miplevels,
+			details->type,
+			loop->GetPoolIndexByFormat(details->type),
+			mainLinearSampler);
+
+	GlobalRenderer::gRenderInstance->UpdateImageMemory(
+		details->data,
+		ret,
+		nullptr,
+		textureCount * details->dataSize,
+		details->width,
+		details->height,
+		details->miplevels,
+		details->arrayLayers,
+		details->type
+	);
+
+	return ret;
+}
+
+int Read2DImage(std::string* name, int mipCounts, TextureIOType ioType)
+{
+	TextureDetails* details;
+
+	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
+
+	uint32_t* mipSizes = (uint32_t*)mainDictionary.AllocateImageCache(sizeof(uint32_t) * mipCounts);
+
+	int totalBlobSize = 0;
+	EntryHandle ret;
+
+	for (int i = 0; i < mipCounts; i++)
+	{
+
+		void* fileData;
+
+		TextureDetails stubDetails{};
+
+		FileManager::ReadFileInFull(name[i], &GlobalInputScratchAllocator, &fileData);
+
+		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
+
+		stubDetails.data = (char*)mainDictionary.AllocateImageCache(stubDetails.dataSize);
+
+		stubDetails.currPointer = stubDetails.data;
+
+		totalBlobSize += stubDetails.dataSize;
+
+		mipSizes[i] = stubDetails.dataSize;
+
+		ReadBMPData((char*)fileData, filePointer, &stubDetails);
+
+		if (!i)
+		{
+			memcpy(details, &stubDetails, sizeof(TextureDetails));
+		}
+
+	}
+
+
+	details->miplevels = mipCounts;
+	details->arrayLayers = 1;
+
+	ret = mainDictionary.textureHandles[textureStart] =
+		GlobalRenderer::gRenderInstance->CreateImageHandle(
+			totalBlobSize,
+			details->width,
+			details->height,
+			details->miplevels,
+			details->type,
+			loop->GetPoolIndexByFormat(details->type),
+			mainLinearSampler);
+
+	GlobalRenderer::gRenderInstance->UpdateImageMemory(
+		details->data,
+		mainDictionary.textureHandles[textureStart],
+		mipSizes,
+		totalBlobSize,
+		details->width,
+		details->height,
+		details->miplevels,
+		details->arrayLayers,
+		details->type
+	);
+
+	ResourceArrayUpdate update;
+
+	update.resourceCount = 1;
+	update.resourceDstBegin = textureStart;
+	update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
+
+	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
+
+	return textureStart;
+}
+
+int AddLight(LightSource& lightDesc, LightType type)
+{
+	int lightLocation = globalLightCount++;
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(LightSource), sizeof(LightSource) * lightLocation, TransferType::CACHED);
+
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&type, globalLightTypesBuffer, sizeof(LightType), sizeof(LightType) * lightLocation, TransferType::CACHED);
+
+	if (type == LightType::DIRECTIONAL)
+	{
+
+		Vector3f pos;
+
+		float distance = 25.0f;
+
+		pos = Vector3f(-lightDesc.direction.x, -lightDesc.direction.y, -lightDesc.direction.z);
+
+		pos = pos * distance;
+
+		LTM ltm{};
+
+		LookAt(&ltm, pos, Vector3f(0.0, 0.0, 0.0), Vector3f(0.0, 1.0, 0.0));
+
+		struct
+		{
+			Matrix4f view;
+			Matrix4f proj;
+		} Upload{
+			.view = CreateViewMatrix(&ltm),
+			.proj = CreateOrthographicMatrix(-10.0, 10.0f, -10.0f, 10.0f, 1.0f, 100.0f)
+		};
+
+		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&Upload, mainShadowMapManager.shadowMapViewProjAlloc, sizeof(Upload), sizeof(Upload) * lightLocation, TransferType::CACHED);
+
+		ShadowMapView view{};
+
+		int shadowXScale = mainShadowMapManager.atlasWidth / mainShadowMapManager.avgShadowWidth;
+		int shadowYScale = mainShadowMapManager.atlasHeight / mainShadowMapManager.avgShadowHeight;
+
+		view.xOff = (float)(mainShadowMapManager.avgShadowWidth) * (mainShadowMapManager.zoneAlloc % shadowXScale);
+		view.xOff /= (float)mainShadowMapManager.atlasWidth;
+
+		view.yOff = (float)(mainShadowMapManager.avgShadowHeight) * (mainShadowMapManager.zoneAlloc++ / shadowYScale);
+		view.yOff /= (float)mainShadowMapManager.atlasHeight;
+		view.xScale = 1.0f / (float)shadowXScale;
+		view.yScale = 1.0f / (float)shadowYScale;
+
+		GlobalRenderer::gRenderInstance->UpdateDriverMemory(&view, mainShadowMapManager.shadowMapAtlasViewsAlloc, sizeof(view), sizeof(view) * lightLocation, TransferType::CACHED);
+
+	}
+
+	return lightLocation;
 }

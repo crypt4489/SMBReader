@@ -52,11 +52,11 @@ SMBGeoChunk::~SMBGeoChunk()
 	free(renderablesTypes);
 }
 
-SMBFile::SMBFile(const std::filesystem::path& path) : id(LoadFile(path))
+SMBFile::SMBFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator) : id(LoadFile(path, inputDataAllocator))
 {
 }
 
-SMBFile::SMBFile(const std::string& file) : id(LoadFile(file))
+SMBFile::SMBFile(const std::string& file, SlabAllocator* inputDataAllocator) : id(LoadFile(file, inputDataAllocator))
 {
 }
 
@@ -65,7 +65,7 @@ SMBFile::~SMBFile()
 	FileManager::RemoveOpenFile(id);
 }
 
-FileID SMBFile::LoadFile(const std::filesystem::path& path)
+FileID SMBFile::LoadFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator)
 {
 	OSFileHandle* handle;
 
@@ -78,12 +78,12 @@ FileID SMBFile::LoadFile(const std::filesystem::path& path)
 
 	OSFileHandle* fh = FileManager::GetFile(ret);
 
-	ProcessFile(fh);
+	ProcessFile(fh, inputDataAllocator);
 
 	return std::move(ret);
 }
 
-FileID SMBFile::LoadFile(const std::string& name)
+FileID SMBFile::LoadFile(const std::string& name, SlabAllocator* inputDataAllocator)
 {
 	OSFileHandle* handle;
 
@@ -96,7 +96,7 @@ FileID SMBFile::LoadFile(const std::string& name)
 
 	OSFileHandle* fh = FileManager::GetFile(ret);
 
-	ProcessFile(fh);
+	ProcessFile(fh, inputDataAllocator);
 
 	return std::move(ret);
 }
@@ -112,8 +112,6 @@ void SMBFile::ReadHeader(OSFileHandle* fh)
 	OSReadFile(fh, stringsize, name.data());
 
 	OSReadFile(fh, 36, reinterpret_cast<char*>(&fileOffset));
-
-	chunks.resize(numResources);
 }
 
 void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk)
@@ -136,14 +134,15 @@ void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk)
 	}
 }
 
-void SMBFile::ProcessFile(OSFileHandle* fh)
+void SMBFile::ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator)
 {
 	ReadHeader(fh);
 
-	for (auto& i : chunks)
+	chunks = (SMBChunk*)inputDataAllocator->Allocate(sizeof(SMBChunk) * numResources);
+
+	for (uint32_t i = 0; i<numResources; i++)
 	{
-		ReadChunk(fh, i);
-	
+		ReadChunk(fh, chunks[i]);
 	}
 }
 
@@ -368,153 +367,7 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 	return sizeof(uint16_t) * geoDef->indicesCount[renderableIndex];
 }
 
-void CreateBitTangent(SMBGeoChunk* geoDefinition, void* vertexDataOut, int vertexCount, uint16_t* indices, int indexCount, int decompressed)
-{
-	/*
-	Vector3f* totalNormals = (Vector3f*)calloc(sizeof(Vector3f), vertexCount);
-	memset(totalNormals, 0, sizeof(Vector3f) * vertexCount);
-	Vector3f* totalTangents = (Vector3f*)calloc(sizeof(Vector3f), vertexCount);
-	float* totalBitTangents = (float*)calloc(sizeof(float), vertexCount);
-	int degenerate = 0;
-	int count = 0;
-	if (!decompressed)
-	{
-		CVertex_PosPack6_C16Tex2_Bone2* verts = (CVertex_PosPack6_C16Tex2_Bone2*)vertexDataOut;
-
-		
-
-		for (int lead = 0; lead<indexCount-2; lead++)
-		{
-			uint16_t index1 = indices[lead];
-			uint16_t index2 = indices[lead+1];
-			uint16_t index3 = indices[lead+2];
-
-			bool odd = (lead & 1) != 0;
-
-			if (odd)
-				std::swap(index2, index3);
-
-			CVertex_PosPack6_C16Tex2_Bone2 vert1 = verts[index1];
-			CVertex_PosPack6_C16Tex2_Bone2 vert2 = verts[index2];
-			CVertex_PosPack6_C16Tex2_Bone2 vert3 = verts[index3];
-
-			Vector3f pos1 = pack6decomp((int16_t*)&vert1.POSITION, geoDefinition->axialBox);
-			Vector3f pos2 = pack6decomp((int16_t*)&vert2.POSITION, geoDefinition->axialBox);
-			Vector3f pos3 = pack6decomp((int16_t*)&vert3.POSITION, geoDefinition->axialBox);
-
-			Vector3f e1 = pos2 - pos1;
-			Vector3f e2 = pos3 - pos1;
-
-			Vector3f normal = Cross(e1, e2);
-
-			float area2 = Dot(normal, normal);
-
-			if (area2 <= 0.0f) {
-				degenerate++;
-				continue;
-			}
-
-
-			totalNormals[index1] = totalNormals[index1] + normal;
-			totalNormals[index2] = totalNormals[index2] + normal;
-			totalNormals[index3] = totalNormals[index3] + normal;
-
-			Vector2f uv1 = converttexcoords16((int16_t*)&vert1.TEXTURE2);
-			Vector2f uv2 = converttexcoords16((int16_t*)&vert2.TEXTURE2);
-			Vector2f uv3 = converttexcoords16((int16_t*)&vert3.TEXTURE2);
-
-			
-			Vector2f duv1 = uv2 - uv1;
-			Vector2f duv2 = uv3 - uv1;
-
-			float f_det = (duv1.x * duv2.y - duv2.x * duv1.y);
-
-			//if (fabs(f_det) < 1e-4f) continue;
-
-			//if (fabsf(f_det) < 1e-8f) {
-			//	continue;
-			//}
-
-			float f = 1.0f / f_det;
-
-			
-
-			Vector3f tangent;
-			tangent = Normalize((e1 * duv2.y -  e2 * duv1.y) * f);
-			//tangent.y = f * (duv2.y * e1.y - duv1.y * e2.y);
-			//tangent.z = f * (duv2.y * e1.z - duv1.y * e2.z);
-
-			
-			Vector3f bitangent = Normalize((e2 * duv1.x - e1 * duv2.x) * f);
-			
-
-			Vector3f n = Normalize(normal);
-			float sign = (Dot(Cross(n, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
-
-		//	std::cout << tangent.x << " " << tangent.y << " " << tangent.z << std::endl;
-		//	std::cout << bittangent.x << " " << bittangent.y << " " << bittangent.z << std::endl;
-		//	std::cout << normal.x << " " << normal.y << " " << normal.z << std::endl;
-
-			//totalBitTangents[index1] = totalBitTangents[index1] + bittangent;
-			//totalBitTangents[index2] = totalBitTangents[index2] + bittangent;
-			//totalBitTangents[index3] = totalBitTangents[index3] + bittangent;
-
-			totalTangents[index1] = totalTangents[index1] + tangent;
-			totalTangents[index2] = totalTangents[index2] + tangent;
-			totalTangents[index3] = totalTangents[index3] + tangent;
-
-			
-
-			totalBitTangents[index1] += sign;
-			totalBitTangents[index2] += sign;
-			totalBitTangents[index3] += sign;
-
-			
-		}
-
-		
-		for (int lead = 0; lead < vertexCount; lead++)
-		{
-		
-			Vector3f normal = totalNormals[lead];
-			if (Length(normal) < 1e-9) {
-				memset(&verts[lead].TANGENT, 0, sizeof(Vector3f) * 3);
-				continue;
-			}
-
-			normal = Normalize(normal);
-			Vector3f tangent = totalTangents[lead];
-
-			tangent = Normalize(tangent - (normal * Dot(normal, tangent)));
-
-			float handedness = totalBitTangents[lead] < 0.0f ? -1.0f : 1.0f;
-
-			Vector3f bittangent = Cross(normal, tangent) * handedness;
-
-			//std::cout << tangent.x << " " << tangent.y << " " << tangent.z << std::endl;
-			//std::cout << bittangent.x << " " << bittangent.y << " " << bittangent.z << std::endl;
-			//std::cout << normal.x << " " << normal.y << " " << normal.z << std::endl;
-
-			//std::cout << "------------------------\n";
-			count++;
-
-			verts[lead].NORMAL = normal;
-			verts[lead].BITTANGENT = bittangent;
-			verts[lead].TANGENT = tangent;
-
-		}
-
-
-	}
-
-	free(totalNormals);
-	free(totalBitTangents);
-	free(totalTangents);
-	*/
-}
-
-
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed)
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, SlabAllocator* tempMemoryPool)
 {
 	OSFileHandle* handle = FileManager::GetFile(file.id);
 
@@ -538,14 +391,13 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 		break;
 	}
 
-	std::vector<char> data(vertexSize);
+	void* data = tempMemoryPool->Allocate(vertexSize);
 
-	OSReadFile(handle, vertexSize, data.data());
+	OSReadFile(handle, vertexSize, (char*)data);
 
-	
 	int vSize = geoDefinition->verticesCount[renderableIndex];
 
-	unsigned char* g = (unsigned char*)data.data();
+	unsigned char* g = (unsigned char*)data;
 
 	if (decompressed)
 	{

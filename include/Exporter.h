@@ -3,6 +3,7 @@
 
 
 #include <iostream>
+#include "AppAllocator.h"
 #include "SMBFile.h"
 #include "VertexTypes.h"
 
@@ -27,14 +28,9 @@ namespace ExportHelper
 	}
 }
 
-struct Exporter
-{
-public:
-	
-	static void ExportChunksFromFile(SMBFile& smb);
 
-	static void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk);
+void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory);
+void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk, SlabAllocator* inputScratchMemory);
+void ExportToOBJFormat(void* vertices, int vertexCount, std::string& outputFile);
 
-	static void ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& outputFile);
-};
 

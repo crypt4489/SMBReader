@@ -10,15 +10,10 @@
 
 #include "AppTypes.h"
 #include "Camera.h"
-#include "Exporter.h"
-#include "ProgramArgs.h"
-
 #include "SMBFile.h"
-#include "TextManager.h"
-#include "TextureDictionary.h"
+#include "ProgramArgs.h"
+#include "WindowManager.h"
 #include "ThreadManager.h"
-
-
 
 enum class DebugDrawType
 {
@@ -116,6 +111,12 @@ public:
 	int CreateGrid(float width, float height, float xDiv, float yDiv);
 
 	int CreateGridRenderable(int meshIndex, int materialIndex, const Matrix4f& world);
+
+	void CreateSkyBox();
+
+	void CreateMSAAPostFullScreen();
+
+	void RecreateFrameGraphAttachments(uint32_t width, uint32_t height);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

@@ -992,3 +992,14 @@ struct Frustum
 	void CreateFrustumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far);
 };
 PACKED_END
+
+struct AxisBox
+{
+	Vector4f min;
+	Vector4f max;
+};
+
+struct Sphere
+{
+	Vector4f sphere;
+};

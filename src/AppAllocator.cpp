@@ -3,11 +3,31 @@
 
 
 
+void* RingAllocator::Allocate(int _allocSize, int alignment)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize, alignment);
+
+	return (head + out);
+}
+
 void* RingAllocator::Allocate(int _allocSize)
 {
 	char* head = (char*)dataHead;
 
 	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize);
+
+	return (head + out);
+}
+
+void* RingAllocator::CAllocate(int _allocSize, int alignment)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize, alignment);
+
+	memset((head + out), 0, _allocSize);
 
 	return (head + out);
 }
@@ -37,11 +57,42 @@ void* RingAllocator::Head()
 
 
 
+void* SlabAllocator::Allocate(int _allocSize, int alignment)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
+
+	return (head + out);
+}
+
 void* SlabAllocator::Allocate(int _allocSize)
 {
 	char* head = (char*)dataHead;
 
 	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
+
+	return (head + out);
+}
+
+void* SlabAllocator::CAllocate(int _allocSize, int alignment)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize, alignment);
+
+	memset((head + out), 0, _allocSize);
+
+	return (head + out);
+}
+
+void* SlabAllocator::CAllocate(int _allocSize)
+{
+	char* head = (char*)dataHead;
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, dataSize);
+
+	memset((head + out), 0, _allocSize);
 
 	return (head + out);
 }

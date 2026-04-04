@@ -1515,7 +1515,7 @@ void RenderInstance::CreatePipelines(std::string* pipelineDescriptions, int pipe
 
 	for (int i = 0; i < pipelineDescriptionsCount; i++)
 	{
-		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++]);
+		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++], cacheAllocator);
 	}
 }
 
@@ -2339,7 +2339,7 @@ int RenderInstance::CreateAttachmentGraph(std::string attachmentLayout, int* sub
 
 	static int rpIndexAlloc = 0;
 
-	CreateAttachmentGraphFromFile(attachmentLayout, &attachmentGraphs[graphTemplateAlloc]);
+	CreateAttachmentGraphFromFile(attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator);
 
 	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc++]);
 	
@@ -2531,7 +2531,7 @@ EntryHandle RenderInstance::CreateSampler(uint32_t maxMipsLevel)
 
 #define MAX_DYNAMIC_VK_OFFSETS 100
 
-void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
+void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int descCount)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -2544,19 +2544,30 @@ void RenderInstance::CreateRenderTargetData(int* desc, int descCount)
 
 	for (int i = 0; i < descCount; i++)
 	{
-		descIDs[i] = CreateShaderResourceSet(desc[i]);
-		uint32_t size = GetDynamicOffsetsForDescriptorSet(desc[i], dynamicOffsets, dynamicSize);
+		descIDs[i] = CreateShaderResourceSet(descsSets[i]);
+		uint32_t size = GetDynamicOffsetsForDescriptorSet(descsSets[i], dynamicOffsets, dynamicSize);
 		dynamicPerSet[i] = size;
 		dynamicSize += size;
 	}
 
+	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraph];
 
-	for (uint32_t i = 0; i < (maxMSAALevels + maxMSAALevels + 4 + maxMSAALevels); i++)
+	int passesCount = graphInstance->graphLayout->passesCount;
+
+	int renderTargetBase = graphInstance->consecutiveRenderTargetsBase;
+
+	for (uint32_t i = 0; i < passesCount; i++)
 	{
-		renderTargets[i] = majorDevice->CreateRenderTargetData(mainRenderTargets[i], descCount);
-		majorDevice->UpdateRenderGraph(renderTargets[i], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
+		uint32_t samplesCount = (uint32_t)graphInstance->passes[i].maxSampleCount;
+		for (uint32_t j = 0; j < samplesCount; j++)
+		{
+			int index = renderTargetBase + j;
+			renderTargets[index] = majorDevice->CreateRenderTargetData(mainRenderTargets[index], descCount);
+			majorDevice->UpdateRenderGraph(renderTargets[index], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
+		}
+
+		renderTargetBase += samplesCount;
 	}
-	
 }
 
 

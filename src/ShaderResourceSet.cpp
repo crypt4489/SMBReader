@@ -812,21 +812,23 @@ int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t
 	return ret;
 }
 
-void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo)
+void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator)
 {
 	memset(stateInfo, 0, sizeof(GenericPipelineStateInfo));
 
-	std::vector<char> fileData;
+	FileID fileID = FileManager::OpenFile(filename, READ);
 
-	auto ret = FileManager::ReadFileInFull(filename, fileData);
+	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
 
-	if (ret)
-	{
-		throw std::runtime_error("Shader Init file is unable to be opened");
-	}
+	int dataSize = fileHandle->fileLength;
 
-	char* dataStart = fileData.data();
-	int dataSize = fileData.size();
+	void* fileData = tempAllocator->Allocate(dataSize);
+
+	OSReadFile(fileHandle, dataSize, (char*)fileData);
+
+	OSCloseFile(fileHandle);
+
+	char* dataStart = (char*)fileData;
 
 	int tagCount = 0;
 	int curr = 0;
@@ -1546,7 +1548,7 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 	return ret;
 }
 
-void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph)
+void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator)
 {
 
 	FileID fileID = FileManager::OpenFile(filename, READ);
@@ -1555,13 +1557,13 @@ void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph*
 
 	int dataSize = fileHandle->fileLength;
 
-	std::vector<char> fileDataC(dataSize);
+	void* data = inputScratchAllocator->Allocate(dataSize);
 
-	OSReadFile(fileHandle, dataSize, fileDataC.data());
+	OSReadFile(fileHandle, dataSize, (char*)data);
 
 	OSCloseFile(fileHandle);
 
-	char* dataStart = fileDataC.data();
+	char* dataStart = (char*)data;
 
 	int attachmentCounter = 0;
 	int resourceCounter = 0;

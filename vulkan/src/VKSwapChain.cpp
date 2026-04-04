@@ -89,8 +89,8 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocat
 
 void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swapChainSupport, uint32_t _imageCount, VkFormat requestedFormat)
 {
-	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats.data(), swapChainSupport.formats.size(), requestedFormat);
-	presentMode = chooseSwapPresentMode(swapChainSupport.presentModes.data(), swapChainSupport.presentModes.size());
+	swapChainImageFormat = chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formatCount, requestedFormat);
+	presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, swapChainSupport.presentModeCount);
 	
 	preTransform = swapChainSupport.capabilities.currentTransform;
 

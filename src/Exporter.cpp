@@ -36,41 +36,17 @@
 
 
 
-void Exporter::ExportChunksFromFile(SMBFile& smb)
+void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory)
 {
-
 	auto& chunk = smb.chunks;
-	for (size_t j = 0; j<smb.chunks.size(); j++)
+	for (size_t j = 0; j<smb.numResources; j++)
 	{
-		
-			
-			
 		switch (smb.chunks[j].chunkType)
 		{
 		case GEO:
-		{
-
-			/*
-
-			OSFileHandle* handle = FileManager::GetFile(smb.id);
-
-			size_t seekpos = chunk[j].offsetInHeader;
-
-			OSSeekFile(handle, seekpos, BEGIN);
-
-			std::vector<char> geomHeader(chunk[j].headerSize);
-
-			OSReadFile(handle, chunk[j].headerSize, geomHeader.data());
-
-			SMBGeoChunk geoDef{};
-			ProcessGeometryClass(geomHeader.data(), 0, &geoDef, chunk[j].contigOffset + smb.fileOffset, chunk[j].fileOffset + smb.numContiguousBytes + smb.fileOffset);
-
-			*/
-			break;
-		}
-		
+			break;	
 		case TEXTURE:
-			ExportTextureFromFile(smb, chunk[j]);
+			ExportTextureFromFile(smb, chunk[j], inputScratchMemory);
 			break;
 		case GR2:
 			break;
@@ -83,14 +59,17 @@ void Exporter::ExportChunksFromFile(SMBFile& smb)
 	}
 }
 
-
-void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
+void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk, SlabAllocator* inputScratchMemory)
 {
 	std::string name = FileManager::ExtractFileNameFromPath(chunk.fileName);
 
 	auto pathToTextures = FileManager::SetupDirectory(name);
 
 	SMBTexture tex(smb, chunk);
+
+	tex.data = (char*)inputScratchMemory->Allocate(tex.cumulativeSize);
+
+	tex.ReadTextureData(smb);
 
 	auto ptr = tex.data;
 
@@ -119,34 +98,30 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		char* bgra = ptr;
 
-		std::vector<char> input;
+		char* input = (char*)inputScratchMemory->Allocate(writeWidth * writeHeight * 4);
 
 		int compressedSize = 0;
-		input.resize(writeWidth * writeHeight * 4);;
+	
 		switch (tex.type)
 		{
 		case SMBImageFormat::SMB_X8L8U8V8:
 			std::cerr << "X8L8U8V8 format is not exportable\n";
 			return;
 		case SMBImageFormat::SMB_DXT1:
-			//compressedSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
-			
-			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input.data());
+			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input);
+			TexUtils::BGRATexture(input, tex.height >> i, tex.width >> i, 4);
 			break;
 		case SMBImageFormat::SMB_DXT3:
-			//compressedSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
-			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input.data());
+			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input);
+			TexUtils::BGRATexture(input, tex.height >> i, tex.width >> i, 4);
 			break;
-		case SMBImageFormat::SMB_R8G8B8A8_UNORM:
-			std::memcpy(input.data(), ptr, writeWidth * writeHeight * 4);
+		case SMBImageFormat::SMB_B8G8R8A8_UNORM:
+			std::memcpy(input, ptr, writeWidth * writeHeight * 4);
 			break;
 		default:
 			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
 			return;
 		}
-
-		TexUtils::BGRATexture(input.data(), tex.height >> i, tex.width >> i, 4);
-
 
 		uint32_t bpr = writeWidth * 4;
 
@@ -154,8 +129,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			//outputFile.write(input.data() + offset, bpr);
-			OSWriteFile(handle, bpr, input.data() + offset);
+			OSWriteFile(handle, bpr, input + offset);
 			offset -= bpr;
 		}
 
@@ -165,7 +139,7 @@ void Exporter::ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk)
 	}
 }
 
-void Exporter::ExportToOBJFormat(std::vector<Vertex>& vertices, std::string& outputFile)
+void ExportToOBJFormat(void* vertices, int vertexCount, std::string& outputFile)
 {
 	/*
 	using ExportHelper::operator<<;

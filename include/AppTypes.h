@@ -691,3 +691,20 @@ struct GPUCommand
 	GPUCommandStreamType streamType;
 	int indexForStreamType;
 };
+
+enum VertexComponents
+{
+	POSITION = 1,
+	TEXTURE0 = 2,
+	TEXTURE1 = 4,
+	TEXTURE2 = 8,
+	NORMAL = 16,
+	BONES2 = 32,
+	COLOR = 64,
+	TANGENT = 128,
+	COMPRESSED = 0x80000000,
+};
+
+constexpr float dx = 3.051851e-05f;
+constexpr float ax = 0.0009770395f;
+constexpr float bx = 0.0019550342f;

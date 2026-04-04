@@ -1,6 +1,7 @@
 #pragma once
 #include "AppTypes.h"
 #include <vector>
+#include "AppAllocator.h"
 #include "MathTypes.h"
 #include "VKUtilities.h"
 
@@ -185,3 +186,23 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 
 } CVertex_PosPack6_C16Tex2_Bone2;
 #pragma pack(pop)
+
+Vector3s CompressPosition(Vector4f vector, AxisBox& box);
+Vector3s CompressPosition(Vector3f vector, AxisBox& box);
+
+int32_t CompressNormal (Vector3f normal);
+
+Vector2s CompressTexCoords(Vector2f in);
+Vector2f DecompressTexCoords(Vector2s in);
+
+int32_t CompressTangent(Vector4f tangent);
+Vector4f DecompressTangent(int32_t ctangent);
+
+int32_t CompressColor(Vector4f color);
+
+void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
+
+int CompressMeshFromVertexStream(VertexInputDescription* inputDesc, int descCount, int vertexStride, int vertexCount,
+	AxisBox& box, void* vertexStream, void* memoryOut, int* compressedSize, int* vertexFlags);
+
+int GetCompressedSize(VertexInputDescription* inputDesc, int descCount);

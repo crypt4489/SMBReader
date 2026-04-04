@@ -90,10 +90,7 @@ public:
 		other.data = nullptr;
 	};
 
-	void MipLevelTextureData(uint32_t miplevel, std::vector<char>& _data);
-
 	SMBTexture(const SMBFile& smb, const SMBChunk& chunk);
-
 
 	void ReadTextureData(const SMBFile& smb);
 
