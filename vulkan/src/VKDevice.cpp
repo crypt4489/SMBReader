@@ -3023,8 +3023,10 @@ void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffset
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
 		graph->descriptorId[i] = perGraphDescriptor[i];
-		graph->dynamicsPerSet[i] = dynamicPerSet[i];
+		if (dynamicPerSet)
+			graph->dynamicsPerSet[i] = dynamicPerSet[i];
 	}
+
 	for (uint32_t i = 0; i<dos; i++)
 	{
 		graph->AddDynamicOffset(dynamicOffsets[i]);

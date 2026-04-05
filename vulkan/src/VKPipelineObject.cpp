@@ -26,7 +26,8 @@ VKPipelineObject::VKPipelineObject(DeviceOwnedAllocator* allocator, EntryHandle 
 	dynamicPerSet = reinterpret_cast<uint32_t*>(allocator->Alloc(sizeof(uint32_t) * descCount));
 	for (uint32_t i = 0; i < descCount; i++) {
 		descriptorSetId[i] = _dsid[i];
-		dynamicPerSet[i] = _dynamicPerSet[i];
+		if (_dynamicPerSet)
+			dynamicPerSet[i] = _dynamicPerSet[i];
 	}
 }
 

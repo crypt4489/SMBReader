@@ -62,8 +62,6 @@ public:
 
 	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
 
-	void SetPositonOfMesh(int meshIndex, const Vector3f& pos);
-
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
 	void CreateCrateObject();
@@ -108,15 +106,24 @@ public:
 	int AddMaterialToDeviceMemory(int count, int* ids);
 	int CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
-	int CreateGrid(float width, float height, float xDiv, float yDiv);
+	void CreateCornerWall(float width, float height, float xDiv, float yDiv);
 
-	int CreateGridRenderable(int meshIndex, int materialIndex, const Matrix4f& world);
+	int CreateGridRenderable(int meshIndex, int materialRangeIndex, const Matrix4f& world);
 
 	void CreateSkyBox();
 
 	void CreateMSAAPostFullScreen();
 
 	void RecreateFrameGraphAttachments(uint32_t width, uint32_t height);
+
+	void CreateMeshHandle(
+		int meshIndex,
+		void* vertexData, void* indexData,
+		int vertexFlags, int vertexCount, int vertexStride,
+		int indexStride, int indexCount,
+		AxisBox& box, Sphere& sphere,
+		int vertexAlloc, int indexAlloc
+	);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

@@ -1282,7 +1282,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		switch (resource->type)
 		{
 		case ShaderResourceType::UNIFORM_BUFFER:
-			descriptorBuilder->AddDynamicBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
+			descriptorBuilder->AddBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::IMAGESTORE2D:
 			descriptorBuilder->AddStorageImageLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
@@ -1327,7 +1327,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 			descriptorBuilder->AddBindlessCombinedSamplersLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::STORAGE_BUFFER:
-			descriptorBuilder->AddDynamicStorageBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
+			descriptorBuilder->AddStorageBufferLayout(resource->binding, stageFlags, arrayCount, bindingFlags);
 			break;
 		case ShaderResourceType::BUFFER_VIEW:
 			if (resource->action == ShaderResourceAction::SHADERREAD)
@@ -1781,7 +1781,7 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	
+
 	int link = descriptorUpdatePool.linkHead;
 	int* linkprev = &descriptorUpdatePool.linkHead;
 	ShaderResourceUpdate region;
@@ -1790,11 +1790,17 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 	DescriptorSetBuilder* builder = nullptr;
 
+	ShaderResourceSet* set = nullptr;
+
+	uintptr_t* offsets = nullptr;
+
 	while (link >= 0)
 	{
 		link = descriptorUpdatePool.PopLink(&region, link, &linkprev);
 
 		EntryHandle index = descriptorManager.vkDescriptorSets[region.descriptorSet];
+
+		
 
 		void* data = region.data;
 
@@ -1802,32 +1808,104 @@ void RenderInstance::UploadDescriptorsUpdates()
 		{
 			builder = dev->UpdateDescriptorSet(index);
 			previousBuffer = index;
+
+			uintptr_t head = descriptorManager.descriptorSets[region.descriptorSet];
+			set = (ShaderResourceSet*)head;
+			offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
 		}
-		
+
 		switch (region.type)
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
 
-			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 			builder->AddSamplerDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 		case ShaderResourceType::IMAGE2D:
 		{
 
-			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 			builder->AddImageResourceDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLER2D:
 		{
-			ResourceArrayUpdate* update = (ResourceArrayUpdate*)region.data;
+			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 			builder->AddCombinedTextureArray(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
 			break;
 		}
+		case ShaderResourceType::STORAGE_BUFFER:
+		{
+			BufferArrayUpdate* update = (BufferArrayUpdate*)region.data;
+			if (!update->allocationIndices) break;
 
+			int arrayCount = update->allocationCount;
+			int firstBuffer = update->resourceDstBegin;
+
+			for (int j = 0; j < arrayCount; j++)
+			{
+				auto alloc = allocations[update->allocationIndices[j]];
+
+				if (alloc.allocType == AllocationType::PERFRAME)
+					builder->AddStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+				else
+					builder->AddStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+
+			}
+			break;
+		}
+		case ShaderResourceType::UNIFORM_BUFFER:
+		{
+			BufferArrayUpdate* update = (BufferArrayUpdate*)region.data;
+			if (!update->allocationIndices) break;
+
+			int arrayCount = update->allocationCount;
+			int firstBuffer = update->resourceDstBegin;
+
+			for (int j = 0; j < arrayCount; j++)
+			{
+				auto alloc = allocations[update->allocationIndices[j]];
+
+				if (alloc.allocType == AllocationType::PERFRAME)
+					builder->AddUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+				else
+					builder->AddUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+			}
+			break;
+		}
+		case ShaderResourceType::BUFFER_VIEW:
+		{
+			BufferArrayUpdate* update = (BufferArrayUpdate*)region.data;
+			if (!update->allocationIndices) break;
+
+			int arrayCount = update->allocationCount;
+			int firstBuffer = update->resourceDstBegin;
+
+			for (int j = 0; j < arrayCount; j++)
+			{
+				auto alloc = allocations.allocations[update->allocationIndices[j]];
+
+				int viewGrab = (alloc.allocType == AllocationType::PERFRAME) ? currentFrame : 0;
+
+				VkBufferView handle = dev->GetBufferView(alloc.viewIndex, viewGrab);
+
+				ShaderResourceHeader* resource = (ShaderResourceHeader*)offsets[region.bindingIndex];
+
+				if (resource->action == ShaderResourceAction::SHADERREAD)
+				{
+					builder->AddUniformBufferView(handle, region.bindingIndex, currentFrame, 1, j + firstBuffer);
+				}
+				else if (resource->action == ShaderResourceAction::SHADERWRITE)
+				{
+					builder->AddStorageBufferView(handle, region.bindingIndex, currentFrame, 1, j + firstBuffer);
+				}
+				
+			}
+			break;
+		}
 		}
 	}
 }
@@ -2536,18 +2614,10 @@ void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int d
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	EntryHandle* descIDs = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * descCount);
-	uint32_t* dynamicPerSet = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * descCount);
-
-	uint32_t dynamicSize = 0;
-
-	uint32_t* dynamicOffsets = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * MAX_DYNAMIC_VK_OFFSETS);
 
 	for (int i = 0; i < descCount; i++)
 	{
 		descIDs[i] = CreateShaderResourceSet(descsSets[i]);
-		uint32_t size = GetDynamicOffsetsForDescriptorSet(descsSets[i], dynamicOffsets, dynamicSize);
-		dynamicPerSet[i] = size;
-		dynamicSize += size;
 	}
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraph];
@@ -2563,7 +2633,7 @@ void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int d
 		{
 			int index = renderTargetBase + j;
 			renderTargets[index] = majorDevice->CreateRenderTargetData(mainRenderTargets[index], descCount);
-			majorDevice->UpdateRenderGraph(renderTargets[index], dynamicOffsets, dynamicSize, descIDs, descCount, dynamicPerSet);
+			majorDevice->UpdateRenderGraph(renderTargets[index], nullptr, 0, descIDs, descCount, nullptr);
 		}
 
 		renderTargetBase += samplesCount;
@@ -2579,60 +2649,6 @@ uint32_t RenderInstance::GetSwapChainHeight()
 uint32_t RenderInstance::GetSwapChainWidth()
 {
 	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainWidth();
-}
-
-uint32_t RenderInstance::GetDynamicOffsetsForDescriptorSet(int descriptorSet, uint32_t* dynamicOffsets, uint32_t topOfDynamicOffsets)
-{
-	uintptr_t head = descriptorManager.descriptorSets[descriptorSet];
-	ShaderResourceSet* set = (ShaderResourceSet*)head;
-	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-
-	int count = set->bindingCount;
-
-	uint32_t size = 0;
-
-	int top = topOfDynamicOffsets;
-
-	for (int i = 0; i < count; i++)
-	{
-		ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[i];
-
-		int arrayCount = (header->arrayCount & DESCRIPTOR_COUNT_MASK);
-
-		switch (header->type)
-		{
-		
-		case ShaderResourceType::STORAGE_BUFFER:
-		case ShaderResourceType::UNIFORM_BUFFER:
-		{
-			ShaderResourceBuffer* buffer = (ShaderResourceBuffer*)offsets[i];
-
-			size += arrayCount;
-	
-			for (int j = 0; j < arrayCount; j++)
-			{
-				if ((j < buffer->bufferCount) && buffer->allocationIndex)
-				{
-					auto alloc = allocations[buffer->allocationIndex[j]];
-					int offset = (buffer->offsets ? buffer->offsets[j] : 0);
-					dynamicOffsets[top] = static_cast<uint32_t>(alloc.offset + offset);
-				} 
-				else
-				{
-					dynamicOffsets[top] = 0;
-				}
-			}
-
-			top += arrayCount;
-			
-			break;
-		}
-		default:
-			break;
-		}
-	}
-
-	return size;
 }
 
 EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
@@ -2711,9 +2727,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					auto alloc = allocations[buffer->allocationIndex[j]];
 
 					if (alloc.allocType == AllocationType::PERFRAME)
-						builder->AddDynamicStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0, 0, firstBuffer + j);
+						builder->AddStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer + j);
 					else
-						builder->AddDynamicStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0, 0, firstBuffer + j);
+						builder->AddStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer + j);
 					
 				}
 				break;
@@ -2731,9 +2747,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					auto alloc = allocations[buffer->allocationIndex[j]];
 
 					if (alloc.allocType == AllocationType::PERFRAME)
-						builder->AddDynamicUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, 0, 0, firstBuffer+j);
+						builder->AddUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer+j);
 					else
-						builder->AddDynamicUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, 0, 0, firstBuffer+j);
+						builder->AddUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer+j);
 				}
 				break;
 			}
@@ -2783,16 +2799,11 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t dynamicNumber = 0;
 	uint32_t pushRangeCount = 0;
 	EntryHandle* descHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle)* (info->descCount));
-	uint32_t* offsetsPerSet = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * (info->descCount));
-	uint32_t* dynamicOffsets = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * MAX_DYNAMIC_VK_OFFSETS);
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
-		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets, dynamicNumber);
-		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
 		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
@@ -2849,8 +2860,8 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 			.pipelinename = EntryHandle(),
 			.descCount = info->descCount,
 			.descriptorsetid = descHandles,
-			.dynamicPerSet = offsetsPerSet,
-			.maxDynCap = dynamicNumber,
+			.dynamicPerSet = 0,
+			.maxDynCap = 0,
 			.indexBufferHandle = indexBufferHandle,
 			.indexBufferOffset = indexOffset,
 			.indexCount = info->indexCount,
@@ -2898,7 +2909,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 			VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
-			vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
+			//vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
 
 			for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 			{
@@ -2952,17 +2963,12 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t dynamicNumber = 0;
 	uint32_t barrierCount = 0;
 	uint32_t pushRangeCount = 0;
 	EntryHandle* descHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * (info->descCount));
-	uint32_t* offsetsPerSet = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * (info->descCount));
-	uint32_t* dynamicOffsets = (uint32_t*)cacheAllocator->CAllocate(sizeof(uint32_t) * MAX_DYNAMIC_VK_OFFSETS);
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
-		offsetsPerSet[i] = GetDynamicOffsetsForDescriptorSet(info->descriptorsetid[i], dynamicOffsets, dynamicNumber);
-		dynamicNumber += offsetsPerSet[i];
 		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
 		barrierCount += descriptorManager.GetBarrierCount(info->descriptorsetid[i]);
 		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
@@ -2974,9 +2980,9 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 		.z = info->z,
 		.descCount = info->descCount,
 		.descriptorId = descHandles,
-		.dynamicPerSet = offsetsPerSet,
+		.dynamicPerSet = 0,
 		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
-		.maxDynCap = dynamicNumber,
+		.maxDynCap = 0,
 		.barrierCount = barrierCount,
 		.pushRangeCount = pushRangeCount
 	};
@@ -2994,8 +3000,6 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 	posStruct->pipelineIdentifierGroup = info->pipelinename;
 
 	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
-
-	vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
 
 	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 	{
@@ -3596,7 +3600,7 @@ void RenderInstance::InsertTransferCommand(int allocationIndex, int size, int al
 
 }
 
-void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, ResourceArrayUpdate* resourceArrayData)
+void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData)
 {
 	RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandResource));
 
@@ -3613,7 +3617,7 @@ void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindinginde
 	case ShaderResourceType::SAMPLERSTATE:
 	case ShaderResourceType::IMAGE2D:
 	{
-		ResourceArrayUpdate* cachedUpdate = (ResourceArrayUpdate*)(updateCommandsCache->Allocate(sizeof(ResourceArrayUpdate)));
+		DeviceHandleArrayUpdate* cachedUpdate = (DeviceHandleArrayUpdate*)(updateCommandsCache->Allocate(sizeof(DeviceHandleArrayUpdate)));
 		
 		cachedUpdate->resourceDstBegin = resourceArrayData->resourceDstBegin;
 		cachedUpdate->resourceCount = resCount;
@@ -3622,7 +3626,50 @@ void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindinginde
 		memcpy(cachedUpdate->resourceHandles, resourceArrayData->resourceHandles, sizeof(EntryHandle) * resCount);
 		
 		argData = cachedUpdate;
-		argSize = (sizeof(EntryHandle) * resCount) + sizeof(ResourceArrayUpdate);
+		argSize = (sizeof(EntryHandle) * resCount) + sizeof(DeviceHandleArrayUpdate);
+		break;
+	}
+	}
+
+	ShaderResourceSet* set = (ShaderResourceSet*)descriptorManager.descriptorSets[descriptorid];
+
+	rducr->bindingindex = bindingindex;
+	rducr->updateType = DriverUpdateType::RESOURCEUPDATE;
+	rducr->descriptorid = descriptorid;
+	rducr->type = type;
+	rducr->cachedDataSize = argSize;
+	rducr->data = argData;
+	rducr->copies = set->setCount;
+
+}
+
+
+void RenderInstance::UpdateBufferResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData)
+{
+	RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandResource));
+
+	int argSize = 0;
+
+	void* argData = nullptr;
+
+	int resCount = resourceArrayData->allocationCount;
+
+	switch (type)
+	{
+	case ShaderResourceType::STORAGE_BUFFER:
+	case ShaderResourceType::UNIFORM_BUFFER:
+	case ShaderResourceType::BUFFER_VIEW:
+	{
+		BufferArrayUpdate* cachedUpdate = (BufferArrayUpdate*)(updateCommandsCache->Allocate(sizeof(BufferArrayUpdate)));
+
+		cachedUpdate->resourceDstBegin = resourceArrayData->resourceDstBegin;
+		cachedUpdate->allocationCount = resCount;
+		cachedUpdate->allocationIndices = (int*)(updateCommandsCache->Allocate(sizeof(int) * resCount));
+
+		memcpy(cachedUpdate->allocationIndices, resourceArrayData->allocationIndices, sizeof(int) * resCount);
+
+		argData = cachedUpdate;
+		argSize = (sizeof(int) * resCount) + sizeof(BufferArrayUpdate);
 		break;
 	}
 	}
@@ -3709,7 +3756,7 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 
 	EntryHandle* imageViews = currentGraphInstance->resources[resourceIndex].attachmentImageView[0];
 
-	ResourceArrayUpdate update;
+	DeviceHandleArrayUpdate update;
 
 	int imageCount = currentGraphInstance->resources[resourceIndex].imageCount;
 

@@ -151,7 +151,9 @@ struct RenderInstance
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
 
-	void UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, ResourceArrayUpdate* resourceArrayData);
+	void UpdateShaderResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData);
+
+	void UpdateBufferResourceArray(int descriptorid, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData);
 
 	void SwapUpdateCommands();
 

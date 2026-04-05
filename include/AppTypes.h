@@ -308,11 +308,18 @@ struct ShaderResourceUpdate
 	int dataSize;
 };
 
-struct ResourceArrayUpdate
+struct DeviceHandleArrayUpdate
 {
 	int resourceDstBegin;
 	int resourceCount;
 	EntryHandle* resourceHandles;
+};
+
+struct BufferArrayUpdate
+{
+	int resourceDstBegin;
+	int allocationCount;
+	int* allocationIndices;
 };
 
 
