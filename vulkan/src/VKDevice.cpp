@@ -2533,6 +2533,18 @@ VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle handle)
 	return reinterpret_cast<VKPipelineObject*>(objHandle.memoryLocation);
 }
 
+VKGraphicsPipelineObject* VKDevice::GetGraphicsPipelineObject(EntryHandle handle)
+{
+	//std::shared_lock lock(deviceLock);
+
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkGraphicsPipeline || !objHandle.memoryLocation)
+		return nullptr;
+
+	return reinterpret_cast<VKGraphicsPipelineObject*>(objHandle.memoryLocation);
+}
+
 VKComputePipelineObject* VKDevice::GetComputePipelineObject(EntryHandle handle)
 {
 	//std::shared_lock lock(deviceLock);

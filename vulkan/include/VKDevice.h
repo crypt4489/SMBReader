@@ -490,6 +490,8 @@ struct VKDevice
 
 	VKComputePipelineObject* GetComputePipelineObject(EntryHandle handle);
 
+	VKGraphicsPipelineObject* GetGraphicsPipelineObject(EntryHandle handle);
+
 	int32_t GetPresentQueue(QueueIndex* queueIdx,
 		QueueIndex* maxQueueCount,
 		VkQueueFamilyProperties* famProps,

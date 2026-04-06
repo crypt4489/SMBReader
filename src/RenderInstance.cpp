@@ -558,7 +558,7 @@ void RenderInstance::DestoryTexture(EntryHandle handle)
 	dev->DestroyTexture(handle);
 }
 
-void RenderInstance::DestroySwapChainAttachments()
+void RenderInstance::DestroySwapChainAttachments(EntryHandle swapChainIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -599,9 +599,10 @@ void RenderInstance::DestroySwapChainAttachments()
 	}
 }
 
-int RenderInstance::RecreateSwapChain() {
+int RenderInstance::RecreateSwapChain(EntryHandle swapChainIndex) {
 
 	int ret = 0;
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
@@ -610,13 +611,13 @@ int RenderInstance::RecreateSwapChain() {
 	
 	windowMan->GetWindowSize(&width, &height);
 
-	if (width && height) {
-
+	if (width && height) 
+	{
 		swc->Wait();
 
-		DestroySwapChainAttachments();
+		DestroySwapChainAttachments(swapChainIndex);
 
-		CreateSwapChain(width, height, true);
+		CreateSwapChainData(swapChainIndex, width, height, true);
 
 		ret = 1;
 	}
@@ -916,7 +917,7 @@ int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraphInstance* gr
 	return totalRenderPassesCreated;
 }
 
-uint32_t RenderInstance::BeginFrame()
+uint32_t RenderInstance::BeginFrame(EntryHandle swapChainIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -926,7 +927,7 @@ uint32_t RenderInstance::BeginFrame()
 
 	if (imageIndex == ~0ui32)
 	{
-		int ret = RecreateSwapChain();
+		int ret = RecreateSwapChain(swapChainIndex);
 	
 		return imageIndex;
 	}
@@ -936,7 +937,7 @@ uint32_t RenderInstance::BeginFrame()
 	return imageIndex;
 }
 
-int RenderInstance::SubmitFrame(uint32_t imageIndex)
+int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -946,7 +947,7 @@ int RenderInstance::SubmitFrame(uint32_t imageIndex)
 
 	if (!res) {
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
-		int ret = RecreateSwapChain();
+		int ret = RecreateSwapChain(swapChainIndex);
 		return -1;
 	}
 	
@@ -960,7 +961,7 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
-int RenderInstance::CreateSwapChainAttachment(int graphIndex, int renderPassIndex, AttachmentClear* clears)
+int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1216,7 +1217,7 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 	return 0;
 }
 
-void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recreate)
+void RenderInstance::CreateSwapChainData(EntryHandle swapChainIndex, uint32_t width, uint32_t height, bool recreate)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1231,7 +1232,6 @@ void RenderInstance::CreateSwapChain(uint32_t width, uint32_t height, bool recre
 	{
 		swapChain->CreateSwapChain(width, height);
 	}
-
 }
 
 void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
@@ -1744,7 +1744,7 @@ void RenderInstance::UploadHostTransfers()
 
 		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.allocoffset;
 
-		EntryHandle index = allocations[handle].memIndex;
+		EntryHandle index = bufferHandles[allocations[handle].memIndex];
 
 		void* data = region.data;
 
@@ -1752,8 +1752,7 @@ void RenderInstance::UploadHostTransfers()
 		{
 			if (previousBuffer != EntryHandle())
 			{
-				if (previousBuffer == globalIndex)
-					dev->WriteToHostBufferBatch(globalIndex, batchAddresses, batchSizes, batchOffsets, previousMax - previousMin, previousMin, batchCounter);
+				dev->WriteToHostBufferBatch(previousBuffer, batchAddresses, batchSizes, batchOffsets, previousMax - previousMin, previousMin, batchCounter);
 			}
 
 			previousBuffer = index;
@@ -1850,9 +1849,9 @@ void RenderInstance::UploadDescriptorsUpdates()
 				auto alloc = allocations[update->allocationIndices[j]];
 
 				if (alloc.allocType == AllocationType::PERFRAME)
-					builder->AddStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+					builder->AddStorageBuffer(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
 				else
-					builder->AddStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+					builder->AddStorageBufferDirect(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
 
 			}
 			break;
@@ -1870,9 +1869,9 @@ void RenderInstance::UploadDescriptorsUpdates()
 				auto alloc = allocations[update->allocationIndices[j]];
 
 				if (alloc.allocType == AllocationType::PERFRAME)
-					builder->AddUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+					builder->AddUniformBuffer(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize / MAX_FRAMES_IN_FLIGHT, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
 				else
-					builder->AddUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
+					builder->AddUniformBufferDirect(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize, region.bindingIndex, 1, alloc.offset, currentFrame, firstBuffer + j);
 			}
 			break;
 		}
@@ -1971,21 +1970,19 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 	{
 		link = driverDeviceMemoryUpdater.PopLink(&region, link, &linkprev);
 		
-		EntryHandle index = allocations.allocations[region.allocationIndex].memIndex;
+		EntryHandle index = bufferHandles[allocations.allocations[region.allocationIndex].memIndex];
 	
 		if (index != previousBuffer)
 		{
 			if (previousBuffer != EntryHandle())
 			{
-				if (previousBuffer == globalDeviceBufIndex)
-					dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
+				dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
 			}
 
 			previousBuffer = index;
 			batchCounter = 0;
 			cumulativeSize = 0;
 		}
-
 
 		batchSizes[batchCounter] = region.size;
 		batchData[batchCounter] = region.data;
@@ -1996,7 +1993,7 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 		batchCounter++;
 	}
 
-	dev->WriteToDeviceBufferBatch(globalDeviceBufIndex, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
+	dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
 }
 
 void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
@@ -2028,7 +2025,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 
 		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.offset;
 
-		EntryHandle index = allocations[handle].memIndex;
+		EntryHandle index = bufferHandles[allocations[handle].memIndex];
 
 		rbo->FillBuffer(index, intSize, intOffset, region.fillVal);
 
@@ -2060,26 +2057,21 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	}
 }
 
-int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation)
+int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle handleDex = EntryHandle();
-
-	switch (storageLocation)
+	switch (bufferAlignmentType)
 	{
-	case 0:
+	case BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT:
 		alignment = (alignment + minUniformAlignment - 1) & ~((size_t)minUniformAlignment - 1);
-		handleDex = globalIndex;
 		break;
-	case 1:
+	case BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT:
 		alignment = (alignment + minStorageAlignment - 1) & ~((size_t)minStorageAlignment - 1);
-	case 2:
-		handleDex = globalDeviceBufIndex;
 		break;
 	}
 
-	size_t allocSize = ((copiesOfStructure * size) + alignment - 1) & ~((size_t)alignment - 1);
+	size_t allocSize = ((copiesOfStructure * structureSize) + alignment - 1) & ~(alignment - 1);
 
 	size_t copies = 1;
 
@@ -2094,13 +2086,13 @@ int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, ui
 		break;
 	}
 
-	size_t location = dev->GetMemoryFromBuffer(handleDex, allocSize * copies, alignment);
+	size_t location = dev->GetMemoryFromBuffer(bufferHandles[bufferHandle], allocSize * copies, alignment);
 
 	int index = allocations.Allocate();
-	allocations.allocations[index].memIndex = handleDex;
+	allocations.allocations[index].memIndex = bufferHandle;
 	allocations.allocations[index].offset = location;
 	allocations.allocations[index].deviceAllocSize = allocSize * copies;
-	allocations.allocations[index].requestedSize = size;
+	allocations.allocations[index].requestedSize = structureSize;
 	allocations.allocations[index].alignment = alignment;
 	allocations.allocations[index].allocType = allocType;
 	allocations.allocations[index].formatType = formatType;
@@ -2108,7 +2100,7 @@ int RenderInstance::GetAllocFromBuffer(size_t size, size_t copiesOfStructure, ui
 
 	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
 	{
-		allocations.allocations[index].viewIndex = dev->CreateBufferView(handleDex, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
+		allocations.allocations[index].viewIndex = dev->CreateBufferView(bufferHandles[bufferHandle], API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
 	}
 
 	return index;
@@ -2437,10 +2429,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	this->windowMan = window;
 
 	void* driverInstanceDataHead = storageAllocator->Allocate(64+(800 * KiB));
-	void* instanceDataHead = storageAllocator->Allocate((256 * KiB + 512 * KiB));
+	void* instanceDataHead = storageAllocator->Allocate((256 * KiB + 16 * KiB));
 
 	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, 64+(800 * KiB), 256 * KiB);
-	vkInstance->CreateRenderInstance(WINDOWS, instanceDataHead, 512*KiB, 256*KiB);
+	vkInstance->CreateRenderInstance(WINDOWS, instanceDataHead, 16*KiB, 256*KiB);
 
 	OSWindowInternalData data;
 
@@ -2509,31 +2501,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(&builder, MAX_FRAMES_IN_FLIGHT * 100);
 
-	globalIndex = majorDevice->CreateHostBuffer
-	(
-		128 * MiB, true,
-		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
-	);
-
-	globalDeviceBufIndex = majorDevice->CreateDeviceBuffer(64 * MiB,
-		VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
-		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
-		VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
-		VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
-		VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT |
-		VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(1, true, COMPUTEQUEUE | TRANSFERQUEUE | GRAPHICSQUEUE, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
@@ -2546,15 +2513,15 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 }
 
 
-void RenderInstance::CreateSwapchain(ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
+EntryHandle RenderInstance::CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	swapChainIndex = majorDevice->CreateSwapChain(MAX_FRAMES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, API::ConvertImageFormatToVulkanFormat(mainBackBufferColorFormat));
+	EntryHandle swapChainIndex = majorDevice->CreateSwapChain(MAX_FRAMES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, API::ConvertImageFormatToVulkanFormat(mainBackBufferColorFormat));
 
-	VKSwapChain* swapChain = majorDevice->GetSwapChain(swapChainIndex);
+	CreateSwapChainData(swapChainIndex, _width, _height, false);
 
-	CreateSwapChain(_width, _height, false);
+	return swapChainIndex;
 }
 
 ImageFormat RenderInstance::FindSupportedBackBufferColorFormat(ImageFormat* requestedFormats, uint32_t requestSize)
@@ -2641,12 +2608,12 @@ void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int d
 }
 
 
-uint32_t RenderInstance::GetSwapChainHeight()
+uint32_t RenderInstance::GetSwapChainHeight(EntryHandle swapChainIndex)
 {
 	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainHeight();
 }
 
-uint32_t RenderInstance::GetSwapChainWidth()
+uint32_t RenderInstance::GetSwapChainWidth(EntryHandle swapChainIndex)
 {
 	return vkInstance->GetLogicalDevice(physicalIndex, deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainWidth();
 }
@@ -2727,9 +2694,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					auto alloc = allocations[buffer->allocationIndex[j]];
 
 					if (alloc.allocType == AllocationType::PERFRAME)
-						builder->AddStorageBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer + j);
+						builder->AddStorageBuffer(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer + j);
 					else
-						builder->AddStorageBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer + j);
+						builder->AddStorageBufferDirect(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer + j);
 					
 				}
 				break;
@@ -2747,9 +2714,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 					auto alloc = allocations[buffer->allocationIndex[j]];
 
 					if (alloc.allocType == AllocationType::PERFRAME)
-						builder->AddUniformBuffer(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer+j);
+						builder->AddUniformBuffer(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize / frames, i, frames, alloc.offset, 0, firstBuffer+j);
 					else
-						builder->AddUniformBufferDirect(dev->GetBufferHandle(alloc.memIndex), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer+j);
+						builder->AddUniformBufferDirect(dev->GetBufferHandle(bufferHandles[alloc.memIndex]), alloc.deviceAllocSize, i, frames, alloc.offset, 0, firstBuffer+j);
 				}
 				break;
 			}
@@ -2824,13 +2791,13 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 	if (info->indexBufferHandle != ~0)
 	{
-		indexBufferHandle = allocations[info->indexBufferHandle].memIndex;
+		indexBufferHandle = bufferHandles[allocations[info->indexBufferHandle].memIndex];
 		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
 	}
 
 	if (info->vertexBufferHandle != ~0)
 	{
-		vertexBufferHandle = allocations[info->vertexBufferHandle].memIndex;
+		vertexBufferHandle = bufferHandles[allocations[info->vertexBufferHandle].memIndex];
 		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferHandle].offset) + info->vertexOffset;
 	}
 
@@ -2838,7 +2805,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	{
 		size_t align = allocations[info->indirectAllocation].alignment;
 		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structureCopies);
-		indirectBufferHandle = allocations[info->indirectAllocation].memIndex;
+		indirectBufferHandle = bufferHandles[allocations[info->indirectAllocation].memIndex];
 		indirectOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset);
 		indirectBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1)) ;
 	}
@@ -2847,7 +2814,7 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	{
 		size_t align = allocations[info->indirectCountAllocation].alignment;
 		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structureCopies);
-		indirectCountBufferHandle = allocations[info->indirectCountAllocation].memIndex;
+		indirectCountBufferHandle = bufferHandles[allocations[info->indirectCountAllocation].memIndex];
 		indirectCountOffset = static_cast<uint32_t>(allocations[info->indirectCountAllocation].offset);
 		indirectCountBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectCountAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1));
 	}
@@ -2908,8 +2875,6 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 			EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
 
 			VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
-
-			//vkPipelineObject->SetPerObjectData(dynamicOffsets, dynamicNumber);
 
 			for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 			{
@@ -3153,7 +3118,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 
 						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-							allocations[index].memIndex,
+							bufferHandles[allocations[index].memIndex],
 							allocations[index].offset,
 							size
 						);
@@ -3207,7 +3172,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 
 						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-							allocations[index].memIndex,
+							bufferHandles[allocations[index].memIndex],
 							allocations[index].offset + offset,
 							size
 						);
@@ -3511,15 +3476,18 @@ void RenderInstance::ReadData(int handle, void* dest, int size, int offset)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	auto alloc = allocations[handle];
+
+	if (bufferTypes[alloc.memIndex] != BufferType::HOST_MEMORY_TYPE)
+	{
+		return;
+	}
+
+	size_t intOffset = alloc.offset;
 	
-	size_t intOffset = allocations[handle].offset;
-	
+	EntryHandle index = bufferHandles[alloc.memIndex];
 
-	EntryHandle index = allocations[handle].memIndex;
-
-	if (index == globalIndex)
-		dev->ReadHostBuffer(dest, index, size, intOffset+offset);
-
+	dev->ReadHostBuffer(dest, index, size, intOffset+offset);
 }
 
 
@@ -3729,11 +3697,11 @@ void RenderInstance::SwapUpdateCommands()
 			RenderDriverUpdateCommandMemory* rducm = (RenderDriverUpdateCommandMemory*)header;
 			
 
-			if (allocations.allocations[rducm->allocationIndex].memIndex == globalIndex)
+			if (bufferTypes[allocations[rducm->allocationIndex].memIndex] == BufferType::HOST_MEMORY_TYPE)
 			{
 				driverHostMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
-			else if (allocations.allocations[rducm->allocationIndex].memIndex == globalDeviceBufIndex)
+			else if (bufferTypes[allocations[rducm->allocationIndex].memIndex] == BufferType::DEVICE_MEMORY_TYPE)
 			{
 				driverDeviceMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
@@ -3769,3 +3737,183 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 	return imageCount;
 }
 
+void RenderInstance::PipelineUpdateInstanceCommandsBuffer(int pipelineIndex, int allocationIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(pipelineIndex);
+
+	auto alloc = allocations[allocationIndex];
+
+	size_t align = alloc.alignment;
+	uint32_t copiesOfstruct = static_cast<uint32_t>(alloc.structureCopies);
+
+	EntryHandle indirectBufferHandle = bufferHandles[alloc.memIndex];
+	size_t indirectOffset = alloc.offset;
+	size_t indirectBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
+	
+	if (handle->group == GRAPHICSO)
+	{
+		int pipelineVariationCount = handle->numHandles;
+		int pipelineBase = handle->indexForHandles;
+		for (int i = 0; i < pipelineVariationCount; i++)
+		{
+			EntryHandle pipelineIndex = renderStateObjects.dataArray[i+pipelineBase];
+			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTBUFFERHANDLE, &indirectBufferHandle);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOMMANDSTRIDE, &indirectBufferPerFrameSize);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTBUFFEROFFSET, &indirectOffset);
+		}
+	}
+}
+
+void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, int vertexCount, int vertexBuffersubAlloc)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(pipelineIndex);
+
+	auto alloc = allocations[allocationIndex];
+
+	EntryHandle vertexBufferHandle = bufferHandles[alloc.memIndex];
+	size_t vertexOffset = alloc.offset + vertexBuffersubAlloc;
+	size_t vertexCountLL = static_cast<size_t>(vertexCount);
+
+	if (handle->group == GRAPHICSO)
+	{
+		int pipelineVariationCount = handle->numHandles;
+		int pipelineBase = handle->indexForHandles;
+		for (int i = 0; i < pipelineVariationCount; i++)
+		{
+			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
+			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXBUFFERINDEX, &vertexBufferHandle);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXBUFFEROFFSET, &vertexOffset);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXCOUNT, &vertexCountLL);
+		}
+	}
+}
+
+void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, int indexCount, int indexStride, int indexSubAlloc)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(pipelineIndex);
+
+	auto alloc = allocations[allocationIndex];
+
+	EntryHandle indexBufferHandle = bufferHandles[alloc.memIndex];
+	size_t indexOffset = alloc.offset + indexSubAlloc;
+	size_t indexCountLL = static_cast<size_t>(indexStride);
+
+	if (handle->group == GRAPHICSO)
+	{
+		int pipelineVariationCount = handle->numHandles;
+		int pipelineBase = handle->indexForHandles;
+		for (int i = 0; i < pipelineVariationCount; i++)
+		{
+			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
+			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXBUFFERHANDLE, &indexBufferHandle);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXBUFFEROFFSET, &indexOffset);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXTYPE, &indexStride);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXCOUNT, &indexCountLL);
+		}
+	}
+}
+
+
+void RenderInstance::PipelineUpdateIndirectCountBuffer(int pipelineIndex, int allocationIndex)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(pipelineIndex);
+
+	auto alloc = allocations[allocationIndex];
+
+	size_t align = alloc.alignment;
+	uint32_t copiesOfstruct = static_cast<uint32_t>(alloc.structureCopies);
+	EntryHandle indirectCountBufferHandle = bufferHandles[alloc.memIndex];
+	size_t indirectCountOffset = alloc.offset;
+	size_t indirectCountBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
+
+	if (handle->group == GRAPHICSO)
+	{
+		int pipelineVariationCount = handle->numHandles;
+		int pipelineBase = handle->indexForHandles;
+		for (int i = 0; i < pipelineVariationCount; i++)
+		{
+			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
+			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFERHANDLE, &indirectCountBufferHandle);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTSTRIDE, &indirectCountBufferPerFrameSize);
+			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFEROFFSET, &indirectCountOffset);
+		}
+	}
+}
+
+void RenderInstance::PipelineUpdateDispatchCommands(int pipelineIndex, int x, int y, int z)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	PipelineHandle* handle = stateObjectHandles.Update(pipelineIndex);
+
+	uint32_t xU = static_cast<uint32_t>(x);
+	uint32_t yU = static_cast<uint32_t>(y);
+	uint32_t zU = static_cast<uint32_t>(z);
+
+	if (handle->group == COMPUTESO)
+	{
+		int pipelineBase = handle->indexForHandles;
+		EntryHandle pipelineIndex = computeStateObjects.dataArray[pipelineBase];
+		VKComputePipelineObject* vkPipelineObject = dev->GetComputePipelineObject(pipelineIndex);
+
+		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_X, &xU);
+		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_Y, &yU);
+		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_Z, &zU);
+	}
+}
+
+int RenderInstance::CreateUniversalBuffer(size_t size, BufferType bufferMemoryType)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	int bufferIndex = bufferPoolsCounter++;
+
+	EntryHandle bufferHandle;
+
+	if (bufferMemoryType == BufferType::HOST_MEMORY_TYPE)
+	{
+		bufferHandle = dev->CreateHostBuffer
+		(
+			size, true,
+			VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+			VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+		);
+	}
+	else if (bufferMemoryType == BufferType::DEVICE_MEMORY_TYPE)
+	{
+		bufferHandle = dev->CreateDeviceBuffer(size,
+			VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT |
+			VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT |
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDEX_BUFFER_BIT |
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT |
+			VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT |
+			VK_BUFFER_USAGE_TRANSFER_DST_BIT |
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+	}
+	
+	bufferHandles[bufferIndex] = bufferHandle;
+	bufferTypes[bufferIndex] = bufferMemoryType;
+
+	return bufferIndex;
+}

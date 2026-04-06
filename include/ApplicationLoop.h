@@ -27,7 +27,7 @@ public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
 
-	void ExecuteCommands(const std::string& command, int argCount);
+	void ExecuteCommands(const StringView& command, int argCount);
 
 	void Execute();
 
@@ -41,12 +41,11 @@ public:
 
 	void SetRunning(bool set = false);
 
-	void LoadObject(const std::string& file);
+	void LoadObject(const StringView& file);
 
-	void LoadThreadedWrapper(std::string& file);
+	void LoadThreadedWrapper(StringView& file);
 
-
-	int FindWords(std::string words);
+	int FindWords(const char* words, int charCount);
 
 	void UpdateCameraMatrix();
 
@@ -107,8 +106,6 @@ public:
 	int CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
 	void CreateCornerWall(float width, float height, float xDiv, float yDiv);
-
-	int CreateGridRenderable(int meshIndex, int materialRangeIndex, const Matrix4f& world);
 
 	void CreateSkyBox();
 

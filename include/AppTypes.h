@@ -395,7 +395,6 @@ struct TransferCommand
  /* Allocation management */
 struct RenderAllocation
 {
-	EntryHandle memIndex;
 	size_t offset;
 	size_t deviceAllocSize;
 	size_t requestedSize;
@@ -404,6 +403,7 @@ struct RenderAllocation
 	AllocationType allocType;
 	ComponentFormatType formatType;
 	int structureCopies;
+	int memIndex;
 };
 
 
@@ -715,3 +715,23 @@ enum VertexComponents
 constexpr float dx = 3.051851e-05f;
 constexpr float ax = 0.0009770395f;
 constexpr float bx = 0.0019550342f;
+
+
+enum BufferType
+{
+	HOST_MEMORY_TYPE = 1,
+	DEVICE_MEMORY_TYPE = 2,
+};
+
+enum BufferAlignmentType
+{
+	NO_BUFFER_ALIGNMENT = 0,
+	UNIFORM_BUFFER_ALIGNMENT = 1,
+	STORAGE_BUFFER_ALIGNMENT = 2,
+};
+
+struct StringView
+{
+	const char* stringData;
+	int charCount;
+};

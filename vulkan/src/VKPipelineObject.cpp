@@ -312,7 +312,7 @@ void VKPipelineObject::AddPushConstant(void* _data, uint32_t size, uint32_t offs
 	args->stage = flags;
 }
 
-void VKPipelineObject::ChangePipelineMemeber(
+void VKPipelineObject::ChangePipelineMember(
 	PipelineModMember member,
 	void* value
 )
@@ -392,12 +392,12 @@ void VKPipelineObject::ChangePipelineMemeber(
 	}
 }
 
-void VKGraphicsPipelineObject::ChangePipelineMemeber (
+void VKGraphicsPipelineObject::ChangePipelineMember (
 	PipelineModMember member,
 	void* value
 )
 {
-	VKPipelineObject::ChangePipelineMemeber(member, value);
+	VKPipelineObject::ChangePipelineMember(member, value);
 
 	switch (member)
 	{
@@ -458,7 +458,16 @@ void VKGraphicsPipelineObject::ChangePipelineMemeber (
 	}
 	case PIPELINE_MOD_MEMBER_INDEXTYPE:
 	{
-		indexType = *static_cast<VkIndexType*>(value);
+		int indexSize = *static_cast<int*>(value);
+		switch (indexType)
+		{
+		case 2:
+			indexType = VK_INDEX_TYPE_UINT16;
+			break;
+		case 4:
+			indexType = VK_INDEX_TYPE_UINT32;
+			break;
+		}
 		break;
 	}
 	case PIPELINE_MOD_MEMBER_INDIRECTCOMMANDSTRIDE:
@@ -484,12 +493,12 @@ void VKGraphicsPipelineObject::ChangePipelineMemeber (
 	}
 }
 
-void VKComputePipelineObject::ChangePipelineMemeber(
+void VKComputePipelineObject::ChangePipelineMember(
 	PipelineModMember member,
 	void* value
 )
 {
-	VKPipelineObject::ChangePipelineMemeber(member, value);
+	VKPipelineObject::ChangePipelineMember(member, value);
 
 	switch (member)
 	{

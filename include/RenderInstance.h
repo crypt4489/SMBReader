@@ -47,13 +47,13 @@ struct RenderInstance
 
 	~RenderInstance();
 
-	void DestroySwapChainAttachments();
+	void DestroySwapChainAttachments(EntryHandle swapChainIndex);
 
-	int RecreateSwapChain();
+	int RecreateSwapChain(EntryHandle swapChainIndex);
 
 	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType, AttachmentClear* clears);
 
-	int CreateSwapChainAttachment(int graphIndex, int renderPassIndex, AttachmentClear* clears);
+	int CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears);
 
 	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears);
 
@@ -63,15 +63,15 @@ struct RenderInstance
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
-	uint32_t BeginFrame();
+	uint32_t BeginFrame(EntryHandle swapChainIndex);
 
-	int SubmitFrame(uint32_t imageIndex);
+	int SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex);
 
 	void WaitOnRender();
 
 	void CreatePipelines(std::string* pipelineDescriptions, int pipelineDescriptionsCount);
 
-	void CreateSwapChain(uint32_t width, uint32_t height, bool recreate);
+	void CreateSwapChainData(EntryHandle swapChainIndex, uint32_t width, uint32_t height, bool recreate);
 
 	void UploadHostTransfers();
 
@@ -83,7 +83,7 @@ struct RenderInstance
 
 	void UploadDeviceLocalTransfers(RecordingBufferObject* rbo);
 
-	int GetAllocFromBuffer(size_t structureSize, size_t copiesOfStructure, uint32_t alignment, AllocationType allocType, ComponentFormatType formatType, int storageLocation);
+	int GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType);
 
 	EntryHandle CreateImageHandle(
 		uint32_t blobSize,
@@ -103,9 +103,9 @@ struct RenderInstance
 
 	void CreateVulkanRenderer(WindowManager* window,  int attachmentGraphCount);
 
-	uint32_t GetSwapChainHeight();
+	uint32_t GetSwapChainHeight(EntryHandle swapChainIndex);
 
-	uint32_t GetSwapChainWidth();
+	uint32_t GetSwapChainWidth(EntryHandle swapChainIndex);
 
 	int CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
 
@@ -126,8 +126,6 @@ struct RenderInstance
 	void CreateShaderResourceMap(ShaderGraph *graph);
 
 	int AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_t targetSet, int setCount);
-
-	uint32_t GetDynamicOffsetsForDescriptorSet(int descriptorSet, uint32_t* dynamicOffsets, uint32_t topOfDynamicOffsets);
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);
 
@@ -167,7 +165,7 @@ struct RenderInstance
 
 	int CreateAttachmentGraph(std::string attachmentLayout, int* subAttachCount);
 
-	void CreateSwapchain(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
+	EntryHandle CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
 
 	void CreateShaderGraphs(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount);
 
@@ -184,14 +182,24 @@ struct RenderInstance
 
 	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorSet, int bindingIndex, int textureStart);
 
+	void PipelineUpdateInstanceCommandsBuffer(int pipelineIndex, int allocationIndex);
+	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, int vertexCount, int vertexBuffersubAlloc);
+	void PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, int indexCount, int indexStride, int indexSubAlloc);
+	void PipelineUpdateIndirectCountBuffer(int pipelineIndex, int allocationIndex);
+	void PipelineUpdateDispatchCommands(int pipelineIndex, int x, int y, int z);
+
+	int CreateUniversalBuffer(size_t size, BufferType bufferMemoryType);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
-	EntryHandle swapChainIndex;
-	EntryHandle globalIndex, globalDeviceBufIndex;
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 
 	uint32_t maxMSAALevels = 0;
+
+	std::array<EntryHandle, 10> bufferHandles{};
+	std::array<BufferType, 10> bufferTypes{};
+	int bufferPoolsCounter = 0;
 
 	std::array<EntryHandle, 20> renderTargets{};
 	std::array<EntryHandle, 20> renderPasses{};

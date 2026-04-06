@@ -168,7 +168,7 @@ struct VKPipelineObject
 	void AddInfoBarrier(VkBarrierInfo* info, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, 
 		EntryHandle barrierIndex, VKBarrierLocation location, uint16_t barrierType);
 
-	void ChangePipelineMemeber(
+	void ChangePipelineMember(
 		PipelineModMember member,
 		void* value
 	);
@@ -194,7 +194,7 @@ struct VKGraphicsPipelineObject : public VKPipelineObject
 	uint32_t indirectCountStride;
 	uint32_t indirectDrawCount;
 
-	void ChangePipelineMemeber(
+	void ChangePipelineMember(
 		PipelineModMember member,
 		void* value
 	);
@@ -212,7 +212,7 @@ struct VKComputePipelineObject : public VKPipelineObject
 
 	void Dispatch(RecordingBufferObject* rbo, uint32_t frame, uint32_t firstSet);
 
-	void ChangePipelineMemeber(
+	void ChangePipelineMember(
 		PipelineModMember member,
 		void* value
 	);
