@@ -45,7 +45,7 @@ public:
 	uint32_t imageSizes[10];
 	char* data;
 	uint32_t id;
-	const char* name;
+	StringView name;
 	size_t fileOffset;
 
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);

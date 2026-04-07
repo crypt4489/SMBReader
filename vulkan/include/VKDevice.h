@@ -603,7 +603,7 @@ struct VKDevice
 
 	void CommandBufferResetFence(EntryHandle bufferIndex);
 
-	VkShaderStageFlagBits ConvertShaderFlags(const std::string& filename);
+	VkShaderStageFlagBits ConvertShaderFlags(const char* filename, int nameLength);
 
 	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
 		uint32_t height, uint32_t mipLevels,

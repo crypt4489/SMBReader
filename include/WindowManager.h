@@ -2,7 +2,7 @@
 
 #include "WinOSWindow.h"
 #include "OSWindow.h"
-#include <string>
+#include "AppTypes.h"
 
 struct WindowManager
 {
@@ -18,7 +18,7 @@ public:
 
 	void GetInternalData(OSWindowInternalData* data);
 
-	void SetWindowTitle(const std::string& text);
+	void SetWindowTitle(StringView text);
 
 	OSWindow windowData;
 };

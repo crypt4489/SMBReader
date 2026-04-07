@@ -4,6 +4,7 @@
 
 static HANDLE intFileHandles[100];
 static std::atomic<int> intFileHandleCounter = 0;
+static char pathscratch[512];
 
 static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
 {
@@ -21,15 +22,16 @@ static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
     return outflags;
 }
 
-int OSCreateFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle)
+int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
     HANDLE hFile;
     DWORD fileShare = 0;
     DWORD hAccess = ConvertOSFlags(flags, &fileShare);
 
+    memcpy(pathscratch, filename, nameLength);
+    pathscratch[nameLength] = '\0';
 
-
-    hFile = CreateFileA(filename, hAccess, fileShare, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -48,13 +50,16 @@ int OSCreateFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHand
 
 }
 
-int OSOpenFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle)
+int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
     HANDLE hFile;
     DWORD fileShare = 0;
     DWORD hAccess = ConvertOSFlags(flags, &fileShare);
 
-    hFile = CreateFileA(filename, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    memcpy(pathscratch, filename, nameLength);
+    pathscratch[nameLength] = '\0';
+
+    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -159,7 +164,7 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
     return OS_SUCCESS;
 }
 
-int OSCreateFileIterator(const char* searchString, OSFileIterator* iterator)
+int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator)
 {
     if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
 
@@ -167,7 +172,10 @@ int OSCreateFileIterator(const char* searchString, OSFileIterator* iterator)
 
     WIN32_FIND_DATAA data;
 
-    HANDLE searchIdx = FindFirstFileA(searchString, &data);
+    memcpy(pathscratch, searchString, nameLength);
+    pathscratch[nameLength] = '\0';
+
+    HANDLE searchIdx = FindFirstFileA(pathscratch, &data);
 
     if (searchIdx == INVALID_HANDLE_VALUE)
     {

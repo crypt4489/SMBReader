@@ -1344,7 +1344,7 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 	}
 }
 
-void RenderInstance::CreateShaderGraphs(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount)
+void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shaderGraphLayoutsCount)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
@@ -1397,9 +1397,15 @@ void RenderInstance::CreateShaderGraphs(std::string* shaderGraphLayouts, int sha
 
 		int shaderLength = 0;
 
-		if (FileManager::FileExists(shaderNameString + ".spv")) {
+		std::string potentialCompiledName = shaderNameString + ".spv";
 
-			FileID id = FileManager::OpenFile(shaderNameString + ".spv", READ);
+		StringView nameView = cacheAllocator->AllocateFromNullStringCopy(potentialCompiledName.c_str());
+
+		VkShaderStageFlagBits shaderFlags = dev->ConvertShaderFlags(nameView.stringData, nameView.charCount);
+
+		if (FileManager::FileExists(&nameView)) {
+
+			FileID id = FileManager::OpenFile(&nameView, READ);
 
 			handle = FileManager::GetFile(id);
 
@@ -1411,8 +1417,9 @@ void RenderInstance::CreateShaderGraphs(std::string* shaderGraphLayouts, int sha
 		}
 		else
 		{
+			nameView.charCount -= 4;
 
-			FileID id = FileManager::OpenFile(shaderNameString, READ);
+			FileID id = FileManager::OpenFile(&nameView, READ);
 
 			handle = FileManager::GetFile(id);
 
@@ -1429,7 +1436,7 @@ void RenderInstance::CreateShaderGraphs(std::string* shaderGraphLayouts, int sha
 			}
 		}
 
-		vulkanShaderGraphs.shaders[outputShaderIndexHead + i] = dev->CreateShader(shaderData, shaderLength, dev->ConvertShaderFlags(shaderNameString));
+		vulkanShaderGraphs.shaders[outputShaderIndexHead + i] = dev->CreateShader(shaderData, shaderLength, shaderFlags);
 
 		vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + i] = deats;
 
@@ -1509,7 +1516,7 @@ int RenderInstance::CreateComputePipelineStateObject(int shaderGraphIndex)
 	return retVal;
 }
 
-void RenderInstance::CreatePipelines(std::string* pipelineDescriptions, int pipelineDescriptionsCount)
+void RenderInstance::CreatePipelines(StringView* pipelineDescriptions, int pipelineDescriptionsCount)
 {
 	static int pipelineInfoIndex = 0;
 
@@ -2403,13 +2410,13 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 }
 
 
-int RenderInstance::CreateAttachmentGraph(std::string attachmentLayout, int* subAttachCount)
+int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount)
 {
 	static int graphTemplateAlloc = 0;
 
 	static int rpIndexAlloc = 0;
 
-	CreateAttachmentGraphFromFile(attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator);
+	CreateAttachmentGraphFromFile(*attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator);
 
 	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc++]);
 	

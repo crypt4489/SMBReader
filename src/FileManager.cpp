@@ -10,7 +10,7 @@ std::regex FileManager::filenamePattern{"([0-9A-Za-z_]+)\\."};
 
 
 
-FileID FileManager::OpenFile(const std::string& name, OSFileFlags flags)
+FileID FileManager::OpenFile(StringView* nameView, OSFileFlags flags)
 {
 	uint32_t index = FindAvailableHandle();
 
@@ -21,7 +21,7 @@ FileID FileManager::OpenFile(const std::string& name, OSFileFlags flags)
 
 	OSFileHandle* outHandle = &filesopen[index];
 
-	int nRet = HandleOpening(name, flags, outHandle);
+	int nRet = HandleOpening(nameView, flags, outHandle);
 
 	if (nRet)
 	{
@@ -43,7 +43,9 @@ FileID FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags
 
 	OSFileHandle* outHandle = &filesopen[index];
 
-	int nRet = HandleOpening(name.string(), flags, outHandle);
+	StringView nameView = { (char*)name.string().c_str(), (int)name.string().size() };
+
+	int nRet = HandleOpening(&nameView, flags, outHandle);
 
 	if (nRet)
 	{
@@ -53,13 +55,13 @@ FileID FileManager::OpenFile(const std::filesystem::path name, OSFileFlags flags
 	return FileID(index);
 }
 
-int FileManager::ReadFileInFull(const std::string& name, SlabAllocator* allocator, void** dataOut)
+int FileManager::ReadFileInFull(StringView* nameView, SlabAllocator* allocator, void** dataOut)
 {
 	OSFileFlags openingFlags = READ;
 
 	OSFileHandle outHandle{};
 
-	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
+	int nRet = OSOpenFile(nameView->stringData, nameView->charCount, openingFlags, &outHandle);
 
 	if (nRet)
 	{
@@ -79,13 +81,13 @@ int FileManager::ReadFileInFull(const std::string& name, SlabAllocator* allocato
 	return 0;
 }
 
-int FileManager::ReadFileInFull(const std::string& name, RingAllocator* allocator, void** dataOut)
+int FileManager::ReadFileInFull(StringView* nameView, RingAllocator* allocator, void** dataOut)
 {
 	OSFileFlags openingFlags = READ;
 
 	OSFileHandle outHandle{};
 
-	int nRet = OSOpenFile(name.c_str(), openingFlags, &outHandle);
+	int nRet = OSOpenFile(nameView->stringData, nameView->charCount, openingFlags, &outHandle);
 
 	if (nRet)
 	{
@@ -136,9 +138,9 @@ void FileManager::RemoveOpenFile(const FileID& id)
 	return;
 }
 
-std::filesystem::path FileManager::SetupDirectory(std::string& nameOfDir)
+std::filesystem::path FileManager::SetupDirectory(StringView* nameView)
 {
-	std::filesystem::path pathToDir = currDir / nameOfDir;
+	std::filesystem::path pathToDir = currDir / std::string(nameView->stringData, nameView->charCount);
 	if (!std::filesystem::exists(pathToDir))
 	{
 		std::filesystem::create_directory(pathToDir);
@@ -146,14 +148,9 @@ std::filesystem::path FileManager::SetupDirectory(std::string& nameOfDir)
 	return pathToDir;
 }
 
-void FileManager::SetFileCurrentDirectory(std::string name)
+void FileManager::SetFileCurrentDirectory(StringView* nameView)
 {
-	currDir = SetupDirectory(name);
-}
-
-void FileManager::SetFileCurrentDirectory(std::string& name)
-{
-	currDir = SetupDirectory(name);
+	currDir = SetupDirectory(nameView);
 }
 
 void FileManager::SetFileCurrentDirectory(std::filesystem::path& path)
@@ -161,41 +158,26 @@ void FileManager::SetFileCurrentDirectory(std::filesystem::path& path)
 	currDir = path;
 }
 
-std::string FileManager::ExtractFileNameFromPath(const std::string path)
+void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outView)
 {
 	std::smatch match;
 
-	std::string name;
+	std::string returnName;
 
-	if (std::regex_search(path, match, filenamePattern))
+	std::string tempStr(nameView->stringData, nameView->charCount);
+
+	if (std::regex_search(tempStr, match, filenamePattern))
 	{
-		name = match[1];
+		returnName = match[1];
 	}
 	else
 	{
-		std::cerr << "Couldn't find the filename in " << path << "\n";
+		std::cerr << "Couldn't find the filename in " << nameView->stringData << "\n";
 	}
 
-	return name;
-}
+	outView->charCount = returnName.size();
 
-std::string FileManager::ExtractFileNameFromPath(std::filesystem::path& path)
-{
-
-	std::smatch match;
-
-	std::string name, search = path.string();
-
-	if (std::regex_search(search, match, filenamePattern))
-	{
-		name = match[1];
-	}
-	else
-	{
-		std::cerr << "Couldn't find the filename in " << path << "\n";
-	}
-
-	return name;
+	memcpy(outView->stringData, returnName.c_str(), outView->charCount);
 }
 
 std::filesystem::path FileManager::GetCurrentDirectoryFM()
@@ -203,12 +185,10 @@ std::filesystem::path FileManager::GetCurrentDirectoryFM()
 	return currDir;
 }
 
-bool FileManager::FileExists(const std::string& name)
+bool FileManager::FileExists(StringView* nameView)
 {
-	return std::filesystem::exists(name);
+	return std::filesystem::exists(std::string(nameView->stringData, nameView->charCount));
 }
-
-
 
 uint32_t FileManager::FindAvailableHandle()
 {
@@ -220,13 +200,13 @@ uint32_t FileManager::FindAvailableHandle()
 	return i;
 }
 
-int FileManager::HandleOpening(const std::string& name, OSFileFlags flags, OSFileHandle* outHandle)
+int FileManager::HandleOpening(StringView* nameView, OSFileFlags flags, OSFileHandle* outHandle)
 {
 	
 
 	OSFileFlags openingFlags = flags;
 
-	int nRet = OSOpenFile(name.c_str(), openingFlags, outHandle);
+	int nRet = OSOpenFile(nameView->stringData, nameView->charCount, openingFlags, outHandle);
 
 	/*if (nRet != OS_SUCCESS)
 	{
@@ -250,9 +230,9 @@ int FileManager::ReadBytes(const FileID& id, int numBytes, char* buffer)
 	return ret;
 }
 
-int FileManager::CreateFileIterator(std::string searchstring, OSFileIterator* file)
+int FileManager::CreateFileIterator(StringView* nameView, OSFileIterator* file)
 {
-	int ret = OSCreateFileIterator(searchstring.c_str(), file);
+	int ret = OSCreateFileIterator(nameView->stringData, nameView->charCount, file);
 	return ret;
 }
 

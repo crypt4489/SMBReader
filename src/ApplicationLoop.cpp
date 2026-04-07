@@ -38,6 +38,9 @@ enum PipelineHandles
 	OUTLINE
 };
 
+static char StartupMemory[32 * KiB];
+static SlabAllocator StartupMemoryAllocator { StartupMemory, sizeof(StartupMemory) };
+
 std::array<std::string, 3> commandsStrings =
 {
 	"end",
@@ -45,44 +48,44 @@ std::array<std::string, 3> commandsStrings =
 	"positiong",
 };
 
-static std::array<std::string, 8> pds = {
-	"GenericPipeline.xml",
-	"TextPipeline.xml",
-	"DebugPipeline.xml",
-	"NormalDebugPipeline.xml",
-	"SkyboxPipeline.xml",
-	"OutlinePipeline.xml",
-	"FullscreenPipeline.xml",
-	"ShadowMap.xml"
+static std::array<StringView, 8> pds = {
+	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("DebugPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebugPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("SkyboxPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("OutlinePipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenPipeline.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.xml")
 };
 
-static std::array<std::string, 19> layouts = {
-		"3DTexturedLayout.xml",
-		"TextLayout.xml",
-		"InterpolateMeshLayout.xml",
-		"PolynomialLayout.xml",
-		"IndirectCull.xml",
-		"DebugDraw.xml",
-		"IndirectDebug.xml",
-		"PrefixSum.xml",
-		"PrefixSumAdd.xml",
-		"WorldObjectDivison.xml",
-		"MeshWorldAssignments.xml",
-		"LightObjectDivision.xml",
-		"LightWorldAssignment.xml",
-		"NormalDebug.xml",
-		"Skybox.xml",
-		"OutlineLayout.xml",
-		"FullscreenLayout.xml",
-		"ShadowMapLayout.xml",
-		"ShadowMapClipping.xml"
+static std::array<StringView, 19> layouts = {
+		StartupMemoryAllocator.AllocateFromNullStringCopy("3DTexturedLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("TextLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("InterpolateMeshLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PolynomialLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectCull.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("DebugDraw.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectDebug.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSum.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSumAdd.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("WorldObjectDivison.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("MeshWorldAssignments.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("LightObjectDivision.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("LightWorldAssignment.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebug.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("Skybox.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("OutlineLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapLayout.xml"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.xml")
 };
 
-static std::array<std::string, 5> mainLayoutAttachments =
+static std::array<StringView, 5> mainLayoutAttachments =
 {
-	"MSAAPostProcess.xml",
-	"BasicShadowMapAtt.xml",
-	"ShadowAtlasUse.xml"
+	StartupMemoryAllocator.AllocateFromNullStringCopy("MSAAPostProcess.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("BasicShadowMapAtt.xml"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowAtlasUse.xml")
 };
 
 enum MaterialFlags
@@ -526,25 +529,34 @@ ApplicationLoop::~ApplicationLoop() {
 
 void ApplicationLoop::Execute()
 {
+	StringView *mainInputString = AppInstanceTempAllocator.AllocateFromNullString(args.inputFile.string().c_str());
 
 	if (args.justexport)
 	{
-		SMBFile mainSMB(args.inputFile, &GlobalInputScratchAllocator);
-		FileManager::SetFileCurrentDirectory(FileManager::ExtractFileNameFromPath(args.inputFile.string()));
+		SMBFile mainSMB(*mainInputString, &GlobalInputScratchAllocator);
+
+		StringView fileName{};
+
+		fileName.stringData = (char*)GlobalInputScratchAllocator.Allocate(150);
+
+		FileManager::ExtractFileNameFromPath(mainInputString, &fileName);
+
+		FileManager::SetFileCurrentDirectory(&fileName);
+
 		ExportChunksFromFile(mainSMB, &GlobalInputScratchAllocator);
+
 		cleaned = true;
 	}
 	else
 	{
 		InitializeRuntime();
 
-		std::string name = args.inputFile.string();
 
 		CreateCrateObject();
 
 		CreateCornerWall(10.0f, 10.0f, 2.0f, 1.0f);
 
-		LoadObject(StringView{ (char*)name.c_str(), (int)name.size() });
+		LoadObject(*mainInputString);
 
 		CreateUniformGrid();
 
@@ -555,7 +567,11 @@ void ApplicationLoop::Execute()
 		uint64_t frameCounter = 0;
 		double FPS = 60.0f;
 
-		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS, this]()
+		char windowText[30];
+
+		StringView view { windowText, 0 };
+
+		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS, &windowText, &view, this]()
 			{
 				double elapsed;
 				QueryPerformanceCounter(&currentTime);
@@ -566,7 +582,10 @@ void ApplicationLoop::Execute()
 					FPS = static_cast<double>(frameCounter) / elapsed;
 					//std::cout << FPS << "\n";
 					//printf("%f\n", FPS);
-					mainWindow->SetWindowTitle(std::format("FPS: {:.2f}", FPS));
+
+					view.charCount = snprintf(windowText, 30, "FPS : %.2f", FPS);
+
+					mainWindow->SetWindowTitle(view);
 				
 
 					frameCounter = 0;
@@ -1181,13 +1200,13 @@ void ApplicationLoop::CreateCrateObject()
 	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	StringView blendname = { "blendmap.bmp", 12 };
+	StringView blendname = AppInstanceTempAllocator.AllocateFromNullStringCopy("blendmap.bmp");
 
-	StringView skyname = { "sky.bmp", 7 };
+	StringView skyname = AppInstanceTempAllocator.AllocateFromNullStringCopy("sky.bmp");
 
-	StringView normalmapname = { "WNN2.bmp", 8 };
+	StringView normalmapname = AppInstanceTempAllocator.AllocateFromNullStringCopy("WNN2.bmp");
 
-	StringView albedomapname = { "WNN.bmp", 7 };
+	StringView albedomapname = AppInstanceTempAllocator.AllocateFromNullStringCopy("WNN.bmp");
 
 	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
 
@@ -2457,12 +2476,12 @@ void ApplicationLoop::CreateSkyBox()
 	GlobalRenderer::gRenderInstance->UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
 
 	StringView names[6] = {
-		{"face4.bmp", 9},
-		{"face1.bmp", 9},
-		{"face5.bmp", 9},
-		{"face2.bmp", 9},
-		{"face6.bmp", 9},
-		{ "face3.bmp", 9 },
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face4.bmp"),
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face1.bmp"),
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face5.bmp"),
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face2.bmp"),
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face6.bmp"),
+		AppInstanceTempAllocator.AllocateFromNullStringCopy("face3.bmp"),
 	};
 
 	skyboxCubeImage = ReadCubeImage(names, 6, BMP);
@@ -2535,9 +2554,9 @@ void ApplicationLoop::InitializeRuntime()
 
 	int mainDSVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(1024 * MiB, mainDepthFormat, 4096, 4096);
 
-	MSAAPost = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[0], nullptr);
-	BasicShadow = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[1], nullptr);
-	MSAAShadowMapping = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(mainLayoutAttachments[2], nullptr);
+	MSAAPost = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(&mainLayoutAttachments[0], nullptr);
+	BasicShadow = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(&mainLayoutAttachments[1], nullptr);
+	MSAAShadowMapping = GlobalRenderer::gRenderInstance->CreateAttachmentGraph(&mainLayoutAttachments[2], nullptr);
 
 	currentFrameGraphIndex = MSAAShadowMapping;
 
@@ -2710,7 +2729,7 @@ void ApplicationLoop::SetRunning(bool set)
 
 void ApplicationLoop::LoadObject(const StringView& file)
 {
-	SMBFile SMB(std::string(file.stringData, file.charCount), &GlobalInputScratchAllocator);
+	SMBFile SMB(file, &GlobalInputScratchAllocator);
 
 	LoadSMBFile(SMB);
 }
@@ -3289,7 +3308,7 @@ EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioTy
 
 	void* fileData;
 
-	FileManager::ReadFileInFull(std::string(name->stringData, name->charCount), &GlobalInputScratchAllocator, &fileData);
+	FileManager::ReadFileInFull(name, &GlobalInputScratchAllocator, &fileData);
 
 	int filePointer = ReadBMPDetails((char*)fileData, details);
 
@@ -3302,7 +3321,7 @@ EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioTy
 
 		ReadBMPData((char*)fileData, filePointer, details);
 
-		FileManager::ReadFileInFull(std::string(name[0].stringData, name[0].charCount), &GlobalInputScratchAllocator, &fileData);
+		FileManager::ReadFileInFull(&name[i], &GlobalInputScratchAllocator, &fileData);
 
 		TextureDetails stubDetails{};
 
@@ -3357,12 +3376,11 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 	for (int i = 0; i < mipCounts; i++)
 	{
-
 		void* fileData;
 
 		TextureDetails stubDetails{};
 
-		FileManager::ReadFileInFull(std::string(name[i].stringData, name[i].charCount), &GlobalInputScratchAllocator, &fileData);
+		FileManager::ReadFileInFull(&name[i], &GlobalInputScratchAllocator, &fileData);
 
 		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
 

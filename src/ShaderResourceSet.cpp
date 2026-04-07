@@ -28,28 +28,11 @@ void* ShaderDetails::GetShaderData()
 }
 
 
-
 constexpr unsigned long
-hash(char* str)
+hash(const char* str)
 {
 	unsigned long hash = 5381;
 	int c;
-
-	while (c = *str++) {
-		if (((c - 'A') >= 0 && (c - 'Z') <= 0) || ((c - 'a') >= 0 && (c - 'z') <= 0))
-			hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-	}
-
-	return hash;
-}
-
-constexpr unsigned long
-hash(const std::string& string)
-{
-	unsigned long hash = 5381;
-	int c;
-
-	const char* str = string.c_str();
 
 	while (c = *str++) {
 		if (((c - 'A') >= 0 && (c - 'Z') <= 0) || ((c - 'a') >= 0 && (c - 'z') <= 0) || ((c - '0') >= 0 && (c - '9') <= 0))
@@ -60,7 +43,7 @@ hash(const std::string& string)
 }
 
 
-ShaderGraph* CreateShaderGraph(const std::string& filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount)
+ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount)
 {
 	uintptr_t* TreeNodes = (uintptr_t*)readerMemory->Allocate(sizeof(uintptr_t) * 50);
 	
@@ -70,7 +53,7 @@ ShaderGraph* CreateShaderGraph(const std::string& filename, RingAllocator* reade
 	
 	ShaderDetails** details = (ShaderDetails**)readerMemory->Allocate(sizeof(ShaderDetails*) * 5);
 
-	FileID fileID = FileManager::OpenFile(filename, READ);
+	FileID fileID = FileManager::OpenFile(&filename, READ);
 
 	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
 
@@ -812,11 +795,11 @@ int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t
 	return ret;
 }
 
-void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator)
+void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator)
 {
 	memset(stateInfo, 0, sizeof(GenericPipelineStateInfo));
 
-	FileID fileID = FileManager::OpenFile(filename, READ);
+	FileID fileID = FileManager::OpenFile(&filename, READ);
 
 	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
 
@@ -1548,10 +1531,10 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 	return ret;
 }
 
-void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator)
+void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator)
 {
 
-	FileID fileID = FileManager::OpenFile(filename, READ);
+	FileID fileID = FileManager::OpenFile(&filename, READ);
 
 	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
 

@@ -52,12 +52,9 @@ SMBGeoChunk::~SMBGeoChunk()
 	free(renderablesTypes);
 }
 
-SMBFile::SMBFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator) : id(LoadFile(path, inputDataAllocator))
+SMBFile::SMBFile(StringView file, SlabAllocator* inputDataAllocator) : id(LoadFile(file, inputDataAllocator))
 {
-}
 
-SMBFile::SMBFile(const std::string& file, SlabAllocator* inputDataAllocator) : id(LoadFile(file, inputDataAllocator))
-{
 }
 
 SMBFile::~SMBFile()
@@ -65,11 +62,12 @@ SMBFile::~SMBFile()
 	FileManager::RemoveOpenFile(id);
 }
 
-FileID SMBFile::LoadFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator)
+
+FileID SMBFile::LoadFile(StringView name, SlabAllocator* inputDataAllocator)
 {
 	OSFileHandle* handle;
 
-	auto ret = FileManager::OpenFile(path, READ);
+	auto ret = FileManager::OpenFile(&name, READ);
 
 	if (ret() == FileManager::NOHANDLE)
 	{
@@ -83,43 +81,28 @@ FileID SMBFile::LoadFile(const std::filesystem::path& path, SlabAllocator* input
 	return std::move(ret);
 }
 
-FileID SMBFile::LoadFile(const std::string& name, SlabAllocator* inputDataAllocator)
-{
-	OSFileHandle* handle;
-
-	auto ret = FileManager::OpenFile(name, READ);
-
-	if (ret() == FileManager::NOHANDLE)
-	{
-		throw std::runtime_error("SMB file is unable to be opened");
-	}
-
-	OSFileHandle* fh = FileManager::GetFile(ret);
-
-	ProcessFile(fh, inputDataAllocator);
-
-	return std::move(ret);
-}
-
-void SMBFile::ReadHeader(OSFileHandle* fh)
+void SMBFile::ReadHeader(OSFileHandle* fh, SlabAllocator* inputDataAllocator)
 {
 	OSReadFile(fh, 8, reinterpret_cast<char*>(&magic));
 
 	int stringsize = 0;
 	OSReadFile(fh, 4, reinterpret_cast<char*>(&stringsize));
 
-	name.resize(stringsize);
-	OSReadFile(fh, stringsize, name.data());
+	name.stringData = (char*)inputDataAllocator->Allocate(stringsize);
+	name.charCount = stringsize;
+
+	OSReadFile(fh, stringsize, name.stringData);
 
 	OSReadFile(fh, 36, reinterpret_cast<char*>(&fileOffset));
 }
 
-void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk)
+void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk, SlabAllocator* inputDataAllocator)
 {
 	OSReadFile(fh, 44, reinterpret_cast<char*>(&chunk.magic));
 
-	chunk.fileName.resize(chunk.stringsize);
-	OSReadFile(fh, chunk.stringsize, chunk.fileName.data());
+	chunk.fileName.charCount = chunk.stringsize;
+	chunk.fileName.stringData = (char*)inputDataAllocator->Allocate(chunk.stringsize);
+	OSReadFile(fh, chunk.stringsize, chunk.fileName.stringData);
 
 	chunk.offsetInHeader = fh->filePointer;
 	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
@@ -136,13 +119,13 @@ void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk)
 
 void SMBFile::ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator)
 {
-	ReadHeader(fh);
+	ReadHeader(fh, inputDataAllocator);
 
 	chunks = (SMBChunk*)inputDataAllocator->Allocate(sizeof(SMBChunk) * numResources);
 
 	for (uint32_t i = 0; i<numResources; i++)
 	{
-		ReadChunk(fh, chunks[i]);
+		ReadChunk(fh, chunks[i], inputDataAllocator);
 	}
 }
 

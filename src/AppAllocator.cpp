@@ -54,8 +54,33 @@ void* RingAllocator::Head()
 	return (void*)(head + dataAllocator);
 }
 
+StringView* RingAllocator::AllocateFromNullString(const char* name)
+{
+	StringView* view = (StringView*)Allocate(sizeof(StringView));
 
+	int strLen = strnlen(name, 250);
 
+	view->stringData = (char*)Allocate(strLen);
+	view->charCount = strLen;
+
+	memcpy(view->stringData, name, strLen);
+
+	return view;
+}
+
+StringView RingAllocator::AllocateFromNullStringCopy(const char* name)
+{
+	StringView view;
+
+	int strLen = strnlen(name, 250);
+
+	view.stringData = (char*)Allocate(strLen);
+	view.charCount = strLen;
+
+	memcpy(view.stringData, name, strLen);
+
+	return view;
+}
 
 void* SlabAllocator::Allocate(int _allocSize, int alignment)
 {
@@ -108,19 +133,37 @@ void* SlabAllocator::Head()
 	return (void*)(head + dataAllocator);
 }
 
+StringView* SlabAllocator::AllocateFromNullString(const char* name)
+{
+	StringView* view = (StringView*)Allocate(sizeof(StringView));
+
+	int strLen = strnlen(name, 250);
+
+	view->stringData = (char*)Allocate(strLen);
+	view->charCount = strLen;
+
+	memcpy(view->stringData, name, strLen);
+
+	return view;
+}
+
+StringView SlabAllocator::AllocateFromNullStringCopy(const char* name)
+{
+	StringView view;
+
+	int strLen = strnlen(name, 250);
+
+	view.stringData = (char*)Allocate(strLen);
+	view.charCount = strLen;
+
+	memcpy(view.stringData, name, strLen);
+
+	return view;
+}
+
 int DeviceSlabAllocator::Allocate(int _allocSize, int alignment)
 {
-
-
-
-	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
-
-	if (out & alignment-1) {
-		int alignUp = (alignment - (alignment - 1 & out));
-		out = (out + alignUp);
-		UpdateAtomic(dataAllocator, alignUp, 0);
-	}
-		
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
 
 	return (out);
 }

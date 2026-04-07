@@ -69,7 +69,7 @@ struct RenderInstance
 
 	void WaitOnRender();
 
-	void CreatePipelines(std::string* pipelineDescriptions, int pipelineDescriptionsCount);
+	void CreatePipelines(StringView* pipelineDescriptions, int pipelineDescriptionsCount);
 
 	void CreateSwapChainData(EntryHandle swapChainIndex, uint32_t width, uint32_t height, bool recreate);
 
@@ -163,11 +163,11 @@ struct RenderInstance
 	ImageFormat FindSupportedBackBufferColorFormat(ImageFormat* requestedFormats, uint32_t requestSize);
 	ImageFormat FindSupportedDepthFormat(ImageFormat* requestedFormats, uint32_t requestSize);
 
-	int CreateAttachmentGraph(std::string attachmentLayout, int* subAttachCount);
+	int CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount);
 
 	EntryHandle CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
 
-	void CreateShaderGraphs(std::string* shaderGraphLayouts, int shaderGraphLayoutsCount);
+	void CreateShaderGraphs(StringView* shaderGraphLayouts, int shaderGraphLayoutsCount);
 
 	int CreateGraphicRenderStateObject(int shaderGraphIndex, int pipelineDescriptionIndex, int* frameGraphAttachments, int* perFrameRenderPassSelection, int frameGraphCount);
 	int CreateComputePipelineStateObject(int shaderGraphIndex);

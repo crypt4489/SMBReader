@@ -333,13 +333,9 @@ struct ShaderResourceSetXMLTag : ShaderXMLTag
 };
 
 static constexpr unsigned long
-hash(char* str);
+hash(const char* str);
 
-static constexpr unsigned long
-hash(const std::string& string);
-
-
-ShaderGraph* CreateShaderGraph(const std::string& filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount);
+ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount);
 
 static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
 
@@ -393,7 +389,7 @@ struct CullModeXMLTag : PipelineXMLTag
 };
 
 
-void CreatePipelineDescription(const std::string& filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator);
+void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator);
 
 
 
@@ -408,7 +404,7 @@ static int HandleVertexComponentInput(char* fileData, int size, int currentLocat
 static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);
 
 
-void CreateAttachmentGraphFromFile(const std::string& filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator);
+void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator);
 static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
 static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description);
 static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder);

@@ -1,4 +1,5 @@
 #pragma once
+#include "AppTypes.h"
 #include "IndexTypes.h"
 #include <type_traits>
 #include <utility>
@@ -11,7 +12,7 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 	val = atomic.load(std::memory_order_relaxed);
 	do {
 		out = (val + alignment - 1) & ~(alignment - 1);
-		desired = val + stride;
+		desired = out + stride;
 		if (wrapAroundSize && desired >= wrapAroundSize)
 		{
 			out = 0;
@@ -59,6 +60,9 @@ struct RingAllocator
 	void* Head();
 	void* CAllocate(int _allocSize, int alignment);
 	void* CAllocate(int _allocSize);
+
+	StringView* AllocateFromNullString(const char* name);
+	StringView AllocateFromNullStringCopy(const char* name);
 };
 
 
@@ -79,6 +83,9 @@ struct SlabAllocator
 	void* Head();
 	void* CAllocate(int _allocSize, int alignment);
 	void* CAllocate(int _allocSize);
+
+	StringView* AllocateFromNullString(const char* name);
+	StringView AllocateFromNullStringCopy(const char* name);
 };
 
 struct DeviceSlabAllocator

@@ -30,7 +30,7 @@ namespace ExportHelper
 
 
 void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory);
-void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk, SlabAllocator* inputScratchMemory);
+void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory);
 void ExportToOBJFormat(void* vertices, int vertexCount, std::string& outputFile);
 
 

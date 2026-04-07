@@ -2765,17 +2765,24 @@ uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t c
 	return imageIndex;
 }
 
-VkShaderStageFlagBits VKDevice::ConvertShaderFlags(const std::string& filename)
+VkShaderStageFlagBits VKDevice::ConvertShaderFlags(const char* filename, int nameLength)
 {
-	if (filename.find(".frag") != std::string::npos)
+	int offset = 0;
+
+	if (strncmp(&filename[nameLength  - 3], "spv", 3) == 0)
+	{
+		offset = 4;
+	}
+
+	if (strncmp(&filename[nameLength - offset - 4], "frag", 4) == 0)
 	{
 		return VK_SHADER_STAGE_FRAGMENT_BIT;
 	}
-	else if (filename.find(".vert") != std::string::npos)
+	else if (strncmp(&filename[nameLength - offset - 4], "vert", 4) == 0)
 	{
 		return VK_SHADER_STAGE_VERTEX_BIT;
 	}
-	else if (filename.find(".comp") != std::string::npos)
+	else if (strncmp(&filename[nameLength - offset - 4], "comp", 4) == 0)
 	{
 		return VK_SHADER_STAGE_COMPUTE_BIT;
 	}

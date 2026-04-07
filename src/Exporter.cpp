@@ -59,11 +59,14 @@ void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory)
 	}
 }
 
-void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk, SlabAllocator* inputScratchMemory)
+void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory)
 {
-	std::string name = FileManager::ExtractFileNameFromPath(chunk.fileName);
 
-	auto pathToTextures = FileManager::SetupDirectory(name);
+	StringView imageName{};
+
+	FileManager::ExtractFileNameFromPath(&chunk.fileName, &imageName);
+
+	auto pathToTextures = FileManager::SetupDirectory(&imageName);
 
 	SMBTexture tex(smb, chunk);
 
@@ -75,7 +78,7 @@ void ExportTextureFromFile(const SMBFile& smb, const SMBChunk& chunk, SlabAlloca
 
 	for (uint32_t i = 0; i < tex.miplevels; i++)
 	{
-		std::string writeFileName = name + std::to_string(i + 1) + ".bmp";
+		std::string writeFileName = std::string(imageName.stringData, imageName.charCount) + std::to_string(i + 1) + ".bmp";
 
 		auto writePath = pathToTextures / writeFileName;
 

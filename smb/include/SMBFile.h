@@ -90,13 +90,13 @@ struct SMBChunk
 	uint32_t pad4;
 	uint32_t chunkIdCopy;
 	uint32_t stringsize;
-	std::string fileName;
+	StringView fileName;
 	std::size_t offsetInHeader;
 	std::size_t headerSize;
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
 	{
-		os << std::hex << "File Reference Name " << chunk.fileName << "\n"
+		os << std::hex << "File Reference Name " << std::string(chunk.fileName.stringData, chunk.fileName.charCount) << "\n"
 		<< "Offset in header " << chunk.offsetInHeader << "\n"
 			<< "File SMB Offset "  << chunk.fileOffset << "\n"
 		<< "File SMB Number of Bytes after tag " << chunk.numOfBytesAfterTag << "\n"
@@ -125,21 +125,17 @@ public:
 	uint32_t numResources;
 	uint32_t ioMode;
 	uint32_t endcode;
-	std::string name;
+	StringView name;
 	SMBChunk* chunks;
 	FileID id;
 
 	SMBFile() = delete;
 
-	SMBFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator);
-
-	SMBFile(const std::string& file, SlabAllocator* inputDataAllocator);
+	SMBFile(StringView file, SlabAllocator* inputDataAllocator);
 
 	~SMBFile();
 
-	FileID LoadFile(const std::filesystem::path& path, SlabAllocator* inputDataAllocator);
-
-	FileID LoadFile(const std::string& name, SlabAllocator* inputDataAllocator);
+	FileID LoadFile(StringView name, SlabAllocator* inputDataAllocator);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
 	{
@@ -152,10 +148,9 @@ public:
 	}
 
 
-private:
-	void ReadHeader(OSFileHandle* fh);
+	void ReadHeader(OSFileHandle* fh, SlabAllocator* inputDataAllocator);
 
-	void ReadChunk(OSFileHandle* fh, SMBChunk& chunk);
+	void ReadChunk(OSFileHandle* fh, SMBChunk& chunk, SlabAllocator* inputDataAllocator);
 
 	void ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator);
 };

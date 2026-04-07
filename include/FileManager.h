@@ -8,6 +8,8 @@
 #include <regex>
 #include <utility>
 
+
+#include "AppTypes.h"
 #include "OSFile.h"
 
 #include "AppAllocator.h"
@@ -38,7 +40,7 @@ struct FileManager
 {
 public:
 
-	static FileID OpenFile(const std::string& name, OSFileFlags flags);
+	static FileID OpenFile(StringView* nameView, OSFileFlags flags);
 
 	static FileID OpenFile(const std::filesystem::path name, OSFileFlags flags);
 
@@ -46,38 +48,34 @@ public:
 
 	static void RemoveOpenFile(const FileID& id);
 
-	static std::filesystem::path SetupDirectory(std::string& nameOfDir);
+	static std::filesystem::path SetupDirectory(StringView* nameView);
 
-	static void SetFileCurrentDirectory(std::string name);
-
-	static void SetFileCurrentDirectory(std::string& name);
+	static void SetFileCurrentDirectory(StringView* nameView);
 
 	static void SetFileCurrentDirectory(std::filesystem::path& path);
 
-	static std::string ExtractFileNameFromPath(const std::string path);
-
-	static std::string ExtractFileNameFromPath(std::filesystem::path& path);
+	static void ExtractFileNameFromPath(StringView* nameView, StringView* outView);
 
 	static std::filesystem::path GetCurrentDirectoryFM();
 
-	static bool FileExists(const std::string& name);
+	static bool FileExists(StringView* nameView);
 
 	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
 	static constexpr uint32_t MAXFILES = 10;
 
 	static uint32_t FindAvailableHandle();
 
-	static int HandleOpening(const std::string& name, OSFileFlags flags, OSFileHandle* outHandle);
+	static int HandleOpening(StringView* nameView, OSFileFlags flags, OSFileHandle* outHandle);
 
 	static int ReadBytes(const FileID& id, int numBytes, char* buffer);
 
-	static int CreateFileIterator(std::string searchstring, OSFileIterator* file);
+	static int CreateFileIterator(StringView* nameView, OSFileIterator* file);
 
 	static int NextFileIterator(OSFileIterator* file);
 
-	static int ReadFileInFull(const std::string& name, SlabAllocator* allocator, void** dataOut);
+	static int ReadFileInFull(StringView* nameView, SlabAllocator* allocator, void** dataOut);
 
-	static int ReadFileInFull(const std::string& name, RingAllocator* allocator, void** dataOut);
+	static int ReadFileInFull(StringView* nameView, RingAllocator* allocator, void** dataOut);
 
 	static std::array<OSFileHandle, MAXFILES> filesopen;
 	static std::filesystem::path currDir;

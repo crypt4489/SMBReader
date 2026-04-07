@@ -732,6 +732,6 @@ enum BufferAlignmentType
 
 struct StringView
 {
-	const char* stringData;
+	char* stringData;
 	int charCount;
 };

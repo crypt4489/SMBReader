@@ -1,3 +1,4 @@
+
 #include "WindowManager.h"
 #include <stdexcept>
 
@@ -31,7 +32,7 @@ void WindowManager::GetInternalData(OSWindowInternalData* data)
    GetInternalOSData(&windowData, data);
 }
 
-void WindowManager::SetWindowTitle(const std::string& text)
+void WindowManager::SetWindowTitle(StringView text)
 {
-    SetOSWindowText(&windowData, text.c_str());
+    SetOSWindowText(&windowData, text.stringData);
 }

@@ -52,9 +52,9 @@ struct OSFileIterator
 	}
 };
 
-int OSCreateFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle);
+int OSCreateFile(const char* filename, int nameLength,  OSFileFlags flags, OSFileHandle* fileHandle);
 
-int OSOpenFile(const char* filename, OSFileFlags flags, OSFileHandle* fileHandle);
+int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle);
 
 int OSCloseFile(OSFileHandle* fileHandle);
 
@@ -64,6 +64,6 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags);
 
 int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer);
 
-int OSCreateFileIterator(const char* searchString, OSFileIterator* iterator);
+int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator);
 
 int OSNextFile(OSFileIterator* iterator);
