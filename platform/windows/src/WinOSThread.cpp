@@ -2,9 +2,6 @@
 #include "Windows.h"
 #include <atomic>
 
-static HANDLE intThreadHandles[50];
-static std::atomic<int> intThreadHandleCounter;
-
 struct ThreadData
 {
     ThreadPointer routine;
@@ -13,15 +10,73 @@ struct ThreadData
     int index;
 };
 
-ThreadData dataThreads[50];
 
+static std::atomic<int8_t>* freeList;
+static int maxFreeListEntry = 0;
+static HANDLE* handles;
+static ThreadData* dataThreads;
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam);
 
+static int FindFreeIndex()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1;
+        if (freeList[idx].compare_exchange_strong(
+            expected,
+            -1,
+            std::memory_order_acquire,
+            std::memory_order_relaxed))
+        {
+            return idx;
+        }
+    }
+    return -1;
+}
+
+OSThreadMemoryRequirements OSGetThreadMemoryRequirements(int maxNumberOfOpenThreads)
+{
+    int handlesSize = (maxNumberOfOpenThreads) * sizeof(HANDLE);
+    int threadDataSize = (maxNumberOfOpenThreads) * sizeof(ThreadData);
+    int freeListSize = (maxNumberOfOpenThreads) * sizeof(std::atomic<int8_t>);
+
+    OSThreadMemoryRequirements memReqs{ handlesSize + threadDataSize + freeListSize, alignof(HANDLE) };
+
+    return memReqs;
+}
+
+int OSSeedThreadMemory(void* dataSource, int dataSize, int numberOfOpenThreads)
+{
+    uintptr_t dataHead = (uintptr_t)dataSource;
+
+    handles = (void**)dataSource;
+
+    int handleSize = numberOfOpenThreads;
+
+    dataHead += sizeof(HANDLE) * handleSize;
+
+    dataThreads = (ThreadData*)dataHead;
+
+    dataHead += sizeof(ThreadData) * handleSize;
+
+    freeList = (std::atomic<int8_t>*)dataHead;
+
+    for (int i = 0; i < handleSize; i++)
+    {
+        freeList[i] = 1;
+    }
+
+    maxFreeListEntry = handleSize;
+
+    return 0;
+}
 
 int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer routine, OSThreadFlags flags)
 {
-	int index = intThreadHandleCounter.fetch_add(1);
+    int index = FindFreeIndex();
 
     dataThreads[index].argumentToThread = argumentToThread;
     dataThreads[index].routine = routine;
@@ -30,7 +85,7 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
 
     DWORD threadID;
 
-    intThreadHandles[index] = CreateThread(
+   handles[index] = CreateThread(
         NULL,                   // default security attributes
         0,                      // use default stack size  
         MyThreadFunction,       // thread function name
@@ -46,7 +101,7 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
 
 int OSCloseThread(OSThreadHandle* handle)
 {
-    HANDLE hand = intThreadHandles[handle->osDataHandle];
+    HANDLE hand = handles[handle->osDataHandle];
 
     CloseHandle(hand);
 
@@ -55,7 +110,7 @@ int OSCloseThread(OSThreadHandle* handle)
 
 int OSWaitThread(OSThreadHandle* handle, int timeout)
 {
-    HANDLE hand = intThreadHandles[handle->osDataHandle];
+    HANDLE hand = handles[handle->osDataHandle];
     WaitForSingleObject(hand, (DWORD)timeout);
     return 0;
 }
@@ -69,7 +124,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 
     if (data->flags & OS_THREAD_ASYNC)
     {
-        CloseHandle(intThreadHandles[data->index]);
+        CloseHandle(handles[data->index]);
     }
 
     ExitThread(0);

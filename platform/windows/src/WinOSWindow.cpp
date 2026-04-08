@@ -3,11 +3,71 @@
 #include "WinOSWindow.h"
 #include <atomic>
 
-static HINSTANCE instancePointers[50];
-static HWND windowPtrs[50];
-static std::atomic<int> windowCounter = 0;
+static HINSTANCE* instancePointers;
+static HWND* windowPtrs;
+static std::atomic<int8_t>* freeList;
+static int maxFreeListEntry = 0;
 
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
+
+
+
+static int FindFreeIndex()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1;
+        if (freeList[idx].compare_exchange_strong(
+            expected,
+            -1,
+            std::memory_order_acquire,
+            std::memory_order_relaxed))
+        {
+            return idx;
+        }
+    }
+    return -1;
+}
+
+OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows)
+{
+    int handlesSize = (maxNumberOfWindows) * sizeof(HINSTANCE);
+    int handlesWndSize = (maxNumberOfWindows) * sizeof(HWND);
+    int freeListSize = (maxNumberOfWindows) * sizeof(std::atomic<int8_t>);
+
+    OSWindowMemoryRequirements memReqs{ handlesSize + handlesWndSize + freeListSize, alignof(HINSTANCE) };
+
+    return memReqs;
+}
+
+int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows)
+{
+    uintptr_t dataHead = (uintptr_t)dataSource;
+    uintptr_t dataStart = dataHead;
+
+    instancePointers = (HINSTANCE*)dataSource;
+
+    int handleSize = maxNumberOfWindows;
+
+    dataHead += handleSize * sizeof(HINSTANCE);
+
+    windowPtrs = (HWND*)dataHead;
+    
+    dataHead += sizeof(HWND) * handleSize;
+
+    freeList = (std::atomic<int8_t>*)dataHead;
+
+    for (int i = 0; i < handleSize; i++)
+    {
+        freeList[i] = 1;
+    }
+
+    maxFreeListEntry = handleSize;
+
+    return 0;
+}
 
 int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData)
 {
@@ -65,7 +125,7 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
     ShowWindow(hwnd, 1);
     UpdateWindow(hwnd);
 
-    int windowIndex = windowCounter.fetch_add(1);
+    int windowIndex = FindFreeIndex();
 
     windowPtrs[windowIndex] = hwnd;
     instancePointers[windowIndex] = hInst;

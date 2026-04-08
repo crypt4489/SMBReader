@@ -2,9 +2,10 @@
 #include "Windows.h"
 #include <atomic>
 
-static HANDLE intFileHandles[100];
-static std::atomic<int> intFileHandleCounter = 0;
-static char pathscratch[512];
+static HANDLE* intFileHandles;
+static std::atomic<int8_t>* freeList;
+static int maxFreeListEntry = 0;
+
 
 static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
 {
@@ -22,8 +23,61 @@ static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
     return outflags;
 }
 
+static int FindFreeIndex()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1; 
+        if (freeList[idx].compare_exchange_strong(
+            expected,
+            -1,
+            std::memory_order_acquire,
+            std::memory_order_relaxed))
+        {
+            return idx;
+        }
+    }
+    return -1;
+}
+
+OSFileMemoryRequirements OSGetFileMemoryRequirements(int maxNumberOfOpenFiles)
+{
+    int handlesSize = (maxNumberOfOpenFiles) * sizeof(HANDLE);
+    int freeListSize = (maxNumberOfOpenFiles) * sizeof(std::atomic<int8_t>);
+
+    OSFileMemoryRequirements memReqs{ handlesSize + freeListSize, alignof(HANDLE) };
+
+    return memReqs;
+}
+
+int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
+{
+    uintptr_t dataHead = (uintptr_t)dataSource;
+    uintptr_t dataStart = dataHead;
+
+    intFileHandles = (HANDLE*)dataHead;
+
+    int handleSize = numberOfOpenFiles;
+
+    dataHead += handleSize * sizeof(HANDLE);
+
+    freeList = (std::atomic<int8_t>*)dataHead;
+
+    for (int i = 0; i < handleSize; i++)
+    {
+        freeList[i] = 1;
+    }
+
+    maxFreeListEntry = handleSize;
+
+    return 0;
+}
+
 int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
+    char pathscratch[MAX_PATH];
     HANDLE hFile;
     DWORD fileShare = 0;
     DWORD hAccess = ConvertOSFlags(flags, &fileShare);
@@ -41,7 +95,7 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
     fileHandle->fileLength = 0;
     fileHandle->filePointer = 0;
 
-    int internalHandlePtr = intFileHandleCounter.fetch_add(1);
+    int internalHandlePtr = FindFreeIndex();
     intFileHandles[internalHandlePtr] = hFile;
 
     fileHandle->osDataHandle = internalHandlePtr;
@@ -52,6 +106,8 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
 
 int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
+    char pathscratch[MAX_PATH];
+
     HANDLE hFile;
     DWORD fileShare = 0;
     DWORD hAccess = ConvertOSFlags(flags, &fileShare);
@@ -77,7 +133,7 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
     fileHandle->fileLength = fileSize;
     fileHandle->filePointer = 0;
 
-    int internalHandlePtr = intFileHandleCounter.fetch_add(1);
+    int internalHandlePtr = FindFreeIndex();
     intFileHandles[internalHandlePtr] = hFile;
 
     fileHandle->osDataHandle = internalHandlePtr;
@@ -90,6 +146,7 @@ int OSCloseFile(OSFileHandle* fileHandle)
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
     CloseHandle(hFile);
     intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;
+    freeList[fileHandle->osDataHandle].store(1, std::memory_order_release);
     memset(fileHandle, -1, sizeof(OSFileHandle));
     return OS_SUCCESS;
 }
@@ -166,9 +223,11 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator)
 {
+    char pathscratch[MAX_PATH];
+
     if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
 
-    int index = intFileHandleCounter.fetch_add(1);
+    int index = FindFreeIndex();
 
     WIN32_FIND_DATAA data;
 

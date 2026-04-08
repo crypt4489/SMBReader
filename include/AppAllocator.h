@@ -12,12 +12,21 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 	val = atomic.load(std::memory_order_relaxed);
 	do {
 		out = (val + alignment - 1) & ~(alignment - 1);
-		desired = out + stride;
-		if (wrapAroundSize && desired >= wrapAroundSize)
+		
+		if (wrapAroundSize && out >= wrapAroundSize)
 		{
 			out = 0;
-			desired = out + stride;
 		}
+
+		desired = out + stride;
+
+		if (wrapAroundSize && out >= wrapAroundSize)
+		{
+			out = 0;
+			desired = stride;
+		}
+
+
 	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
 		std::memory_order_relaxed));
 
@@ -35,7 +44,7 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 		if (wrapAroundSize && desired >= wrapAroundSize)
 		{
 			out = 0;
-			desired = out + stride;
+			desired = stride;
 		}
 	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
 		std::memory_order_relaxed));

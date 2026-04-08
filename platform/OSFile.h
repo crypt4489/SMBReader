@@ -52,6 +52,16 @@ struct OSFileIterator
 	}
 };
 
+struct OSFileMemoryRequirements
+{
+	int dataSize;
+	int alignment;
+};
+
+OSFileMemoryRequirements OSGetFileMemoryRequirements(int maxNumberOfOpenFiles);
+
+int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles);
+
 int OSCreateFile(const char* filename, int nameLength,  OSFileFlags flags, OSFileHandle* fileHandle);
 
 int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle);

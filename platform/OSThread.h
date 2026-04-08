@@ -27,6 +27,16 @@ enum OSThreadErrorCodes
 
 typedef void (*ThreadPointer)(void*);
 
+struct OSThreadMemoryRequirements
+{
+	int dataSize;
+	int alignment;
+};
+
+OSThreadMemoryRequirements OSGetThreadMemoryRequirements(int maxNumberOfOpenThreads);
+
+int OSSeedThreadMemory(void* dataSource, int dataSize, int numberOfOpenThreads);
+
 int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer routine, OSThreadFlags flags);
 
 int OSCloseThread(OSThreadHandle* handle);

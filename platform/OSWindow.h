@@ -96,6 +96,16 @@ enum OSWindowErrorCode
     OPEN_WINDOW_FAILED = -1,
 };
 
+struct OSWindowMemoryRequirements
+{
+    int dataSize;
+    int alignment;
+};
+
+OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows);
+
+int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows);
+
 int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData);
 
 int PollOSWindowEvents(OSWindow* window);

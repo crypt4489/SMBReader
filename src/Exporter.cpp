@@ -142,7 +142,7 @@ void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* i
 	}
 }
 
-void ExportToOBJFormat(void* vertices, int vertexCount, std::string& outputFile)
+void ExportToOBJFormat(void* vertices, int vertexCount, StringView outputFile)
 {
 	/*
 	using ExportHelper::operator<<;

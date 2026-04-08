@@ -96,7 +96,8 @@ struct SMBChunk
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
 	{
-		os << std::hex << "File Reference Name " << std::string(chunk.fileName.stringData, chunk.fileName.charCount) << "\n"
+		os << "File Reference Name ";
+		os.write(chunk.fileName.stringData, chunk.fileName.charCount) << std::hex << "\n"
 		<< "Offset in header " << chunk.offsetInHeader << "\n"
 			<< "File SMB Offset "  << chunk.fileOffset << "\n"
 		<< "File SMB Number of Bytes after tag " << chunk.numOfBytesAfterTag << "\n"

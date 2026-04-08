@@ -21,6 +21,16 @@ enum OSSemaphoreErrorCodes
 	ERROR_SEMAPHORE_RELEASE_FAILED
 };
 
+struct OSSyncMemoryRequirements
+{
+	int dataSize;
+	int alignment;
+};
+
+OSSyncMemoryRequirements OSGetSyncMemoryRequirements(int maxNumberOfOpenSyncObjects);
+
+int OSSeedSyncMemory(void* dataSource, int dataSize, int maxNumberSyncObjects);
+
 int CreateOSSemaphore(OSSemaphore* semaphore, int count);
 
 int WaitOSSemaphore(OSSemaphore* semaphore, unsigned int waitMS);
