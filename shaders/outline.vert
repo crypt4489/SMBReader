@@ -28,12 +28,26 @@ struct AABB
     vec4 max;
 };
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -42,7 +56,8 @@ struct Renderable
 	mat4 transform;
 };
 
-struct PerModel
+
+struct MeshDetails
 {
     uint vertexComponents;
     uint vertexStride;
@@ -52,7 +67,6 @@ struct PerModel
     uint pad1;
 	uint pad2;
 	uint pad3;
-    AABB minMaxBox;
     vec4 sphere;
 };
 
@@ -89,7 +103,7 @@ layout(set = 0, binding = 0) uniform GlobalContext {
 
 
 layout(set = 2, binding = 0) readonly buffer PMBuffer {
-    PerModel objects[];
+    MeshDetails objects[];
 } perModelBuffer;
 
 layout(set = 2, binding = 1) readonly buffer InputVertices {
@@ -100,8 +114,18 @@ layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
 layout(set = 2, binding = 3) readonly buffer RENDBuffer
 {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
+
+layout(set = 2, binding = 4) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 2, binding = 5) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -186,7 +210,7 @@ vec3 convertnormal(uint offset)
     return ret;
 }
 
-vec3 pack6decomp(uint offset, PerModel model)
+vec3 pack6decomp(uint offset, AABB minMaxBox)
 {
 
     int piX = unpack_i16(offset);
@@ -197,8 +221,8 @@ vec3 pack6decomp(uint offset, PerModel model)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-    vec3 min = model.minMaxBox.min.xyz;
-    vec3 max = model.minMaxBox.max.xyz;
+    vec3 min = minMaxBox.min.xyz;
+    vec3 max = minMaxBox.max.xyz;
 
     vec3 pos = mix(min, max, unormPos);
 
@@ -243,9 +267,13 @@ void main() {
 
     uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
-    Renderable currentRenderable = rends.renderables[renderableIndex];
+    MeshRenderable currentRenderable = rends.renderables[renderableIndex];
 
-    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
+    MeshDetails modelData = perModelBuffer.objects[currentRenderable.meshIndex];
+
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
+
+    GeometryDetails lGeomDetails = geomDetails.details[lGeomRenderable.geomDescIndex];
 
     uint comp = modelData.vertexComponents;
 
@@ -255,10 +283,10 @@ void main() {
 
     outColor = outline.color;
 
-    mat4 scaleMatrix = currentRenderable.transform;
-    scaleMatrix[0] *= outline.uniScale;
-    scaleMatrix[1] *= outline.uniScale;
-    scaleMatrix[2] *= outline.uniScale;
+    mat4 meshWorld = lGeomRenderable.transform * currentRenderable.transform;
+    meshWorld[0] *= outline.uniScale;
+    meshWorld[1] *= outline.uniScale;
+    meshWorld[2] *= outline.uniScale;
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
@@ -301,8 +329,8 @@ void main() {
         if ((comp & POSITION) == POSITION)
         {
             mat4 VP = gs.proj * gs.view;
-            vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
-            gl_Position = VP  * scaleMatrix * intPos;
+            vec4 intPos = vec4(pack6decomp(offset, lGeomDetails.minMaxBox), 1.0f);
+            gl_Position = VP  * meshWorld * intPos;
         }
 
     } 
@@ -310,7 +338,7 @@ void main() {
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = gs.proj * gs.view * scaleMatrix;
+            mat4 MVP = gs.proj * gs.view * meshWorld;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
         }

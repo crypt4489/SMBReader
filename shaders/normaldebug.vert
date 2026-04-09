@@ -23,12 +23,26 @@ struct AABB
     vec4 max;
 };
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -37,7 +51,8 @@ struct Renderable
 	mat4 transform;
 };
 
-struct PerModel
+
+struct MeshDetails
 {
     uint vertexComponents;
     uint vertexStride;
@@ -47,7 +62,6 @@ struct PerModel
     uint pad1;
 	uint pad2;
 	uint pad3;
-    AABB minMaxBox;
     vec4 sphere;
 };
 
@@ -85,7 +99,7 @@ layout(set = 1, binding = 1) uniform texture2D Textures[];
 layout(set = 1, binding = 0) uniform sampler samplerLinear;
 
 layout(set = 2, binding = 0) readonly buffer PMBuffer {
-    PerModel objects[];
+    MeshDetails objects[];
 } perModelBuffer;
 
 layout(set = 2, binding = 1) readonly buffer InputVertices {
@@ -96,9 +110,18 @@ layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
 layout(set = 2, binding = 3) readonly buffer RENDBuffer
 {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
 
+layout(set = 2, binding = 4) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 2, binding = 5) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
 
 vec4 ReconstructVEC4(uint offset)
 {
@@ -165,9 +188,8 @@ vec3 convertnormal(uint offset)
     return ret;
 }
 
-vec3 pack6decomp(uint offset, PerModel model)
+vec3 pack6decomp(uint offset, AABB minMaxBox)
 {
-
     int piX = unpack_i16(offset);
 
     int piY = unpack_i16(offset+2);
@@ -176,7 +198,7 @@ vec3 pack6decomp(uint offset, PerModel model)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-	return mix( model.minMaxBox.min.xyz, model.minMaxBox.max.xyz, unormPos);
+	return mix(minMaxBox.min.xyz, minMaxBox.max.xyz, unormPos);
 }
 
 vec3 ReconstructVEC3(uint offset)
@@ -201,9 +223,13 @@ void main() {
    
     uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
-    Renderable currentRenderable = rends.renderables[renderableIndex];
+    MeshRenderable currentRenderable = rends.renderables[renderableIndex];
 
-    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
+
+    GeometryDetails lGeomDetails = geomDetails.details[lGeomRenderable.geomDescIndex];
+
+    MeshDetails modelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
     uint comp = modelData.vertexComponents;
 
@@ -215,14 +241,14 @@ void main() {
 
     color = vec4(1.0, 1.0, 0.0, 1.0);
 
+    mat4 meshWorld = lGeomRenderable.transform * currentRenderable.transform;
+
     if ((comp&COMPRESSED)==COMPRESSED)
     {
         if ((comp&BONES2)==BONES2)
         {
             offset += 4;
         }
-
-       
 
         if ((comp & TEXTURES1) == TEXTURES1)
         {
@@ -231,15 +257,13 @@ void main() {
 
         if ((comp & TEXTURES2) == TEXTURES2)
         {
-    
-            offset += 4;
-        }
-        if ((comp & TEXTURES3) == TEXTURES3)
-        {
-    
             offset += 4;
         }
 
+        if ((comp & TEXTURES3) == TEXTURES3)
+        {
+            offset += 4;
+        }
 
         if ((comp&NORMAL)==NORMAL)
         {
@@ -253,15 +277,14 @@ void main() {
         if ((comp & POSITION) == POSITION)
         {
             mat4 MVP = gs.proj * gs.view;
-            vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
+            vec4 intPos = vec4(pack6decomp(offset, lGeomDetails.minMaxBox), 1.0f);
 
-            intPos = currentRenderable.transform * intPos;
+            intPos = meshWorld * intPos;
 
             if ((gl_VertexIndex & 1) == 1)
             {
                 intPos += (vec4(normal, 0));
             }
-
 
             gl_Position = MVP * intPos;
           

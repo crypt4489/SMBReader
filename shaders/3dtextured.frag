@@ -15,12 +15,26 @@ struct AABB
     vec4 max;
 };
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -28,6 +42,7 @@ struct Renderable
     uint pad2;
 	mat4 transform;
 };
+
 
 struct Plane
 {
@@ -126,7 +141,7 @@ layout(set = 2, binding = 5) uniform MaterialContext {
 } mats;
 
 layout(set = 2, binding = 6) readonly buffer RENDBuffer {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
 
 layout(set = 2, binding = 7) uniform usamplerBuffer globalMaterialIndices;
@@ -143,7 +158,17 @@ layout(set = 2, binding = 8) readonly buffer BLENDBuffer {
 
 layout(set = 2, binding = 9) uniform usamplerBuffer globalBlendIndices;
 
-vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, Renderable currentRenderable, vec3 specularBase, float shininess)
+layout(set = 2, binding = 10) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 2, binding = 11) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
+
+vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, MeshRenderable currentRenderable, vec3 specularBase, float shininess)
 {
     uint lightCount = currentRenderable.lightCount;
 
@@ -335,7 +360,9 @@ mat3 AdjointMatrix(mat4 worldTransform)
 
 void main() {
 
-    Renderable currentRenderable = rends.renderables[renderableIndex];
+    MeshRenderable currentRenderable = rends.renderables[renderableIndex];
+
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
 
     uint materialStart = currentRenderable.materialStart;
 
@@ -347,7 +374,7 @@ void main() {
 
     bool lightAffected = false;
 
-    mat3 normalMatrix = AdjointMatrix(currentRenderable.transform);
+    mat3 normalMatrix = AdjointMatrix(lGeomRenderable.transform * currentRenderable.transform);
 
     for (uint i = 0; i<currentRenderable.materialCount; i++)
     {

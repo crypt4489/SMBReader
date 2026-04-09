@@ -108,12 +108,26 @@ layout(set = 0, binding = 0) writeonly buffer Commands {
 	IndexedIndirectCommand commands[];
 } cmdBuffer;
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -122,7 +136,8 @@ struct Renderable
 	mat4 transform;
 };
 
-struct PerModel
+
+struct MeshDetails
 {
     uint vertexComponents;
     uint vertexStride;
@@ -132,13 +147,12 @@ struct PerModel
     uint pad1;
 	uint pad2;
 	uint pad3;
-    AABB minMaxBox;
     vec4 sphere;
 };
 
 
 layout(set = 0, binding = 1) buffer PMBuffer {
-    PerModel objects[];
+    MeshDetails objects[];
 } perModelBuffer;
 
 layout(set = 0, binding = 2) uniform CameraData {
@@ -158,8 +172,19 @@ layout(set = 0, binding = 4) writeonly buffer commandCounts {
 
 layout(set = 0, binding = 5) buffer RENDBuffer
 {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
+
+layout(set = 0, binding = 6) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 0, binding = 7) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
+
 
 layout(set = 1, binding = 0) uniform usamplerBuffer globalLightOffsets;
 layout(set = 1, binding = 1) uniform usamplerBuffer globalLightCounts;
@@ -208,18 +233,9 @@ Frustum CalculateFrustrum()
     return transformFrustrum;
 }
 
-bool CheckAllPlanesAgainstAABB(uint index)
+bool CheckAllPlanesAgainstAABB(AABB inputAABB, mat4 worldMatrix)
 {
-
-    Renderable currentRenderable = rends.renderables[index];
-    uint meshIndex = currentRenderable.meshIndex;
-
-    mat4 modelM = currentRenderable.transform;
-
-    AABB AABBTransform = perModelBuffer.objects[meshIndex].minMaxBox;
-
-
-    AABB outAABBTransform = TransformAABBArvo(modelM, AABBTransform);
+    AABB outAABBTransform = TransformAABBArvo(worldMatrix, inputAABB);
 
     vec4 transAABBMin =  outAABBTransform.min;
     vec4 transAABBMax =  outAABBTransform.max;
@@ -276,17 +292,11 @@ bool CheckAllPlanesAgainstAABB(uint index)
     return true;
 }
 
-bool CheckAllPlanesAgainstSphere(uint index)
+bool CheckAllPlanesAgainstSphere(mat4 worldMatrix, vec4 inSphere)
 {
+    float r = inSphere.w;
 
-    Renderable currentRenderable = rends.renderables[index];
-    uint meshIndex = currentRenderable.meshIndex;
-
-    mat4 modelM = currentRenderable.transform;
-    vec4 sphere = perModelBuffer.objects[meshIndex].sphere;
-    float r = sphere.w;
-
-    vec3 transPosition =  vec3(modelM * vec4(sphere.xyz, 1.0));
+    vec3 transPosition =  vec3(worldMatrix * vec4(inSphere.xyz, 1.0));
 
     Frustum testFrustrum = CalculateFrustrum();
 
@@ -386,41 +396,44 @@ void main()
 {
 	uint index = (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
+    uint maxCount = gs.grid.indirectDrawCount;
   
-    if (index >= gs.grid.indirectDrawCount)  {
+    if (index >= maxCount)  {
         return;
     }
 
-    bool visible = CheckAllPlanesAgainstAABB(index);
+    MeshRenderable currentRenderable = rends.renderables[index];
 
-  if (!visible)
-  {
-      uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
-      cmdBuffer.commands[gs.grid.indirectDrawCount-(1+invisibleIndex)].instanceCount = 0;
-      return;
-  } 
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
+
+    GeometryDetails lGeomDetails = geomDetails.details[lGeomRenderable.geomDescIndex];
+
+    MeshDetails lModelData = perModelBuffer.objects[currentRenderable.meshIndex];
+
+    mat4 worldM = lGeomRenderable.transform * currentRenderable.transform;
+
+    vec4 sphere = lModelData.sphere;
+
+    bool visible = CheckAllPlanesAgainstAABB(lGeomDetails.minMaxBox, worldM);
+
+    if (!visible)
+    {
+        uint invisibleIndex = atomicAdd(cCounts.invisibleCount, 1u);
+        cmdBuffer.commands[maxCount-(1+invisibleIndex)].instanceCount = 0;
+        return;
+    } 
 
     uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
    
-
     imageStore(globalRenderableIndices, int(visibleIndex), uvec4(index, 0, 0, 0));
 
-    uint meshIndex = rends.renderables[index].meshIndex;
-
-    
-   
-    cmdBuffer.commands[visibleIndex].instanceCount = 1;
-    cmdBuffer.commands[visibleIndex].firstIndex = perModelBuffer.objects[meshIndex].firstIndex;
-    cmdBuffer.commands[visibleIndex].indexCount = perModelBuffer.objects[meshIndex].indexCount;
+    cmdBuffer.commands[visibleIndex].instanceCount = currentRenderable.instanceCount;
+    cmdBuffer.commands[visibleIndex].firstIndex = lModelData.firstIndex;
+    cmdBuffer.commands[visibleIndex].indexCount = lModelData.indexCount;
     cmdBuffer.commands[visibleIndex].firstInstance = 0;
     cmdBuffer.commands[visibleIndex].vertexOffset = 0;
-
    
-
-    vec4 sphere = perModelBuffer.objects[meshIndex].sphere;
     float r = sphere.w;
-
-    mat4 worldM = rends.renderables[index].transform;
 
     vec3 sphereWPos = vec3(worldM * vec4(sphere.xyz, 1.0f));
 

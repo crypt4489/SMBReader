@@ -15,12 +15,6 @@
 #include "WindowManager.h"
 #include "ThreadManager.h"
 
-enum class DebugDrawType
-{
-	DEBUGBOX = 1,
-	DEBUGSPHERE = 2,
-};
-
 class ApplicationLoop
 {
 public:
@@ -69,7 +63,7 @@ public:
 		void* vertexData, void* indexData,
 		int vertexFlags, int vertexCount, int vertexStride,
 		int indexStride, int indexCount,
-		AxisBox& box, Sphere& sphere,
+		Sphere& sphere,
 		int vertexAlloc, int indexAlloc
 		
 	);
@@ -103,7 +97,7 @@ public:
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
 	int AddMaterialToDeviceMemory(int count, int* ids);
-	int CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
+	int CreateRenderable(const Matrix4f& mat, int geomIndex, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
 	void CreateCornerWall(float width, float height, float xDiv, float yDiv);
 
@@ -118,9 +112,12 @@ public:
 		void* vertexData, void* indexData,
 		int vertexFlags, int vertexCount, int vertexStride,
 		int indexStride, int indexCount,
-		AxisBox& box, Sphere& sphere,
+		Sphere& sphere,
 		int vertexAlloc, int indexAlloc
 	);
+
+	int CreateGPUGeometryDetails(const AxisBox& minMaxBox);
+	int CreateGPUGeometryRenderable(const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
 
 	ProgramArgs& args;
 	Semaphore queueSema;
@@ -144,5 +141,3 @@ public:
 
 	std::array<bool, MAXDIRS> camMovements;
 };
-
-extern ApplicationLoop* loop;

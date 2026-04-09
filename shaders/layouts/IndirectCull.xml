@@ -22,6 +22,10 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="bufferView" used="c" rw="read">

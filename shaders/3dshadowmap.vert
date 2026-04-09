@@ -24,12 +24,26 @@ struct AABB
     vec4 max;
 };
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -38,7 +52,8 @@ struct Renderable
 	mat4 transform;
 };
 
-struct PerModel
+
+struct MeshDetails
 {
     uint vertexComponents;
     uint vertexStride;
@@ -48,14 +63,13 @@ struct PerModel
     uint pad1;
 	uint pad2;
 	uint pad3;
-    AABB minMaxBox;
     vec4 sphere;
 };
 
 
 
 layout(set = 0, binding = 0) readonly buffer PMBuffer {
-    PerModel objects[];
+    MeshDetails objects[];
 } perModelBuffer;
 
 layout(set = 0, binding = 1) readonly buffer InputVertices {
@@ -66,11 +80,21 @@ layout(set = 0, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
 layout(set = 0, binding = 3) readonly buffer RENDBuffer
 {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
 
 layout(set = 0, binding = 4) uniform usamplerBuffer globalSMRenderableStart;
 layout(set = 0, binding = 5) uniform usamplerBuffer globalSMPerRendIndices;
+
+layout(set = 0, binding = 8) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 0, binding = 9) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
 
 struct ShadowMapViewProj
 {
@@ -178,7 +202,7 @@ vec3 convertnormal(uint offset)
     return ret;
 }
 
-vec3 pack6decomp(uint offset, PerModel model)
+vec3 pack6decomp(uint offset, AABB minMaxBox)
 {
 
     int piX = unpack_i16(offset);
@@ -189,8 +213,8 @@ vec3 pack6decomp(uint offset, PerModel model)
 
     vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
 
-    vec3 min = model.minMaxBox.min.xyz;
-    vec3 max = model.minMaxBox.max.xyz;
+    vec3 min = minMaxBox.min.xyz;
+    vec3 max = minMaxBox.max.xyz;
 
     vec3 pos = mix(min, max, unormPos);
 
@@ -251,9 +275,13 @@ void main()
 
     ShadowMapView viewSize = sv.views[shadowViewProjOffset];
 
-    Renderable currentRenderable = rends.renderables[renderableIndex];
+    MeshRenderable currentRenderable = rends.renderables[renderableIndex];
 
-    PerModel modelData = perModelBuffer.objects[currentRenderable.meshIndex];
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
+
+    GeometryDetails lGeomDetails = geomDetails.details[lGeomRenderable.geomDescIndex];
+
+    MeshDetails modelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
     uint comp = modelData.vertexComponents;
 
@@ -265,13 +293,14 @@ void main()
 
     vec4 scale = vec4(2.0 * viewSize.xScale, 2.0 * viewSize.yScale, 1.0, 1.0);
 
+    mat4 meshWorld = lGeomRenderable.transform * currentRenderable.transform;
 
     if ((comp&COMPRESSED)==COMPRESSED)
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
-            vec4 intPos = vec4(pack6decomp(offset, modelData), 1.0f);
+            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * meshWorld;
+            vec4 intPos = vec4(pack6decomp(offset, lGeomDetails.minMaxBox), 1.0f);
             
             vec4 outPos = (MVP * intPos);
 
@@ -289,7 +318,7 @@ void main()
     {
         if ((comp & POSITION) == POSITION)
         {
-            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * currentRenderable.transform;
+            mat4 MVP = viewProj.shadowMapProj * viewProj.shadowMapView * meshWorld;
             vec4 intPos = ReconstructVEC4(offset);
             //gl_Position = (scale * ((MVP * intPos) + ndcOff)) + vec4(viewBase, 0.0, 0.0);
         }

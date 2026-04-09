@@ -22,12 +22,26 @@ struct AABB
     vec4 max;
 };
 
-struct Renderable
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
 {
 	uint meshIndex;
 	uint lightCount; 
 	uint instanceCount;
-	uint pad1;
+	uint geomInstIndex;
 	uint lightIndices[4];
 	uint materialStart;
 	uint blendLayersStart;
@@ -36,7 +50,8 @@ struct Renderable
 	mat4 transform;
 };
 
-struct PerModel
+
+struct MeshDetails
 {
     uint vertexComponents;
     uint vertexStride;
@@ -46,18 +61,28 @@ struct PerModel
     uint pad1;
 	uint pad2;
 	uint pad3;
-    AABB minMaxBox;
     vec4 sphere;
 };
 
 layout(set = 0, binding = 1) readonly buffer PMBuffer {
-    PerModel objects[];
+    MeshDetails objects[];
 } perModelBuffer;
 
 layout(set = 0, binding = 2) buffer RENDBuffer
 {
-    Renderable renderables[];
+    MeshRenderable renderables[];
 } rends;
+
+layout(set = 0, binding = 3) readonly buffer GeomDescBuffer
+{
+    GeometryDetails details[];
+} geomDetails;
+
+layout(set = 0, binding = 4) readonly buffer GeomInstBuffer
+{
+    GeometryRenderable geomRenderables[];
+} geomRends;
+
 
 AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
 {
@@ -94,16 +119,19 @@ void main()
     if (lIndex >= gs.grid.numberOfMeshes) 
         return;
 
+    MeshRenderable currentRenderable = rends.renderables[lIndex];
 
-    Renderable currentRenderable = rends.renderables[lIndex];
+    GeometryRenderable lGeomRenderable = geomRends.geomRenderables[currentRenderable.geomInstIndex];
 
-    uint meshIndex = currentRenderable.meshIndex;
+    GeometryDetails lGeomDetails = geomDetails.details[lGeomRenderable.geomDescIndex];
 
-    mat4 objWorld = currentRenderable.transform;
+    MeshDetails lModelData = perModelBuffer.objects[currentRenderable.meshIndex];
 
-    AABB objBox = perModelBuffer.objects[meshIndex].minMaxBox;
+    mat4 worldM = lGeomRenderable.transform * currentRenderable.transform;
 
-    AABB outObjTransform = TransformAABBArvo(objWorld, objBox);
+    AABB objBox = lGeomDetails.minMaxBox;
+
+    AABB outObjTransform = TransformAABBArvo(worldM, objBox);
 
     vec4 transformMin = outObjTransform.min;
     vec4 transformMax = outObjTransform.max;

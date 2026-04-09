@@ -109,12 +109,12 @@ struct GPUMaterial
 	Vector4f specularColor;
 };
 
-struct GPURenderable
+struct GPUMeshRenderable
 {
 	int meshIndex;
 	int lightCount;
 	int instanceCount;
-	int pad1;
+	int geomIndex;
 	int lightIndices[4];
 	int materialStart;
 	int blendLayersStart;
@@ -133,8 +133,21 @@ struct GPUMeshDetails
 	int pad1;
 	int pad2;
 	int pad3;
-	AxisBox minMaxBox;
 	Sphere sphere;
+};
+
+struct GPUGeometryDetails
+{
+	AxisBox minMaxBox;
+};
+
+struct GPUGeometryRenderable
+{
+	int geomDescIndex;
+	int renderableStart;
+	int renderableCount;
+	int pad1;
+	Matrix4f transform;
 };
 
 enum BlendMaterialType
@@ -143,7 +156,7 @@ enum BlendMaterialType
 	BlendMap = 2,
 };
 
-struct BlendDetails
+struct GPUBlendDetails
 {
 	BlendMaterialType type;
 	union {
@@ -163,7 +176,6 @@ struct IndirectDrawData
 	int indirectCullDescriptor;
 	int indirectCullPipeline;
 	int indirectGlobalIDsAlloc;
-	//EntryHandle indirectGlobalIDsView;
 };
 
 struct WorldSpaceGPUPartition
@@ -203,6 +215,11 @@ struct GPULightSource
 	Vector4f ancillary; //for spot, x, y are cosine theta cutoffs
 };
 
+enum class DebugDrawType
+{
+	DEBUGBOX = 1,
+	DEBUGSPHERE = 2,
+};
 
 struct GPUDebugRenderable
 {
@@ -337,7 +354,6 @@ static int globalIndexBufferSize = 1024 * KiB;
 static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 1024 * KiB;
 
-
 static int globalLightBufferSize = 1024 * KiB;
 static int globalLightMax = globalLightBufferSize / sizeof(GPULightSource);
 static int globalLightTypesBufferSize = globalLightMax * sizeof(LightType);
@@ -361,6 +377,14 @@ static int globalMeshLocation;
 static int globalMeshSize = 24 * KiB;
 static int globalMeshCount = 0;
 
+static int globalGeometryDescriptionsLocation;
+static int globalGeometryDescriptionsSize = 1 * KiB;
+static int globalGeometryDescriptionsCount = 0;
+
+static int globalGeometryRenderableLocation;
+static int globalGeometryRenderableSize = 1 * KiB;
+static int globalGeometryRenderableCount = 0;
+
 static int globalRenderableLocation;
 static int globalRenderableSize = 24 * KiB;
 static int globalRenderableCount = 0;
@@ -381,12 +405,14 @@ static int globalBlendDetailCount = 0;
 static int globalBlendRangeCount = 0;
 
 static int globalMaterialsMax = globalMaterialsSize / sizeof(GPUMaterial);
-static int globalBlendDetailMax = globalBlendDetailsSize / sizeof(BlendDetails);
+static int globalBlendDetailMax = globalBlendDetailsSize / sizeof(GPUBlendDetails);
 static int globalBlendRangeMax = globalBlendRangesSize / sizeof(BlendRanges);
 static int globalMaterialRangeMax = globalMaterialIndicesSize / sizeof(uint32_t);
-static int globalRenderableMax = globalRenderableSize / sizeof(GPURenderable);
+static int globalRenderableMax = globalRenderableSize / sizeof(GPUMeshRenderable);
 static int globalDebugStructMaxCount = globalDebugStructAllocSize / sizeof(GPUDebugRenderable);
 static int globalMeshCountMax = globalMeshSize / sizeof(GPUMeshDetails);
+static int globalGeometryDescriptionsCountMax = globalGeometryDescriptionsSize / sizeof(GPUGeometryDetails);
+static int globalGeometryRenderableCountMax = globalGeometryRenderableSize / sizeof(GPUGeometryRenderable);
 
 static int shadowMapIndex = 0;
 
@@ -394,12 +420,9 @@ static char vertexAndIndicesMemory[16 * MiB];
 static char meshObjectSpecificMemory[4 * KiB];
 static char geometryObjectSpecificMemory[4 * KiB];
 static char mainTextureCacheMemory[256 * MiB];
-
-
 static char mainOSDataManagement[16 * KiB];
 
 static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
-
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
 static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
 static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
@@ -439,11 +462,6 @@ static GPULightSource mainSpotLight =
 	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
 };
 
-
-
-
-
-
 static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
 static ArrayAllocator<MeshCPUData, MAX_MESHES> meshCPUData{};
 static ArrayAllocator<GeometryCPUData, MAX_GEOMETRY> geometryCPUData{};
@@ -453,8 +471,7 @@ static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
 
 static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
-static UniformGrid mainGrid = {
-	
+static UniformGrid mainGrid = {	
 	.max = Vector4f(100.0f, 50.0f, 100.0f, 0.0),
 	.min = Vector4f(-100.0f, -50.0f, -100.0f, 0.0),
 	.numberOfDivision = 5,
@@ -478,7 +495,6 @@ static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, size
 
 static char ThreadSharedCmdMemory[4 * KiB];
 static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
-
 
 static EntryHandle mainLinearSampler = EntryHandle();
 
@@ -512,10 +528,6 @@ static void CreateUniformGrid();
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
 static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
-
-
-
-
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -593,7 +605,6 @@ void ApplicationLoop::Execute()
 	{
 		InitializeRuntime();
 
-
 		CreateCrateObject();
 
 		CreateCornerWall(10.0f, 10.0f, 2.0f, 1.0f);
@@ -670,8 +681,6 @@ void ApplicationLoop::Execute()
 
 		while (running)
 		{
-
-
 			mainWindow->PollEvents();
 
 			if (mainWindow->ShouldCloseWindow()) break;
@@ -1017,7 +1026,9 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	sphere.sphere = Vector4f(0.0, 0.0, 0.0, width);
 
-	int meshIndex = CreateMeshHandle(compPoses, indices, vertexFlags, vertexCount, compressedSize, 2, indexCount, box, sphere, vertexAlloc, indexAlloc);
+	int geomIndex = CreateGPUGeometryDetails(box);
+
+	int meshIndex = CreateMeshHandle(compPoses, indices, vertexFlags, vertexCount, compressedSize, 2, indexCount, sphere, vertexAlloc, indexAlloc);
 
 	rendInst->UpdateDriverMemory(compPoses, globalVertexBuffer, vertexCount * compressedSize, vertexAlloc, TransferType::CACHED);
 	rendInst->UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::CACHED);
@@ -1038,13 +1049,17 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	int gridMaterialRange = AddMaterialToDeviceMemory(1, &gridMaterial);
 
-	geomRendCPUData->renderableMeshStart = CreateRenderable({ { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 }, { 0.0 , 0.0, 1.0, 0.0 }, { 5.0f, -2.0, -5.0, 1.0 } }, gridMaterialRange, 1, -1, meshIndex, 1);
+	geomRendCPUData->renderableMeshStart = globalRenderableCount;
 
 	geomRendCPUData->renderableMeshCount = 3;
 
-	CreateRenderable(sideFrontPanel, gridMaterialRange, 1, -1, meshIndex, 1);
+	int gpuGeomRenderable = CreateGPUGeometryRenderable(Identity4f(), geomIndex, geomRendCPUData->renderableMeshStart, geomRendCPUData->renderableMeshCount);
+
+	CreateRenderable({ { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 }, { 0.0 , 0.0, 1.0, 0.0 }, { 5.0f, -2.0, -5.0, 1.0 } }, gpuGeomRenderable, gridMaterialRange, 1, -1, meshIndex, 1);
+
+	CreateRenderable(sideFrontPanel, gpuGeomRenderable, gridMaterialRange, 1, -1, meshIndex, 1);
 	
-	CreateRenderable(backPanel, gridMaterialRange, 1, -1, meshIndex, 1);
+	CreateRenderable(backPanel, gpuGeomRenderable, gridMaterialRange, 1, -1, meshIndex, 1);
 
 	return;
 }
@@ -1279,16 +1294,23 @@ void ApplicationLoop::CreateCrateObject()
 
 	int materialRangeCount = 2;
 	int materialRangeStart = AddMaterialToDeviceMemory(materialRangeCount, materialIDs.data());
+
+	int geomIndex = CreateGPUGeometryDetails(BOX);
 	
-	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, vertexFlags, 24, compressedSize, 2, 52, BOX, sphere, vertexAlloc, indexAlloc);
+	int meshIndex = CreateMeshHandle(compVerts, BoxIndices, vertexFlags, 24, compressedSize, 2, 52, sphere, vertexAlloc, indexAlloc);
 
 	RenderableGeomCPUData* rendGeomCPUData;
 
 	std::tie(std::ignore, rendGeomCPUData) = renderablesGeomObjects.Allocate();
 
-	rendGeomCPUData->renderableMeshStart = CreateRenderable(crateMatrix, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
+	rendGeomCPUData->renderableMeshStart = globalRenderableCount;
+
 	rendGeomCPUData->renderableMeshCount = 1;
 
+	int gpuGeomRenderable = CreateGPUGeometryRenderable(Identity4f(), geomIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
+
+	CreateRenderable(crateMatrix, gpuGeomRenderable, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
+	
 	rendInst->UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
 	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
 }
@@ -1317,10 +1339,6 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	geomRenderableCPUData->geomInstanceLocalMemoryCount = geometryObjectData.Allocate(geomSpecificData);
 
-	geomRenderableCPUData->renderableMeshCount = meshCount;
-
-	geomRenderableCPUData->renderableMeshStart = -1;
-
 	*geomSpecificData = Identity4f();
 		
 	(*geomSpecificData).translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
@@ -1332,6 +1350,14 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	int geomBlend = CreateBlendDetails(BlendMaterialType::ConstantAlpha, 1.0f);
 
 	int blendRange = CreateBlendRange(&geomBlend, 1);
+
+	int geomDescIndex = CreateGPUGeometryDetails(geoDef->axialBox);
+
+	geomRenderableCPUData->renderableMeshStart = globalRenderableCount;
+	
+	geomRenderableCPUData->renderableMeshCount = meshCount;
+
+	int gpuGeomIndex = CreateGPUGeometryRenderable(*geomSpecificData, geomDescIndex, geomRenderableCPUData->renderableMeshStart, geomRenderableCPUData->renderableMeshCount);
 
 	for (int i = 0; i < meshCount; i++)
 	{
@@ -1429,16 +1455,11 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 		CreateMeshHandle(geom->meshStart + i, vertexData, indices,
 			vertexFlags, vertexCount, vertexSize, 2, 
 			indexCount,
-			geoDef->axialBox, geoDef->spheres[i], 
+			geoDef->spheres[i], 
 			vertexAlloc, indexAlloc
 		);
 
-		int posStart = CreateRenderable(*geomSpecificData, materialRangeStart, materialRangeCount, blendRange, geom->meshStart + i, 1);
-
-		if (geomRenderableCPUData->renderableMeshStart < 0)
-		{
-			geomRenderableCPUData->renderableMeshStart = posStart;
-		}
+		CreateRenderable(Identity4f(), gpuGeomIndex, materialRangeStart, materialRangeCount, blendRange, geom->meshStart + i, 1);
 	}
 
 	CreateSphereDebugStruct(geoDef->axialBox, 24, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 1.0, 0.0, 0.0));
@@ -1784,6 +1805,8 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 3);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 4);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalRenderableLocation, nullptr, 0, 1, 5);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 6);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectCullDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 7);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
@@ -1812,7 +1835,8 @@ void CreateGenericMeshCommandBuffers(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
-	
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 10);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 11);
 
 	std::array<int, 1> indirectDrawDescriptors = {
 		mainIndirectDrawData.indirectDrawDescriptor,
@@ -1917,6 +1941,8 @@ void CreateGenericMeshCommandBuffers(int count)
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(outlineDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(outlineDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
 
 	static Vector4f black = { 0.0, 0.0, 0.0, 1.0 };
 
@@ -2062,6 +2088,8 @@ void CreateMeshWorldAssignment(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 2);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 4);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -2087,6 +2115,8 @@ void CreateMeshWorldAssignment(int count)
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.UploadConstant(worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
@@ -2321,6 +2351,8 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectCountAlloc, nullptr, 0, 1, 3);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &globalRenderableLocation, nullptr, 0, 1, 4);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 5);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryRenderableLocation, nullptr, 0, 1, 6);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(mainShadowMapManager.shadowClippingDescriptor2, &globalLightBuffer, nullptr, 0, 1, 0);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 1);
@@ -2364,6 +2396,8 @@ void CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int sha
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferView(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 5);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapViewProjAlloc, nullptr, 0, 1, 6);
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAtlasViewsAlloc, nullptr, 0, 1, 7);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 8);
+	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(smdpd.shadowMapDescriptorSet, &globalGeometryRenderableLocation, nullptr, 0, 1, 9);
 
 	
 
@@ -2713,6 +2747,10 @@ void ApplicationLoop::InitializeRuntime()
 	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(mainHostBuffer, globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
 	globalBlendRangesLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(mainHostBuffer, globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
 
+	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance->GetAllocFromBuffer(mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+
+
 	GlobalRenderer::gRenderInstance->descriptorManager.BindBufferToShaderResource(globalBufferDescriptor, &globalBufferLocation, nullptr, 0, 1, 0);
 
 	GlobalRenderer::gRenderInstance->descriptorManager.SetVariableArrayCount(globalTexturesDescriptor, 3, 512);
@@ -2868,7 +2906,7 @@ int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
 	return ret;
 }
 
-int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
+int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int geomIndex,  int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
 {
 	RenderableMeshCPUData* meshCpuRenderable = nullptr;
 
@@ -2881,7 +2919,7 @@ int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, in
 
 	std::tie(meshRenderableIndex, meshCpuRenderable) = renderablesMeshObjects.Allocate();
 
-	GPURenderable renderable{};
+	GPUMeshRenderable renderable{};
 
 	int renderableLocation = globalRenderableCount++;
 
@@ -2891,10 +2929,11 @@ int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int materialStart, in
 	meshCpuRenderable->meshMaterialRangeIndex = renderable.materialStart = materialStart;
 	meshCpuRenderable->meshBlendRangeCount = meshCpuRenderable->meshMaterialCount = renderable.materialCount = materialCount;
 	meshCpuRenderable->renderableIndex = meshRenderableIndex;
+	renderable.geomIndex = geomIndex;
 	
 	renderable.transform = mat;
 
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&renderable, globalRenderableLocation, sizeof(GPURenderable), sizeof(GPURenderable) * renderableLocation, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&renderable, globalRenderableLocation, sizeof(GPUMeshRenderable), sizeof(GPUMeshRenderable) * renderableLocation, TransferType::CACHED);
 
 	return renderableLocation;
 }
@@ -2969,7 +3008,7 @@ void ApplicationLoop::CreateMeshHandle(
 	void* vertexData, void* indexData,
 	int vertexFlags, int vertexCount, int vertexStride,
 	int indexStride, int indexCount,
-	AxisBox& box, Sphere& sphere,
+	Sphere& sphere,
 	int vertexAlloc, int indexAlloc
 )
 {
@@ -3007,7 +3046,7 @@ void ApplicationLoop::CreateMeshHandle(
 	handles->firstIndex = indexAlloc / mesh->indexSize;
 	handles->vertexByteOffset = vertexAlloc;
 
-	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
+	//memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
 	int meshSpecificAlloc = globalMeshCount++;
@@ -3022,7 +3061,7 @@ int ApplicationLoop::CreateMeshHandle(
 	void* vertexData, void* indexData,
 	int vertexFlags, int vertexCount, int vertexStride,
 	int indexStride, int indexCount,
-	AxisBox& box, Sphere& sphere,
+	 Sphere& sphere,
 	int vertexAlloc, int indexAlloc
 )
 {
@@ -3062,7 +3101,7 @@ int ApplicationLoop::CreateMeshHandle(
 	handles->firstIndex = indexAlloc / mesh->indexSize;
 	handles->vertexByteOffset = vertexAlloc;
 
-	memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
+	//memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
 	int meshSpecificAlloc = globalMeshCount++;
@@ -3087,7 +3126,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 	{
 		RenderableMeshCPUData* mesh = &renderablesMeshObjects.dataArray[meshStart + i];
 
-		GPURenderable renderable{};
+		GPUMeshRenderable renderable{};
 
 		int renderableLocation = mesh->renderableIndex;
 
@@ -3101,7 +3140,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 		renderable.transform.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
-		rendInst->UpdateDriverMemory(&renderable, globalRenderableLocation, sizeof(GPURenderable), sizeof(GPURenderable) * renderableLocation, TransferType::CACHED);
+		rendInst->UpdateDriverMemory(&renderable, globalRenderableLocation, sizeof(GPUMeshRenderable), sizeof(GPUMeshRenderable) * renderableLocation, TransferType::CACHED);
 	}
 }
 
@@ -3130,6 +3169,51 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 	}
 
 	ThreadSharedMessageQueue.Read();
+}
+
+int ApplicationLoop::CreateGPUGeometryDetails(const AxisBox& minMaxBox)
+{
+	auto rendInst = GlobalRenderer::gRenderInstance;
+	
+	int geomDescriptionsIndex = -1;
+
+	if (globalGeometryDescriptionsCount == globalGeometryDescriptionsCountMax)
+	{
+		return geomDescriptionsIndex;
+	}
+
+	geomDescriptionsIndex = globalGeometryDescriptionsCount++;
+
+	GPUGeometryDetails details{};
+
+	details.minMaxBox = minMaxBox;
+
+	rendInst->UpdateDriverMemory(&details, globalGeometryDescriptionsLocation, sizeof(GPUGeometryDetails), sizeof(GPUGeometryDetails) * geomDescriptionsIndex, TransferType::CACHED);
+
+	return geomDescriptionsIndex;
+}
+
+int ApplicationLoop::CreateGPUGeometryRenderable(const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount)
+{
+	auto rendInst = GlobalRenderer::gRenderInstance;
+	int geomRenderableIndex = -1;
+	if (globalGeometryRenderableCount == globalGeometryRenderableCountMax)
+	{
+		return geomRenderableIndex;
+	}
+
+	geomRenderableIndex = globalGeometryRenderableCount++;
+
+	GPUGeometryRenderable renderable{};
+
+	renderable.geomDescIndex = geomDesc;
+	renderable.renderableStart = renderableStart;
+	renderable.renderableCount = renderableCount;
+	renderable.transform = matrix;
+
+	rendInst->UpdateDriverMemory(&renderable, globalGeometryRenderableLocation, sizeof(GPUGeometryRenderable), sizeof(GPUGeometryRenderable) * geomRenderableIndex, TransferType::CACHED);
+
+	return geomRenderableIndex;
 }
 
 void ScanSTDIN(void* data)
@@ -3218,12 +3302,12 @@ int CreateBlendDetails(BlendMaterialType type, float constantAlpha)
 {
 	int loc = globalBlendDetailCount++;
 
-	BlendDetails details;
+	GPUBlendDetails details;
 
 	details.type = type;
 	details.alphaBlend = constantAlpha;
 
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(BlendDetails),  sizeof(BlendDetails) * loc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(GPUBlendDetails),  sizeof(GPUBlendDetails) * loc, TransferType::CACHED);
 
 	return loc;
 }
@@ -3232,12 +3316,12 @@ int CreateBlendDetails(BlendMaterialType type, int mapID)
 {
 	int loc = globalBlendDetailCount++;
 
-	BlendDetails details;
+	GPUBlendDetails details;
 
 	details.type = type;
 	details.alphaMapHandle = mapID;
 
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(BlendDetails), sizeof(BlendDetails) * loc, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&details, globalBlendDetailsLocation, sizeof(GPUBlendDetails), sizeof(GPUBlendDetails) * loc, TransferType::CACHED);
 
 	return loc;
 }

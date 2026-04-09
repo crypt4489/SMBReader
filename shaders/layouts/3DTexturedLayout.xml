@@ -45,6 +45,10 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="f" rw="read">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="vf" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="vf" rw="read">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
 
