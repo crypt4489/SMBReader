@@ -53,17 +53,17 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 	
 	ShaderDetails** details = (ShaderDetails**)readerMemory->Allocate(sizeof(ShaderDetails*) * 5);
 
-	FileID fileID = FileManager::OpenFile(&filename, READ);
+	OSFileHandle fileHandle;
 
-	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
+	OSOpenFile(filename.stringData, filename.charCount, READ, &fileHandle);
 
-	int dataSize = fileHandle->fileLength;
+	int dataSize = fileHandle.fileLength;
 	
 	void* fileData = readerMemory->Allocate(dataSize);
 
-	OSReadFile(fileHandle, dataSize, (char*)fileData);
+	OSReadFile(&fileHandle, dataSize, (char*)fileData);
 
-	OSCloseFile(fileHandle);
+	OSCloseFile(&fileHandle);
 
 	char* dataStart = (char*)fileData;
 
@@ -799,17 +799,17 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 {
 	memset(stateInfo, 0, sizeof(GenericPipelineStateInfo));
 
-	FileID fileID = FileManager::OpenFile(&filename, READ);
+	OSFileHandle fileHandle;
 
-	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
+	OSOpenFile(filename.stringData, filename.charCount, READ, &fileHandle);
 
-	int dataSize = fileHandle->fileLength;
+	int dataSize = fileHandle.fileLength;
 
 	void* fileData = tempAllocator->Allocate(dataSize);
 
-	OSReadFile(fileHandle, dataSize, (char*)fileData);
+	OSReadFile(&fileHandle, dataSize, (char*)fileData);
 
-	OSCloseFile(fileHandle);
+	OSCloseFile(&fileHandle);
 
 	char* dataStart = (char*)fileData;
 
@@ -1533,18 +1533,17 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 
 void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator)
 {
+	OSFileHandle fileHandle;
 
-	FileID fileID = FileManager::OpenFile(&filename, READ);
+	OSOpenFile(filename.stringData, filename.charCount, READ, &fileHandle);
 
-	OSFileHandle* fileHandle = FileManager::GetFile(fileID);
-
-	int dataSize = fileHandle->fileLength;
+	int dataSize = fileHandle.fileLength;
 
 	void* data = inputScratchAllocator->Allocate(dataSize);
 
-	OSReadFile(fileHandle, dataSize, (char*)data);
+	OSReadFile(&fileHandle, dataSize, (char*)data);
 
-	OSCloseFile(fileHandle);
+	OSCloseFile(&fileHandle);
 
 	char* dataStart = (char*)data;
 

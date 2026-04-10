@@ -7,6 +7,10 @@ static std::atomic<int8_t>* freeList;
 static int maxFreeListEntry = 0;
 
 
+static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
+static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
+static HANDLE stdErrorHandle = INVALID_HANDLE_VALUE;
+
 static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
 {
     DWORD outflags = 0;
@@ -153,7 +157,21 @@ int OSCloseFile(OSFileHandle* fileHandle)
 
 int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    if (fileHandle->osDataHandle >= maxFreeListEntry+1)
+    {
+        return OS_STD_HANDLE_INVALID;
+    }
+
+    HANDLE hFile = INVALID_HANDLE_VALUE;
+
+    if (fileHandle->osDataHandle == maxFreeListEntry)
+    {
+        hFile = stdInputHandle;
+    }
+    else
+    {
+        hFile = intFileHandles[fileHandle->osDataHandle];
+    }
 
     DWORD hBytesRead = 0;
 
@@ -169,7 +187,20 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 
 int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    HANDLE hFile = INVALID_HANDLE_VALUE;
+
+    if (fileHandle->osDataHandle == maxFreeListEntry + 1)
+    {
+        hFile = stdErrorHandle;
+    }
+    else if (fileHandle->osDataHandle == maxFreeListEntry + 2)
+    {
+        hFile = stdOutputHandle;
+    }
+    else if (fileHandle->osDataHandle < maxFreeListEntry)
+    {
+        hFile = intFileHandles[fileHandle->osDataHandle];
+    }
 
     DWORD hBytesWrite = 0;
 
@@ -185,6 +216,10 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 {
+    if (fileHandle->osDataHandle >= maxFreeListEntry)
+    {
+        return OS_STD_HANDLE_INVALID;
+    }
 
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
 
@@ -253,6 +288,8 @@ int OSNextFile(OSFileIterator* iterator)
 {
     if (!iterator) return OS_INVALID_ARGUMENT;
 
+    
+
     int index = iterator->osDataHandle;
 
     WIN32_FIND_DATAA data;
@@ -268,4 +305,41 @@ int OSNextFile(OSFileIterator* iterator)
     strncpy(iterator->currentFileName, data.cFileName, 250);
 
     return 0;
+}
+
+void OSGetSTDInput(OSFileHandle* fileHandle)
+{
+    if (stdInputHandle == INVALID_HANDLE_VALUE)
+    {
+        stdInputHandle = GetStdHandle(STD_INPUT_HANDLE);
+    }
+
+    fileHandle->osDataHandle = maxFreeListEntry;
+    fileHandle->fileLength = -1;
+    fileHandle->filePointer = -1;
+}
+
+void OSGetSTDOutput(OSFileHandle* fileHandle)
+{
+    if (stdOutputHandle == INVALID_HANDLE_VALUE)
+    {
+        stdOutputHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    }
+
+    fileHandle->osDataHandle = maxFreeListEntry + 2;
+    fileHandle->fileLength = -1;
+    fileHandle->filePointer = -1;
+
+}
+
+void OSGetSTDError(OSFileHandle* fileHandle)
+{
+    if (stdErrorHandle == INVALID_HANDLE_VALUE)
+    {
+        stdErrorHandle = GetStdHandle(STD_ERROR_HANDLE);
+    }
+
+    fileHandle->osDataHandle = maxFreeListEntry + 1;
+    fileHandle->fileLength = -1;
+    fileHandle->filePointer = -1;
 }

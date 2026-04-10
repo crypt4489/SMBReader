@@ -90,11 +90,11 @@ public:
 		other.data = nullptr;
 	};
 
-	SMBTexture(const SMBFile& smb, const SMBChunk& chunk);
+	SMBTexture(SMBFile& smb, const SMBChunk& chunk);
 
-	void ReadTextureData(const SMBFile& smb);
+	void ReadTextureData(SMBFile& smb);
 
-	friend std::ostream& operator<<(std::ostream& os, const SMBTexture& tex)
+	friend std::ostream& operator<<(std::ostream& os, SMBTexture& tex)
 	{
 		os  << tex.type << "\n"
 			<< tex.width << "\n"

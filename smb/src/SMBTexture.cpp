@@ -5,12 +5,12 @@ SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, 
 	
 }
 
-SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk) 
+SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk) 
 	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), data(nullptr)
 {
 	name = chunk.fileName;
 	id = chunk.chunkId;
-	auto fileHandle = FileManager::GetFile(smb.id);
+	OSFileHandle* fileHandle = &smb.fileHandle;
 
 	int offset = chunk.offsetInHeader + 21;
 
@@ -60,11 +60,11 @@ SMBTexture::SMBTexture(const SMBFile& smb, const SMBChunk& chunk)
 	cumulativeSize = totalBlobSize;
 }
 
-void SMBTexture::ReadTextureData(const SMBFile& smb)
+void SMBTexture::ReadTextureData(SMBFile& smb)
 {
 	char* readHead = data;
 
-	auto fileHandle = FileManager::GetFile(smb.id);
+	OSFileHandle* fileHandle = &smb.fileHandle;
 
 	OSSeekFile(fileHandle, fileOffset, BEGIN);
 

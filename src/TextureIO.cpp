@@ -32,7 +32,7 @@ int ReadBMPDetails(char* _fileData, TextureDetails* details)
 
 	if (fh.bfType != 0x4D42)
 	{
-		throw std::runtime_error("not a valid bitmap file");
+		return -1;
 	}
 
 	iter += sizeof(TexUtils::BMP::BitmapFileHeader);
@@ -43,7 +43,6 @@ int ReadBMPDetails(char* _fileData, TextureDetails* details)
 
 	uint32_t width = details->width = ih.biWidth;
 	uint32_t height = details->height = ih.biHeight;
-
 	uint32_t bitcount = details->bitcount = ih.biBitCount;
 
 	switch (bitcount)
@@ -52,7 +51,7 @@ int ReadBMPDetails(char* _fileData, TextureDetails* details)
 		details->type = ImageFormat::B8G8R8A8;
 		break;
 	default:
-		throw std::runtime_error("Unsupported BMP texture type");
+		return -1;
 	}
 
 	if (ih.biSizeImage)

@@ -59,7 +59,7 @@ void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory)
 	}
 }
 
-void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory)
+void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory)
 {
 
 	StringView imageName{};
@@ -85,19 +85,11 @@ void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* i
 		uint32_t writeWidth = tex.width >> i;
 		uint32_t writeHeight = tex.height >> i;
 
-		OSFileHandle* handle;
+		OSFileHandle handle;
 
-		auto outputfilehandle = FileManager::OpenFile(writePath, WRITE);
+		OSOpenFile(writePath.string().c_str(), writePath.string().size(), WRITE, &handle);
 
-		if (outputfilehandle() == FileManager::NOHANDLE)
-		{
-			std::cerr << "Something bad happened\n";
-			return;
-		}
-
-		handle = FileManager::GetFile(outputfilehandle);
-
-		TexUtils::BMP::WriteOutBMPHeaders(handle, writeWidth, writeHeight);
+		TexUtils::BMP::WriteOutBMPHeaders(&handle, writeWidth, writeHeight);
 
 		char* bgra = ptr;
 
@@ -132,13 +124,13 @@ void ExportTextureFromFile(const SMBFile& smb, SMBChunk& chunk, SlabAllocator* i
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			OSWriteFile(handle, bpr, input + offset);
+			OSWriteFile(&handle, bpr, input + offset);
 			offset -= bpr;
 		}
 
 		ptr += tex.imageSizes[i];
 
-		FileManager::RemoveOpenFile(outputfilehandle);
+		OSCloseFile(&handle);
 	}
 }
 

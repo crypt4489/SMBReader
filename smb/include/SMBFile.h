@@ -1,8 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include <vector>
 #include "AppTypes.h"
+#include "Logger.h"
 #include "FileManager.h"
 #include "MathTypes.h"
 
@@ -128,15 +128,15 @@ public:
 	uint32_t endcode;
 	StringView name;
 	SMBChunk* chunks;
-	FileID id;
+	OSFileHandle fileHandle;
 
 	SMBFile() = delete;
 
-	SMBFile(StringView file, SlabAllocator* inputDataAllocator);
+	SMBFile(StringView file, SlabAllocator* inputDataAllocator, Logger* scratch);
 
 	~SMBFile();
 
-	FileID LoadFile(StringView name, SlabAllocator* inputDataAllocator);
+	void LoadFile(StringView name, SlabAllocator* inputDataAllocator, Logger* scratch);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
 	{
@@ -149,11 +149,11 @@ public:
 	}
 
 
-	void ReadHeader(OSFileHandle* fh, SlabAllocator* inputDataAllocator);
+	int ReadHeader(SlabAllocator* inputDataAllocator, Logger* scratch);
 
-	void ReadChunk(OSFileHandle* fh, SMBChunk& chunk, SlabAllocator* inputDataAllocator);
+	int ReadChunk(SMBChunk& chunk, SlabAllocator* inputDataAllocator, Logger* scratch);
 
-	void ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator);
+	int ProcessFile(SlabAllocator* inputDataAllocator, Logger* scratch);
 };
 
 

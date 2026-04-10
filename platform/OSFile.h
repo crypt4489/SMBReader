@@ -38,7 +38,8 @@ enum OSFileErrorFlags
 	OS_FAILED_READ = -5,
 	OS_FAILED_WRITE = -6,
 	OS_FAILED_SEARCH_ITER = -7,
-	OS_REACH_ITER_END = -8
+	OS_REACH_ITER_END = -8,
+	OS_STD_HANDLE_INVALID = -9,
 };
 
 struct OSFileIterator
@@ -77,3 +78,7 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer);
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator);
 
 int OSNextFile(OSFileIterator* iterator);
+
+void OSGetSTDInput(OSFileHandle* fileHandle);
+void OSGetSTDOutput(OSFileHandle* fileHandle);
+void OSGetSTDError(OSFileHandle* fileHandle);

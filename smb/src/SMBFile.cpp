@@ -52,81 +52,83 @@ SMBGeoChunk::~SMBGeoChunk()
 	free(renderablesTypes);
 }
 
-SMBFile::SMBFile(StringView file, SlabAllocator* inputDataAllocator) : id(LoadFile(file, inputDataAllocator))
+SMBFile::SMBFile(StringView file, SlabAllocator* inputDataAllocator, Logger* scratch) 
 {
-
+	LoadFile(file, inputDataAllocator, scratch);
 }
 
 SMBFile::~SMBFile()
 {
-	FileManager::RemoveOpenFile(id);
+	OSCloseFile(&fileHandle);
 }
 
-
-FileID SMBFile::LoadFile(StringView name, SlabAllocator* inputDataAllocator)
+void SMBFile::LoadFile(StringView name, SlabAllocator* inputDataAllocator, Logger* scratch)
 {
-	OSFileHandle* handle;
+	OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
 
-	auto ret = FileManager::OpenFile(&name, READ);
+	ProcessFile(inputDataAllocator, scratch);
 
-	if (ret() == FileManager::NOHANDLE)
-	{
-		throw std::runtime_error("SMB file is unable to be opened");
-	}
-
-	OSFileHandle* fh = FileManager::GetFile(ret);
-
-	ProcessFile(fh, inputDataAllocator);
-
-	return std::move(ret);
+	return;
 }
 
-void SMBFile::ReadHeader(OSFileHandle* fh, SlabAllocator* inputDataAllocator)
+int SMBFile::ReadHeader(SlabAllocator* inputDataAllocator, Logger* scratch)
 {
-	OSReadFile(fh, 8, reinterpret_cast<char*>(&magic));
+	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic));
 
 	int stringsize = 0;
-	OSReadFile(fh, 4, reinterpret_cast<char*>(&stringsize));
+	OSReadFile(&fileHandle, 4, reinterpret_cast<char*>(&stringsize));
 
 	name.stringData = (char*)inputDataAllocator->Allocate(stringsize);
 	name.charCount = stringsize;
 
-	OSReadFile(fh, stringsize, name.stringData);
+	OSReadFile(&fileHandle, stringsize, name.stringData);
 
-	OSReadFile(fh, 36, reinterpret_cast<char*>(&fileOffset));
+	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset));
+
+	return 0;
 }
 
-void SMBFile::ReadChunk(OSFileHandle* fh, SMBChunk& chunk, SlabAllocator* inputDataAllocator)
+int SMBFile::ReadChunk(SMBChunk& chunk, SlabAllocator* inputDataAllocator, Logger* scratch)
 {
-	OSReadFile(fh, 44, reinterpret_cast<char*>(&chunk.magic));
+	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic));
 
 	chunk.fileName.charCount = chunk.stringsize;
 	chunk.fileName.stringData = (char*)inputDataAllocator->Allocate(chunk.stringsize);
-	OSReadFile(fh, chunk.stringsize, chunk.fileName.stringData);
+	OSReadFile(&fileHandle, chunk.stringsize, chunk.fileName.stringData);
 
-	chunk.offsetInHeader = fh->filePointer;
+	chunk.offsetInHeader = fileHandle.filePointer;
 	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
 	chunk.headerSize = offset;
 	int next = chunk.offsetInHeader + offset;
 
-	OSSeekFile(fh, next, BEGIN);
+	OSSeekFile(&fileHandle, next, BEGIN);
 
 	if (chunk.chunkId != chunk.chunkIdCopy)
 	{
-		throw std::runtime_error("chunk did not equal");
+		return -1;
 	}
+
+	return 0;
 }
 
-void SMBFile::ProcessFile(OSFileHandle* fh, SlabAllocator* inputDataAllocator)
+int SMBFile::ProcessFile(SlabAllocator* inputDataAllocator, Logger* scratch)
 {
-	ReadHeader(fh, inputDataAllocator);
+	if (ReadHeader(inputDataAllocator, scratch) < 0)
+	{
+		return -1;
+	}
 
 	chunks = (SMBChunk*)inputDataAllocator->Allocate(sizeof(SMBChunk) * numResources);
 
 	for (uint32_t i = 0; i<numResources; i++)
 	{
-		ReadChunk(fh, chunks[i], inputDataAllocator);
+		if (ReadChunk(chunks[i], inputDataAllocator, scratch) < 0)
+		{
+			return -1;
+		}
 	}
+
+	return 0;
 }
 
 void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int contiguousOffset, int systemOffset)
@@ -352,7 +354,7 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, SlabAllocator* tempMemoryPool)
 {
-	OSFileHandle* handle = FileManager::GetFile(file.id);
+	OSFileHandle* handle = &file.fileHandle;
 
 	OSSeekFile(handle, geoDefinition->vertexOffsetInArchive[renderableIndex], BEGIN);
 
@@ -514,9 +516,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 	
 	int iCount = geoDefinition->indicesCount[renderableIndex];
 
-	OSFileHandle* handle = FileManager::GetFile(file.id);
-
-	
+	OSFileHandle* handle = &file.fileHandle;
 
 	uint16_t* indices = (uint16_t*)indexDataOut;
 
@@ -539,8 +539,6 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 			if (indexType == 0x1800)
 			{
-
-
 				OSReadFile(handle, stride * 4, (char*)indices);
 
 				indices += (stride * 2);

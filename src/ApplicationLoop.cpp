@@ -5,6 +5,7 @@
 #endif
 #include "Camera.h"
 #include "Exporter.h"
+#include "Logger.h"
 #include "TextureDictionary.h"
 #include "SMBTexture.h"
 #include "AppAllocator.h"
@@ -496,6 +497,9 @@ static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, size
 static char ThreadSharedCmdMemory[4 * KiB];
 static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
 
+static char LoggerMessageMemory[64 * KiB];
+static Logger mainAppLogger{ LoggerMessageMemory, 16 * KiB };
+
 static EntryHandle mainLinearSampler = EntryHandle();
 
 static uint32_t imageIndex = 0;
@@ -585,9 +589,11 @@ void ApplicationLoop::Execute()
 
 	StringView *mainInputString = AppInstanceTempAllocator.AllocateFromNullString(args.inputFile.string().c_str());
 
+	OSGetSTDOutput(&mainAppLogger.fileHandle);
+
 	if (args.justexport)
 	{
-		SMBFile mainSMB(*mainInputString, &GlobalInputScratchAllocator);
+		SMBFile mainSMB(*mainInputString, &GlobalInputScratchAllocator, &mainAppLogger);
 
 		StringView fileName{};
 
@@ -633,14 +639,11 @@ void ApplicationLoop::Execute()
 
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
-					//std::cout << FPS << "\n";
-					//printf("%f\n", FPS);
-
+			
 					view.charCount = snprintf(windowText, 30, "FPS : %.2f", FPS);
 
 					mainWindow->SetWindowTitle(view);
 				
-
 					frameCounter = 0;
 					QueryPerformanceCounter(&startTime);
 					return 1;
@@ -788,6 +791,10 @@ void ApplicationLoop::Execute()
 			frameCounter++;
 
 			mainIndirectDrawData.commandBufferCount = globalRenderableCount;
+
+			debugIndirectDrawData.commandBufferCount = globalDebugStructCount;
+
+			mainAppLogger.ProcessMessage();
 			
 		}
 	}
@@ -1061,6 +1068,8 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 	
 	CreateRenderable(backPanel, gpuGeomRenderable, gridMaterialRange, 1, -1, meshIndex, 1);
 
+	mainAppLogger.AddLogMessage(LOGINFO, "Created Corner Object", 21);
+
 	return;
 }
 
@@ -1313,6 +1322,8 @@ void ApplicationLoop::CreateCrateObject()
 	
 	rendInst->UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
 	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
+
+	mainAppLogger.AddLogMessage(LOGINFO, "Created Crate Object", 20);
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
@@ -1465,6 +1476,8 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	CreateSphereDebugStruct(geoDef->axialBox, 24, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 1.0, 0.0, 0.0));
 
 	CreateAABBDebugStruct(geoDef->axialBox, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.5, 0.5, 1.0, 0.0));
+
+	mainAppLogger.AddLogMessage(LOGINFO, "Created SMB Object", 18);
 }
 
 
@@ -1578,15 +1591,13 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			
 			SMBGeoChunk* geoDef = &geoDefs[totalMeshCount++];
 
-			OSFileHandle* handle = FileManager::GetFile(file.id);
-
 			size_t seekpos = chunk[i].offsetInHeader;
 
-			OSSeekFile(handle, seekpos, BEGIN);
+			OSSeekFile(&file.fileHandle, seekpos, BEGIN);
 
 			char* geomHeader = (char*)AppInstanceTempAllocator.Allocate(chunk[i].headerSize);
 
-			OSReadFile(handle, chunk[i].headerSize, geomHeader);
+			OSReadFile(&file.fileHandle, chunk[i].headerSize, geomHeader);
 
 		    ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset);
 	
@@ -2829,7 +2840,7 @@ void ApplicationLoop::SetRunning(bool set)
 
 void ApplicationLoop::LoadObject(const StringView& file)
 {
-	SMBFile SMB(file, &GlobalInputScratchAllocator);
+	SMBFile SMB(file, &GlobalInputScratchAllocator, &mainAppLogger);
 
 	LoadSMBFile(SMB);
 }
@@ -3485,9 +3496,17 @@ EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioTy
 
 	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
 
-	void* fileData;
+	OSFileHandle outHandle{};
 
-	FileManager::ReadFileInFull(name, &GlobalInputScratchAllocator, &fileData);
+	int nRet = OSOpenFile(name->stringData, name->charCount, READ, &outHandle);
+
+	int size = outHandle.fileLength;
+
+	void* fileData = GlobalInputScratchAllocator.Allocate(size);
+
+	OSReadFile(&outHandle, size, (char*)fileData);
+
+	OSCloseFile(&outHandle);
 
 	int filePointer = ReadBMPDetails((char*)fileData, details);
 
@@ -3497,10 +3516,17 @@ EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioTy
 
 	for (int i = 1; i < textureCount; i++)
 	{
-
 		ReadBMPData((char*)fileData, filePointer, details);
 
-		FileManager::ReadFileInFull(&name[i], &GlobalInputScratchAllocator, &fileData);
+		nRet = OSOpenFile(name->stringData, name->charCount, READ, &outHandle);
+
+		size = outHandle.fileLength;
+
+		fileData = GlobalInputScratchAllocator.Allocate(size);
+
+		OSReadFile(&outHandle, size, (char*)fileData);
+
+		OSCloseFile(&outHandle);
 
 		TextureDetails stubDetails{};
 
@@ -3555,11 +3581,19 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 	for (int i = 0; i < mipCounts; i++)
 	{
-		void* fileData;
-
 		TextureDetails stubDetails{};
 
-		FileManager::ReadFileInFull(&name[i], &GlobalInputScratchAllocator, &fileData);
+		OSFileHandle outHandle{};
+
+		int nRet = OSOpenFile(name->stringData, name->charCount, READ, &outHandle);
+
+		int size = outHandle.fileLength;
+
+		void* fileData = GlobalInputScratchAllocator.Allocate(size);
+
+		OSReadFile(&outHandle, size, (char*)fileData);
+
+		OSCloseFile(&outHandle);
 
 		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
 

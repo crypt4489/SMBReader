@@ -1393,7 +1393,7 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 		char* shaderData;
 
-		OSFileHandle* handle;
+		OSFileHandle handle;
 
 		int shaderLength = 0;
 
@@ -1405,29 +1405,23 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 		if (FileManager::FileExists(&nameView)) {
 
-			FileID id = FileManager::OpenFile(&nameView, READ);
+			OSOpenFile(nameView.stringData, nameView.charCount, READ, &handle);
 
-			handle = FileManager::GetFile(id);
-
-			shaderLength = handle->fileLength;
+			shaderLength = handle.fileLength;
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength);
 
-			OSReadFile(handle, shaderLength, shaderData);
+			OSReadFile(&handle, shaderLength, shaderData);
 		}
 		else
 		{
 			nameView.charCount -= 4;
 
-			FileID id = FileManager::OpenFile(&nameView, READ);
-
-			handle = FileManager::GetFile(id);
-
-			shaderLength = handle->fileLength;
+			OSOpenFile(nameView.stringData, nameView.charCount, READ, &handle);
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength + 1);
 
-			OSReadFile(handle, shaderLength, shaderData);
+			OSReadFile(&handle, shaderLength, shaderData);
 
 			if (shaderData[shaderLength - 1] != '\0')
 			{
@@ -1442,7 +1436,7 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 		deats = deats->GetNext();
 
-		OSCloseFile(handle);
+		OSCloseFile(&handle);
 	}
 }
 
@@ -2216,7 +2210,7 @@ int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidt
 		vkFormat = VK_FORMAT_D32_SFLOAT;
 		break;
 	default:
-		throw std::runtime_error("Incorrect depth format");
+		return -1;
 	}
 
 	if (!attachment)
