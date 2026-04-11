@@ -74,10 +74,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 	int tagCount = 0;
 	int curr = 0;
 
-	int stride = SkipLine(dataStart, dataSize, curr);
-	
-	curr += stride;
-
+	int stride = 0;
 	int readerSizeMultiply = (dataSize / KiB) + 1;
 
 	readerMemBufferAllocate = 0;
@@ -816,8 +813,7 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 	int tagCount = 0;
 	int curr = 0;
 
-	int stride = SkipLine(dataStart, dataSize, curr);
-	curr += stride;
+	int stride = 0;
 
 	int currentVertexInput = 0;
 	int currentVertexInputDescription = 0;

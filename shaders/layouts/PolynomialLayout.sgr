@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="compute">
 		polynomialimage.comp
@@ -11,5 +10,4 @@
 		<ShaderResourceItem type="storageImage2D" used="c" rw="write">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
-	
 </ShaderGraph>

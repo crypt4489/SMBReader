@@ -1,7 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="compute">
-		lightworldsort.comp
+		organize.comp
 		<ComputeLayout x="1024" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>
@@ -14,10 +13,11 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="bufferView" used="c" rw="write">
+		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
-
 </ShaderGraph>

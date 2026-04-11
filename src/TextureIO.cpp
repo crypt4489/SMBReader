@@ -1,4 +1,5 @@
 #include "TextureIO.h"
+
 void ReadBMPData(char* _fileData, int dataPointer, TextureDetails* details)
 {
 	int uLine;

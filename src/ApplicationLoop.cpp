@@ -50,43 +50,43 @@ std::array<std::string, 3> commandsStrings =
 };
 
 static std::array<StringView, 8> pds = {
-	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("DebugPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebugPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("SkyboxPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("OutlinePipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenPipeline.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.xml")
+	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("DebugPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebugPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("SkyboxPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("OutlinePipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenPipeline.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.pld")
 };
 
 static std::array<StringView, 19> layouts = {
-		StartupMemoryAllocator.AllocateFromNullStringCopy("3DTexturedLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("TextLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("InterpolateMeshLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PolynomialLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectCull.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("DebugDraw.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectDebug.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSum.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSumAdd.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("WorldObjectDivison.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("MeshWorldAssignments.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("LightObjectDivision.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("LightWorldAssignment.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebug.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("Skybox.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("OutlineLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapLayout.xml"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.xml")
+		StartupMemoryAllocator.AllocateFromNullStringCopy("3DTexturedLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("TextLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("InterpolateMeshLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PolynomialLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectCull.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("DebugDraw.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectDebug.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSum.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSumAdd.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("WorldObjectDivison.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("MeshWorldAssignments.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("LightObjectDivision.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("LightWorldAssignment.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebug.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("Skybox.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("OutlineLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapLayout.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.sgr")
 };
 
 static std::array<StringView, 5> mainLayoutAttachments =
 {
-	StartupMemoryAllocator.AllocateFromNullStringCopy("MSAAPostProcess.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("BasicShadowMapAtt.xml"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowAtlasUse.xml")
+	StartupMemoryAllocator.AllocateFromNullStringCopy("MSAAPostProcess.adf"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("BasicShadowMapAtt.adf"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowAtlasUse.adf")
 };
 
 enum MaterialFlags

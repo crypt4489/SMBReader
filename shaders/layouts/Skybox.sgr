@@ -1,21 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="vert">
-		3dtexturedInstanced.vert
+		3dSkyBox.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		3dtextured.frag
+		3dSkyBox.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="v">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="sampler2d" used="f" count="8">
+		<ShaderResourceItem type="constantbuffer" used="v" size="64" offset="0" pushstage="0">
 		</ShaderResourceItem>
-	</ShaderResourceSet>
-	<ShaderResourceSet>
-		<ShaderResourceItem type="storage" used="v" rw="read">
+		<ShaderResourceItem type="samplerCube" used="f">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

@@ -31,11 +31,11 @@ file(GLOB PROJECT_SOURCES "platform/windows/src/*.cpp" "src/*.cpp" "smb/src/*.cp
 
 file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h" "platform/windows/include/*.h" "common/include/*.h")
 
-file(GLOB PROJECT_SHADERS "shaders/layouts/*" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
+file(GLOB PROJECT_SHADERS "shaders/layouts/*.sgr" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
 
-file(GLOB PROJECT_PIPELINE_LAYOUTS "pipelineLayout/*.xml")
+file(GLOB PROJECT_PIPELINE_LAYOUTS "pipelineLayout/*.pld")
 
-file(GLOB PROJECT_ATTACHMENT_LAYOUTS "attachmentdescriptions/*.xml")
+file(GLOB PROJECT_ATTACHMENT_LAYOUTS "attachmentdescriptions/*.adf")
 
 set (PROJECT_DEFINES)
 

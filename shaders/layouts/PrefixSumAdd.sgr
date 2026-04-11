@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="compute">
 		addincrementsPFS.comp
@@ -13,5 +12,4 @@
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
-
 </ShaderGraph>

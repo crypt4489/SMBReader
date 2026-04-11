@@ -1,8 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="compute">
-		meshworldsort.comp
-		<ComputeLayout x="1024" y="1" z="1">
+		indirectcull.comp
+		<ComputeLayout x="32" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
@@ -14,13 +13,30 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="uniform" used="c" rw="read">
+		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="c" rw="write">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="c" rw="read">
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+
 </ShaderGraph>
