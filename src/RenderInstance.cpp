@@ -1268,8 +1268,6 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 
 		VkDescriptorBindingFlags bindingFlags = 0;
 
-		
-
 		if (arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
 		{
 			bindingFlags |= VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT;

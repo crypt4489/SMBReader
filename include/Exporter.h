@@ -1,7 +1,7 @@
 #pragma once
 
 
-
+#include <format>
 #include <iostream>
 #include "AppAllocator.h"
 #include "SMBFile.h"
@@ -29,8 +29,8 @@ namespace ExportHelper
 }
 
 
-void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory);
-void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory);
+void ExportChunksFromFile(SMBFile& smb, Allocator* inputScratchMemory);
+void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratchMemory);
 void ExportToOBJFormat(void* vertices, int vertexCount, StringView outputFile);
 
 

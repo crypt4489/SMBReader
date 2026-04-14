@@ -1060,7 +1060,7 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	geomRendCPUData->renderableMeshCount = 3;
 
-	int gpuGeomRenderable = CreateGPUGeometryRenderable(Identity4f(), geomIndex, geomRendCPUData->renderableMeshStart, geomRendCPUData->renderableMeshCount);
+	int gpuGeomRenderable = geomRendCPUData->geomIndex = CreateGPUGeometryRenderable(Identity4f(), geomIndex, geomRendCPUData->renderableMeshStart, geomRendCPUData->renderableMeshCount);
 
 	CreateRenderable({ { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 }, { 0.0 , 0.0, 1.0, 0.0 }, { 5.0f, -2.0, -5.0, 1.0 } }, gpuGeomRenderable, gridMaterialRange, 1, -1, meshIndex, 1);
 
@@ -1316,9 +1316,9 @@ void ApplicationLoop::CreateCrateObject()
 
 	rendGeomCPUData->renderableMeshCount = 1;
 
-	int gpuGeomRenderable = CreateGPUGeometryRenderable(Identity4f(), geomIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
+	int gpuGeomRenderable = rendGeomCPUData->geomIndex = CreateGPUGeometryRenderable(crateMatrix, geomIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
 
-	CreateRenderable(crateMatrix, gpuGeomRenderable, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
+	CreateRenderable(Identity4f(), gpuGeomRenderable, materialRangeStart, materialRangeCount, blendRange, meshIndex, 1);
 	
 	rendInst->UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
 	rendInst->UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
@@ -1326,7 +1326,7 @@ void ApplicationLoop::CreateCrateObject()
 	mainAppLogger.AddLogMessage(LOGINFO, "Created Crate Object", 20);
 }
 
-void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
+void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file, int* textureHandles, int textureBase)
 {
 	auto rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1340,7 +1340,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 
 	std::tie(std::ignore, geomRenderableCPUData) = renderablesGeomObjects.Allocate();
 
-	std::tie(geomRenderableCPUData->geomIndex, geom) = geometryCPUData.Allocate();
+	std::tie(std::ignore, geom) = geometryCPUData.Allocate();
 	
 	geom->meshStart = meshCPUData.AllocateN(meshCount);
 
@@ -1368,7 +1368,9 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 	
 	geomRenderableCPUData->renderableMeshCount = meshCount;
 
-	int gpuGeomIndex = CreateGPUGeometryRenderable(*geomSpecificData, geomDescIndex, geomRenderableCPUData->renderableMeshStart, geomRenderableCPUData->renderableMeshCount);
+	int gpuGeomIndex = geomRenderableCPUData->geomIndex = CreateGPUGeometryRenderable(*geomSpecificData, geomDescIndex, geomRenderableCPUData->renderableMeshStart, geomRenderableCPUData->renderableMeshCount);
+
+	int base = 0;
 
 	for (int i = 0; i < meshCount; i++)
 	{
@@ -1436,31 +1438,38 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file)
 			vertexFlags |= COMPRESSED;
 		}
 
-		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
-
 		uint16_t* indices = (uint16_t*)vertexAndIndicesAlloc.Allocate(sizeof(uint16_t) * indexCount);
 
 		SMBCopyIndices(geoDef, i, file, indices);
 
+		int vertexAlloc = vertexBufferAlloc.Allocate(vertexSize * vertexCount, 16);
+
 		int indexAlloc = indexBufferAlloc.Allocate(sizeof(uint16_t) * indexCount, 1);
+		
 		rendInst->UpdateDriverMemory(indices, globalIndexBuffer, sizeof(uint16_t) * indexCount,  indexAlloc, TransferType::MEMORY);
 
 		rendInst->UpdateDriverMemory(vertexData, globalVertexBuffer, vertexSize * vertexCount,  vertexAlloc, TransferType::MEMORY);
 		
-
-		int base = geoDef->materialStart[i];
-
 		int textureStart = meshTextureHandles.AllocateN(geoDef->materialsCount[i]);
 		int textureCount = geoDef->materialsCount[i];
 
 		for (int j = 0; j < textureCount; j++)
 		{
-			meshTextureHandles.Update(textureStart + i, geoDef->materialsId[base + i]);
+			meshTextureHandles.Update(textureStart + j, textureHandles[base+j] + textureBase);
 		}
 
-		std::array<int, 1> materialHandles = { CreateMaterial(ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : type == PosPack6_C16Tex1_Bone2 ? 0 : VERTEXNORMAL), &geoDef->materialsId[base], textureCount, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.1, .1, .1, 1.0), 1.5, Vector4f(0.0, 0.0, 0.0, 1.0))};
+		base += textureCount;
 
-		int materialRangeStart = AddMaterialToDeviceMemory(1, materialHandles.data());
+		int materialHandle = CreateMaterial(
+			ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : type == PosPack6_C16Tex1_Bone2 ? 0 : VERTEXNORMAL), 
+			&meshTextureHandles.dataArray[textureStart], 
+			textureCount, 
+			Vector4f(1.0, 1.0, 1.0, 1.0), 
+			Vector4f(.1, .1, .1, 1.0), 1.5, 
+			Vector4f(0.0, 0.0, 0.0, 1.0)
+		);
+
+		int materialRangeStart = AddMaterialToDeviceMemory(1, &materialHandle);
 		int materialRangeCount = 1;
 
 		CreateMeshHandle(geom->meshStart + i, vertexData, indices,
@@ -1509,6 +1518,7 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, ui
 
 	if (globalDebugStructCount == globalDebugStructMaxCount)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many debug structs created"));
 		return -1;
 	}
 
@@ -1553,6 +1563,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 
 	if (globalDebugStructCount == globalDebugStructMaxCount)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many debug structs created"));
 		return -1;
 	}
 
@@ -1572,7 +1583,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 void ApplicationLoop::LoadSMBFile(SMBFile &file)
 {
 
-	const int MAX_GEO_FILES = 10;
+	const int MAX_GEO_FILES = 2;
 	const int MAX_TEXTURES = 10;
 
 	int totalTextureCount = 0, totalMeshCount = 0;
@@ -1588,7 +1599,6 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 		{
 		case GEO:
 		{
-			
 			SMBGeoChunk* geoDef = &geoDefs[totalMeshCount++];
 
 			size_t seekpos = chunk[i].offsetInHeader;
@@ -1599,8 +1609,8 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 			OSReadFile(&file.fileHandle, chunk[i].headerSize, geomHeader);
 
-		    ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset);
-	
+		    ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file.fileOffset, chunk[i].fileOffset + file.numContiguousBytes + file.fileOffset, &mainAppLogger, &GlobalInputScratchAllocator);
+
 			break;
 		}
 		case TEXTURE:
@@ -1610,18 +1620,16 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 			break;
 		}
 		case GR2:
-			break;
 		case Joints:
-			break;
 		default:
-			std::cerr << "Unprocessed chunkType\n";
+			mainAppLogger.AddLogMessage(LogMessageType::LOGINFO, AppInstanceTempAllocator.AllocateFromNullStringCopy("Unhandled SMB Chunk"));
 			break;
 		}
 	}
 
 	TextureDetails** details = (TextureDetails**)AppInstanceTempAllocator.Allocate(sizeof(TextureDetails*) * totalTextureCount);
 
-	int index = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
+	int globalTextureStartIndex = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
 
 	for (int ii = 0; ii < totalTextureCount; ii++)
 	{
@@ -1637,7 +1645,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 		texture.ReadTextureData(file);
 
-		mainDictionary.textureHandles[ii + index] =
+		mainDictionary.textureHandles[ii + globalTextureStartIndex] =
 			GlobalRenderer::gRenderInstance->CreateImageHandle(
 				texture.cumulativeSize,
 				texture.width,
@@ -1650,7 +1658,7 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 
 		GlobalRenderer::gRenderInstance->UpdateImageMemory(
 			texture.data, 
-			mainDictionary.textureHandles[ii + index], 
+			mainDictionary.textureHandles[ii + globalTextureStartIndex],
 			sizesCached, 
 			texture.cumulativeSize, 
 			texture.width, 
@@ -1664,15 +1672,15 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 	DeviceHandleArrayUpdate update; 
 
 	update.resourceCount = totalTextureCount;
-	update.resourceDstBegin = index;
-	update.resourceHandles = mainDictionary.textureHandles.data() + index;
+	update.resourceDstBegin = globalTextureStartIndex;
+	update.resourceHandles = mainDictionary.textureHandles.data() + globalTextureStartIndex;
 
 	GlobalRenderer::gRenderInstance->UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 
-	
-	for (int i = 0; i < totalMeshCount; i++)
-	{
+	for (int i = 0; i < totalMeshCount; i++) {
 		SMBGeoChunk* geoDef = &geoDefs[i];
+
+		int* flattenMatHandles = (int*)AppInstanceTempAllocator.Allocate(sizeof(int) * geoDef->numMaterials);
 
 		int base = 0;
 
@@ -1687,28 +1695,22 @@ void ApplicationLoop::LoadSMBFile(SMBFile &file)
 				{
 					if (id == textures[gg].id)
 					{
-						geoDef->materialsId[hh + base] = index + gg;
+						flattenMatHandles[hh + base] = gg;
 						break;
 					}
 				}
 
 				if (gg == totalTextureCount)
 				{
-					geoDef->materialsId[hh + base] = -1;
+					flattenMatHandles[hh + base] = 0;
+					mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, "Unhandled Mesh Material Image", 20);
 				}
-
 			}
-
-			geoDef->materialStart[jj] = base;
-
 			base += count;
 		}
 
-		SMBGeometricalObject(geoDef, file);
+		SMBGeometricalObject(geoDef, file, flattenMatHandles, globalTextureStartIndex);
 	}
-	
-
-	
 }
 
 void CreateDebugCommandBuffers(int count)
@@ -2657,7 +2659,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	ImageFormat mainDepthFormat = GlobalRenderer::gRenderInstance->FindSupportedDepthFormat(&requestedDSVFormats, 1);
 
-	int mainRTVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(512 * MiB, mainColorFormat, 4096, 4096);
+	int mainRTVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(800 * MiB, mainColorFormat, 4096, 4096);
 
 	int mainDSVIndex = GlobalRenderer::gRenderInstance->CreateRSVMemoryPool(1024 * MiB, mainDepthFormat, 4096, 4096);
 
@@ -2907,6 +2909,7 @@ int ApplicationLoop::AddMaterialToDeviceMemory(int count, int* ids)
 
 	if (globalMaterialRangeMax <= globalMaterialRangeCount+count)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many material ranges created"));
 		return -1;
 	}
 
@@ -2925,6 +2928,7 @@ int ApplicationLoop::CreateRenderable(const Matrix4f& mat, int geomIndex,  int m
 
 	if (globalRenderableCount == globalRenderableMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many renderables created"));
 		return -1;
 	}
 
@@ -2961,6 +2965,7 @@ int ApplicationLoop::CreateMaterial(
 
 	if (globalMaterialsIndex == globalMaterialsMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many materials created"));
 		return -1;
 	}
 
@@ -2994,6 +2999,7 @@ int ApplicationLoop::CreateMaterial(
 
 	if (globalMaterialsIndex == globalMaterialsMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many materials created"));
 		return -1;
 	}
 
@@ -3027,6 +3033,7 @@ void ApplicationLoop::CreateMeshHandle(
 
 	if (globalMeshCount == globalMeshCountMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many mesh created"));
 		return;
 	}
 
@@ -3057,7 +3064,6 @@ void ApplicationLoop::CreateMeshHandle(
 	handles->firstIndex = indexAlloc / mesh->indexSize;
 	handles->vertexByteOffset = vertexAlloc;
 
-	//memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
 	int meshSpecificAlloc = globalMeshCount++;
@@ -3082,6 +3088,7 @@ int ApplicationLoop::CreateMeshHandle(
 
 	if (globalMeshCount == globalMeshCountMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many mesh created"));
 		return -1;
 	}
 
@@ -3112,7 +3119,6 @@ int ApplicationLoop::CreateMeshHandle(
 	handles->firstIndex = indexAlloc / mesh->indexSize;
 	handles->vertexByteOffset = vertexAlloc;
 
-	//memcpy(&handles->minMaxBox, &box, sizeof(AxisBox));
 	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
 
 	int meshSpecificAlloc = globalMeshCount++;
@@ -3126,33 +3132,25 @@ int ApplicationLoop::CreateMeshHandle(
 
 void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 {
-
 	auto rendInst = GlobalRenderer::gRenderInstance;
-	RenderableGeomCPUData* geom = &renderablesGeomObjects.dataArray[geomIndex];
+	
+	RenderableGeomCPUData* geom = nullptr;
 
-	int meshCount = geom->renderableMeshCount;
-	int meshStart = geom->renderableMeshStart; 
-
-	for (int i = 0; i < meshCount; i++)
+	if (geomIndex >= renderablesGeomObjects.allocatorPtr.load())
 	{
-		RenderableMeshCPUData* mesh = &renderablesMeshObjects.dataArray[meshStart + i];
-
-		GPUMeshRenderable renderable{};
-
-		int renderableLocation = mesh->renderableIndex;
-
-		renderable.instanceCount = mesh->instanceCount;
-		renderable.meshIndex = mesh->meshIndex;
-		renderable.blendLayersStart = mesh->meshBlendRangeIndex;
-		renderable.materialStart = mesh->meshMaterialRangeIndex;
-		renderable.materialCount = mesh->meshMaterialCount;
-
-		renderable.transform = Identity4f();;
-
-		renderable.transform.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
-
-		rendInst->UpdateDriverMemory(&renderable, globalRenderableLocation, sizeof(GPUMeshRenderable), sizeof(GPUMeshRenderable) * renderableLocation, TransferType::CACHED);
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Incorrect Geometry Location"));
+		return;
 	}
+
+	geom = &renderablesGeomObjects.dataArray[geomIndex];
+
+	int geomRenderable = geom->geomIndex;
+
+	Matrix4f transform = Identity4f();;
+
+	transform.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+
+	rendInst->UpdateDriverMemory(&transform, globalGeometryRenderableLocation, sizeof(Matrix4f), (sizeof(GPUMeshRenderable) * geomRenderable) + 16, TransferType::CACHED);
 }
 
 void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
@@ -3178,6 +3176,9 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 		float z1 = std::stof(std::string(args[4].stringData, args[4].charCount));
 		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
 	}
+	else {
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Unprocessed command entered"));
+	}
 
 	ThreadSharedMessageQueue.Read();
 }
@@ -3190,6 +3191,7 @@ int ApplicationLoop::CreateGPUGeometryDetails(const AxisBox& minMaxBox)
 
 	if (globalGeometryDescriptionsCount == globalGeometryDescriptionsCountMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many geometry details created"));
 		return geomDescriptionsIndex;
 	}
 
@@ -3210,6 +3212,7 @@ int ApplicationLoop::CreateGPUGeometryRenderable(const Matrix4f& matrix, int geo
 	int geomRenderableIndex = -1;
 	if (globalGeometryRenderableCount == globalGeometryRenderableCountMax)
 	{
+		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Too many geometry renderables created"));
 		return geomRenderableIndex;
 	}
 

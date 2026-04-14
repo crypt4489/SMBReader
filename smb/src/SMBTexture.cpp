@@ -16,7 +16,7 @@ SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk)
 
 	OSSeekFile(fileHandle, offset, BEGIN);
 
-	OSReadFile(fileHandle, 4 * 4, reinterpret_cast<char*>(this));
+	OSReadFile(fileHandle, 4 * 4, reinterpret_cast<char*>(&this->type));
 
 	fileOffset = chunk.contigOffset + smb.fileOffset;
 
@@ -32,7 +32,6 @@ SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk)
 
 		switch (type)
 		{
-			//	std::cerr << "X8L8U8V8 format is not exportable\n";
 		case SMBImageFormat::SMB_DXT1:
 			size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			break;
@@ -44,8 +43,7 @@ SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk)
 			size = writeWidth * writeHeight * 4;
 			break;
 		default:
-			std::cerr << type << "\n";
-
+			//std::cerr << type << "\n";
 			return;
 		}
 

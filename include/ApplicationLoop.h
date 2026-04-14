@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <format>
 #include <functional>
@@ -53,7 +54,7 @@ public:
 
 	void LoadSMBFile(SMBFile& file);
 
-	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file);
+	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file, int* textureHandles, int textureBase);
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 

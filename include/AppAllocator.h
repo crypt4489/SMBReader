@@ -20,13 +20,11 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 
 		desired = out + stride;
 
-		if (wrapAroundSize && out >= wrapAroundSize)
+		if (wrapAroundSize && desired >= wrapAroundSize)
 		{
 			out = 0;
 			desired = stride;
 		}
-
-
 	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
 		std::memory_order_relaxed));
 
@@ -52,14 +50,35 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 	return out;
 }
 
-
-struct RingAllocator
+struct Allocator
 {
 	void* dataHead;
 	int dataSize;
 	std::atomic<int> dataAllocator;
-	constexpr RingAllocator(void* _dataHead, int _size) :
-		dataSize(_size), dataAllocator(0), dataHead(_dataHead)
+
+	Allocator(void* _dataHead, int _size)
+	{
+		dataSize = _size;
+		dataAllocator = 0;
+		dataHead = _dataHead;
+	}
+
+	virtual void* Allocate(int _allocSize, int alignment) = 0;
+	virtual void* Allocate(int _allocSize) = 0;
+	virtual void Reset() = 0;
+	virtual void* Head() = 0;
+	virtual void* CAllocate(int _allocSize, int alignment) = 0;
+	virtual void* CAllocate(int _allocSize) = 0;
+
+	virtual StringView* AllocateFromNullString(const char* name) = 0;
+	virtual StringView AllocateFromNullStringCopy(const char* name) = 0;
+
+};
+
+struct RingAllocator : public Allocator
+{
+	RingAllocator(void* _dataHead, int _size) :
+		Allocator(_dataHead, _size)
 	{
 
 	}
@@ -75,15 +94,12 @@ struct RingAllocator
 };
 
 
-struct SlabAllocator
+struct SlabAllocator : public Allocator
 {
-	void* dataHead;
-	int dataSize;
-	std::atomic<int> dataAllocator;
-	constexpr SlabAllocator(void* _dataHead, int _size) :
-		dataSize(_size), dataAllocator(0), dataHead(_dataHead)
+	SlabAllocator(void* _dataHead, int _size) 
+		:
+		Allocator(_dataHead, _size)
 	{
-
 	}
 
 	void* Allocate(int _allocSize, int alignment);

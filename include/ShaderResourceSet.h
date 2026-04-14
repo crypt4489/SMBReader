@@ -335,7 +335,7 @@ struct ShaderResourceSetXMLTag : ShaderXMLTag
 static constexpr unsigned long
 hash(const char* str);
 
-ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount);
+ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount);
 
 static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
 
@@ -350,7 +350,7 @@ static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, 
 
 static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
 
-static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, SlabAllocator* shaderAllocator);
+static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator);
 
 static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset);
 

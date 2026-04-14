@@ -1,7 +1,4 @@
 #pragma once
-#include <cstdint>
-#include <fstream>
-#include <vector>
 
 #include "DXTCompression.h"
 #include "SMBFile.h"
@@ -26,28 +23,29 @@ inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
 		os << "R8G8B8A8UNORM";
 		break;
 	default:
-		std::cerr << "Unsupported/Unknown texture type";
+		os << "Unsupported/Unknown texture type";
 		break;
 	}
 
 	return os;
 }
 
+#define MAX_MIPS_LEVELS 10
+
 struct SMBTexture
 {
 public:
-	
+	size_t fileOffset;
+	StringView name;
+	char* data;
 	SMBImageFormat type;
 	uint32_t width;
 	uint32_t height;
 	uint32_t miplevels;
 	uint32_t cumulativeSize;
-	uint32_t imageSizes[10];
-	char* data;
+	uint32_t imageSizes[MAX_MIPS_LEVELS];
 	uint32_t id;
-	StringView name;
-	size_t fileOffset;
-
+	
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
 	~SMBTexture()
 	{
@@ -68,7 +66,7 @@ public:
 		this->id = other.id;
 		this->cumulativeSize = other.cumulativeSize;
 		this->fileOffset = other.fileOffset;
-		this->name = std::move(other.name);
+		this->name = other.name;
 		other.data = nullptr;
 		
 	};

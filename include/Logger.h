@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OSFile.h"
+#include "AppTypes.h"
 #include <cstdint>
 
 enum LogMessageType
@@ -35,6 +36,8 @@ struct Logger
 	Logger(char* _buffer, size_t _bufferSize);
 
 	void AddLogMessage(LogMessageType type, const char* format, int charCount);
+
+	void AddLogMessage(LogMessageType type, const StringView& stringView);
 
 	int ProcessMessage();
 

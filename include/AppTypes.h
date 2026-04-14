@@ -75,6 +75,7 @@ enum class ImageLayout
 	PRESENT = 5,
 	DEPTHATTACHMENT = 6,
 	STENCILATTACHMENT = 7,
+	GENERAL = 8
 };
 
 enum class ImageUsage

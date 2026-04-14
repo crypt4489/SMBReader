@@ -1,5 +1,6 @@
 #include "ApplicationLoop.h"
 #include "ProgramArgs.h"
+#include <iostream>
 int main(int argc, char **argv)
 {
 	try 

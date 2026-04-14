@@ -1,8 +1,6 @@
 #include "Exporter.h"
 
-#include <cstdint>
-#include <format>
-#include <fstream>
+#include <iostream>
 #include "TextureIO.h"
 #include "FileManager.h"
 #include "DXTCompression.h"
@@ -36,7 +34,7 @@
 
 
 
-void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory)
+void ExportChunksFromFile(SMBFile& smb, Allocator* inputScratchMemory)
 {
 	auto& chunk = smb.chunks;
 	for (size_t j = 0; j<smb.numResources; j++)
@@ -59,7 +57,7 @@ void ExportChunksFromFile(SMBFile& smb, SlabAllocator* inputScratchMemory)
 	}
 }
 
-void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, SlabAllocator* inputScratchMemory)
+void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratchMemory)
 {
 
 	StringView imageName{};

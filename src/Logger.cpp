@@ -41,6 +41,27 @@ void Logger::AddLogMessage(LogMessageType type, const char* format, int charCoun
 	outputMessage[charCount + 1] = '\0';
 }
 
+void Logger::AddLogMessage(LogMessageType type, const StringView& stringView)
+{
+	int internalCharCount = stringView.charCount + 2;
+	int align = alignof(LogMessage);
+	int messageSize = sizeof(LogMessage) + ((internalCharCount + align - 1) & ~(align - 1));
+
+
+	LogMessage* message = (LogMessage*)Allocate(messageSize, 1);
+
+	message->allocSize = messageSize;
+	message->charCount = internalCharCount;
+	message->logType = type;
+
+	char* outputMessage = message->GetString();
+
+	memcpy(outputMessage, stringView.stringData, stringView.charCount);
+
+	outputMessage[stringView.charCount] = '\n';
+	outputMessage[stringView.charCount + 1] = '\0';
+}
+
 int Logger::ProcessMessage()
 {
 	uint64_t currentHead = head;

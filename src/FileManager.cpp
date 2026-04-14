@@ -42,7 +42,7 @@ void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outV
 	}
 	else
 	{
-		std::cerr << "Couldn't find the filename in " << nameView->stringData << "\n";
+		//std::cerr << "Couldn't find the filename in " << nameView->stringData << "\n";
 	}
 
 	outView->charCount = returnName.size();

@@ -1,58 +1,55 @@
 #include "SMBFile.h"
-
 #include "VertexTypes.h"
 
+//constexpr float dx = 3.051851e-05f;
+//constexpr float ax = 0.0009770395f;
+//constexpr float bx = 0.0019550342f;
 
-void SMBGeoChunk::Create(int _numRenderables, int _numMaterials)
+void SMBGeoChunk::Create(int _numRenderables, int _numMaterials, Allocator* inputDataAllocator)
 {
 	memset(this, 0, sizeof(SMBGeoChunk));
+	
 	numRenderables = _numRenderables;
+
 	int chunkSize = _numRenderables * 9 * sizeof(int);
+
 	chunkSize += (sizeof(int) * _numMaterials);
-	chunkSize += (sizeof(Vector4f) * +numRenderables);
+	chunkSize += (sizeof(Vector4f) * _numRenderables);
 
-	int* chunkPtr = (int*)malloc(chunkSize);
-	int* cP = chunkPtr;
+	int* chunkPtr = (int*)inputDataAllocator->Allocate(chunkSize);
 
-	if (chunkPtr)
-	{
+	renderablesTypes = chunkPtr;
+	chunkPtr += (_numRenderables);
+	vertexTypes = (SMBVertexTypes*)chunkPtr;
+	chunkPtr += (_numRenderables);
+	indicesCount = chunkPtr;
+	chunkPtr += (_numRenderables);
+	indexOffsetInArchive = chunkPtr;
+	chunkPtr += (_numRenderables);
+	verticesCount = chunkPtr;
+	chunkPtr += (_numRenderables);
+	vertexOffsetInArchive = chunkPtr;
+	chunkPtr += (_numRenderables);
+	primitiveTypes = chunkPtr;
+	chunkPtr += (_numRenderables);
+	materialsCount = chunkPtr;
+	chunkPtr += (_numRenderables);
+	materialsId = chunkPtr;
+	chunkPtr += (_numMaterials);
+	materialStart = chunkPtr;
+	chunkPtr += (_numRenderables);
+	spheres = (Sphere*)chunkPtr;
 
-		renderablesTypes = chunkPtr;
-		chunkPtr += (_numRenderables);
-		vertexTypes = (SMBVertexTypes*)chunkPtr;
-		chunkPtr += (_numRenderables);
-		indicesCount = chunkPtr;
-		chunkPtr += (_numRenderables);
-		indexOffsetInArchive = chunkPtr;
-		chunkPtr += (_numRenderables);
-		verticesCount = chunkPtr;
-		chunkPtr += (_numRenderables);
-		vertexOffsetInArchive = chunkPtr;
-		chunkPtr += (_numRenderables);
-		primitiveTypes = chunkPtr;
-		chunkPtr += (_numRenderables);
-		materialsCount = chunkPtr;
-		chunkPtr += (_numRenderables);
-		materialsId = chunkPtr;
-		chunkPtr += (_numMaterials);
-		materialStart = chunkPtr;
-		chunkPtr += (_numRenderables);
-		spheres = (Sphere*)chunkPtr;
-
-		memset(&axialBox, 0, sizeof(AxisBox));
-		memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
-		memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
-	}
-
-
+	memset(&axialBox, 0, sizeof(AxisBox));
+	memset(indexOffsetInArchive, 0xFF, sizeof(int) * _numRenderables);
+	memset(indicesCount, 0xFF, sizeof(int) * _numRenderables);
 }
 
 SMBGeoChunk::~SMBGeoChunk()
 {
-	free(renderablesTypes);
 }
 
-SMBFile::SMBFile(StringView file, SlabAllocator* inputDataAllocator, Logger* scratch) 
+SMBFile::SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch) 
 {
 	LoadFile(file, inputDataAllocator, scratch);
 }
@@ -62,7 +59,7 @@ SMBFile::~SMBFile()
 	OSCloseFile(&fileHandle);
 }
 
-void SMBFile::LoadFile(StringView name, SlabAllocator* inputDataAllocator, Logger* scratch)
+void SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch)
 {
 	OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
 
@@ -71,7 +68,7 @@ void SMBFile::LoadFile(StringView name, SlabAllocator* inputDataAllocator, Logge
 	return;
 }
 
-int SMBFile::ReadHeader(SlabAllocator* inputDataAllocator, Logger* scratch)
+int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
 {
 	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic));
 
@@ -88,7 +85,7 @@ int SMBFile::ReadHeader(SlabAllocator* inputDataAllocator, Logger* scratch)
 	return 0;
 }
 
-int SMBFile::ReadChunk(SMBChunk& chunk, SlabAllocator* inputDataAllocator, Logger* scratch)
+int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* scratch)
 {
 	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic));
 
@@ -111,7 +108,7 @@ int SMBFile::ReadChunk(SMBChunk& chunk, SlabAllocator* inputDataAllocator, Logge
 	return 0;
 }
 
-int SMBFile::ProcessFile(SlabAllocator* inputDataAllocator, Logger* scratch)
+int SMBFile::ProcessFile(Allocator* inputDataAllocator, Logger* scratch)
 {
 	if (ReadHeader(inputDataAllocator, scratch) < 0)
 	{
@@ -131,7 +128,10 @@ int SMBFile::ProcessFile(SlabAllocator* inputDataAllocator, Logger* scratch)
 	return 0;
 }
 
-void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int contiguousOffset, int systemOffset)
+#define MAX_POSSIBLE_RENDERABLES 100
+#define MAX_MATERIALS 15
+
+int ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int contiguousOffset, int systemOffset, Logger* outputLogger, Allocator* inputAllocator)
 {
 	char* iter = data;
 
@@ -153,21 +153,29 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 		axialBoxOffset = 44;
 		geometryTypeDefSize = 80;
 	}
+	else
+	{
+		outputLogger->AddLogMessage(LOGERROR, inputAllocator->AllocateFromNullStringCopy("Unhandled geometry type"));
+		return -1;
+	}
 
 	int numRenderables = 0;
 
 	memcpy(&numRenderables, iter + numRenderablesOffset, 4);
 
-	if (numRenderables <= 0 || numRenderables > 15)
+	if (numRenderables <= 0 || numRenderables > MAX_POSSIBLE_RENDERABLES)
 	{
-		return;
+		outputLogger->AddLogMessage(LOGERROR, inputAllocator->AllocateFromNullStringCopy("Bad number of renderables read from file"));
+		return -1;
 	}
 
-	chunk->Create(numRenderables, 15);
+	chunk->Create(numRenderables, MAX_MATERIALS, inputAllocator);
 
 	char* axialBox = iter + axialBoxOffset;
+	
 	memcpy(&chunk->axialBox.min, axialBox, sizeof(float) * 3);
 	memcpy(&chunk->axialBox.max, axialBox + sizeof(float) * 3, sizeof(float) * 3);
+
 	chunk->axialBox.min.w = 1.0f;
 	chunk->axialBox.max.w = 1.0f;
 
@@ -179,16 +187,16 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 
 	int* lMaterialId = chunk->materialsId;
 
+	int materialCount = 0;
 
-	while (true)
+	int maxGeometryDepth = 100;
+
+	while (maxGeometryDepth--)
 	{
 		int header = *((int*)material);
 
-
-
 		if (header != 737893)
 		{
-
 			break;
 		}
 
@@ -232,10 +240,9 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 			renderableIndex++;
 		}
 		else {
+			int materialType = *((int*)(material + 4));
 
-			int type = *((int*)(material + 4));
-
-			if (type == -1373022986)
+			if (materialType == -1373022986)
 			{
 				*lMaterialCount = 2;
 			}
@@ -243,27 +250,25 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 				*lMaterialCount = 1;
 			}
 
-
-
+			materialCount += *lMaterialCount;
 
 			material += MaterialDefSize;
 
-			int copy = *((int*)material);
+			int skipCounter = *((int*)material);
 
+			int skipMax = 100;
 
-			while (copy != 0)
+			while (skipCounter != 0 && skipMax > 0)
 			{
-				material += (copy + 4);
-				copy = *((int*)material);
+				material += (skipCounter + 4);
+				skipCounter = *((int*)material);
 			}
 
+			int currMaterialCount = *lMaterialCount;
 
-
-			int iter = *lMaterialCount;
-
-			while (iter--)
+			while (currMaterialCount--)
 			{
-				if (copy == 737893) break;
+				if (skipCounter == 737893) break;
 
 				*lMaterialId = *((int*)(material + 4));
 
@@ -271,10 +276,9 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 
 				material += 8;
 
-				copy = *((int*)material);
+				skipCounter = *((int*)material);
 
-				material += (copy + 4);
-
+				material += (skipCounter + 4);
 			}
 
 			lMaterialCount++;
@@ -287,42 +291,21 @@ void ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int 
 				int numberMinMaxes = *((int*)material);
 
 				material += ((198 * numberMinMaxes) + 8);
-
 			}
 
-			copy = *((int*)material);
+			skipCounter = *((int*)material);
 
-			if (-1866346045 == type)
+			if (-1866346045 == materialType)
 			{
 				char* start = material;
 				while (*material != 0x65 && (material != start + 20)) material++;
 			}
-
 		}
 	}
-}
 
+	chunk->numMaterials = materialCount;
 
-static Vector2f converttexcoords16(int16_t* huh)
-{
-	float x = huh[0] * dx * 16.0f;
-	float y = huh[1] * dx * 16.0f;
-
-
-	return Vector2f(x, y);
-}
-
-static Vector3f pack6decomp(int16_t* hello, AxisBox& box)
-{
-	float x = ((hello[0] * dx) + 1.0f) * 0.5f;
-	float y = (((hello[1] * dx)) + 1.0f) * 0.5f;
-	float z = (((hello[2] * dx)) + 1.0f) * 0.5f;
-
-	x = ((box.max.x - box.min.x) * x) + box.min.x;
-	y = ((box.max.y - box.min.y) * y) + box.min.y;
-	z = ((box.max.z - box.min.z) * z) + box.min.z;
-
-	return Vector3f(x, y, z);
+	return 0;
 }
 
 int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex)
@@ -352,7 +335,7 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 	return sizeof(uint16_t) * geoDef->indicesCount[renderableIndex];
 }
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, SlabAllocator* tempMemoryPool)
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool)
 {
 	OSFileHandle* handle = &file.fileHandle;
 
@@ -361,7 +344,6 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 	SMBVertexTypes type = geoDefinition->vertexTypes[renderableIndex];
 
 	int vertexSize = geoDefinition->verticesCount[renderableIndex];
-
 
 	switch (type)
 	{
@@ -414,7 +396,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
 				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-				vertex->TEXTURE = converttexcoords16(t);
+				vertex->TEXTURE = DecompressTexCoords(Vector2s(t[0], t[1]));
 
 
 				int16_t s[3];
@@ -423,7 +405,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
 				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+				Vector3f pos = DecompressPosition(Vector3s(s[0], s[1], s[2]), geoDefinition->axialBox);
 
 				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
@@ -450,12 +432,12 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
 				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-				vertex->TEXTURE = converttexcoords16(t);
+				vertex->TEXTURE = DecompressTexCoords(Vector2s(t[0], t[1]));
 
 				t[0] = (((int16_t)g[9] & 0xff) << 8) | g[8];
 				t[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
 
-				vertex->TEXTURE2 = converttexcoords16(t);
+				vertex->TEXTURE2 = DecompressTexCoords(Vector2s(t[0], t[1]));
 
 				int16_t s[3];
 
@@ -463,7 +445,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[15] & 0xff) << 8) | g[14];
 				s[2] = (((int16_t)g[17] & 0xff) << 8) | g[16];
 
-				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+				Vector3f pos = DecompressPosition(Vector3s(s[0], s[1], s[2]), geoDefinition->axialBox);
 
 				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
@@ -487,7 +469,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				t[0] = (((int16_t)g[5] & 0xff) << 8) | g[4];
 				t[1] = (((int16_t)g[7] & 0xff) << 8) | g[6];
 
-				vertex->TEXTURE = converttexcoords16(t);
+				vertex->TEXTURE = DecompressTexCoords(Vector2s(t[0], t[1]));
 
 				int16_t s[3];
 
@@ -495,7 +477,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 				s[1] = (((int16_t)g[11] & 0xff) << 8) | g[10];
 				s[2] = (((int16_t)g[13] & 0xff) << 8) | g[12];
 
-				Vector3f pos = pack6decomp(s, geoDefinition->axialBox);
+				Vector3f pos = DecompressPosition(Vector3s(s[0], s[1], s[2]), geoDefinition->axialBox);
 
 				vertex->POSITION = { pos.x, pos.y, pos.z, 1.0f };
 
@@ -514,7 +496,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 {
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
 	
-	int iCount = geoDefinition->indicesCount[renderableIndex];
+	int iCount = std::min(geoDefinition->indicesCount[renderableIndex], 65536);
 
 	OSFileHandle* handle = &file.fileHandle;
 
@@ -524,18 +506,16 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 	if (renderableType == PBIVRENDERABLE)
 	{
-
 		int iter = 0;
 
 		while (iCount > 0) {
 
+			uint32_t byteInput;
 
-			uint32_t god;
+			OSReadFile(handle, 4, (char*)&byteInput);
 
-			OSReadFile(handle, 4, (char*)&god);
-
-			uint32_t stride = (god >> 0x12) & 0x7ff;
-			uint32_t indexType = (god & 0x3ffff);
+			uint32_t stride = (byteInput >> 0x12) & 0x7ff;
+			uint32_t indexType = (byteInput & 0x3ffff);
 
 			if (indexType == 0x1800)
 			{
@@ -545,7 +525,6 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 
 				iCount -= (stride * 2);
 			}
-
 			else if (indexType == 0x1808)
 			{
 				OSReadFile(handle, 2, (char*)indices);
@@ -555,14 +534,105 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& fi
 				
 			}
 		}
-
 	} 
 	else if (renderableType == IVRENDERABLE)
 	{
 		OSReadFile(handle, iCount * 4, (char*)indices);
 	}
+}
 
-	
+pospack6_cnorm_c16tex1_bone2_type_h::pospack6_cnorm_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector3f& _n, const Vector2i& _b, const Vector2f& _w) :
+	POSITION(_p), TEXTURE(_t), NORMAL(_n), BONES(_b), WEIGHTS(_w)
+{
+}
 
-	
+
+bool pospack6_cnorm_c16tex1_bone2_type_h::operator==(const pospack6_cnorm_c16tex1_bone2_type_h& v)
+{
+	return (v.POSITION == this->POSITION) &&
+		(v.TEXTURE == this->TEXTURE) &&
+		(v.NORMAL == this->NORMAL) &&
+		(v.WEIGHTS == this->WEIGHTS) &&
+		(v.BONES == this->BONES);
+}
+
+pospack6_c16tex1_bone2_type_h::pospack6_c16tex1_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2i& _b, const Vector2f& _w) :
+	POSITION(_p), TEXTURE(_t), BONES(_b), WEIGHTS(_w)
+{
+}
+
+
+bool pospack6_c16tex1_bone2_type_h::operator==(const pospack6_c16tex1_bone2_type_h& v)
+{
+	return (v.POSITION == this->POSITION) &&
+		(v.TEXTURE == this->TEXTURE) &&
+		(v.WEIGHTS == this->WEIGHTS) &&
+		(v.BONES == this->BONES);
+}
+
+pospack6_c16tex2_bone2_type_h::pospack6_c16tex2_bone2_type_h(const Vector4f& _p, const Vector2f& _t, const Vector2f& _t2, const Vector2i& _b, const Vector2f& _w) :
+	POSITION(_p), TEXTURE(_t), TEXTURE2(_t2), BONES(_b), WEIGHTS(_w)
+{
+}
+
+
+bool pospack6_c16tex2_bone2_type_h::operator==(const pospack6_c16tex2_bone2_type_h& v)
+{
+	return (v.POSITION == this->POSITION) &&
+		(v.TEXTURE == this->TEXTURE) &&
+		(v.TEXTURE2 == this->TEXTURE2) &&
+		(v.WEIGHTS == this->WEIGHTS) &&
+		(v.BONES == this->BONES);
+}
+
+cpospack6_cnorm_c16tex1_bone2_type_h::cpospack6_cnorm_c16tex1_bone2_type_h(
+	const Vector3s& _p,
+	const Vector2s& _t,
+	const int _n,
+	const Vector2uc& _b,
+	const Vector2uc& _w)
+	: POSITION(_p), TEXTURE(_t), NORMAL(_n), BONES(_b), WEIGHTS(_w)
+{
+}
+
+bool cpospack6_cnorm_c16tex1_bone2_type_h::operator==(const cpospack6_cnorm_c16tex1_bone2_type_h& v) const
+{
+	return POSITION == v.POSITION &&
+		TEXTURE == v.TEXTURE &&
+		NORMAL == v.NORMAL &&
+		WEIGHTS == v.WEIGHTS &&
+		BONES == v.BONES;
+}
+
+
+cpospack6_c16tex1_bone2_type_h::cpospack6_c16tex1_bone2_type_h(
+	const Vector3s& _p,
+	const Vector2s& _t,
+	const Vector2uc& _b,
+	const Vector2uc& _w)
+	: POSITION(_p), TEXTURE(_t), BONES(_b), WEIGHTS(_w)
+{
+}
+
+bool cpospack6_c16tex1_bone2_type_h::operator==(const cpospack6_c16tex1_bone2_type_h& v) const
+{
+	return POSITION == v.POSITION &&
+		TEXTURE == v.TEXTURE &&
+		WEIGHTS == v.WEIGHTS &&
+		BONES == v.BONES;
+}
+
+cpospack6_c16tex2_bone2_type_h::cpospack6_c16tex2_bone2_type_h(const Vector3s& _p, const Vector2s& _t, const Vector2s& _t2, const Vector2uc& _b, const Vector2uc& _w) :
+	POSITION(_p), TEXTURE(_t), TEXTURE2(_t2), BONES(_b), WEIGHTS(_w)
+{
+}
+
+
+bool cpospack6_c16tex2_bone2_type_h::operator==(const cpospack6_c16tex2_bone2_type_h& v)
+{
+	return (v.POSITION == this->POSITION) &&
+		(v.TEXTURE == this->TEXTURE) &&
+		(v.TEXTURE2 == this->TEXTURE2) &&
+		(v.WEIGHTS == this->WEIGHTS) &&
+		(v.BONES == this->BONES);
 }

@@ -43,7 +43,7 @@ hash(const char* str)
 }
 
 
-ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, SlabAllocator* graphAllocator, SlabAllocator* shaderAllocator, int* shaderDetailCount)
+ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount)
 {
 	uintptr_t* TreeNodes = (uintptr_t*)readerMemory->Allocate(sizeof(uintptr_t) * 50);
 	
@@ -514,7 +514,7 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 
 #define MAX_SHADER_NAME 50
 
-int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, SlabAllocator* shaderAllocator)
+int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator)
 {
 	unsigned long hashes[6];
 	char nameScratch[MAX_SHADER_NAME];
