@@ -4,11 +4,104 @@
 //constexpr float dx = 3.051851e-05f;
 //constexpr float ax = 0.0009770395f;
 //constexpr float bx = 0.0019550342f;
+#define MAX_STRING_SIZE 250
+
+SMBFile::SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch) 
+{
+	LoadFile(file, inputDataAllocator, scratch);
+}
+
+SMBFile::~SMBFile()
+{
+	OSCloseFile(&fileHandle);
+}
+
+int SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch)
+{
+	OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
+
+	int processReturn = ProcessFile(inputDataAllocator, scratch);
+
+	return processReturn;
+}
+
+int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
+{
+	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic));
+
+	int stringsize = 0;
+	OSReadFile(&fileHandle, 4, reinterpret_cast<char*>(&stringsize));
+
+	if (stringsize < 0 || stringsize >= MAX_STRING_SIZE)
+	{
+		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("SMB Broken String Size Count"));
+		return -1;
+	}
+
+	name.stringData = (char*)inputDataAllocator->Allocate(stringsize);
+	name.charCount = stringsize;
+
+	OSReadFile(&fileHandle, stringsize, name.stringData);
+
+	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset));
+
+	return 0;
+}
+
+int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* scratch)
+{
+	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic));
+
+	if (chunk.chunkId != chunk.chunkIdCopy)
+	{
+		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("Chunk ID does not match on both for chunk header"));
+		return -1;
+	}
+
+	if ((chunk.stringsize <= 0 || chunk.stringsize >= MAX_STRING_SIZE) && chunk.chunkType != Joints)
+	{
+		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("SMB Broken String Size Count"));
+		return -1;
+	}
+
+	chunk.fileName.charCount = chunk.stringsize;
+	chunk.fileName.stringData = (char*)inputDataAllocator->Allocate(chunk.stringsize);
+	OSReadFile(&fileHandle, chunk.stringsize, chunk.fileName.stringData);
+
+	chunk.offsetInHeader = fileHandle.filePointer;
+	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
+	chunk.headerSize = offset;
+	int next = chunk.offsetInHeader + offset;
+
+	OSSeekFile(&fileHandle, next, BEGIN);
+
+	return 0;
+}
+
+int SMBFile::ProcessFile(Allocator* inputDataAllocator, Logger* scratch)
+{
+	if (ReadHeader(inputDataAllocator, scratch))
+	{
+		return -1;
+	}
+
+	chunks = (SMBChunk*)inputDataAllocator->Allocate(sizeof(SMBChunk) * numResources);
+
+	for (uint32_t i = 0; i<numResources; i++)
+	{
+		if (ReadChunk(chunks[i], inputDataAllocator, scratch))
+		{
+			return -1;
+		}
+	}
+
+	return 0;
+}
 
 void SMBGeoChunk::Create(int _numRenderables, int _numMaterials, Allocator* inputDataAllocator)
 {
 	memset(this, 0, sizeof(SMBGeoChunk));
-	
+
 	numRenderables = _numRenderables;
 
 	int chunkSize = _numRenderables * 9 * sizeof(int);
@@ -47,85 +140,6 @@ void SMBGeoChunk::Create(int _numRenderables, int _numMaterials, Allocator* inpu
 
 SMBGeoChunk::~SMBGeoChunk()
 {
-}
-
-SMBFile::SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch) 
-{
-	LoadFile(file, inputDataAllocator, scratch);
-}
-
-SMBFile::~SMBFile()
-{
-	OSCloseFile(&fileHandle);
-}
-
-void SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch)
-{
-	OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
-
-	ProcessFile(inputDataAllocator, scratch);
-
-	return;
-}
-
-int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
-{
-	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic));
-
-	int stringsize = 0;
-	OSReadFile(&fileHandle, 4, reinterpret_cast<char*>(&stringsize));
-
-	name.stringData = (char*)inputDataAllocator->Allocate(stringsize);
-	name.charCount = stringsize;
-
-	OSReadFile(&fileHandle, stringsize, name.stringData);
-
-	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset));
-
-	return 0;
-}
-
-int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* scratch)
-{
-	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic));
-
-	chunk.fileName.charCount = chunk.stringsize;
-	chunk.fileName.stringData = (char*)inputDataAllocator->Allocate(chunk.stringsize);
-	OSReadFile(&fileHandle, chunk.stringsize, chunk.fileName.stringData);
-
-	chunk.offsetInHeader = fileHandle.filePointer;
-	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
-	chunk.headerSize = offset;
-	int next = chunk.offsetInHeader + offset;
-
-	OSSeekFile(&fileHandle, next, BEGIN);
-
-	if (chunk.chunkId != chunk.chunkIdCopy)
-	{
-		return -1;
-	}
-
-	return 0;
-}
-
-int SMBFile::ProcessFile(Allocator* inputDataAllocator, Logger* scratch)
-{
-	if (ReadHeader(inputDataAllocator, scratch) < 0)
-	{
-		return -1;
-	}
-
-	chunks = (SMBChunk*)inputDataAllocator->Allocate(sizeof(SMBChunk) * numResources);
-
-	for (uint32_t i = 0; i<numResources; i++)
-	{
-		if (ReadChunk(chunks[i], inputDataAllocator, scratch) < 0)
-		{
-			return -1;
-		}
-	}
-
-	return 0;
 }
 
 #define MAX_POSSIBLE_RENDERABLES 100

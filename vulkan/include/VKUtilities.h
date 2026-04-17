@@ -9,6 +9,9 @@ namespace VK {
 
 	namespace Utils {
 
+
+
+
 		struct SwapChainSupportDetails {
 				VkSurfaceFormatKHR* formats;
 				VkPresentModeKHR* presentModes;
@@ -16,6 +19,8 @@ namespace VK {
 				uint32_t presentModeCount;
 				VkSurfaceCapabilitiesKHR capabilities{};
 		};
+
+		VkDeviceSize GetRawImageSizeFromFormat(VkFormat format, uint32_t width, uint32_t height);
 
 		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace);
 

@@ -652,15 +652,16 @@ struct VKDevice
 	void ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
 
 	void UploadImageData(EntryHandle textureIndex,
-		char* imageData, size_t totalImageDataSize,
-		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+		char* imageData, 
+		size_t totalImageDataSize, 
+		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
 		int mipLevels, VkFormat format
 	);
 
 	void UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
-		uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
 		int mipLevels, VkFormat format, RecordingBufferObject* rbo
 	);

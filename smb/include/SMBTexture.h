@@ -30,7 +30,6 @@ inline std::ostream& operator<<(std::ostream& os, const SMBImageFormat format)
 	return os;
 }
 
-#define MAX_MIPS_LEVELS 10
 
 struct SMBTexture
 {
@@ -43,22 +42,18 @@ public:
 	uint32_t height;
 	uint32_t miplevels;
 	uint32_t cumulativeSize;
-	uint32_t imageSizes[MAX_MIPS_LEVELS];
 	uint32_t id;
 	
+	SMBTexture() = default;
+
 	SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, uint32_t _mips);
 	~SMBTexture()
 	{
 	
 	}
 
-	SMBTexture(SMBTexture&& other) {
+	SMBTexture(SMBTexture&& other) noexcept {
 		this->data = other.data;
-		
-		for (int i = 0; i < other.miplevels; i++)
-		{
-			this->imageSizes[i] = other.imageSizes[i];
-		}
 		this->height = other.height;
 		this->width = other.width;
 		this->miplevels = other.miplevels;
@@ -68,15 +63,10 @@ public:
 		this->fileOffset = other.fileOffset;
 		this->name = other.name;
 		other.data = nullptr;
-		
 	};
 
 	SMBTexture(SMBTexture& other) {
 		this->data = other.data;
-		for (int i = 0; i < other.miplevels; i++)
-		{
-			this->imageSizes[i] = other.imageSizes[i];
-		}
 		this->height = other.height;
 		this->width = other.width;
 		this->miplevels = other.miplevels;
@@ -88,9 +78,9 @@ public:
 		other.data = nullptr;
 	};
 
-	SMBTexture(SMBFile& smb, const SMBChunk& chunk);
+	int CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk);
 
-	void ReadTextureData(SMBFile& smb);
+	int ReadTextureData(SMBFile& smb);
 
 	friend std::ostream& operator<<(std::ostream& os, SMBTexture& tex)
 	{

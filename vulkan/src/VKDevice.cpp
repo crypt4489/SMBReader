@@ -3249,8 +3249,7 @@ void VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle sta
 }
 
 void VKDevice::UploadImageData(EntryHandle textureIndex, 
-	char* imageData, size_t totalImageDataSize, 
-	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex, 
+	char* imageData, size_t totalImageDataSize,  EntryHandle stagingBufferIndex, 
 	int width, int height, int layers,
 	int mipLevels, VkFormat format
 )
@@ -3299,21 +3298,15 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	VkDeviceSize offset = 0UL;
 
-	if (mipLevels > 1)
-
+	for (auto i = 0U; i < mipLevels; i++) 
 	{
-		for (auto i = 0U; i < mipLevels; i++) {
+		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
 
-			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
+		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
 
-			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
-		}
+		offset += individualSize;
 	}
-	else
-	{
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 }, 0, layers);
-	}
-
+	
 	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
@@ -3326,7 +3319,7 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 void VKDevice::UploadImageData(EntryHandle textureIndex,
 	char* imageData, size_t totalImageDataSize,
-	uint32_t* indivdualImageSizes, EntryHandle stagingBufferIndex,
+	EntryHandle stagingBufferIndex,
 	int width, int height,
 	int mipLevels, int layers, VkFormat format, RecordingBufferObject* rbo
 )
@@ -3363,21 +3356,15 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	VkDeviceSize offset = offsetAlloc;
 
-	if (mipLevels > 1)
+	for (auto i = 0U; i < mipLevels; i++) {
 
-	{
-		for (auto i = 0U; i < mipLevels; i++) {
+		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
 
-			VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
+		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
 
-			offset += static_cast<VkDeviceSize>(indivdualImageSizes[i]);
-		}
+		offset += individualSize;
 	}
-	else
-	{
-		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width, height, 0, offset, { 0, 0, 0 }, 0, layers);
-	}
-
+	
 	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, layers);
 }
 

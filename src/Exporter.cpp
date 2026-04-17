@@ -66,13 +66,17 @@ void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratc
 
 	auto pathToTextures = FileManager::SetupDirectory(&imageName);
 
-	SMBTexture tex(smb, chunk);
+	SMBTexture tex;
+	
+	tex.CreateTextureDetails(smb, chunk);
 
 	tex.data = (char*)inputScratchMemory->Allocate(tex.cumulativeSize);
 
 	tex.ReadTextureData(smb);
 
 	auto ptr = tex.data;
+
+	size_t individualSize = 0;
 
 	for (uint32_t i = 0; i < tex.miplevels; i++)
 	{
@@ -101,15 +105,18 @@ void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratc
 			std::cerr << "X8L8U8V8 format is not exportable\n";
 			return;
 		case SMBImageFormat::SMB_DXT1:
+			individualSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
 			DXTCompression::BlockDecompressImageDXT1(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned long*)input);
 			TexUtils::BGRATexture(input, tex.height >> i, tex.width >> i, 4);
 			break;
 		case SMBImageFormat::SMB_DXT3:
+			individualSize = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
 			DXTCompression::BlockDecompressImageDXT3(writeWidth, writeHeight, (unsigned char*)ptr, (unsigned char*)input);
 			TexUtils::BGRATexture(input, tex.height >> i, tex.width >> i, 4);
 			break;
 		case SMBImageFormat::SMB_B8G8R8A8_UNORM:
-			std::memcpy(input, ptr, writeWidth * writeHeight * 4);
+			individualSize = writeWidth * writeHeight * 4;
+			std::memcpy(input, ptr, individualSize);
 			break;
 		default:
 			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
@@ -126,7 +133,7 @@ void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratc
 			offset -= bpr;
 		}
 
-		ptr += tex.imageSizes[i];
+		ptr += individualSize;
 
 		OSCloseFile(&handle);
 	}

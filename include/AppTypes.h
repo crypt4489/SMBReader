@@ -372,7 +372,6 @@ struct BufferMemoryTransferRegion
 struct TextureMemoryRegion
 {
 	void* data;
-	uint32_t* imageSizes;
 	size_t totalSize;
 	EntryHandle textureIndex;
 	int width;

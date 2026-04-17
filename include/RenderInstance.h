@@ -145,7 +145,7 @@ struct RenderInstance
 
 	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
 
-	void UpdateImageMemory(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
+	void UpdateImageMemory(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
 

@@ -5,8 +5,7 @@ SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, 
 	
 }
 
-SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk) 
-	: type(SMBImageFormat::SMB_IMAGEUNKNOWN), height(0), width(0), miplevels(0), cumulativeSize(0), data(nullptr)
+int SMBTexture::CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk)
 {
 	name = chunk.fileName;
 	id = chunk.chunkId;
@@ -44,10 +43,8 @@ SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk)
 			break;
 		default:
 			//std::cerr << type << "\n";
-			return;
+			return -1;
 		}
-
-		imageSizes[i] = static_cast<uint32_t>(size);
 
 		totalBlobSize += size;
 
@@ -56,9 +53,11 @@ SMBTexture::SMBTexture(SMBFile& smb, const SMBChunk& chunk)
 	}
 
 	cumulativeSize = totalBlobSize;
+
+	return 0;
 }
 
-void SMBTexture::ReadTextureData(SMBFile& smb)
+int SMBTexture::ReadTextureData(SMBFile& smb)
 {
 	char* readHead = data;
 
@@ -66,10 +65,37 @@ void SMBTexture::ReadTextureData(SMBFile& smb)
 
 	OSSeekFile(fileHandle, fileOffset, BEGIN);
 
+	int writeWidth = width;
+	int	writeHeight = height;
+
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-		OSReadFile(fileHandle, imageSizes[i], (char*)readHead);
+		size_t size = 0;
+		switch (type)
+		{
+		case SMBImageFormat::SMB_DXT1:
+			size = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
+			break;
+		case SMBImageFormat::SMB_DXT3:
+			size = DXTCompression::DXT3CompressedSize(writeWidth, writeHeight);
+			break;
+		case SMBImageFormat::SMB_B8G8R8A8_UNORM:
+		case SMBImageFormat::SMB_R8G8B8A8_UNORM:
+			size = writeWidth * writeHeight * 4;
+			break;
+		default:
+			//std::cerr << type << "\n";
+			return -1;
+		}
 
-		readHead += imageSizes[i];
+		writeWidth >>= 1;
+		writeHeight >>= 1;
+
+
+		OSReadFile(fileHandle, size, (char*)readHead);
+
+		readHead += size;
 	}
+
+	return 0;
 }

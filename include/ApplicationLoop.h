@@ -44,13 +44,13 @@ public:
 
 	void UpdateCameraMatrix();
 
-	void WriteCameraMatrix(uint32_t frame);
+	void WriteCameraMatrix();
 
 	bool MoveCamera(double fps);
 
 	void CreateTexturePools();
 
-	EntryHandle GetPoolIndexByFormat(ImageFormat format);
+	int GetPoolIndexByFormat(ImageFormat format);
 
 	void LoadSMBFile(SMBFile& file);
 
@@ -59,15 +59,6 @@ public:
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
 	void CreateCrateObject();
-
-	int CreateMeshHandle(
-		void* vertexData, void* indexData,
-		int vertexFlags, int vertexCount, int vertexStride,
-		int indexStride, int indexCount,
-		Sphere& sphere,
-		int vertexAlloc, int indexAlloc
-		
-	);
 
 	int CreateMaterial(
 		int flags,
@@ -98,7 +89,7 @@ public:
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
 	int AddMaterialToDeviceMemory(int count, int* ids);
-	int CreateRenderable(const Matrix4f& mat, int geomIndex, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
+	int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, const Matrix4f& mat, int geomIndex, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
 	void CreateCornerWall(float width, float height, float xDiv, float yDiv);
 
@@ -108,8 +99,8 @@ public:
 
 	void RecreateFrameGraphAttachments(uint32_t width, uint32_t height);
 
-	void CreateMeshHandle(
-		int meshIndex,
+	int CreateMeshHandle(
+		int meshCPUDataIndex, int meshGPUDataIndex,
 		void* vertexData, void* indexData,
 		int vertexFlags, int vertexCount, int vertexStride,
 		int indexStride, int indexCount,
@@ -117,14 +108,25 @@ public:
 		int vertexAlloc, int indexAlloc
 	);
 
-	int CreateGPUGeometryDetails(const AxisBox& minMaxBox);
-	int CreateGPUGeometryRenderable(const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
+	int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox);
+	int CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
+
+	int AllocateCPUGeometryDetails(int numberOfDetails);
+	int AllocateGPUGeometryDetails(int numberOfDetails);
+
+	int AllocateCPUMeshDetails(int numberOfDetails);
+	int AllocateGPUMeshDetails(int numberOfDetails);
+
+	int AllocateCPUMeshRenderable(int numberOfRenderables);
+	int AllocateGPUMeshRenderable(int numberOfRenderables);
+
+	int AllocateCPUGeometryInstances(int numberOfInstances);
+	int AllocateGPUGeometryInstances(int numberOfInstances);
 
 	ProgramArgs& args;
 	Semaphore queueSema;
 	std::queue<int> wordCounts;
 	bool running, cleaned;
-	WindowManager* mainWindow = nullptr;
 	
 	Camera c;
 

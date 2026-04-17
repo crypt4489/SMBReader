@@ -9,6 +9,58 @@ namespace VK {
 
 	namespace Utils {
 
+
+		VkDeviceSize GetRawImageSizeFromFormat(VkFormat format, uint32_t width, uint32_t height)
+		{
+			VkDeviceSize size = 0;
+			switch (format)
+			{
+			case VK_FORMAT_BC1_RGB_SRGB_BLOCK:
+			{
+				int ret = 0;
+				unsigned long blockCountX = (width + 3) / 4;
+				unsigned long blockCountY = (height + 3) / 4;
+				size = blockCountX * 8 * blockCountY;
+				break;
+			}
+			case VK_FORMAT_BC3_SRGB_BLOCK:
+			{
+				int ret = 0;
+				unsigned long blockCountX = (width + 3) / 4;
+				unsigned long blockCountY = (height + 3) / 4;
+				size = blockCountX * 16 * blockCountY;
+				break;
+			}
+			case VK_FORMAT_R8G8B8A8_SRGB:
+				size = width * height * 4;
+				break;
+			case VK_FORMAT_R8G8B8A8_UNORM:
+				size = width * height * 4;
+				break;
+			case VK_FORMAT_B8G8R8A8_UNORM:
+				size = width * height * 4;
+				break;
+			case VK_FORMAT_B8G8R8A8_SRGB:
+				size = width * height * 4;
+				break;
+			case VK_FORMAT_D24_UNORM_S8_UINT:
+				size = width * height * 4;
+				break;
+			case VK_FORMAT_D32_SFLOAT_S8_UINT:
+				size = width * height * 5;
+				break;
+			case VK_FORMAT_D32_SFLOAT:
+				size = width * height * 4;
+				break;
+			default:
+				break;
+			}
+
+			return size;
+
+		}
+
+
 		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace) {
 				SwapChainSupportDetails details;
 

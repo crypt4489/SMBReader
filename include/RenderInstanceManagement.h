@@ -58,9 +58,8 @@ struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
 	ImageFormat format;
 	void* data;
 	EntryHandle textureIndex;
-	uint32_t* imageSizes;
 	size_t totalSize;
-	int pad[2];
+	int pad[4];
 
 	RenderDriverUpdateCommandHeader* GetNext()
 	{
@@ -338,7 +337,7 @@ struct ImageMemoryUpdateManager
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+	int Create(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 	{
 		int link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
@@ -354,7 +353,6 @@ struct ImageMemoryUpdateManager
 		regionLinks[regionAlloc] = -1;
 
 		region->data = data;
-		region->imageSizes = imageSizes;
 		region->height = height;
 		region->width = width;
 		region->totalSize = totalSize;
@@ -399,7 +397,6 @@ struct ImageMemoryUpdateManager
 		TextureMemoryRegion* src = &transferRegions[regionIndex];
 
 		outputRegion->data = src->data;
-		outputRegion->imageSizes = src->imageSizes;
 		outputRegion->totalSize = src->totalSize;
 		outputRegion->textureIndex = src->textureIndex;
 		outputRegion->width = src->width;
@@ -414,7 +411,6 @@ struct ImageMemoryUpdateManager
 
 
 		src->data = nullptr;
-		src->imageSizes = nullptr;
 		src->totalSize = 0;
 		src->textureIndex = {};
 		src->width = 0;

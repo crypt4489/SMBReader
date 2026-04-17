@@ -146,6 +146,10 @@ struct ArrayAllocator
 
 	std::pair<int, T_Type*> Allocate() requires ClassType<T_Type>
 	{
+		if (allocatorPtr == T_Count)
+		{
+			return { -1, nullptr };
+		}
 		int retI = UpdateAtomic(allocatorPtr, 1, 0);
 		T_Type* ret = &dataArray[retI];
 		return { retI, ret };
@@ -154,6 +158,10 @@ struct ArrayAllocator
 	
 	int Allocate(T_Type insert) requires ValueType<T_Type>
 	{
+		if (allocatorPtr == T_Count)
+		{
+			return { -1 };
+		}
 		int ret = UpdateAtomic(allocatorPtr, 1, 0);
 		dataArray[ret] = insert;
 		return ret;
@@ -161,6 +169,10 @@ struct ArrayAllocator
 
 	int AllocateN(int num)
 	{
+		if (allocatorPtr + num >= T_Count)
+		{
+			return { -1 };
+		}
 		int ret = UpdateAtomic(allocatorPtr, num, 0);
 		return ret;
 	}

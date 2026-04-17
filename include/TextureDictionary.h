@@ -36,7 +36,7 @@ struct TextureDictionary
 	std::array<EntryHandle, 50> textureHandles{};
 
 	std::array<EntryHandle, 10> deviceImageBuffers{};
-	std::array<EntryHandle, 10> texturePoolHandle{};
+	std::array<int, 10> texturePoolHandle{};
 	std::array<ImageFormat, 10> texturePoolsFormat{};
 	std::array<size_t, 10> texturePoolsSize{};
 	std::array<size_t, 10> texturePoolsAllocatedSize{};

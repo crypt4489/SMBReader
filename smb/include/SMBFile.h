@@ -237,13 +237,13 @@ public:
 	uint32_t endcode;
 	OSFileHandle fileHandle;
 
-	SMBFile() = delete;
+	SMBFile() = default;
 
 	SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch);
 
 	~SMBFile();
 
-	void LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch);
+	int LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
 	{

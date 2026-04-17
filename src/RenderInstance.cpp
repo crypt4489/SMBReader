@@ -7,7 +7,6 @@
 #include <bit>
 #include <cassert>
 #include <iostream>
-#include <vector>
 #include <limits>
 
 #include "FileManager.h"
@@ -1928,7 +1927,6 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 		dev->UploadImageData(handle,
 			(char*)region.data,
 			region.totalSize,
-			region.imageSizes,
 			stagingBuffers[currentFrame],
 			region.width,
 			region.height,
@@ -3518,16 +3516,8 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 	rducm->updateType = DriverUpdateType::MEMORYUPDATE;
 }
 
-void RenderInstance::UpdateImageMemory(void* data, EntryHandle textureIndex, uint32_t* imageSizes, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+void RenderInstance::UpdateImageMemory(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 {
-	uint32_t* cachedImageSizes = imageSizes;
-	
-	if (cachedImageSizes)
-	{
-		cachedImageSizes = (uint32_t*)updateCommandsCache->Allocate(mipLevels * sizeof(uint32_t));
-
-		memcpy(cachedImageSizes, imageSizes, mipLevels * sizeof(uint32_t));
-	}
 
 	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
 
@@ -3536,7 +3526,6 @@ void RenderInstance::UpdateImageMemory(void* data, EntryHandle textureIndex, uin
 	rduci->height = height;
 	rduci->mipLevels = mipLevels;
 	rduci->width = width;
-	rduci->imageSizes = imageSizes;
 	rduci->layers = layers;
 	rduci->textureIndex = textureIndex;
 	rduci->updateType = DriverUpdateType::IMAGEMEMORYUPDATE;
@@ -3686,7 +3675,7 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::IMAGEMEMORYUPDATE:
 		{
 			RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)header;
-			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->imageSizes, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layers, rduci->format);
+			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layers, rduci->format);
 			header = rduci->GetNext();
 			currentSize -= sizeof(RenderDriverUpdateCommandImage);
 			break;
