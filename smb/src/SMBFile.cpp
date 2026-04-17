@@ -349,9 +349,9 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex)
 	return sizeof(uint16_t) * geoDef->indicesCount[renderableIndex];
 }
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool)
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool)
 {
-	OSFileHandle* handle = &file.fileHandle;
+	OSFileHandle* handle = &file->fileHandle;
 
 	OSSeekFile(handle, geoDefinition->vertexOffsetInArchive[renderableIndex], BEGIN);
 
@@ -506,13 +506,13 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile&
 	}
 }
 
-void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut)
+void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* indexDataOut)
 {
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
 	
-	int iCount = std::min(geoDefinition->indicesCount[renderableIndex], 65536);
+	int iCount = std::min(geoDefinition->indicesCount[renderableIndex], 65535);
 
-	OSFileHandle* handle = &file.fileHandle;
+	OSFileHandle* handle = &file->fileHandle;
 
 	uint16_t* indices = (uint16_t*)indexDataOut;
 

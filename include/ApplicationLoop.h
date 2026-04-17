@@ -52,15 +52,16 @@ public:
 
 	int GetPoolIndexByFormat(ImageFormat format);
 
-	void LoadSMBFile(SMBFile& file);
+	void ProcessSMBFile(SMBFile* file);
 
-	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile& file, int* textureHandles, int textureBase);
+	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase);
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 
 	void CreateCrateObject();
 
 	int CreateMaterial(
+		int gpuMaterialID,
 		int flags,
 		int* texturesIDs,
 		int textureCount,
@@ -69,6 +70,7 @@ public:
 
 
 	int CreateMaterial(
+		int gpuMaterialID,
 		int flags,
 		int* texturesIDs,
 		int textureCount,
@@ -88,14 +90,14 @@ public:
 	int CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color);
 	int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
 
-	int AddMaterialToDeviceMemory(int count, int* ids);
+	int CreateMaterialRange(int gpuMaterialRangeID, int count, int* ids);
 	int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, const Matrix4f& mat, int geomIndex, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
 
 	void CreateCornerWall(float width, float height, float xDiv, float yDiv);
 
-	void CreateSkyBox();
+	int CreateSkyBox();
 
-	void CreateMSAAPostFullScreen();
+	int CreateMSAAPostFullScreen();
 
 	void RecreateFrameGraphAttachments(uint32_t width, uint32_t height);
 
@@ -122,6 +124,11 @@ public:
 
 	int AllocateCPUGeometryInstances(int numberOfInstances);
 	int AllocateGPUGeometryInstances(int numberOfInstances);
+
+	int AllocateGPUMaterialData(int numberOfMaterials);
+	int AllocateGPUMaterialRanges(int numberOfRanges);
+	int AllocateGPUBlendDescriptions(int numberOfDescs);
+	int AllocateGPUBlendRanges(int numberOfRanges);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

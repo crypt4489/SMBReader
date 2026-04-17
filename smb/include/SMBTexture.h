@@ -78,9 +78,9 @@ public:
 		other.data = nullptr;
 	};
 
-	int CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk);
+	int CreateTextureDetails(SMBFile* smb, const SMBChunk& chunk);
 
-	int ReadTextureData(SMBFile& smb);
+	int ReadTextureData(SMBFile* smb);
 
 	friend std::ostream& operator<<(std::ostream& os, SMBTexture& tex)
 	{

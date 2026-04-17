@@ -5,11 +5,11 @@ SMBTexture::SMBTexture(SMBImageFormat _type, uint32_t _width, uint32_t _height, 
 	
 }
 
-int SMBTexture::CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk)
+int SMBTexture::CreateTextureDetails(SMBFile* smb, const SMBChunk& chunk)
 {
 	name = chunk.fileName;
 	id = chunk.chunkId;
-	OSFileHandle* fileHandle = &smb.fileHandle;
+	OSFileHandle* fileHandle = &smb->fileHandle;
 
 	int offset = chunk.offsetInHeader + 21;
 
@@ -17,7 +17,7 @@ int SMBTexture::CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk)
 
 	OSReadFile(fileHandle, 4 * 4, reinterpret_cast<char*>(&this->type));
 
-	fileOffset = chunk.contigOffset + smb.fileOffset;
+	fileOffset = chunk.contigOffset + smb->fileOffset;
 
 	int totalBlobSize = 0;
 
@@ -57,11 +57,11 @@ int SMBTexture::CreateTextureDetails(SMBFile& smb, const SMBChunk& chunk)
 	return 0;
 }
 
-int SMBTexture::ReadTextureData(SMBFile& smb)
+int SMBTexture::ReadTextureData(SMBFile* smb)
 {
 	char* readHead = data;
 
-	OSFileHandle* fileHandle = &smb.fileHandle;
+	OSFileHandle* fileHandle = &smb->fileHandle;
 
 	OSSeekFile(fileHandle, fileOffset, BEGIN);
 

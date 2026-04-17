@@ -5,11 +5,21 @@
 
 #include "AppAllocator.h"
 #include "AppTypes.h"
+#include "Logger.h"
 #include "FileManager.h"
 #include "ResourceDependencies.h"
 
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
+
+
+struct ShaderResourceSetContext
+{
+	Logger* contextLogger;
+	bool contextFailed;
+};
+
+
 
 template <int N>
 struct ShaderResourceManager
@@ -37,7 +47,7 @@ struct ShaderResourceManager
 		return indexRet;
 	}
 
-	void SetVariableArrayCount(int descriptorSet, int bindingIndex, int varArrayCount)
+	void SetVariableArrayCount(ShaderResourceSetContext* context, int descriptorSet, int bindingIndex, int varArrayCount)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -55,7 +65,7 @@ struct ShaderResourceManager
 
 	}
 
-	void BindBufferToShaderResource(int descriptorSet, int* allocationIndex, int* offsets,  int firstBuffer, int bufferCount, int bindingIndex)
+	void BindBufferToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* allocationIndex, int* offsets,  int firstBuffer, int bufferCount, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -72,7 +82,7 @@ struct ShaderResourceManager
 		header->bufferCount = bufferCount;
 	}
 
-	void BindImageResourceToShaderResource(int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -104,7 +114,7 @@ struct ShaderResourceManager
 		header->firstSampler = firstSampler;
 	}
 
-	void BindSampledImageToShaderResource(int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -120,7 +130,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSampledImageArrayToShaderResource(int descriptorSet, EntryHandle* indices, int texCount, int firstTexture, int bindingIndex)
+	void BindSampledImageArrayToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* indices, int texCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -136,7 +146,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindBufferView(int descriptorSet, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
+	void BindBufferView(ShaderResourceSetContext* context, int descriptorSet, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -153,7 +163,7 @@ struct ShaderResourceManager
 		header->allocationIndex = allocationIndex;
 	}
 
-	void BindBarrier(int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
+	void BindBarrier(ShaderResourceSetContext* context, int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -201,7 +211,7 @@ struct ShaderResourceManager
 
 	}
 
-	void BindImageBarrier(int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
+	void BindImageBarrier(ShaderResourceSetContext* context, int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -288,7 +298,7 @@ struct ShaderResourceManager
 		return set->barrierCount;
 	}
 
-	void UploadConstant(int descriptorset, void* data, int bufferLocation)
+	void UploadConstant(ShaderResourceSetContext* context, int descriptorset, void* data, int bufferLocation)
 	{
 		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
 		if (!header) return;

@@ -269,6 +269,6 @@ int GetSMBVertexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
 int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 
-void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool);
+void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool);
 
-void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile& file, void* indexDataOut);
+void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* indexDataOut);

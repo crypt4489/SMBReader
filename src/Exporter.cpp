@@ -34,12 +34,12 @@
 
 
 
-void ExportChunksFromFile(SMBFile& smb, Allocator* inputScratchMemory)
+void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 {
-	auto& chunk = smb.chunks;
-	for (size_t j = 0; j<smb.numResources; j++)
+	auto& chunk = smb->chunks;
+	for (size_t j = 0; j<smb->numResources; j++)
 	{
-		switch (smb.chunks[j].chunkType)
+		switch (smb->chunks[j].chunkType)
 		{
 		case GEO:
 			break;	
@@ -57,7 +57,7 @@ void ExportChunksFromFile(SMBFile& smb, Allocator* inputScratchMemory)
 	}
 }
 
-void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratchMemory)
+void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratchMemory)
 {
 
 	StringView imageName{};

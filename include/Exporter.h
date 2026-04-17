@@ -29,8 +29,8 @@ namespace ExportHelper
 }
 
 
-void ExportChunksFromFile(SMBFile& smb, Allocator* inputScratchMemory);
-void ExportTextureFromFile(SMBFile& smb, SMBChunk& chunk, Allocator* inputScratchMemory);
+void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory);
+void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratchMemory);
 void ExportToOBJFormat(void* vertices, int vertexCount, StringView outputFile);
 
 
