@@ -73,6 +73,7 @@ struct Allocator
 	virtual StringView* AllocateFromNullString(const char* name) = 0;
 	virtual StringView AllocateFromNullStringCopy(const char* name) = 0;
 
+	std::pair<int, int> GetUsageAndCapacity() const;
 };
 
 struct RingAllocator : public Allocator
@@ -123,6 +124,7 @@ struct DeviceSlabAllocator
 
 	}
 	int Allocate(int _allocSize, int alignment);
+	std::pair<int, int> GetUsageAndCapacity() const;
 };
 
 

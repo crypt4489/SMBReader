@@ -218,6 +218,22 @@ void VKMemoryAllocator::Reset()
 	freeList.emplace_front(firstRange);
 }
 
+VKMemoryAllocatorDetails VKMemoryAllocator::GetMemoryAllocDetails()
+{
+	VKMemoryAllocatorDetails details{ 0, capacity };
+
+	auto iter = occupiedList.begin();
+
+	while (iter != std::end(occupiedList))
+	{
+		VkDeviceSize allocSize = iter->second - iter->first;
+		details.allocSize += allocSize;
+		iter++;
+	}
+
+	return details;
+}
+
 
 RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, uint32_t _wSize, uint32_t _hSize, uint32_t _wOff, uint32_t _hOff, void* data)
 {
@@ -3284,10 +3300,6 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	vkUnmapMemory(device, stagingMemory);
 
-
-
-
-
 	VkImage image = GetImageByTexture(textureIndex);
 
 	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
@@ -3378,6 +3390,30 @@ void VKDevice::ResetBufferAllocator(EntryHandle bufferIndex)
 	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
 
 	alloc->alloc.Reset();
+}
+
+VKMemoryAllocatorDetails VKDevice::GetMemoryAllocDetailsForBuffer(EntryHandle bufferHandle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(bufferHandle);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+		return { ~0ui64, ~0ui64 };
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	return alloc->alloc.GetMemoryAllocDetails();
+}
+
+VKMemoryAllocatorDetails VKDevice::GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
+
+	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
+		return { ~0ui64, ~0ui64 };
+
+	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
+
+	return iter->alloc.GetMemoryAllocDetails();
 }
 
 /*---------------------------------------------------------*/

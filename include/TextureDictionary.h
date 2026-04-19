@@ -49,6 +49,7 @@ struct TextureDictionary
 
 	void CreatePools(ImageFormat* formats, size_t* sizes, EntryHandle* poolHandles, EntryHandle* bufferHandles, int num);
 
+	std::pair<int, int> GetCacheUsageAndCapacity() const;
 
 };
 

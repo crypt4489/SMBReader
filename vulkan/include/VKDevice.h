@@ -16,7 +16,11 @@
 #include "VKTypes.h"
 
 
-
+struct VKMemoryAllocatorDetails
+{
+	uint64_t allocSize;
+	uint64_t totalDataSize;
+};
 
 struct VKMemoryAllocator
 {
@@ -50,6 +54,8 @@ struct VKMemoryAllocator
 	void FreeMemory(VkDeviceSize addr);
 
 	void Reset();
+
+	VKMemoryAllocatorDetails GetMemoryAllocDetails();
 };
 
 struct VKCommandBuffer
@@ -666,10 +672,14 @@ struct VKDevice
 		int mipLevels, VkFormat format, RecordingBufferObject* rbo
 	);
 
-
 	void WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo);
 
 	void ResetBufferAllocator(EntryHandle bufferIndex);
+
+	VKMemoryAllocatorDetails GetMemoryAllocDetailsForBuffer(EntryHandle bufferHandle);
+
+	VKMemoryAllocatorDetails GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle);
+	
 
 	//mutable std::shared_mutex deviceLock;
 

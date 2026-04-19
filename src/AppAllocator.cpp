@@ -1,7 +1,9 @@
 #include "AppAllocator.h"
 
 
-
+std::pair<int, int> Allocator::GetUsageAndCapacity() const {
+	return { dataAllocator.load(), dataSize };
+}
 
 void* RingAllocator::Allocate(int _allocSize, int alignment)
 {
@@ -81,6 +83,8 @@ StringView RingAllocator::AllocateFromNullStringCopy(const char* name)
 
 	return view;
 }
+
+
 
 void* SlabAllocator::Allocate(int _allocSize, int alignment)
 {
@@ -166,5 +170,9 @@ int DeviceSlabAllocator::Allocate(int _allocSize, int alignment)
 	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
 
 	return (out);
+}
+
+std::pair<int, int> DeviceSlabAllocator::GetUsageAndCapacity() const {
+	return { dataAllocator.load(), dataSize };
 }
 

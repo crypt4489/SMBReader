@@ -3905,3 +3905,42 @@ int RenderInstance::CreateUniversalBuffer(size_t size, BufferType bufferMemoryTy
 
 	return bufferIndex;
 }
+
+void RenderInstance::PrintOutBufferAllocations(Logger* outputLogger)
+{
+	char OutputScratch[512];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	for (int i = 0; i < bufferPoolsCounter; i++)
+	{
+		EntryHandle bufferIndex = bufferHandles[i];
+		BufferType bufferType = bufferTypes[i];
+
+		VKMemoryAllocatorDetails details = dev->GetMemoryAllocDetailsForBuffer(bufferIndex);
+
+		int actualSize = snprintf(OutputScratch, 512, "Buffer Type %d with memory allocation %d/%d", bufferType, (int)details.allocSize, (int)details.totalDataSize);
+
+		outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
+	}
+}
+
+
+void RenderInstance::PrintOutTexturePoolAllocations(Logger* outputLogger)
+{
+	char OutputScratch[512];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	for (int i = 0; i < imagePoolCounter; i++)
+	{
+		EntryHandle poolIndex = imagePools[i];
+
+		VKMemoryAllocatorDetails details = dev->GetMemoryAllocDetailsForImageMemory(poolIndex);
+
+		int actualSize = snprintf(OutputScratch, 512, "Image Pool with memory allocation %d/%d", (int)details.allocSize, (int)details.totalDataSize);
+
+		outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
+	}
+}
+

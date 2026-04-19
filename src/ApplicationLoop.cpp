@@ -14,8 +14,6 @@
 
 ApplicationLoop* loop;
 
-#define MAX_GEOMETRY 2048
-#define MAX_MESHES 4096
 #define MAX_MESH_TEXTURES 8192
 #define MAX_IMAGE_DIM 4096
 
@@ -40,13 +38,14 @@ enum PipelineHandles
 };
 
 static char StartupMemory[32 * KiB];
-static SlabAllocator StartupMemoryAllocator { StartupMemory, sizeof(StartupMemory) };
+static SlabAllocator StartupMemoryAllocator{ StartupMemory, sizeof(StartupMemory) };
 
-std::array<std::string, 3> commandsStrings =
+std::array<std::string, 4> commandsStrings =
 {
 	"end",
 	"load",
 	"positiong",
+	"debugscreen"
 };
 
 static std::array<StringView, 8> pds = {
@@ -366,7 +365,7 @@ static int globalLightCount = 0;
 static int normalDebugAlloc;
 
 static int globalDebugStructAlloc = 0;
-static int globalDebugStructAllocSize = 10 * KiB;
+static const int globalDebugStructAllocSize = 10 * KiB;
 static int globalDebugTypesAlloc = 0;
 static int globalDebugStructCount = 0;
 
@@ -375,57 +374,55 @@ static int globalBufferDescriptor;
 static int globalTexturesDescriptor;
 
 static int globalMeshLocation;
-static int globalMeshSize = 24 * KiB;
+static const int globalMeshSize = 24 * KiB;
 static int globalMeshCount = 0;
 
 static int globalGeometryDescriptionsLocation;
-static int globalGeometryDescriptionsSize = 1 * KiB;
+static const int globalGeometryDescriptionsSize = 1 * KiB;
 static int globalGeometryDescriptionsCount = 0;
 
 static int globalGeometryRenderableLocation;
-static int globalGeometryRenderableSize = 1 * KiB;
+static const int globalGeometryRenderableSize = 1 * KiB;
 static int globalGeometryRenderableCount = 0;
 
 static int globalRenderableLocation;
-static int globalRenderableSize = 24 * KiB;
+static const int globalRenderableSize = 24 * KiB;
 static int globalRenderableCount = 0;
 
 static int globalMaterialIndicesLocation;
-static int globalMaterialIndicesSize = 4 * KiB;
+static const int globalMaterialIndicesSize = 4 * KiB;
 static int globalMaterialRangeCount = 0;
 
 static int globalMaterialsLocation; 
-static int globalMaterialsSize = 4 * KiB;
+static const int globalMaterialsSize = 4 * KiB;
 static int globalMaterialsIndex = 0;
 
 static int globalBlendDetailsLocation;
 static int globalBlendRangesLocation;
-static int globalBlendDetailsSize = 1 * KiB;
-static int globalBlendRangesSize = 1 * KiB;
+static const int globalBlendDetailsSize = 1 * KiB;
+static const int globalBlendRangesSize = 1 * KiB;
 static int globalBlendDetailCount = 0;
 static int globalBlendRangeCount = 0;
 
-static int globalMaterialsMax = globalMaterialsSize / sizeof(GPUMaterial);
-static int globalBlendDetailMax = globalBlendDetailsSize / sizeof(GPUBlendDetails);
-static int globalBlendRangeMax = globalBlendRangesSize / sizeof(BlendRanges);
-static int globalMaterialRangeMax = globalMaterialIndicesSize / sizeof(uint32_t);
-static int globalRenderableMax = globalRenderableSize / sizeof(GPUMeshRenderable);
-static int globalDebugStructMaxCount = globalDebugStructAllocSize / sizeof(GPUDebugRenderable);
-static int globalMeshCountMax = globalMeshSize / sizeof(GPUMeshDetails);
-static int globalGeometryDescriptionsCountMax = globalGeometryDescriptionsSize / sizeof(GPUGeometryDetails);
-static int globalGeometryRenderableCountMax = globalGeometryRenderableSize / sizeof(GPUGeometryRenderable);
+static const int globalMaterialsMax = globalMaterialsSize / sizeof(GPUMaterial);
+static const int globalBlendDetailMax = globalBlendDetailsSize / sizeof(GPUBlendDetails);
+static const int globalBlendRangeMax = globalBlendRangesSize / sizeof(BlendRanges);
+static const int globalMaterialRangeMax = globalMaterialIndicesSize / sizeof(uint32_t);
+static const int globalRenderableMax = globalRenderableSize / sizeof(GPUMeshRenderable);
+static const int globalDebugStructMaxCount = globalDebugStructAllocSize / sizeof(GPUDebugRenderable);
+static const int globalMeshCountMax = globalMeshSize / sizeof(GPUMeshDetails);
+static const int globalGeometryDescriptionsCountMax = globalGeometryDescriptionsSize / sizeof(GPUGeometryDetails);
+static const int globalGeometryRenderableCountMax = globalGeometryRenderableSize / sizeof(GPUGeometryRenderable);
 
 static int shadowMapIndex = 0;
 
 static char vertexAndIndicesMemory[16 * MiB];
-static char meshObjectSpecificMemory[4 * KiB];
 static char geometryObjectSpecificMemory[4 * KiB];
 static char mainTextureCacheMemory[256 * MiB];
 static char mainOSDataManagement[16 * KiB];
 
 static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
-static SlabAllocator meshObjectSpecificAlloc(meshObjectSpecificMemory, sizeof(meshObjectSpecificMemory));
 static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
 
 static DeviceSlabAllocator indexBufferAlloc(globalIndexBufferSize);
@@ -463,15 +460,13 @@ static GPULightSource mainSpotLight =
 	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
 };
 
-static ArrayAllocator<void*, MAX_MESHES> geometryObjectData{};
 
 static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
 
-
-static ArrayAllocator<MeshCPUData, MAX_MESHES> meshCPUData{};
-static ArrayAllocator<GeometryCPUData, MAX_GEOMETRY> geometryCPUData{};
-static ArrayAllocator<RenderableGeomCPUData, MAX_GEOMETRY> renderablesGeomObjects{};
-static ArrayAllocator<RenderableMeshCPUData, MAX_MESHES> renderablesMeshObjects{};
+static ArrayAllocator<MeshCPUData, globalMeshCountMax> meshCPUData{};
+static ArrayAllocator<GeometryCPUData, globalGeometryDescriptionsCountMax> geometryCPUData{};
+static ArrayAllocator<RenderableGeomCPUData, globalGeometryRenderableCountMax> renderablesGeomObjects{};
+static ArrayAllocator<RenderableMeshCPUData, globalRenderableMax> renderablesMeshObjects{};
 
 static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
@@ -485,23 +480,18 @@ static int skyboxPipeline = 0;
 static EntryHandle skyboxCubeImage = EntryHandle();
 
 static char RenderInstanceMemoryPool[256 * MiB];
-static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
-
 static char RenderInstanceTemporaryPool[64 * KiB];
-static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
-
 static char AppInstanceTempMemory[64 * KiB];
-static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
-
-
 static char GlobalInputScratchMemory[128 * MiB];
-static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
-
 static char ThreadSharedCmdMemory[4 * KiB];
-static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
-
 static char LoggerMessageMemory[64 * KiB];
-static Logger mainAppLogger{ LoggerMessageMemory, 16 * KiB };
+
+static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
+static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
+static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
+static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
+static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
+static Logger mainAppLogger{ LoggerMessageMemory, sizeof(LoggerMessageMemory)};
 
 static EntryHandle mainLinearSampler = EntryHandle();
 
@@ -537,6 +527,8 @@ static void CreateUniformGrid();
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
 static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
+static void PrintDebugMemoryAllocation();
+
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -1470,21 +1462,17 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 
 	int base = 0;
 
-	Matrix4f* geomSpecificData = (Matrix4f*)geometryObjectSpecificAlloc.Allocate(sizeof(Matrix4f));
+	Matrix4f geomSpecificData;
 
-	rendGeomCPUData->geomInstanceLocalMemoryStart = geometryObjectData.Allocate(geomSpecificData);
+	geomSpecificData = Identity4f();
 
-	rendGeomCPUData->geomInstanceLocalMemoryCount = 1;
-
-	*geomSpecificData = Identity4f();
-
-	(*geomSpecificData).translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
+	geomSpecificData.translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
 
 	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
-	*geomSpecificData = *geomSpecificData * rotation;
+	geomSpecificData = geomSpecificData * rotation;
 
-	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, *geomSpecificData, geomDetailsIndex, gpuMeshRenderable, meshCount);
+	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, geomSpecificData, geomDetailsIndex, gpuMeshRenderable, meshCount);
 
 	for (int i = 0; i < meshCount; i++)
 	{
@@ -3241,7 +3229,7 @@ int ApplicationLoop::FindWords(const char* words, int charCount)
 			out->charCount = wordSize;
 			memcpy(stringData, words + i, wordSize);
 			wordCount++;
-			i = j + 1;
+			i = j;
 		}
 		else 
 		{
@@ -3250,11 +3238,14 @@ int ApplicationLoop::FindWords(const char* words, int charCount)
 	}
 
 	wordSize = j - i;
+	if (wordSize)
+	{ 
 	StringView* out = (StringView*)ThreadSharedMessageQueue.AcquireWrite(sizeof(StringView));
 	char* stringData = (char*)AppInstanceTempAllocator.Allocate(wordSize);
 	out->stringData = stringData;
 	out->charCount = wordSize;
 	memcpy(stringData, words + i, wordSize);
+	}
 
 	return wordCount;
 }
@@ -3377,18 +3368,18 @@ int ApplicationLoop::CreateMeshHandle(
 
 	mesh->deviceVertices = vertexAlloc;
 
-	GPUMeshDetails* handles = (GPUMeshDetails*)meshObjectSpecificAlloc.Allocate(sizeof(GPUMeshDetails));
+	GPUMeshDetails handles{};
 
-	handles->vertexFlags = vertexFlags;
-	handles->stride = vertexStride;
+	handles.vertexFlags = vertexFlags;
+	handles.stride = vertexStride;
 
-	handles->indexCount = mesh->indicesCount;
-	handles->firstIndex = indexAlloc / mesh->indexSize;
-	handles->vertexByteOffset = vertexAlloc;
+	handles.indexCount = mesh->indicesCount;
+	handles.firstIndex = indexAlloc / mesh->indexSize;
+	handles.vertexByteOffset = vertexAlloc;
 
-	memcpy(&handles->sphere, &sphere, sizeof(Vector4f));
+	memcpy(&handles.sphere, &sphere, sizeof(Vector4f));
 
-	GlobalRenderer::gRenderInstance->UpdateDriverMemory(handles, globalMeshLocation, sizeof(GPUMeshDetails), meshGPUDataIndex * sizeof(GPUMeshDetails), TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance->UpdateDriverMemory(&handles, globalMeshLocation, sizeof(GPUMeshDetails), meshGPUDataIndex * sizeof(GPUMeshDetails), TransferType::CACHED);
 
 	return 0;
 }
@@ -3438,6 +3429,10 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 		float y1 = std::stof(std::string(args[3].stringData, args[3].charCount));
 		float z1 = std::stof(std::string(args[4].stringData, args[4].charCount));
 		SetPositionOfGeometry(geomIndex, Vector3f(x1, y1, z1));
+	}
+	else if (strncmp(command.stringData, "debugscreen", 12) == 0)
+	{
+		PrintDebugMemoryAllocation();
 	}
 	else {
 		mainAppLogger.AddLogMessage(LOGERROR, AppInstanceTempAllocator.AllocateFromNullStringCopy("Unprocessed command entered"));
@@ -3887,7 +3882,6 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 int AddLight(GPULightSource& lightDesc, LightType type)
 {
-
 	if (globalLightCount == globalLightMax)
 	{
 		return -1;
@@ -3944,6 +3938,71 @@ int AddLight(GPULightSource& lightDesc, LightType type)
 	return lightLocation;
 }
 
+void PrintDebugMemoryAllocation()
+{
+	char StringBuffer[512];
+
+	std::pair<int, int> allocDetails{};
+
+	allocDetails = StartupMemoryAllocator.GetUsageAndCapacity();
+
+	int actualSize = snprintf(StringBuffer, 512, "Start up memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = RenderInstanceMemoryAllocator.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Render Instance memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = GlobalInputScratchAllocator.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Global Input memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = osAllocator.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "OS Memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = vertexAndIndicesAlloc.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Main Memory vertex and indices memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = geometryObjectSpecificAlloc.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Geometry memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = indexBufferAlloc.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Main Index memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = vertexBufferAlloc.GetUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Main Vertex memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	allocDetails = mainDictionary.GetCacheUsageAndCapacity();
+
+	actualSize = snprintf(StringBuffer, 512, "Main texture memory allocation %d/%d", allocDetails.first, allocDetails.second);
+
+	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
+
+	GlobalRenderer::gRenderInstance->PrintOutBufferAllocations(&mainAppLogger);
+
+	GlobalRenderer::gRenderInstance->PrintOutTexturePoolAllocations(&mainAppLogger);
+}
+
 int ApplicationLoop::AllocateCPUGeometryDetails(int numberOfDetails) {
 	return -1;
 }
@@ -3966,7 +4025,8 @@ int ApplicationLoop::AllocateGPUGeometryDetails(int numberOfDetails)
 }
 
 int ApplicationLoop::AllocateCPUMeshDetails(int numberOfDetails) {
-	uint32_t meshIndex;
+	
+	int meshIndex;
 
 	meshIndex = meshCPUData.AllocateN(numberOfDetails);
 
@@ -3979,7 +4039,8 @@ int ApplicationLoop::AllocateCPUMeshDetails(int numberOfDetails) {
 }
 
 int ApplicationLoop::AllocateGPUMeshDetails(int numberOfDetails) {
-	uint32_t meshIndex;
+	
+	int meshIndex;
 
 	if (globalMeshCount+numberOfDetails > globalMeshCountMax)
 	{
@@ -4040,6 +4101,7 @@ int ApplicationLoop::AllocateCPUGeometryInstances(int numberOfInstances)
 }
 
 int ApplicationLoop::AllocateGPUGeometryInstances(int numberOfInstances) {
+	
 	int geomRenderableIndex = -1;
 
 	if (globalGeometryRenderableCount+numberOfInstances > globalGeometryRenderableCountMax)

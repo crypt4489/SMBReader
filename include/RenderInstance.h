@@ -190,6 +190,10 @@ struct RenderInstance
 
 	int CreateUniversalBuffer(size_t size, BufferType bufferMemoryType);
 
+	void PrintOutBufferAllocations(Logger* outputLogger);
+
+	void PrintOutTexturePoolAllocations(Logger* outputLogger);
+
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
@@ -204,7 +208,7 @@ struct RenderInstance
 	std::array<EntryHandle, 20> renderTargets{};
 	std::array<EntryHandle, 20> renderPasses{};
 
-	std::array<EntryHandle, 9> imagePools{};
+	std::array<EntryHandle, 10> imagePools{};
 	int imagePoolCounter = 0;
 
 	WindowManager *windowMan = nullptr;

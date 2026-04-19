@@ -51,3 +51,8 @@ void TextureDictionary::CreatePools(ImageFormat* formats, size_t* sizes, EntryHa
 		deviceImageBuffers[i] = bufferHandles[i];
 	}
 }
+
+std::pair<int, int> TextureDictionary::GetCacheUsageAndCapacity() const
+{
+	return { (int)textureAllocator.load(), (int)textureSize };
+}
