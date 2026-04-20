@@ -56,6 +56,9 @@ struct Allocator
 	int dataSize;
 	std::atomic<int> dataAllocator;
 
+
+	Allocator() = default;
+
 	Allocator(void* _dataHead, int _size)
 	{
 		dataSize = _size;
@@ -78,6 +81,8 @@ struct Allocator
 
 struct RingAllocator : public Allocator
 {
+	RingAllocator() = default;
+
 	RingAllocator(void* _dataHead, int _size) :
 		Allocator(_dataHead, _size)
 	{
@@ -97,6 +102,7 @@ struct RingAllocator : public Allocator
 
 struct SlabAllocator : public Allocator
 {
+	SlabAllocator() = default;
 	SlabAllocator(void* _dataHead, int _size) 
 		:
 		Allocator(_dataHead, _size)

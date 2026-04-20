@@ -517,6 +517,35 @@ void RecordingBufferObject::BindingDrawIndexedIndirectCount(EntryHandle commandB
 	vkCmdDrawIndexedIndirectCount(cbBufferHandler.buffer, combuffer, commandBufferOffset, cntbuffer, countBufferOffset, maxDrawCount, sizeof(VkDrawIndexedIndirectCommand));
 }
 
+
+void RecordingBufferObject::BeginQuery(EntryHandle queryPoolHandle, uint32_t queryIndex)
+{
+	VkQueryPool poolHandle = vkDeviceHandle->GetQueryPool(queryPoolHandle);
+
+	vkCmdBeginQuery(cbBufferHandler.buffer, poolHandle, queryIndex, 0);
+}
+
+void RecordingBufferObject::EndQuery(EntryHandle queryPoolHandle, uint32_t queryIndex)
+{
+	VkQueryPool poolHandle = vkDeviceHandle->GetQueryPool(queryPoolHandle);
+
+	vkCmdEndQuery(cbBufferHandler.buffer, poolHandle, queryIndex);
+}
+
+void RecordingBufferObject::WriteTimestamp(EntryHandle queryPoolHandle, uint32_t queryIndex, VkPipelineStageFlagBits pipelineStage)
+{
+	VkQueryPool poolHandle = vkDeviceHandle->GetQueryPool(queryPoolHandle);
+
+	vkCmdWriteTimestamp(cbBufferHandler.buffer, pipelineStage, poolHandle, queryIndex);
+}
+
+void RecordingBufferObject::ResetQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount)
+{
+	VkQueryPool poolHandle = vkDeviceHandle->GetQueryPool(poolIndex);
+
+	vkCmdResetQueryPool(cbBufferHandler.buffer, poolHandle, firstQuery, queryCount);
+}
+
 static size_t FindQueueManagerByCapapbilites(QueueManager* managers, size_t managerSize, uint32_t capabilities)
 {
 	size_t i = 0;
@@ -1403,6 +1432,29 @@ void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, ui
 		*this, queueManagerData);
 }
 
+
+EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries)
+{
+	EntryHandle ret;
+
+	VkQueryPool poolVKHandle;
+
+	VkQueryPoolCreateInfo createInfo{};
+
+	createInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	createInfo.queryCount = numberOfQueries;
+	createInfo.queryType = queryType;
+	createInfo.pipelineStatistics = 0;
+	createInfo.pNext = nullptr;
+	createInfo.flags = 0;
+
+	vkCreateQueryPool(device, &createInfo, nullptr, &poolVKHandle);
+
+	ret = AddVkTypeToEntry(poolVKHandle, VulkQueryPool);
+
+	return ret;
+}
+
 EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 {
 	//std::shared_lock lock(deviceLock);
@@ -2054,6 +2106,9 @@ void VKDevice::DestroyDevice()
 			// DestroyQueueManager(handle);
 			break;
 
+		case VulkQueryPool:
+			DestoryQueryPool(handle);
+			break;
 		case VulkMaxEnum:
 		default:
 			// Invalid handle type
@@ -2132,6 +2187,20 @@ void VKDevice::DestroyRenderTarget(EntryHandle handle)
 
 	entries[handle()].memoryLocation = 0;
 	entries[handle()].type = VulkMaxEnum;
+}
+
+void VKDevice::DestoryQueryPool(EntryHandle handle)
+{
+	VkQueryPool pool = GetQueryPool(handle);
+
+	if (!pool)
+		return;
+
+	vkDestroyQueryPool(device, pool, nullptr);
+
+	entries[handle()].memoryLocation = 0;
+	entries[handle()].type = VulkMaxEnum;
+
 }
 
 void VKDevice::ResetRenderTarget(EntryHandle handle)
@@ -2614,6 +2683,18 @@ int32_t VKDevice::GetQueueByMask(QueueIndex* queueIdx,
 		i++;
 	}
 	return -1;
+}
+
+VkQueryPool VKDevice::GetQueryPool(EntryHandle poolHandle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
+
+	if (objHandle.type != VulkQueryPool || !objHandle.memoryLocation)
+		 VK_NULL_HANDLE;
+
+	VkQueryPool queryPool = reinterpret_cast<VkQueryPool>(objHandle.memoryLocation);
+
+	return queryPool;
 }
 
 VKDevice::QueueDetails VKDevice::GetQueueHandle(uint32_t capabilites)
@@ -3414,6 +3495,32 @@ VKMemoryAllocatorDetails VKDevice::GetMemoryAllocDetailsForImageMemory(EntryHand
 	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
 
 	return iter->alloc.GetMemoryAllocDetails();
+}
+
+void VKDevice::ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
+
+	if (objHandle.type != VulkQueryPool || !objHandle.memoryLocation)
+		return;
+
+	VkQueryPool queryPool = reinterpret_cast<VkQueryPool>(objHandle.memoryLocation);
+
+	vkResetQueryPool(
+		device,
+		queryPool,
+		firstQuery,
+		queryCount);
+}
+
+void VKDevice::ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount, void* dataOut, size_t sizeOfDataOut, VkDeviceSize dataStride, VkQueryResultFlags flags)
+{
+	VkQueryPool queryPool = GetQueryPool(poolIndex);
+
+	vkGetQueryPoolResults(device, queryPool,
+		firstQuery, queryCount,
+		sizeOfDataOut, dataOut,
+		dataStride, flags);
 }
 
 /*---------------------------------------------------------*/

@@ -31,6 +31,8 @@ struct ShaderResourceManager
 
 	EntryHandle deviceResourceHeap;
 
+	ShaderResourceManager() = default;
+
 	ShaderResourceManager(void* srSlabHead, int srSlabSize) :
 		shaderResourceInstAllocator{srSlabHead, srSlabSize},
 		deviceResourceHeap(EntryHandle())

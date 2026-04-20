@@ -42,10 +42,13 @@ namespace API {
 
 struct RenderInstance
 {
+	RenderInstance() = default;
 
 	RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
 
 	~RenderInstance();
+
+	void CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
 
 	void DestroySwapChainAttachments(EntryHandle swapChainIndex);
 
@@ -205,7 +208,10 @@ struct RenderInstance
 	std::array<BufferType, 10> bufferTypes{};
 	int bufferPoolsCounter = 0;
 
+
+	int renderTargetsDrawDataAlloc = 0;
 	std::array<EntryHandle, 20> renderTargets{};
+	int vulkanRenderPassAlloc = 0;
 	std::array<EntryHandle, 20> renderPasses{};
 
 	std::array<EntryHandle, 10> imagePools{};
@@ -214,6 +220,8 @@ struct RenderInstance
 	WindowManager *windowMan = nullptr;
 
 	uint32_t currentFrame = 0;
+	uint32_t previousFrame = ~0ui32;
+	std::array<uint32_t, MAX_FRAMES_IN_FLIGHT> queryCounts{};
 
 	ShaderGraphsHolder<50, 60> vulkanShaderGraphs;
 	
@@ -222,6 +230,7 @@ struct RenderInstance
 	std::array<EntryHandle*, 25> pipelinesIdentifier{};
 	std::array<PipelineInstanceData, 25> pipelinesInstancesInfo{};
 
+	int vulkanDescriptorLayoutCounter = 0;
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
 
 	RenderAllocationHolder<100> allocations{};
@@ -252,6 +261,7 @@ struct RenderInstance
 
 	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
 
+	int pipelineInfoCounter = 0;
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos{};
 
 	RingAllocator* cacheAllocator;
@@ -267,6 +277,8 @@ struct RenderInstance
 
 	ArrayAllocator<EntryHandle, 10> renderTargetQueues{};
 
+	int graphTemplateAlloc = 0;
+
 	AttachmentGraph* attachmentGraphs;
 
 	AttachmentGraphInstance* attachmentGraphsInstances;
@@ -274,8 +286,18 @@ struct RenderInstance
 	int attachmentGraphInstancesCount = 0;
 
 	int pipelineIdentifierCount = 0;
+
+	Logger* internalRendererLogger;
+
+	EntryHandle queryPool = EntryHandle();
+
+	std::array<uint32_t, 10> queryResults;
+
+	double deviceTimeStampPeriodNS = 0.0;
+
+	
 };
 
 namespace GlobalRenderer {
-	extern RenderInstance* gRenderInstance;
+	extern RenderInstance gRenderInstance;
 }

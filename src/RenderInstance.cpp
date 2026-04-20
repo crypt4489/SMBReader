@@ -29,7 +29,7 @@
 #include "ShaderResourceSet.h"
 
 namespace GlobalRenderer {
-	RenderInstance* gRenderInstance = nullptr;
+	RenderInstance gRenderInstance;
 }
 
 
@@ -464,7 +464,7 @@ RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllo
 	descriptorManager{ instanceStorageAllocator->Allocate(10 * KiB), 10*KiB},
 	minStorageAlignment(0), minUniformAlignment(0), attachmentGraphs(nullptr), attachmentGraphsInstances(nullptr)
 {
-	vkInstance = new VKInstance();
+	vkInstance = (VKInstance*)instanceStorageAllocator->Allocate(sizeof(VKInstance));
 
 	cacheAllocator = instanceCacheAllocator;
 	storageAllocator = instanceStorageAllocator;
@@ -495,7 +495,65 @@ RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllo
 	descriptorUpdatePool.AllocateList(instanceStorageAllocator->Allocate(resourceUpdateLinkedSize), resourceUpdateLinkedSize);
 
 	attachmentGraphsInstances = (AttachmentGraphInstance*)instanceStorageAllocator->Allocate(sizeof(AttachmentGraphInstance) * 10);
+
+	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
+
+	std::construct_at(internalRendererLogger, (char*)instanceStorageAllocator->Allocate(8 * KiB, 8), 8 * KiB);
 };
+
+void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
+{
+
+
+	new (&vulkanShaderGraphs) decltype(vulkanShaderGraphs)
+	{
+		instanceStorageAllocator->Allocate(10 * KiB), 10 * KiB,
+		instanceStorageAllocator->Allocate(5 * KiB), 5 * KiB
+	};
+
+	new (&descriptorManager) decltype(descriptorManager)
+	{
+		instanceStorageAllocator->Allocate(10 * KiB), 10 * KiB
+	};
+
+	minStorageAlignment = 0;
+	minUniformAlignment = 0;
+	attachmentGraphs = nullptr;
+	attachmentGraphsInstances = nullptr;
+
+	vkInstance = (VKInstance*)instanceStorageAllocator->Allocate(sizeof(VKInstance));
+
+	cacheAllocator = instanceCacheAllocator;
+	storageAllocator = instanceStorageAllocator;
+
+	updateCommandsCache = (RingAllocator*)instanceStorageAllocator->Allocate(sizeof(RingAllocator));
+	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(64 * KiB), 64 * KiB);
+
+	for (uint32_t i = 0; i < 2; i++)
+	{
+		updateCommandBuffers[i] = (SlabAllocator*)instanceStorageAllocator->Allocate(sizeof(SlabAllocator));
+		std::construct_at(updateCommandBuffers[i], instanceStorageAllocator->Allocate(16 * KiB), 16 * KiB);
+	}
+
+	int driverHostLinkedSize = driverHostMemoryUpdater.GetSize(800);
+	int commandLinkedSize = transferCommandPool.GetSize(20);
+	int resourceUpdateLinkedSize = descriptorUpdatePool.GetSize(30);
+	int driverDeviceLinkedSize = driverDeviceMemoryUpdater.GetSize(60);
+	int imageMemoryLinkedSize = imageMemoryUpdateManager.GetSize(30);
+
+	driverHostMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverHostLinkedSize), driverHostLinkedSize);
+	transferCommandPool.AllocateList(instanceStorageAllocator->Allocate(commandLinkedSize), commandLinkedSize);
+	driverDeviceMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverDeviceLinkedSize), driverDeviceLinkedSize);
+	imageMemoryUpdateManager.AllocateList(instanceStorageAllocator->Allocate(imageMemoryLinkedSize), imageMemoryLinkedSize);
+	descriptorUpdatePool.AllocateList(instanceStorageAllocator->Allocate(resourceUpdateLinkedSize), resourceUpdateLinkedSize);
+
+	attachmentGraphsInstances = (AttachmentGraphInstance*)instanceStorageAllocator->Allocate(sizeof(AttachmentGraphInstance) * 10);
+
+	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
+	std::construct_at(internalRendererLogger, (char*)instanceStorageAllocator->Allocate(8 * KiB, 8), 8 * KiB);
+
+	return;
+}
 
 RenderInstance::~RenderInstance()
 {
@@ -547,8 +605,6 @@ RenderInstance::~RenderInstance()
 	*/
 
 	dev->DestroyDevice();
-
-	delete vkInstance;
 };
 
 void RenderInstance::DestoryTexture(EntryHandle handle)
@@ -626,9 +682,6 @@ int RenderInstance::RecreateSwapChain(EntryHandle swapChainIndex) {
 
 int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 {
-
-	static int renderTargetDataAlloc = 0;
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[attachmentGraphInstancesCount];
@@ -637,7 +690,7 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 	graphInstance->graphLayout = graph;
 
-	graphInstance->consecutiveRenderTargetsBase = renderTargetDataAlloc;
+	graphInstance->consecutiveRenderTargetsBase = renderTargetsDrawDataAlloc;
 
 	AttachmentResource* resources = graph->resources;
 
@@ -717,7 +770,7 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 		totalRenderTargetsCreated += renderPassSampleCount;
 	}
 
-	renderTargetDataAlloc += totalRenderTargetsCreated;
+	renderTargetsDrawDataAlloc += totalRenderTargetsCreated;
 
 	return attachmentGraphInstancesCount-1;
 }
@@ -949,8 +1002,7 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 		int ret = RecreateSwapChain(swapChainIndex);
 		return -1;
 	}
-	
-	currentFrame = (currentFrame  + 1) % MAX_FRAMES_IN_FLIGHT;
+
 	return 0;
 }
 
@@ -1235,19 +1287,17 @@ void RenderInstance::CreateSwapChainData(EntryHandle swapChainIndex, uint32_t wi
 
 void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 {
-	static int descriptorLayoutIndex = 0;
-
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	DescriptorSetLayoutBuilder** descriptorBuilders = (DescriptorSetLayoutBuilder**)cacheAllocator->Allocate(sizeof(DescriptorSetLayoutBuilder*) * graph->resourceSetCount);
+	int ResourceSetCount = graph->resourceSetCount;
 
-	int count = graph->resourceSetCount;
+	DescriptorSetLayoutBuilder** descriptorBuilders = (DescriptorSetLayoutBuilder**)cacheAllocator->Allocate(sizeof(DescriptorSetLayoutBuilder*) * ResourceSetCount);
 
-	for (int j = 0; j < graph->resourceSetCount; j++)
+	for (int j = 0; j < ResourceSetCount; j++)
 	{
 		ShaderResourceSetTemplate* set = (ShaderResourceSetTemplate*)graph->GetSet(j);
 		descriptorBuilders[j] = dev->CreateDescriptorSetLayoutBuilder(set->bindingCount);
-		set->vulkanDescLayout = descriptorLayoutIndex+j;
+		set->vulkanDescLayout = vulkanDescriptorLayoutCounter + j;
 	}
 
 	for (int j = 0; j < graph->resourceCount; j++)
@@ -1335,10 +1385,12 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 		}
 	}
 
-	for (int j = 0; j < count; j++)
+	for (int j = 0; j < ResourceSetCount; j++)
 	{
-		vulkanDescriptorLayouts[descriptorLayoutIndex++] = dev->CreateDescriptorSetLayout(descriptorBuilders[j]);
+		vulkanDescriptorLayouts[vulkanDescriptorLayoutCounter+j] = dev->CreateDescriptorSetLayout(descriptorBuilders[j]);
 	}
+
+	vulkanDescriptorLayoutCounter += ResourceSetCount;
 }
 
 void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shaderGraphLayoutsCount)
@@ -1509,12 +1561,12 @@ int RenderInstance::CreateComputePipelineStateObject(int shaderGraphIndex)
 
 void RenderInstance::CreatePipelines(StringView* pipelineDescriptions, int pipelineDescriptionsCount)
 {
-	static int pipelineInfoIndex = 0;
-
 	for (int i = 0; i < pipelineDescriptionsCount; i++)
 	{
-		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoIndex++], cacheAllocator);
+		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoCounter+i], cacheAllocator);
 	}
+
+	pipelineInfoCounter += pipelineDescriptionsCount;
 }
 
 int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer, AttachmentGraphInstance* graphInstance, uint32_t graphRenderPassIndex)
@@ -2402,17 +2454,15 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount)
 {
-	static int graphTemplateAlloc = 0;
-
-	static int rpIndexAlloc = 0;
-
 	CreateAttachmentGraphFromFile(*attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator);
 
-	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc++]);
+	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc]);
 	
-	int currentRenderPassCount = CreateRenderPass(rpIndexAlloc, &attachmentGraphsInstances[currentGraphInstance]);
+	int currentRenderPassCount = CreateRenderPass(vulkanRenderPassAlloc, &attachmentGraphsInstances[currentGraphInstance]);
 
-	rpIndexAlloc += currentRenderPassCount;
+	vulkanRenderPassAlloc += currentRenderPassCount;
+
+	graphTemplateAlloc++;
 
 	if (subAttachCount)
 		*subAttachCount = currentRenderPassCount;
@@ -2507,6 +2557,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	attachmentGraphs = (AttachmentGraph*)storageAllocator->Allocate(sizeof(AttachmentGraph) * attachmentGraphCount);
 
 	cacheAllocator->Reset();
+
+	queryPool = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * 5 * 2);
+
+	deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
 }
 
 
@@ -3211,6 +3265,8 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
+	rcb.ResetQueries(queryPool, 5 * 2 * currentFrame, 5 * 2);
+
 	UploadDeviceLocalTransfers(&rcb);
 
 	InvokeTransferCommands(&rcb);
@@ -3219,22 +3275,35 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 	int commandCountIter = 0;
 
+	int queryCountBaseIndex = 5 * 2 * currentFrame;
+
+	int queryCountIndex = queryCountBaseIndex;
+
 	while (commandCountIter <= gpuCommandCount)
 	{
 		GPUCommand* command = &gpuCommands[commandCountIter];
+
 		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
+			rcb.WriteTimestamp(queryPool, queryCountIndex, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			
 			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
 
 			computeQueue->DispatchWork(&rcb, currentFrame);
+			
+			rcb.WriteTimestamp(queryPool, queryCountIndex+1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+
+			queryCountIndex += 2;
 		}
 		else if (command->streamType == GPUCommandStreamType::ATTACHMENT_COMMANDS)
 		{
-
 			AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[command->indexForStreamType];
 
 			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 			{
+
+				rcb.WriteTimestamp(queryPool, queryCountIndex, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+
 				AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
 
 				int SubRenderTargetSelection = rpInst->rpType == RenderPassType::SWAPCHAIN_IMAGE_COUNT ? imageIndex : currentFrame;
@@ -3299,11 +3368,17 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 				graph->DrawScene(&rcb, currentFrame);
 
 				rcb.EndRenderPassCommand();
+
+				rcb.WriteTimestamp(queryPool, queryCountIndex+1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+			
+				queryCountIndex += 2;
 			}
 		}
 
 		commandCountIter++;
 	}
+
+	queryCounts[currentFrame] = (queryCountIndex - queryCountBaseIndex);
 
 	rcb.EndRecordingCommand();
 }
@@ -3380,6 +3455,8 @@ void RenderInstance::AddCommandQueue(int index, GPUCommandStreamType type)
 
 void RenderInstance::EndFrame()
 {
+	char StringBuffer[512];
+
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	int commandCountIter = 0;
@@ -3417,7 +3494,31 @@ void RenderInstance::EndFrame()
 		commandCountIter++;
 	}
 
+	if (previousFrame < MAX_FRAMES_IN_FLIGHT)
+	{
+		dev->ReadbackResultsFromQueries(
+			queryPool, 
+			5 * 2 * previousFrame, 
+			queryCounts[previousFrame],
+			queryResults.data(), sizeof(queryResults), 
+			sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT
+		);
+
+		for (uint32_t i = 0; i < queryCounts[previousFrame]; i+=2)
+		{
+			double timeNs = (queryResults[i + 1] - queryResults[i]) * deviceTimeStampPeriodNS;
+			double timeMs = timeNs / 1e6;
+
+			int actualSize = snprintf(StringBuffer, 512, "Time to run pass: %lf", timeMs);
+
+			internalRendererLogger->AddLogMessage(LOGINFO, StringBuffer, actualSize);
+		}
+	}
+
 	cacheAllocator->Reset();
+
+	previousFrame = currentFrame;
+	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void RenderInstance::AddPipelineToRPGraphicsQueue(int psoIndex, int frameGraphIndex, int renderPass)

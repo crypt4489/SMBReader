@@ -136,6 +136,20 @@ void VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 	}
 }
 
+double VKInstance::GetTimeStampPeriod(DeviceIndex gpuIndex)
+{
+	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
+	
+	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
+
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(gpu, &props);
+
+	double timestampPeriod = props.limits.timestampPeriod;
+
+	return timestampPeriod;
+}
+
 
 void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize)
 {

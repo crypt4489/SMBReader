@@ -151,6 +151,15 @@ struct RecordingBufferObject
 	void BindingDrawIndirectCount(EntryHandle commandBufferIndex, EntryHandle countBufferIndex, size_t commandBufferOffset, size_t countBufferOffset, uint32_t maxDrawCount);
 	void BindingDrawIndexedIndirectCount(EntryHandle commandBufferIndex, EntryHandle countBufferIndex, size_t commandBufferOffset, size_t countBufferOffset, uint32_t maxDrawCount);
 
+	void BeginQuery(EntryHandle queryPoolHandle, uint32_t queryIndex);
+	
+	void EndQuery(EntryHandle queryPoolHandle, uint32_t queryIndex);
+
+	void WriteTimestamp(EntryHandle queryPoolHandle, uint32_t queryIndex, VkPipelineStageFlagBits pipelineStage);
+
+	void ResetQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount);
+
+
 	VKCommandBuffer cbBufferHandler;
 	VKDevice* vkDeviceHandle;
 	VkPipelineLayout currLayout;
@@ -277,6 +286,7 @@ enum HandleType
 	VulkGraphicsOTQ = 29,
 	VulkComputeOTQ = 30,
 	VulkIndirectPipeline = 31,
+	VulkQueryPool = 32,
 	VulkMaxEnum
 };
 
@@ -390,7 +400,7 @@ struct VKDevice
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
-	
+	EntryHandle CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries);
 
 	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount);
 
@@ -510,6 +520,8 @@ struct VKDevice
 		uint32_t famPropsCount,
 		uint32_t queueMask);
 
+	VkQueryPool GetQueryPool(EntryHandle poolHandle);
+
 	struct QueueDetails
 	{
 		uint32_t managerIndex;
@@ -575,6 +587,8 @@ struct VKDevice
 	void DestroyRenderPass(EntryHandle handle);
 
 	void DestroyRenderTarget(EntryHandle handle);
+
+	void DestoryQueryPool(EntryHandle handle);
 
 	void DestroySampler(EntryHandle handle);
 
@@ -680,6 +694,9 @@ struct VKDevice
 
 	VKMemoryAllocatorDetails GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle);
 	
+	void ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount);
+
+	void ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount, void* dataOut, size_t sizeOfDataOut, VkDeviceSize dataStride, VkQueryResultFlags flags);
 
 	//mutable std::shared_mutex deviceLock;
 

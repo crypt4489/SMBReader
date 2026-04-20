@@ -39,6 +39,8 @@ struct ShaderGraphsHolder
 	std::array<EntryHandle, T_ShaderCount> shaders{};
 	std::array<ShaderDetails*, T_ShaderCount> shaderDetails{};
 	
+	ShaderGraphsHolder() = default;
+
 	ShaderGraphsHolder(void* gSlabHead, int gSlabSize, void* sSlabHead, int sSlabSize)
 		: 
 		graphCount(0), shaderCount(0),

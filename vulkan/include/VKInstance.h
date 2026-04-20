@@ -133,6 +133,8 @@ struct VKInstance
 
 	void CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
 
+	double GetTimeStampPeriod(DeviceIndex gpuIndex);
+
 	VkInstance instance = VK_NULL_HANDLE;
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 	
