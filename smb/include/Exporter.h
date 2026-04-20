@@ -3,9 +3,9 @@
 
 #include <format>
 #include <iostream>
-#include "AppAllocator.h"
+#include "allocator/AppAllocator.h"
 #include "SMBFile.h"
-#include "VertexTypes.h"
+#include "math/VertexTypes.h"
 
 namespace ExportHelper
 {

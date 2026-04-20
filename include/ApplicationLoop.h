@@ -8,8 +8,7 @@
 #include <string>
 #include <syncstream>
 
-
-#include "AppTypes.h"
+#include "CommonRenderTypes.h"
 #include "Camera.h"
 #include "SMBFile.h"
 #include "ProgramArgs.h"

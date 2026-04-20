@@ -1,5 +1,5 @@
 #pragma once
-#include "AppTypes.h"
+#include "StringUtils.h"
 #include "IndexTypes.h"
 #include <type_traits>
 #include <utility>

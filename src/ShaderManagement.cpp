@@ -1,4 +1,4 @@
-#include "ResourceDependencies.h"
+#include "ShaderManagement.h"
 uintptr_t ShaderGraph::GetSet(int setIndex)
 {
 	uintptr_t head = (uintptr_t)(this) + sizeof(ShaderGraph) + (setIndex * sizeof(ShaderResourceSetTemplate));

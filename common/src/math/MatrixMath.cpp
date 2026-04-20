@@ -1,5 +1,5 @@
-#include "MathTypes.h"
-#include "LTM.h"
+#include "math/MathTypes.h"
+#include "math/LTM.h"
 #include <cmath>
 
 Matrix2f Add(Matrix2f a, Matrix2f b)

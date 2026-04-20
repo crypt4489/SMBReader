@@ -1,7 +1,7 @@
 #pragma once
 
 #include "OSFile.h"
-#include "AppTypes.h"
+#include "StringUtils.h"
 #include <cstdint>
 
 enum LogMessageType
@@ -10,7 +10,6 @@ enum LogMessageType
 	LOGWARNING = 2,
 	LOGINFO = 3,
 };
-
 
 struct LogMessage
 {

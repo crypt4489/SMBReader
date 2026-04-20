@@ -1,11 +1,9 @@
 #pragma once
-#include "AppTypes.h"
+#include "CommonRenderTypes.h"
 #include "OSFile.h"
-#include <vector>
 
-#include <cstdint>
-#include <fstream>
 #include <utility>
+
 namespace TexUtils
 {
 	inline void BGRATexture(char* image, int height, int width, int stride)
@@ -60,6 +58,11 @@ namespace TexUtils
 		}
 	}
 }
+
+enum TextureIOType
+{
+	BMP = 0,
+};
 
 struct TextureDetails
 {

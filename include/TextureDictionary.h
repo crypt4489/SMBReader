@@ -1,10 +1,8 @@
 #pragma once
 #include <array>
 
-#include "AppAllocator.h"
-#include "AppTypes.h"
-
-#include "TextureIO.h"
+#include "allocator/AppAllocator.h"
+#include "imageutils/TextureIO.h"
 #include "IndexTypes.h"
 #include "ThreadManager.h"
 

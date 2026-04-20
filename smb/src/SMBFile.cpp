@@ -1,5 +1,5 @@
 #include "SMBFile.h"
-#include "VertexTypes.h"
+#include "math/VertexTypes.h"
 
 //constexpr float dx = 3.051851e-05f;
 //constexpr float ax = 0.0009770395f;

@@ -1,4 +1,4 @@
-#include "LTM.h"
+#include "math/LTM.h"
 Vector3f LTM::GetPos() const {
 	return Vector3f(LTM.translate.x, LTM.translate.y, LTM.translate.z);
 }

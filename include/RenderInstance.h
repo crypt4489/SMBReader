@@ -3,12 +3,11 @@
 #include <functional>
 #include <vulkan/vulkan.h>
 
-#include "AppTypes.h"
-#include "AppAllocator.h"
+#include "allocator/AppAllocator.h"
 #include "IndexTypes.h"
 #include "VKTypes.h"
-#include "VertexTypes.h"
-#include "ResourceDependencies.h"
+#include "math/VertexTypes.h"
+#include "ShaderManagement.h"
 #include "RenderInstanceManagement.h"
 #include "ShaderResourceSet.h"
 #include "ThreadManager.h"
@@ -291,7 +290,7 @@ struct RenderInstance
 
 	EntryHandle queryPool = EntryHandle();
 
-	std::array<uint32_t, 10> queryResults;
+	std::array<uint32_t, 10> queryResults{};
 
 	double deviceTimeStampPeriodNS = 0.0;
 

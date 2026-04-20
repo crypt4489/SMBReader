@@ -5,10 +5,10 @@
 #endif
 #include "Camera.h"
 #include "Exporter.h"
-#include "Logger.h"
+#include "logger/Logger.h"
 #include "TextureDictionary.h"
 #include "SMBTexture.h"
-#include "AppAllocator.h"
+#include "allocator/AppAllocator.h"
 
 #include <cassert>
 
@@ -528,7 +528,7 @@ static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
 static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
 static void PrintDebugMemoryAllocation();
-
+static void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -4188,4 +4188,89 @@ int ApplicationLoop::AllocateGPUBlendRanges(int numberOfRanges)
 	globalBlendRangeCount += numberOfRanges;
 
 	return blendRangeReturn;
+}
+
+void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator)
+{
+
+	Vector3f* totalTangents = (Vector3f*)tempAllocator->CAllocate(sizeof(Vector3f) * totalVertCount, 16);
+	float* signBitTangents = (float*)tempAllocator->CAllocate(sizeof(float) * totalVertCount, 4);
+	Vector3f* normals = (Vector3f*)tempAllocator->CAllocate(sizeof(Vector3f) * totalVertCount, 16);
+
+	for (int lead = 0; lead < totalIndexCount - 2; lead++)
+	{
+		uint16_t index1 = indices[lead];
+		uint16_t index2 = indices[lead + 1];
+		uint16_t index3 = indices[lead + 2];
+
+		Vector3f vert1 = Vector3f(pos[index1].x, pos[index1].y, pos[index1].z);
+		Vector3f vert2 = Vector3f(pos[index2].x, pos[index2].y, pos[index2].z);
+		Vector3f vert3 = Vector3f(pos[index3].x, pos[index3].y, pos[index3].z);
+
+
+		Vector3f e1 = vert2 - vert1;
+		Vector3f e2 = vert3 - vert1;
+
+		Vector3f normal = Cross(e1, e2);
+
+		float area2 = Dot(normal, normal);
+
+		if (area2 <= 0.0f) {
+			continue;
+		}
+
+		normals[index1] = normals[index1] + normal;
+		normals[index2] = normals[index2] + normal;
+		normals[index3] = normals[index3] + normal;
+
+		Vector2f uv1 = uvs[index1];
+		Vector2f uv2 = uvs[index2];
+		Vector2f uv3 = uvs[index3];
+
+		Vector2f duv1 = uv2 - uv1;
+		Vector2f duv2 = uv3 - uv1;
+
+		float f_det = (duv1.x * duv2.y - duv2.x * duv1.y);
+
+
+
+		float f = 1.0f / f_det;
+
+		Vector3f tangent;
+		tangent = Normalize((e1 * duv2.y - e2 * duv1.y) * f);
+
+		Vector3f bitangent = Normalize((e2 * duv1.x - e1 * duv2.x) * f);
+
+
+		Vector3f n = Normalize(normal);
+		float sign = (Dot(Cross(n, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
+
+		totalTangents[index1] = totalTangents[index1] + tangent;
+		totalTangents[index2] = totalTangents[index2] + tangent;
+		totalTangents[index3] = totalTangents[index3] + tangent;
+
+		signBitTangents[index1] += sign;
+		signBitTangents[index2] += sign;
+		signBitTangents[index3] += sign;
+	}
+
+
+	for (int lead = 0; lead < totalVertCount; lead++)
+	{
+		Vector3f normal = normals[lead];
+
+		normal = Normalize(normal);
+
+		Vector3f tangent = totalTangents[lead];
+
+		tangent = Normalize(tangent - (normal * Dot(normal, tangent)));
+
+		float handedness = signBitTangents[lead] < 0.0f ? -1.0f : 1.0f;
+
+		Vector4f outTangent = Vector4f(tangent.x, tangent.y, tangent.z, handedness);
+
+		tangents[lead] = outTangent;
+
+		outNormals[lead] = normal;
+	}
 }

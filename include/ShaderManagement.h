@@ -1,9 +1,19 @@
 #pragma once
-#include "AppAllocator.h"
-#include "AppTypes.h"
-#include "IndexTypes.h"
-
+#include "allocator/AppAllocator.h"
+#include "CommonRenderTypes.h"
 #include <array>
+
+struct ShaderDetails
+{
+	int shaderNameSize;
+	int shaderDataSize;
+
+	ShaderDetails* GetNext();
+
+	char* GetString();
+
+	void* GetShaderData();
+};
 
 struct ShaderMap
 {

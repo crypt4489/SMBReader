@@ -1,8 +1,160 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
-#include "AppTypes.h"
+#include "CommonRenderTypes.h"
 
+enum RenderingBackend
+{
+	VULKAN = 1,
+	DXD12 = 2,
+};
+
+enum class AllocationType
+{
+	STATIC = 0,
+	PERFRAME = 1,
+	PERDRAW = 2
+};
+
+enum class TransferType
+{
+	CACHED = 0,
+	MEMORY = 1,
+};
+
+struct ShaderResourceUpdate
+{
+	ShaderResourceType type;
+	int descriptorSet;
+	int bindingIndex;
+	int copyCount;
+	void* data;
+	int dataSize;
+};
+
+struct DeviceHandleArrayUpdate
+{
+	int resourceDstBegin;
+	int resourceCount;
+	EntryHandle* resourceHandles;
+};
+
+struct BufferArrayUpdate
+{
+	int resourceDstBegin;
+	int allocationCount;
+	int* allocationIndices;
+};
+
+struct GraphicsIntermediaryPipelineInfo
+{
+	uint32_t drawType;
+	int vertexBufferHandle;
+	uint32_t vertexCount;
+	uint32_t pipelinename;
+	uint32_t descCount;
+	int* descriptorsetid;
+	int indexBufferHandle;
+	uint32_t indexCount;
+	uint32_t instanceCount;
+	uint32_t indexSize;
+	uint32_t indexOffset;
+	uint32_t vertexOffset;
+	int indirectAllocation;
+	int indirectDrawCount;
+	int indirectCountAllocation;
+};
+
+struct ComputeIntermediaryPipelineInfo
+{
+	uint32_t x;
+	uint32_t y;
+	uint32_t z;
+	uint32_t pipelinename;
+	uint32_t descCount;
+	int* descriptorsetid;
+};
+
+struct BufferMemoryTransferRegion
+{
+	void* data;
+	int size;
+	int copyCount;
+	int allocationIndex;
+	int allocoffset;
+};
+
+struct TextureMemoryRegion
+{
+	void* data;
+	size_t totalSize;
+	EntryHandle textureIndex;
+	int width;
+	int height;
+	int mipLevels;
+	int layers;
+	ImageFormat format;
+};
+
+struct TransferCommand
+{
+	int fillVal;
+	int size;
+	int offset;
+	int allocationIndex;
+	int copycount;
+	BarrierStage dstStage;
+	BarrierAction dstAction;
+};
+
+struct RenderAllocation
+{
+	size_t offset;
+	size_t deviceAllocSize;
+	size_t requestedSize;
+	size_t alignment;
+	EntryHandle viewIndex;
+	AllocationType allocType;
+	ComponentFormatType formatType;
+	int structureCopies;
+	int memIndex;
+};
+
+enum AppPipelineHandleType
+{
+	COMPUTESO,
+	GRAPHICSO,
+	INDIRECTSO,
+};
+
+struct PipelineHandle
+{
+	int group;
+	int indexForHandles;
+	int numHandles;
+	int pipelineIdentifierGroup;
+};
+
+struct PipelineInstanceData
+{
+	int frameGraphIndices[4];
+	int frameGraphRenderPasses[4];
+	int frameGraphPipelineIndices[4];
+	int frameGraphCount;
+	int pipelineCount;
+};
+
+enum GPUCommandStreamType
+{
+	ATTACHMENT_COMMANDS = 1,
+	COMPUTE_QUEUE_COMMANDS = 2,
+};
+
+struct GPUCommand
+{
+	GPUCommandStreamType streamType;
+	int indexForStreamType;
+};
 
 
 enum class DriverUpdateType

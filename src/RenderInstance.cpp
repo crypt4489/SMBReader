@@ -1,7 +1,5 @@
 #include "RenderInstance.h"
 
-
-
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -22,7 +20,6 @@
 #include "VKPipelineBuilder.h"
 #include "VKPipelineObject.h"
 #include "VKOneTimeQueue.h"
-#include "VertexTypes.h"
 #include "WindowManager.h"
 
 
@@ -2343,7 +2340,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
 			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
-				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)descriptorManager.shaderResourceInstAllocator.Allocate(sizeof(ImageShaderResourceBarrier)*2);
+				ShaderResourceImageBarrier* barriers = (ShaderResourceImageBarrier*)descriptorManager.shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImageBarrier)*2);
 				barriers[0].dstStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers[0].dstAction = WRITE_SHADER_RESOURCE;
 				barriers[0].type = memBarrierType;
@@ -2370,7 +2367,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
 			{
-				ImageShaderResourceBarrier* barriers = (ImageShaderResourceBarrier*)descriptorManager.shaderResourceInstAllocator.Allocate(sizeof(ImageShaderResourceBarrier));
+				ShaderResourceImageBarrier* barriers = (ShaderResourceImageBarrier*)descriptorManager.shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImageBarrier));
 				
 				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
 				barriers->srcAction = WRITE_SHADER_RESOURCE;
@@ -3059,8 +3056,8 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				case ShaderResourceType::IMAGESTORE2D:
 				{
 					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
-					ImageShaderResourceBarrier* barrier = (ImageShaderResourceBarrier*)(imageBarrier + 1);
-					ImageShaderResourceBarrier* barrier2 = &barrier[1];
+					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
+					ShaderResourceImageBarrier* barrier2 = &barrier[1];
 
 					VkImageSubresourceRange range{};
 					range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -3110,7 +3107,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 				{
 					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
 
-					ImageShaderResourceBarrier* barrier = (ImageShaderResourceBarrier*)(imageBarrier + 1);
+					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
 
 					VkImageSubresourceRange range{};
 

@@ -2,7 +2,7 @@
 
 #include "WinOSWindow.h"
 #include "OSWindow.h"
-#include "AppTypes.h"
+#include "StringUtils.h"
 
 struct WindowManager
 {

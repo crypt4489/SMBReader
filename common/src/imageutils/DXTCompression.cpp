@@ -4,7 +4,7 @@
 // unsigned char g:     green channel.
 // unsigned char b:     blue channel.
 // unsigned char a:     alpha channel.
-#include "DXTCompression.h"
+#include "imageutils/DXTCompression.h"
 #include <cstdint>
 static inline unsigned long PackRGBA(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DXTCompression.h"
+#include "imageutils/DXTCompression.h"
 #include "SMBFile.h"
 
 

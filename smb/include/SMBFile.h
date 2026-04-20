@@ -1,9 +1,9 @@
 #pragma once
 #include <cstdint>
 #include <fstream>
-#include "AppAllocator.h"
-#include "Logger.h"
-#include "MathTypes.h"
+#include "allocator/AppAllocator.h"
+#include "logger/Logger.h"
+#include "math/MathTypes.h"
 
 #define BEGINNINGSMBChunk 0xa77e4dfa
 #define ENDTAG 0xbeef1234

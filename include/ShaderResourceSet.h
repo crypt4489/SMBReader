@@ -3,23 +3,19 @@
 #include <array>
 #include <atomic>
 
-#include "AppAllocator.h"
-#include "AppTypes.h"
-#include "Logger.h"
+#include "allocator/AppAllocator.h"
+#include "CommonRenderTypes.h"
+#include "logger/Logger.h"
 #include "FileManager.h"
-#include "ResourceDependencies.h"
-
+#include "ShaderManagement.h"
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
-
 
 struct ShaderResourceSetContext
 {
 	Logger* contextLogger;
 	bool contextFailed;
 };
-
-
 
 template <int N>
 struct ShaderResourceManager
@@ -242,7 +238,7 @@ struct ShaderResourceManager
 		}
 
 
-		ImageShaderResourceBarrier* imageBarrier = (ImageShaderResourceBarrier*)head;
+		ShaderResourceImageBarrier* imageBarrier = (ShaderResourceImageBarrier*)head;
 
 
 		imageBarrier[barrierIndex].imageType = ImageUsage::COLOR;
@@ -309,10 +305,6 @@ struct ShaderResourceManager
 };
 
 
-
-
-
-
 struct ShaderXMLTag
 {
 	unsigned long hashCode;
@@ -370,9 +362,6 @@ static constexpr int ASCIIToInt(char* str);
 
 static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset);
 
-
-
-
 struct PipelineXMLTag
 {
 	unsigned long hashCode;
@@ -402,8 +391,6 @@ struct CullModeXMLTag : PipelineXMLTag
 
 
 void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator);
-
-
 
 static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);

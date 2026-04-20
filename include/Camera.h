@@ -1,6 +1,6 @@
 #pragma once
 
-#include "LTM.h"
+#include "math/LTM.h"
 #include <cmath>
 struct Camera
 {

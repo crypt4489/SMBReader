@@ -27,9 +27,9 @@ set (PROJECT_LIBRARY_PATHS
  "lib/windows/"
 )
 
-file(GLOB PROJECT_SOURCES "platform/windows/src/*.cpp" "src/*.cpp" "smb/src/*.cpp" "main.cpp") 
+file(GLOB PROJECT_SOURCES "platform/windows/src/*.cpp" "src/*.cpp" "smb/src/*.cpp" "common/src/*/*.cpp" "main.cpp") 
 
-file(GLOB PROJECT_HEADERS "include/*.h" "smb/include/*.h" "platform/*.h" "platform/windows/include/*.h" "common/include/*.h")
+file(GLOB PROJECT_HEADERS "common/include/*/*.h" "include/*.h" "smb/include/*.h" "platform/*.h" "platform/windows/include/*.h" "common/include/*.h")
 
 file(GLOB PROJECT_SHADERS "shaders/layouts/*.sgr" "shaders/*.vert" "shaders/*.comp" "shaders/*.frag")
 

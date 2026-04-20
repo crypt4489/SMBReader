@@ -1,6 +1,5 @@
-#include "Logger.h"
+#include "logger/Logger.h"
 #include <bit>
-#include <stdio.h>
 Logger::Logger(OSFileHandle _handle, char* _buffer, size_t _bufferSize) :
 	structuredLogBuffer(_buffer), size(_bufferSize), head(0), tail(0), fileHandle(_handle)
 {

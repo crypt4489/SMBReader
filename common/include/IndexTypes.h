@@ -1,6 +1,10 @@
 #pragma once
 #include <cstdint>
 
+#define KiB 1024
+#define MiB 1024 * KiB
+#define GiB 1024 * MiB
+
 struct DeviceIndex
 {
 
