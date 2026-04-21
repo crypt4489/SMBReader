@@ -1846,8 +1846,6 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 		EntryHandle index = descriptorManager.vkDescriptorSets[region.descriptorSet];
 
-		
-
 		void* data = region.data;
 
 		if (index != previousBuffer)
@@ -1864,23 +1862,32 @@ void RenderInstance::UploadDescriptorsUpdates()
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
-
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
-			builder->AddSamplerDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
+
+			for (int iter = 0; iter < update->resourceCount; iter++)
+			{
+				builder->AddSamplerDescription(samplerResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+			}
 			break;
 		}
 		case ShaderResourceType::IMAGE2D:
 		{
 
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
-			builder->AddImageResourceDescription(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
+			for (int iter = 0; iter < update->resourceCount; iter++)
+			{
+				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+			}
 			break;
 		}
 		case ShaderResourceType::SAMPLER3D:
 		case ShaderResourceType::SAMPLER2D:
 		{
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
-			builder->AddCombinedTextureArray(update->resourceHandles, update->resourceCount, update->resourceDstBegin, region.bindingIndex, currentFrame, 1);
+			for (int iter = 0; iter < update->resourceCount; iter++)
+			{
+				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+			}
 			break;
 		}
 		case ShaderResourceType::STORAGE_BUFFER:
@@ -1971,7 +1978,7 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 	{
 		link = imageMemoryUpdateManager.PopLink(&region, link);
 
-		EntryHandle handle = region.textureIndex;
+		EntryHandle handle = textureResourceHandles[region.textureIndex];
 
 		dev->UploadImageData(handle,
 			(char*)region.data,
@@ -2153,58 +2160,73 @@ int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, s
 }
 
 
-EntryHandle RenderInstance::CreateImageHandle(
+int RenderInstance::CreateImageHandle(
 	uint32_t blobSize,
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat format, int poolIndex, EntryHandle samplerIndex)
+	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
 {
 
 	assert(poolIndex != 0);
 
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle textureIndex = majorDevice->CreateImageHandle(
+	EntryHandle textureHandle = majorDevice->CreateImageHandle(
 		blobSize,
 		width, height, 1,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
 		imagePools[poolIndex],
 		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D);
 
-	majorDevice->AssignSamplerToTexture(textureIndex, samplerIndex);
+	majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+
+	int textureIndex = textureResourceHandlesCtr++;
+
+	textureResourceHandles[textureIndex] = textureHandle;
 
 	return textureIndex;
 }
 
-EntryHandle RenderInstance::CreateCubeImageHandle(
+int RenderInstance::CreateCubeImageHandle(
 	uint32_t blobSize,
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat format, int poolIndex, EntryHandle samplerIndex)
+	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle textureIndex = majorDevice->CreateCubeMapedImageHandle(
+	EntryHandle textureHandle = majorDevice->CreateCubeMapedImageHandle(
 		blobSize,
 		width, height, 6,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
 		imagePools[poolIndex],
 		VK_IMAGE_ASPECT_COLOR_BIT);
 
-	majorDevice->AssignSamplerToTexture(textureIndex, samplerIndex);
+	majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+
+	int textureIndex = textureResourceHandlesCtr++;
+
+	textureResourceHandles[textureIndex] = textureHandle;
 
 	return textureIndex;
 }
 
 
-EntryHandle RenderInstance::CreateStorageImage(
+int RenderInstance::CreateStorageImage(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat type, int poolIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-	return majorDevice->CreateStorageImage(
+
+	EntryHandle textureHandle = majorDevice->CreateStorageImage(
 		width, height,
 		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
 		imagePools[poolIndex],
 		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	int textureIndex = textureResourceHandlesCtr++;
+
+	textureResourceHandles[textureIndex] = textureHandle;
+
+	return textureIndex;
 }
 
 
@@ -2614,11 +2636,17 @@ ImageFormat RenderInstance::FindSupportedDepthFormat(ImageFormat* requestedForma
 }
 
 
-EntryHandle RenderInstance::CreateSampler(uint32_t maxMipsLevel)
+int RenderInstance::CreateSampler(uint32_t maxMipsLevel)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	return majorDevice->CreateSampler(maxMipsLevel);
+	EntryHandle samplerHandle = majorDevice->CreateSampler(maxMipsLevel);
+
+	int samplerIndex = samplersResourceHandlesCtr++;
+
+	samplerResourceHandles[samplerIndex] = samplerHandle;
+
+	return samplerIndex;
 }
 
 
@@ -2702,22 +2730,31 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 		{
 			case ShaderResourceType::SAMPLERSTATE:
 			{
-				ShaderResourceSampler* image = (ShaderResourceSampler*)header;
-				if (image->samplerHandles)
-					builder->AddSamplerDescription(image->samplerHandles, image->samplerCount, image->firstSampler, i, 0, frames);
-				break;
+			ShaderResourceSampler* image = (ShaderResourceSampler*)header;
+			if (!image->samplerHandles) break;
+			for (int sampler = 0; sampler < image->samplerCount; sampler++)
+			{
+				builder->AddSamplerDescription(samplerResourceHandles[image->samplerHandles[sampler]], image->firstSampler + sampler, i, 0, frames);
+			}
+			break;
 			}
 			case ShaderResourceType::IMAGE2D:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				if (image->textureHandles)
-					builder->AddImageResourceDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				if (!image->textureHandles) break;
+
+				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
+				{
+					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]], image->firstTexture + imageIndex, i, 0, frames);
+				}
+
+			
 				break;
 			}
 			case ShaderResourceType::IMAGESTORE2D:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				builder->AddStorageImageDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				//builder->AddStorageImageDescription(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
 				break;
 			}
 			case ShaderResourceType::SAMPLER3D:
@@ -2725,8 +2762,12 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 			case ShaderResourceType::SAMPLERCUBE:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				if (image->textureHandles)
-					builder->AddCombinedTextureArray(image->textureHandles, image->textureCount, image->firstTexture, i, 0, frames);
+				if (!image->textureHandles) break;
+
+				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
+				{
+					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]], image->firstTexture + imageIndex, i, 0, frames);
+				}
 				
 				break;
 			}
@@ -3071,7 +3112,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
 					{
-
+						/*
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
 							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
@@ -3079,6 +3120,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 							srcStage,
 							dstStage
 						);
+						*/
 					}
 
 
@@ -3090,7 +3132,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 					if (barrier2->dstResourceLayout != barrier2->srcResourceLayout)
 					{
 
-
+						/*
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier2->srcResourceLayout),
 							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), *imageBarrier->textureHandles, range);
 
@@ -3099,6 +3141,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 							srcStage,
 							dstStage
 						);
+						*/
 					}
 
 					break;
@@ -3122,7 +3165,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 
 					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
 					{
-
+						/*
 						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
 							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
 						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
@@ -3130,6 +3173,7 @@ void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, 
 							srcStage,
 							dstStage
 						);
+						*/
 					}
 
 					break;
@@ -3458,18 +3502,27 @@ void RenderInstance::EndFrame()
 
 	int commandCountIter = 0;
 
-	while (commandCountIter <= gpuCommandCount)
+	int queryOffset = 0;
+
+	while (commandCountIter < gpuCommandCount)
 	{
 		GPUCommand* command = &gpuCommands[commandCountIter];
+
+		const char* passDesc = "Undefined pass : ";
+
+		int queryCount = 0;
+
 		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
 			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
 
 			computeQueue->UpdateQueue();
+			passDesc = "Compute Pass : ";
+
+			queryCount = 2;
 		}
 		else if (command->streamType == GPUCommandStreamType::ATTACHMENT_COMMANDS)
 		{
-
 			AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[command->indexForStreamType];
 
 			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
@@ -3485,31 +3538,38 @@ void RenderInstance::EndFrame()
 					queue->UpdateQueue();
 				}
 
+				queryCount += 2;
+			}
+
+			passDesc = "Render Pass : ";
+		}
+
+		if (previousFrame < MAX_FRAMES_IN_FLIGHT)
+		{
+			dev->ReadbackResultsFromQueries(
+				queryPool,
+				(5 * 2 * previousFrame) + queryOffset,
+				queryCount,
+				queryResults.data(), 
+				sizeof(queryResults),
+				sizeof(uint32_t), 
+				VK_QUERY_RESULT_WAIT_BIT
+			);
+
+			for (uint32_t i = 0; i < queryCount; i += 2)
+			{
+				double timeNs = (queryResults[i + 1] - queryResults[i]) * deviceTimeStampPeriodNS;
+				double timeMs = timeNs / 1e6;
+
+				int actualSize = snprintf(StringBuffer, 512, "%s Time to run pass: %lf", passDesc, timeMs);
+
+				internalRendererLogger->AddLogMessage(LOGINFO, StringBuffer, actualSize);
 			}
 		}
 
+		queryOffset += queryCount;
+
 		commandCountIter++;
-	}
-
-	if (previousFrame < MAX_FRAMES_IN_FLIGHT)
-	{
-		dev->ReadbackResultsFromQueries(
-			queryPool, 
-			5 * 2 * previousFrame, 
-			queryCounts[previousFrame],
-			queryResults.data(), sizeof(queryResults), 
-			sizeof(uint32_t), VK_QUERY_RESULT_WAIT_BIT
-		);
-
-		for (uint32_t i = 0; i < queryCounts[previousFrame]; i+=2)
-		{
-			double timeNs = (queryResults[i + 1] - queryResults[i]) * deviceTimeStampPeriodNS;
-			double timeMs = timeNs / 1e6;
-
-			int actualSize = snprintf(StringBuffer, 512, "Time to run pass: %lf", timeMs);
-
-			internalRendererLogger->AddLogMessage(LOGINFO, StringBuffer, actualSize);
-		}
 	}
 
 	cacheAllocator->Reset();
@@ -3614,7 +3674,7 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 	rducm->updateType = DriverUpdateType::MEMORYUPDATE;
 }
 
-void RenderInstance::UpdateImageMemory(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 {
 
 	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
@@ -3675,12 +3735,12 @@ void RenderInstance::UpdateShaderResourceArray(int descriptorid, int bindinginde
 		
 		cachedUpdate->resourceDstBegin = resourceArrayData->resourceDstBegin;
 		cachedUpdate->resourceCount = resCount;
-		cachedUpdate->resourceHandles = (EntryHandle*)(updateCommandsCache->Allocate(sizeof(EntryHandle) * resCount));
+		cachedUpdate->resourceHandles = (int*)(updateCommandsCache->Allocate(sizeof(int) * resCount));
 		
-		memcpy(cachedUpdate->resourceHandles, resourceArrayData->resourceHandles, sizeof(EntryHandle) * resCount);
+		memcpy(cachedUpdate->resourceHandles, resourceArrayData->resourceHandles, sizeof(int) * resCount);
 		
 		argData = cachedUpdate;
-		argSize = (sizeof(EntryHandle) * resCount) + sizeof(DeviceHandleArrayUpdate);
+		argSize = (sizeof(int) * resCount) + sizeof(DeviceHandleArrayUpdate);
 		break;
 	}
 	}
@@ -3810,13 +3870,21 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 
 	EntryHandle* imageViews = currentGraphInstance->resources[resourceIndex].attachmentImageView[0];
 
-	DeviceHandleArrayUpdate update;
-
 	int imageCount = currentGraphInstance->resources[resourceIndex].imageCount;
+
+	int* textureIds = (int*)cacheAllocator->Allocate(sizeof(int) * imageCount);
+
+	for (int i = 0; i < imageCount; i++)
+	{
+		textureResourceHandles[textureResourceHandlesCtr] = imageViews[i];
+		textureIds[i] = textureResourceHandlesCtr++;
+	}
+
+	DeviceHandleArrayUpdate update;
 
 	update.resourceCount = imageCount;
 	update.resourceDstBegin = textureStart;
-	update.resourceHandles = imageViews;
+	update.resourceHandles = textureIds;
 
 	UpdateShaderResourceArray(descriptorSet, bindingIndex, ShaderResourceType::IMAGE2D, &update);
 

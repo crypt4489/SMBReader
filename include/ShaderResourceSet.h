@@ -80,7 +80,7 @@ struct ShaderResourceManager
 		header->bufferCount = bufferCount;
 	}
 
-	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* index, int textureCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -96,7 +96,7 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSamplerResourceToShaderResource(int descriptorSet, EntryHandle* indices, int samplerCount, int firstSampler, int bindingIndex)
+	void BindSamplerResourceToShaderResource(int descriptorSet, int* indices, int samplerCount, int firstSampler, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -112,7 +112,7 @@ struct ShaderResourceManager
 		header->firstSampler = firstSampler;
 	}
 
-	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* index, int textureCount, int firstTexture, int bindingIndex)
 	{
 		uintptr_t head = descriptorSets[descriptorSet];
 		ShaderResourceSet* set = (ShaderResourceSet*)head;
@@ -125,22 +125,6 @@ struct ShaderResourceManager
 
 		header->textureHandles = index;
 		header->textureCount = textureCount;
-		header->firstTexture = firstTexture;
-	}
-
-	void BindSampledImageArrayToShaderResource(ShaderResourceSetContext* context, int descriptorSet, EntryHandle* indices, int texCount, int firstTexture, int bindingIndex)
-	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-
-		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
-
-		if (header->type != ShaderResourceType::SAMPLER3D && header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE)
-			return;
-
-		header->textureHandles = indices;
-		header->textureCount = texCount;
 		header->firstTexture = firstTexture;
 	}
 

@@ -36,7 +36,7 @@ struct DeviceHandleArrayUpdate
 {
 	int resourceDstBegin;
 	int resourceCount;
-	EntryHandle* resourceHandles;
+	int* resourceHandles;
 };
 
 struct BufferArrayUpdate
@@ -88,7 +88,7 @@ struct TextureMemoryRegion
 {
 	void* data;
 	size_t totalSize;
-	EntryHandle textureIndex;
+	int textureIndex;
 	int width;
 	int height;
 	int mipLevels;
@@ -209,7 +209,7 @@ struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
 	int layers; 
 	ImageFormat format;
 	void* data;
-	EntryHandle textureIndex;
+	int textureIndex;
 	size_t totalSize;
 	int pad[4];
 
@@ -489,7 +489,7 @@ struct ImageMemoryUpdateManager
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+	int Create(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 	{
 		int link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
@@ -530,7 +530,7 @@ struct ImageMemoryUpdateManager
 		linkCount++;
 	}
 
-	int Find(EntryHandle textureIndex)
+	int Find(int textureIndex)
 	{
 		int link = linkHead;
 		while (link >= 0 && transferRegions[link].textureIndex != textureIndex)

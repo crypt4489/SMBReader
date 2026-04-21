@@ -89,6 +89,35 @@ void DescriptorSetBuilder::AddStorageImageDescription(EntryHandle* textureHandle
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
+void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+{
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
+	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
+
+	
+	VKTexture* tex = device->GetTexture(textureHandle);
+	imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo->imageView = device->GetImageViewByTexture(textureHandle, 0);
+	imageInfo->sampler = device->GetSamplerByTexture(textureHandle, 0);
+	
+
+	for (uint32_t set = firstSet; set < firstSet + setCount; set++)
+	{
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSets[set];
+		descriptorWrite.dstBinding = binding;
+		descriptorWrite.dstArrayElement = dstArrayElement;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pImageInfo = imageInfo;
+		descriptorWrites[set - firstSet] = descriptorWrite;
+	}
+
+	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
+}
+
+
 void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
@@ -183,6 +212,59 @@ void DescriptorSetBuilder::AddBufferTypePerFrame(VkBuffer buffer, VkDeviceSize s
 		descriptorWrite.pBufferInfo = &ref;
 		descriptorWrites[i-firstSet] = descriptorWrite;
 		offset += size;
+	}
+
+	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
+}
+
+void DescriptorSetBuilder::AddSamplerDescription(EntryHandle samplerHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+{
+	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
+	imageInfo->sampler = device->GetSamplerByHandle(samplerHandle);
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
+
+	for (uint32_t set = firstSet; set < setCount + firstSet; set++)
+	{
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSets[set];
+		descriptorWrite.dstBinding = binding;
+		descriptorWrite.dstArrayElement = dstArrayElement;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pImageInfo = imageInfo;
+		descriptorWrites[set - firstSet] = descriptorWrite;
+	}
+
+	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
+}
+
+void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+{
+	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
+
+	imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo->imageView = device->GetImageViewByTexture(textureHandle, 0);
+
+	if (!imageInfo->imageView)
+	{
+		imageInfo->imageView = device->GetImageViewByHandle(textureHandle);
+	}
+	
+
+	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
+
+	for (uint32_t set = firstSet; set < firstSet + setCount; set++)
+	{
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSets[set];
+		descriptorWrite.dstBinding = binding;
+		descriptorWrite.dstArrayElement = dstArrayElement;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pImageInfo = imageInfo;
+		descriptorWrites[set - firstSet] = descriptorWrite;
 	}
 
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);

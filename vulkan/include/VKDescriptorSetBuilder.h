@@ -44,6 +44,14 @@ struct DescriptorSetBuilder
 
 	void AddSamplerDescription(EntryHandle* samplerHandles, uint32_t samplerCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
+	void AddSamplerDescription(EntryHandle samplerHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+
+	void AddImageResourceDescription(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+
+	void AddCombinedTextureArray(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+
+	void AddStorageImageDescription(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+
 	EntryHandle AddDescriptorsToCache();
 
 	VkDescriptorSet* descriptorSets;

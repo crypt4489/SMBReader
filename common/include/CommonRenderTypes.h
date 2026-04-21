@@ -130,6 +130,13 @@ struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
 
 };
 
+struct ShaderResourceState
+{
+	BarrierAction currentAction;
+	BarrierStage currentStage;
+	ImageLayout layout;  
+};
+
 enum class ShaderResourceType
 {
 	SAMPLER2D = 1,
@@ -211,14 +218,14 @@ struct ShaderResourceHeader
 
 struct ShaderResourceSampler : public ShaderResourceHeader
 {
-	EntryHandle* samplerHandles;
+	int* samplerHandles;
 	int samplerCount;
 	int firstSampler;
 };
 
 struct ShaderResourceImage : public ShaderResourceHeader
 {
-	EntryHandle* textureHandles;
+	int* textureHandles;
 	int textureCount;
 	int firstTexture;
 };

@@ -40,14 +40,6 @@ enum PipelineHandles
 static char StartupMemory[32 * KiB];
 static SlabAllocator StartupMemoryAllocator{ StartupMemory, sizeof(StartupMemory) };
 
-std::array<std::string, 4> commandsStrings =
-{
-	"end",
-	"load",
-	"positiong",
-	"debugscreen"
-};
-
 static std::array<StringView, 8> pds = {
 	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.pld"),
 	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.pld"),
@@ -419,7 +411,7 @@ static int shadowMapIndex = 0;
 static char vertexAndIndicesMemory[16 * MiB];
 static char geometryObjectSpecificMemory[4 * KiB];
 static char mainTextureCacheMemory[256 * MiB];
-static char mainOSDataManagement[16 * KiB];
+static char mainOSDataManagement[KiB];
 
 static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
@@ -462,7 +454,6 @@ static GPULightSource mainSpotLight =
 
 
 static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
-
 static ArrayAllocator<MeshCPUData, globalMeshCountMax> meshCPUData{};
 static ArrayAllocator<GeometryCPUData, globalGeometryDescriptionsCountMax> geometryCPUData{};
 static ArrayAllocator<RenderableGeomCPUData, globalGeometryRenderableCountMax> renderablesGeomObjects{};
@@ -477,7 +468,7 @@ static UniformGrid mainGrid = {
 };
 
 static int skyboxPipeline = 0;
-static EntryHandle skyboxCubeImage = EntryHandle();
+static int skyboxCubeImage = -1;
 
 static char RenderInstanceMemoryPool[256 * MiB];
 static char RenderInstanceTemporaryPool[64 * KiB];
@@ -493,7 +484,7 @@ static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, size
 static MessageQueue ThreadSharedMessageQueue{ ThreadSharedCmdMemory, sizeof(ThreadSharedCmdMemory) };
 static Logger mainAppLogger{ LoggerMessageMemory, sizeof(LoggerMessageMemory)};
 
-static EntryHandle mainLinearSampler = EntryHandle();
+static int mainLinearSampler = -1;
 
 static uint32_t imageIndex = 0;
 
@@ -521,7 +512,7 @@ static void UpdateLight(GPULightSource& lightDesc, int lightIndex);
 static int CreateBlendRange(int gpuBlendRangeID, int* blendIDs, int blendCount);
 static int CreateBlendDetails(int gpuBlendDescID, BlendMaterialType type, float constantAlpha);
 static int CreateBlendDetails(int gpuBlendDescID, BlendMaterialType type, int mapID);
-static EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType);
+static int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType);
 static int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType);
 static void CreateUniformGrid();
 static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
@@ -3729,7 +3720,7 @@ void UpdateLight(GPULightSource& lightDesc, int lightIndex)
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&lightDesc, globalLightBuffer, sizeof(GPULightSource), sizeof(GPULightSource) * lightIndex, TransferType::CACHED);
 }
 
-EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
+int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 {
 	TextureDetails* details;
 
@@ -3782,7 +3773,7 @@ EntryHandle ReadCubeImage(StringView* name, int textureCount, TextureIOType ioTy
 
 	details->arrayLayers = textureCount;
 
-	EntryHandle ret = mainDictionary.textureHandles[textureStart] =
+	int ret = mainDictionary.textureHandles[textureStart] =
 		GlobalRenderer::gRenderInstance.CreateCubeImageHandle(
 			textureCount * details->dataSize,
 			details->width,
@@ -3813,7 +3804,8 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
 
 	int totalBlobSize = 0;
-	EntryHandle ret;
+	
+	int ret;
 
 	for (int i = 0; i < mipCounts; i++)
 	{

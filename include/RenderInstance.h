@@ -87,17 +87,17 @@ struct RenderInstance
 
 	int GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType);
 
-	EntryHandle CreateImageHandle(
+	int CreateImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type, int poolIndex, EntryHandle samplerIndex);
+		uint32_t mipLevels, ImageFormat type, int poolIndex, int samplerIndex);
 
-	EntryHandle CreateCubeImageHandle(
+	int CreateCubeImageHandle(
 		uint32_t blobSize,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat format, int poolIndex, EntryHandle samplerIndex);
+		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
 
-	EntryHandle CreateStorageImage(
+	int CreateStorageImage(
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type, int poolIndex);
 
@@ -147,7 +147,7 @@ struct RenderInstance
 
 	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
 
-	void UpdateImageMemory(void* data, EntryHandle textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
+	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
 
@@ -157,7 +157,7 @@ struct RenderInstance
 
 	void SwapUpdateCommands();
 
-	EntryHandle CreateSampler(uint32_t maxMipsLevel);
+	int CreateSampler(uint32_t maxMipsLevel);
 
 	int CreateRSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
 	int CreateDSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
@@ -293,6 +293,12 @@ struct RenderInstance
 	std::array<uint32_t, 10> queryResults{};
 
 	double deviceTimeStampPeriodNS = 0.0;
+
+	std::array<EntryHandle, 50> textureResourceHandles{};
+	int textureResourceHandlesCtr = 0;
+
+	std::array<EntryHandle, 50> samplerResourceHandles{};
+	int samplersResourceHandlesCtr = 0;
 
 	
 };
