@@ -526,3 +526,4 @@ enum BufferAlignmentType
 	UNIFORM_BUFFER_ALIGNMENT = 1,
 	STORAGE_BUFFER_ALIGNMENT = 2,
 };
+

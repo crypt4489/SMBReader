@@ -130,12 +130,33 @@ enum AppPipelineHandleType
 struct PipelineHandle
 {
 	int group;
-	int indexForHandles;
 	int numHandles;
 	int pipelineIdentifierGroup;
+	int resourceSets[4];
+	int resourceSetCount;
+	int vertexBufferIndex;
+	uint32_t vertexBufferOffset;
+	uint32_t vertexCount;
+	uint32_t indexBufferOffset;
+	int indexBufferHandle;
+	uint32_t indexCount;
+	uint32_t pushRangeCount;
+	uint32_t instanceCount;
+	uint32_t indexSize;
+	uint32_t indirectDrawCount;
+	int indirectBufferHandle;
+	uint32_t indirectBufferOffset;
+	uint32_t indirectBufferFrames;
+	int indirectCountBufferHandle;
+	uint32_t indirectCountBufferOffset;
+	uint32_t indirectCountBufferStride;
+	uint32_t x;
+	uint32_t y;
+	uint32_t z;
 };
 
-struct PipelineInstanceData
+
+struct PipelineTemplateData
 {
 	int frameGraphIndices[4];
 	int frameGraphRenderPasses[4];
@@ -155,7 +176,6 @@ struct GPUCommand
 	GPUCommandStreamType streamType;
 	int indexForStreamType;
 };
-
 
 enum class DriverUpdateType
 {
@@ -687,7 +707,6 @@ struct ShaderResourceUpdatePool
 	}
 };
 
-
 template <int N>
 struct RenderAllocationHolder
 {
@@ -716,4 +735,32 @@ struct RenderAllocationHolder
 
 	std::atomic<int> allocationsIndex;
 
+};
+
+enum ResourceType
+{
+	BUFFER_RESOURCE = 1,
+	IMAGE_RESOURCE = 2,
+};
+
+struct ResourceStatus
+{
+	ResourceType resourceType;
+	BarrierStage currStage;
+	BarrierAction currAction;
+	ImageLayout currentLayout;
+};
+
+struct ComputeQueue
+{
+	int pipelines[12];
+	uint32_t queueCount;
+	int32_t pad[3];
+};
+
+struct RenderQueue
+{
+	int pipelines[12];
+	uint32_t queueCount;
+	int32_t pad[3];
 };

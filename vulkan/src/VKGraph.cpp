@@ -2,7 +2,6 @@
 
 #include "VKGraph.h"
 #include "VKDevice.h"
-#include "VKPipelineObject.h"
 
 VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d)
 	:
@@ -13,50 +12,6 @@ VKRenderGraph::VKRenderGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCo
 
 void VKRenderGraph::DrawScene(RecordingBufferObject* rbo, uint32_t frameNum)
 {
-
-	uint32_t count = pipelineObjCount.load();
-
-	for (uint32_t i = 0; i < count; i++)
-	{
-
-		if (!activeIndicators[i]) continue;
-
-		EntryHandle objIndex = objects[i];
-
-		VKPipelineObject* objHeader = dev->GetPipelineObject(objIndex);
-
-		EntryHandle handle = objHeader->pipelineID;
-
-		if (handle != currentPipeline)
-		{
-			currentPipeline = handle;
-
-			rbo->BindGraphicsPipeline(handle);
-			
-			uint32_t dynamicOffset = 0;
-
-			for (uint32_t descI = 0; descI < descriptorCount; descI++) {
-				rbo->BindDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
-				dynamicOffset += dynamicsPerSet[descI];
-			}
-		}
-
-		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
-		{
-			PushConstantArguments* args = &objHeader->pushArgs[i];
-			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
-		}
-
-
-		if (objHeader->type == GRAPHICSPIPELINETYPE)
-		{
-			VKGraphicsPipelineObject* obj = (VKGraphicsPipelineObject*)objHeader;
-			obj->Draw(rbo, frameNum, descriptorCount);
-		}
-		
-	}
-
-	currentPipeline = EntryHandle();
 }
 
 VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamicCount, uint32_t descriptorCount, uint32_t pipelineCount, VKDevice* _d)
@@ -69,44 +24,7 @@ VKComputeGraph::VKComputeGraph(DeviceOwnedAllocator* allocator, uint32_t dynamic
 void VKComputeGraph::DispatchWork(RecordingBufferObject* rbo, uint32_t frameNum)
 {
 
-	uint32_t count = pipelineObjCount.load();
-
-	for (uint32_t i = 0; i < count; i++)
-	{
-		EntryHandle objIndex = objects[i];
-
-		if (!activeIndicators[i]) continue;
-
-		VKPipelineObject* objHeader = dev->GetPipelineObject(objIndex);
-
-		EntryHandle handle = objHeader->pipelineID;
-
-		if (handle != currentPipeline)
-		{
-			currentPipeline = handle;
-
-			rbo->BindComputePipeline(handle);
-
-			uint32_t dynamicOffset = 0;
-
-			for (uint32_t descI = 0; descI<descriptorCount; descI++) {
-				rbo->BindComputeDescriptorSets(descriptorId[descI], frameNum, 1, descI, dynamicsPerSet[descI], &dynamicOffsets[dynamicOffset]);
-				dynamicOffset += dynamicsPerSet[descI];
-			}
-		}
-
-		for (uint32_t i = 0; i < objHeader->pushConstantCount; i++)
-		{
-			PushConstantArguments* args = &objHeader->pushArgs[i];
-			rbo->PushConstantsCommand(args->offset, args->size, args->stage, args->data);
-		}
-
-		VKComputePipelineObject* obj = (VKComputePipelineObject*)objHeader;
-		obj->Dispatch(rbo, frameNum, descriptorCount);
-
-	}
-
-	currentPipeline = EntryHandle();
+	
 }
 
 uint32_t VKGraph::AddObject(EntryHandle obj)

@@ -153,7 +153,7 @@ layout(set = 0, binding = 3) writeonly buffer commandCounts {
     uint invisibleCount;
 } cCounts;
 
-layout(set = 0, binding = 4) buffer RENDBuffer
+layout(set = 0, binding = 4) readonly buffer RENDBuffer
 {
     MeshRenderable renderables[];
 } rends;

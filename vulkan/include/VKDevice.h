@@ -313,10 +313,6 @@ struct VKDevice
 
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
-	EntryHandle CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t maxFramesInFlight);
-
-	EntryHandle CreateComputeOneTimeQueue(uint32_t maxObjectCount);
-
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize, VkDescriptorPoolCreateFlags flags);
@@ -378,25 +374,11 @@ struct VKDevice
 		void* devicePoolHead
 	);
 
-	EntryHandle CreateGraphicsOneTimeQueue(uint32_t maxObjectCount);
-
 	VKGraphicsPipelineBuilder* CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount);
 	
 	VKComputePipelineBuilder* CreateComputePipelineBuilder(size_t numberOfDescriptors, uint32_t pushConstantRangeCount);
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
-
-	EntryHandle CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info);
-
-	EntryHandle CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info);
-
-
-
-	EntryHandle CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst);
-
-	EntryHandle CreateBufferMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, EntryHandle bufferIndex, size_t offset, size_t size);
-
-	EntryHandle CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, VkImageLayout oldLayout, VkImageLayout newLayout, EntryHandle imageIndex, VkImageSubresourceRange subresourceRange);
 
 	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
@@ -464,12 +446,6 @@ struct VKDevice
 
 	VkCommandPool GetCommandPool(EntryHandle handle);
 
-	VKComputeGraph* GetComputeGraph(EntryHandle handle);
-
-	VKComputeOneTimeQueue* GetComputeOTQ(EntryHandle handle);
-
-	VKGraphicsOneTimeQueue* GetGraphicsOTQ(EntryHandle handle);
-
 	VkDescriptorPool GetDescriptorPool(EntryHandle handle);
 
 	VkDescriptorSet GetDescriptorSet(EntryHandle handle, uint32_t index);
@@ -494,19 +470,7 @@ struct VKDevice
 
 	VkImageView GetImageViewByTexture(EntryHandle handle, int imageViewIndex);
 
-	VkMemoryBarrier* GetMemoryBarrier(EntryHandle handle);
-
-	VkBufferMemoryBarrier* GetBufferMemoryBarrier(EntryHandle handle);
-
-	VkImageMemoryBarrier* GetImageMemoryBarrier(EntryHandle handle);
-
 	PipelineCacheObject* GetPipelineCacheObject(EntryHandle handle);
-
-	VKPipelineObject* GetPipelineObject(EntryHandle handle);
-
-	VKComputePipelineObject* GetComputePipelineObject(EntryHandle handle);
-
-	VKGraphicsPipelineObject* GetGraphicsPipelineObject(EntryHandle handle);
 
 	int32_t GetPresentQueue(QueueIndex* queueIdx,
 		QueueIndex* maxQueueCount,

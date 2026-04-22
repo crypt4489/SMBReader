@@ -1,8 +1,5 @@
 #pragma once
 
-#include <array>
-#include <atomic>
-
 #include "allocator/AppAllocator.h"
 #include "CommonRenderTypes.h"
 #include "logger/Logger.h"
@@ -320,30 +317,20 @@ struct ShaderResourceSetXMLTag : ShaderXMLTag
 	int resourceCount;
 };
 
-static constexpr unsigned long
-hash(const char* str);
+static constexpr unsigned long hash(const char* str);
+static constexpr int ASCIIToInt(char* str);
+static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
+static int SkipLine(char* fileData, int size, int currentLocation);
+static int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len);
+static int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash);
+static int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash);
+static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val);
 
 ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount);
 
-static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
-
-static int SkipLine(char* fileData, int size, int currentLocation);
-static int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len);
-
-static int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash);
-
-static int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash);
-
-static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val);
-
 static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
-
 static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator);
-
 static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset);
-
-static constexpr int ASCIIToInt(char* str);
-
 static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset);
 
 struct PipelineXMLTag
@@ -381,9 +368,7 @@ static int HandleCullMode(char* fileData, int size, int currentLocation, Generic
 static int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
 static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face);
 static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
-
 static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation);
-
 static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);
 
 

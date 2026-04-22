@@ -4,12 +4,10 @@
 
 #include "GlslangCompiler.h"
 #include "VKGraph.h"
-#include "VKPipelineObject.h"
 #include "VKInstance.h"
 #include "VKRenderPassBuilder.h"
 #include "VKDescriptorLayoutBuilder.h"
 #include "VKDescriptorSetBuilder.h"
-#include "VKOneTimeQueue.h"
 #include "VKPipelineBuilder.h"
 #include "VKSwapChain.h"
 #include "VKTexture.h"
@@ -727,31 +725,6 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 	return poolIndex;
 }
 
-EntryHandle VKDevice::CreateComputeGraph(uint32_t dynamicCount, uint32_t maxPipelineCount, uint32_t descriptorCount)
-{
-	//std::shared_lock lock(deviceLock);
-	
-	auto graph = reinterpret_cast<VKComputeGraph*>(AllocFromPerDeviceData(sizeof(VKComputeGraph)));
-
-	graph = std::construct_at(graph, &deviceDataAlloc, dynamicCount, descriptorCount, maxPipelineCount, this);
-
-	EntryHandle ret = AddVkTypeToEntry(graph, VulkComputeGraph);
-
-	return ret;
-}
-
-
-EntryHandle VKDevice::CreateComputeOneTimeQueue(uint32_t maxObjectCount)
-{
-	auto graph = reinterpret_cast<VKComputeOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKComputeOneTimeQueue)));
-
-	graph = std::construct_at(graph, &deviceDataAlloc,maxObjectCount, this);
-
-	EntryHandle ret = AddVkTypeToEntry(graph, VulkComputeOTQ);
-
-	return ret;
-}
-
 EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets)
 {
 	//std::shared_lock lock(deviceLock);
@@ -1291,81 +1264,6 @@ void VKDevice::CreateLogicalDevice(
 	info.pDeviceMasks = &deviceMask;
 }
 
-EntryHandle VKDevice::CreateMemoryBarrier(VkAccessFlags src, VkAccessFlags dst)
-{
-	//std::shared_lock lock(deviceLock);
-	VkMemoryBarrier* barrier = reinterpret_cast<VkMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkMemoryBarrier)));
-
-	barrier->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	barrier->pNext = nullptr;
-	barrier->srcAccessMask = src;
-	barrier->dstAccessMask = dst;
-	
-
-	EntryHandle ret = AddVkTypeToEntry(barrier, VulkMemoryBarrier);
-
-	return ret;
-}
-
-EntryHandle VKDevice::CreateBufferMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, EntryHandle bufferIndex, size_t offset, size_t size)
-{
-	//std::shared_lock lock(deviceLock);
-	VkBufferMemoryBarrier* barrier = reinterpret_cast<VkBufferMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkBufferMemoryBarrier)));
-	VkBuffer buffer = GetBufferHandle(bufferIndex);
-
-	barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-	barrier->pNext = nullptr;
-	barrier->srcAccessMask = src;
-	barrier->dstAccessMask = dst;
-	barrier->srcQueueFamilyIndex = srcQFI;
-	barrier->dstQueueFamilyIndex = dstQFI;
-	barrier->buffer = buffer;
-	barrier->offset = offset;
-	barrier->size = size;
-
-	EntryHandle ret = AddVkTypeToEntry(barrier, VulkBufferMemoryBarrier);
-
-	return ret;
-}
-
-EntryHandle VKDevice::CreateImageMemoryBarrier(VkAccessFlags src, VkAccessFlags dst, uint32_t srcQFI, uint32_t dstQFI, VkImageLayout oldLayout, VkImageLayout newLayout, EntryHandle imageIndex, VkImageSubresourceRange subresourceRange)
-{
-	//std::shared_lock lock(deviceLock);
-	VkImageMemoryBarrier* barrier = reinterpret_cast<VkImageMemoryBarrier*>(AllocFromPerDeviceData(sizeof(VkImageMemoryBarrier)));
-	VkImage image = GetImageByTexture(imageIndex);
-
-	barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier->pNext = nullptr;
-	barrier->srcAccessMask = src;
-	barrier->dstAccessMask = dst;
-	barrier->srcQueueFamilyIndex = srcQFI;
-	barrier->dstQueueFamilyIndex = dstQFI;
-	barrier->oldLayout = oldLayout;
-	barrier->newLayout = newLayout;
-	barrier->image = image;
-	barrier->subresourceRange.aspectMask = subresourceRange.aspectMask;
-	barrier->subresourceRange.baseArrayLayer = subresourceRange.baseArrayLayer;
-	barrier->subresourceRange.baseMipLevel = subresourceRange.baseMipLevel;
-	barrier->subresourceRange.layerCount = subresourceRange.layerCount;
-	barrier->subresourceRange.levelCount = subresourceRange.levelCount;
-	
-
-	EntryHandle ret = AddVkTypeToEntry(barrier, VulkImageMemoryBarrier);
-
-	return ret;
-}
-
-EntryHandle VKDevice::CreateGraphicsOneTimeQueue(uint32_t maxObjectCount)
-{
-	auto graph = reinterpret_cast<VKGraphicsOneTimeQueue*>(AllocFromPerDeviceData(sizeof(VKGraphicsOneTimeQueue)));
-
-	graph = std::construct_at(graph, &deviceDataAlloc, maxObjectCount, this);
-
-	EntryHandle ret = AddVkTypeToEntry(graph, VulkGraphicsOTQ);
-
-	return ret;
-}
-
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount)
 {
 	//std::shared_lock lock(deviceLock);
@@ -1391,34 +1289,6 @@ VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numberOf
 	return std::construct_at(computePB, this, numberOfDescriptors, pushConstantRangeCount);
 }
 
-EntryHandle VKDevice::CreateGraphicsPipelineObject(VKGraphicsPipelineObjectCreateInfo* info)
-{
-	EntryHandle ret;
-
-	VKGraphicsPipelineObject* objLoc = reinterpret_cast<VKGraphicsPipelineObject*>(AllocFromPerDeviceData(sizeof(VKGraphicsPipelineObject)));
-
-	objLoc = std::construct_at(objLoc, info, &deviceDataAlloc);
-
-	ret = AddVkTypeToEntry(objLoc, VulkGraphicsPipeline);
-
-	return ret;
-}
-
-
-
-EntryHandle VKDevice::CreateComputePipelineObject(VKComputePipelineObjectCreateInfo* info)
-{
-	EntryHandle ret;
-
-	VKComputePipelineObject* objLoc = reinterpret_cast<VKComputePipelineObject*>(AllocFromPerDeviceData(sizeof(VKComputePipelineObject)));
-
-	objLoc = std::construct_at(objLoc, info, &deviceDataAlloc);
-
-	ret = AddVkTypeToEntry(objLoc, VulkComputePipeline);
-
-	return ret;
-}
-
 void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
 	//std::shared_lock lock(deviceLock);
@@ -1431,7 +1301,6 @@ void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, ui
 		queueFlags, presentsupport, 
 		*this, queueManagerData);
 }
-
 
 EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries)
 {
@@ -2365,37 +2234,6 @@ VkCommandPool VKDevice::GetCommandPool(EntryHandle handle)
 	return reinterpret_cast<VkCommandPool>(objHandle.memoryLocation);
 }
 
-VKComputeGraph* VKDevice::GetComputeGraph(EntryHandle handle) 
-{
-	//std::shared_lock lock(deviceLock);
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkComputeGraph || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	return reinterpret_cast<VKComputeGraph*>(objHandle.memoryLocation);
-}
-
-VKComputeOneTimeQueue* VKDevice::GetComputeOTQ(EntryHandle handle)
-{
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkComputeOTQ || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	return reinterpret_cast<VKComputeOneTimeQueue*>(objHandle.memoryLocation);
-}
-
-VKGraphicsOneTimeQueue* VKDevice::GetGraphicsOTQ(EntryHandle handle)
-{
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkGraphicsOTQ || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	return reinterpret_cast<VKGraphicsOneTimeQueue*>(objHandle.memoryLocation);
-}
-
 VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle handle)
 {
 	//std::shared_lock lock(deviceLock);
@@ -2554,46 +2392,6 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewInd
 	return GetImageViewByHandle(tex->viewIndex[imageViewIndex]);
 }
 
-
-VkMemoryBarrier* VKDevice::GetMemoryBarrier(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkMemoryBarrier || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	VkMemoryBarrier* barrier = reinterpret_cast<VkMemoryBarrier*>(objHandle.memoryLocation);
-
-	return barrier;
-}
-
-VkBufferMemoryBarrier* VKDevice::GetBufferMemoryBarrier(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkBufferMemoryBarrier || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	VkBufferMemoryBarrier* barrier = reinterpret_cast<VkBufferMemoryBarrier*>(objHandle.memoryLocation);
-
-	return barrier;
-}
-
-VkImageMemoryBarrier* VKDevice::GetImageMemoryBarrier(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkImageMemoryBarrier || !objHandle.memoryLocation)
-		return VK_NULL_HANDLE;
-
-	VkImageMemoryBarrier* barrier = reinterpret_cast<VkImageMemoryBarrier*>(objHandle.memoryLocation);
-
-	return barrier;
-}
-
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 {
 	//std::shared_lock lock(deviceLock);
@@ -2604,42 +2402,6 @@ PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 		return nullptr;
 
 	return reinterpret_cast<PipelineCacheObject*>(objHandle.memoryLocation);
-}
-
-VKPipelineObject* VKDevice::GetPipelineObject(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if ((objHandle.type != VulkComputePipeline && objHandle.type != VulkGraphicsPipeline && objHandle.type != VulkIndirectPipeline) || !objHandle.memoryLocation)
-		return nullptr;
-
-	return reinterpret_cast<VKPipelineObject*>(objHandle.memoryLocation);
-}
-
-VKGraphicsPipelineObject* VKDevice::GetGraphicsPipelineObject(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkGraphicsPipeline || !objHandle.memoryLocation)
-		return nullptr;
-
-	return reinterpret_cast<VKGraphicsPipelineObject*>(objHandle.memoryLocation);
-}
-
-VKComputePipelineObject* VKDevice::GetComputePipelineObject(EntryHandle handle)
-{
-	//std::shared_lock lock(deviceLock);
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if ((objHandle.type != VulkComputePipeline) || !objHandle.memoryLocation)
-		return nullptr;
-
-	return reinterpret_cast<VKComputePipelineObject*>(objHandle.memoryLocation);
 }
 
 int32_t VKDevice::GetPresentQueue(QueueIndex* queueIdx,

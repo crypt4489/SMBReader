@@ -17,7 +17,7 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="write">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="c" rw="write">
+		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>

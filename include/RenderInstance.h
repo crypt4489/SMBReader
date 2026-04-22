@@ -131,7 +131,7 @@ struct RenderInstance
 
 	EntryHandle CreateShaderResourceSet(int descriptorSet);
 
-	void AddVulkanMemoryBarrier(VKPipelineObject* vkPipelineObject, int* descriptorid, int descriptorcount);
+	void AddVulkanMemoryBarrier(RecordingBufferObject* rcb, int* descriptorid, int descriptorcount);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
@@ -205,6 +205,7 @@ struct RenderInstance
 
 	std::array<EntryHandle, 10> bufferHandles{};
 	std::array<BufferType, 10> bufferTypes{};
+	std::array<int, 10> bufferToResourceStatus{};
 	int bufferPoolsCounter = 0;
 
 
@@ -227,20 +228,16 @@ struct RenderInstance
 	ShaderResourceManager<50> descriptorManager;
 
 	std::array<EntryHandle*, 25> pipelinesIdentifier{};
-	std::array<PipelineInstanceData, 25> pipelinesInstancesInfo{};
+	std::array<PipelineTemplateData, 25> pipelinesInstancesInfo{};
 
 	int vulkanDescriptorLayoutCounter = 0;
 	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
 
 	RenderAllocationHolder<100> allocations{};
 
-	ArrayAllocator<EntryHandle, 100> renderStateObjects{};
-
-	ArrayAllocator<EntryHandle, 100> computeStateObjects{};
-
 	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
 
-	ArrayAllocator<EntryHandle, 10> computeQueues{};
+	ArrayAllocator<ComputeQueue, 10> computeQueues{};
 
 	std::array<GPUCommand, 10> gpuCommands{};
 	int gpuCommandCount = 0;
@@ -274,7 +271,7 @@ struct RenderInstance
 
 	EntryHandle mainRenderTargets[20]{};
 
-	ArrayAllocator<EntryHandle, 10> renderTargetQueues{};
+	ArrayAllocator<RenderQueue, 10> renderTargetQueues{};
 
 	int graphTemplateAlloc = 0;
 
@@ -294,13 +291,15 @@ struct RenderInstance
 
 	double deviceTimeStampPeriodNS = 0.0;
 
+	std::array<ResourceStatus, 75> resourceStatuses{};
+	int resourceStateCtr = 0;
+
+	std::array<int, 50> textureToResourceStatus{};
 	std::array<EntryHandle, 50> textureResourceHandles{};
 	int textureResourceHandlesCtr = 0;
 
 	std::array<EntryHandle, 50> samplerResourceHandles{};
 	int samplersResourceHandlesCtr = 0;
-
-	
 };
 
 namespace GlobalRenderer {

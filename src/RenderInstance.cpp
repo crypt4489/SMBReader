@@ -18,8 +18,6 @@
 #include "VKSwapChain.h"
 #include "VKGraph.h"
 #include "VKPipelineBuilder.h"
-#include "VKPipelineObject.h"
-#include "VKOneTimeQueue.h"
 #include "WindowManager.h"
 
 
@@ -1500,7 +1498,7 @@ int RenderInstance::CreateGraphicRenderStateObject(int shaderGraphIndex, int pip
 
 		uint32_t totalPiplineVariations = 0;
 
-		PipelineInstanceData* instData = &pipelinesInstancesInfo[shaderGraphIndex];
+		PipelineTemplateData* instData = &pipelinesInstancesInfo[shaderGraphIndex];
 
 		instData->frameGraphCount = frameGraphCount;
 
@@ -1827,7 +1825,6 @@ void RenderInstance::UploadDescriptorsUpdates()
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-
 	int link = descriptorUpdatePool.linkHead;
 	int* linkprev = &descriptorUpdatePool.linkHead;
 	ShaderResourceUpdate region;
@@ -1872,8 +1869,8 @@ void RenderInstance::UploadDescriptorsUpdates()
 		}
 		case ShaderResourceType::IMAGE2D:
 		{
-
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
+
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
 				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
@@ -1884,6 +1881,7 @@ void RenderInstance::UploadDescriptorsUpdates()
 		case ShaderResourceType::SAMPLER2D:
 		{
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
+
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
 				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
@@ -1932,6 +1930,7 @@ void RenderInstance::UploadDescriptorsUpdates()
 		case ShaderResourceType::BUFFER_VIEW:
 		{
 			BufferArrayUpdate* update = (BufferArrayUpdate*)region.data;
+			
 			if (!update->allocationIndices) break;
 
 			int arrayCount = update->allocationCount;
@@ -2182,6 +2181,7 @@ int RenderInstance::CreateImageHandle(
 	int textureIndex = textureResourceHandlesCtr++;
 
 	textureResourceHandles[textureIndex] = textureHandle;
+	textureToResourceStatus[textureIndex] = resourceStateCtr++;
 
 	return textureIndex;
 }
@@ -2855,38 +2855,48 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
+	EntryHandle* ref = pipelinesIdentifier[info->pipelinename];
+
+	PipelineTemplateData* pid = &pipelinesInstancesInfo[info->pipelinename];
+
+	auto pso = stateObjectHandles.Allocate();
+
+	int ret = pso.first;
+
+	PipelineHandle* posStruct = pso.second;
+	
+	posStruct->group = GRAPHICSO;
+	posStruct->pipelineIdentifierGroup = info->pipelinename;
+	posStruct->resourceSetCount = info->descCount;
+
 	uint32_t pushRangeCount = 0;
-	EntryHandle* descHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle)* (info->descCount));
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
-		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
+		posStruct->resourceSets[i] = info->descriptorsetid[i];
+		CreateShaderResourceSet(info->descriptorsetid[i]);
 		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
 
-	EntryHandle indexBufferHandle = EntryHandle();
+	posStruct->pushRangeCount = pushRangeCount;
+
 	uint32_t indexOffset = ~0ui32;
 
-	EntryHandle vertexBufferHandle = EntryHandle();
 	uint32_t vertexOffset = ~0ui32;
 
-	EntryHandle indirectBufferHandle = EntryHandle();
 	uint32_t indirectOffset = ~0ui32;
 	uint32_t indirectBufferPerFrameSize = 0;
 
-	EntryHandle indirectCountBufferHandle = EntryHandle();
 	uint32_t indirectCountOffset = ~0ui32;
 	uint32_t indirectCountBufferPerFrameSize = 0;
 
 	if (info->indexBufferHandle != ~0)
 	{
-		indexBufferHandle = bufferHandles[allocations[info->indexBufferHandle].memIndex];
 		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
 	}
 
 	if (info->vertexBufferHandle != ~0)
 	{
-		vertexBufferHandle = bufferHandles[allocations[info->vertexBufferHandle].memIndex];
 		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferHandle].offset) + info->vertexOffset;
 	}
 
@@ -2894,7 +2904,6 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	{
 		size_t align = allocations[info->indirectAllocation].alignment;
 		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structureCopies);
-		indirectBufferHandle = bufferHandles[allocations[info->indirectAllocation].memIndex];
 		indirectOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset);
 		indirectBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1)) ;
 	}
@@ -2903,104 +2912,38 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 	{
 		size_t align = allocations[info->indirectCountAllocation].alignment;
 		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structureCopies);
-		indirectCountBufferHandle = bufferHandles[allocations[info->indirectCountAllocation].memIndex];
 		indirectCountOffset = static_cast<uint32_t>(allocations[info->indirectCountAllocation].offset);
 		indirectCountBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectCountAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1));
 	}
 
-	VKGraphicsPipelineObjectCreateInfo create = 
-	{
-			.vertexBufferIndex = vertexBufferHandle,
-			.vertexBufferOffset = vertexOffset,
-			.vertexCount = info->vertexCount,
-			.pipelinename = EntryHandle(),
-			.descCount = info->descCount,
-			.descriptorsetid = descHandles,
-			.dynamicPerSet = 0,
-			.maxDynCap = 0,
-			.indexBufferHandle = indexBufferHandle,
-			.indexBufferOffset = indexOffset,
-			.indexCount = info->indexCount,
-			.pushRangeCount = pushRangeCount,
-			.instanceCount = info->instanceCount,
-			.indexSize = info->indexSize,
-			.indirectDrawCount = static_cast<uint32_t>(info->indirectDrawCount),
-			.indirectBufferHandle = indirectBufferHandle,
-			.indirectBufferOffset = indirectOffset,
-			.indirectBufferFrames = indirectBufferPerFrameSize,
-			.indirectCountBufferHandle = indirectCountBufferHandle,
-			.indirectCountBufferOffset = indirectCountOffset,
-			.indirectCountBufferStride = indirectCountBufferPerFrameSize
-	};
+	posStruct->indexBufferHandle = info->indexBufferHandle;
+	posStruct->indexBufferOffset = indexOffset;
+	posStruct->indexCount = info->indexCount;
+	posStruct->vertexBufferIndex = info->vertexBufferHandle;
+	posStruct->vertexBufferOffset = vertexOffset;
+	posStruct->vertexCount = info->vertexCount;
+	posStruct->indirectBufferFrames = indirectBufferPerFrameSize;
+	posStruct->indirectBufferHandle = info->indirectAllocation;
+	posStruct->indirectBufferOffset = indirectOffset;
+	posStruct->indirectCountBufferHandle = info->indirectCountAllocation;
+	posStruct->indirectCountBufferOffset = indirectCountOffset;
+	posStruct->indirectCountBufferStride = indirectCountBufferPerFrameSize;
+	posStruct->instanceCount = info->instanceCount;
+	posStruct->indexSize = info->indexSize;
+	posStruct->indirectDrawCount = info->indirectDrawCount;
 
 	int renderStateCount = 0;
-
-	int renderstateObjHead = renderStateObjects.allocatorPtr.load();
-
-	EntryHandle* ref = pipelinesIdentifier[info->pipelinename];
-
-	PipelineInstanceData* pid = &pipelinesInstancesInfo[info->pipelinename];
 
 	for (uint32_t a = 0; a < pid->frameGraphCount; a++)
 	{
 		AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[pid->frameGraphIndices[a]];
 
-		int baseRenderTargetData = graphInstance->consecutiveRenderTargetsBase;
-
 		AttachmentRenderPassInstance* renderPassInstance = &graphInstance->passes[pid->frameGraphRenderPasses[a]];
 
-		int baseRenderTargetRenderPass = renderPassInstance->baseRenderTargetData;
-
-		int pipelineBase = pid->frameGraphPipelineIndices[a];
-
 		renderStateCount += renderPassInstance->maxSampleCount;
-
-		for (uint32_t b = 0; b < renderPassInstance->maxSampleCount; b++) {
-
-			int graphIndex = baseRenderTargetData + baseRenderTargetRenderPass + b;
-			
-			create.pipelinename = ref[b+pipelineBase];
-
-			EntryHandle pipelineIndex = dev->CreateGraphicsPipelineObject(&create);
-
-			VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
-
-			for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
-			{
-				ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(info->descriptorsetid[j], constantBufferPerSet++);
-				if (!pushArgs)
-				{
-					j++;
-					constantBufferPerSet = 0;
-					continue;
-				}
-
-				vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
-				i++;
-			}
-
-
-			AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
-
-			if (addToGraph)
-			{
-				auto graph = dev->GetRenderGraph(renderTargets[graphIndex]);
-				graph->AddObject(pipelineIndex);
-			}
-
-			renderStateObjects.Allocate(pipelineIndex);
-		}
 	}
 
-	auto pso = stateObjectHandles.Allocate();
-
-	int ret = pso.first;
-	
-	PipelineHandle* posStruct = pso.second;
 	posStruct->numHandles = renderStateCount;
-	posStruct->group = GRAPHICSO;
-	posStruct->indexForHandles = renderstateObjHead;
-	posStruct->pipelineIdentifierGroup = info->pipelinename;
 
 	return ret;
 }
@@ -3017,43 +2960,38 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t barrierCount = 0;
+	auto pso = stateObjectHandles.Allocate();
+
+	int pipelineIndex = pso.first;
+	
+	PipelineHandle* posStruct = pso.second;
+	
+	posStruct->numHandles = 1;
+	posStruct->group = COMPUTESO;
+	posStruct->pipelineIdentifierGroup = info->pipelinename;
+	posStruct->resourceSetCount = info->descCount;
+	posStruct->x = info->x;
+	posStruct->y = info->y;
+	posStruct->z = info->z;
+	
 	uint32_t pushRangeCount = 0;
-	EntryHandle* descHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * (info->descCount));
 
 	for (uint32_t i = 0; i < info->descCount; i++)
 	{
-		descHandles[i] = CreateShaderResourceSet(info->descriptorsetid[i]);
-		barrierCount += descriptorManager.GetBarrierCount(info->descriptorsetid[i]);
+		posStruct->resourceSets[i] = info->descriptorsetid[i];
+		CreateShaderResourceSet(info->descriptorsetid[i]);
 		pushRangeCount += descriptorManager.GetConstantBufferCount(info->descriptorsetid[i]);
 	}
 
-	VKComputePipelineObjectCreateInfo create = {
-		.x = info->x,
-		.y = info->y,
-		.z = info->z,
-		.descCount = info->descCount,
-		.descriptorId = descHandles,
-		.dynamicPerSet = 0,
-		.pipelineId = pipelinesIdentifier[info->pipelinename][0],
-		.maxDynCap = 0,
-		.barrierCount = barrierCount,
-		.pushRangeCount = pushRangeCount
-	};
+	posStruct->pushRangeCount = pushRangeCount;
 
-	auto pso = stateObjectHandles.Allocate();
+	/*
 
-	int ret = pso.first;
-	PipelineHandle* posStruct = pso.second;
+	//EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
 
-	EntryHandle pipelineIndex = dev->CreateComputePipelineObject(&create);
+	//posStruct->indexForHandles = computeStateObjects.Allocate(pipelineIndex);
 
-	posStruct->numHandles = 1;
-	posStruct->group = COMPUTESO;
-	posStruct->indexForHandles = computeStateObjects.Allocate(pipelineIndex);
-	posStruct->pipelineIdentifierGroup = info->pipelinename;
-
-	VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
+	//VKPipelineObject* vkPipelineObject = dev->GetPipelineObject(pipelineIndex);
 
 	for (uint32_t i = 0, j = 0, constantBufferPerSet = 0; i < pushRangeCount && j < info->descCount;)
 	{
@@ -3064,228 +3002,15 @@ int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelin
 			constantBufferPerSet = 0;
 			continue;
 		}
-		vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
+		//vkPipelineObject->AddPushConstant(pushArgs->data, pushArgs->size, pushArgs->offset, i, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage));
 		i++;
 	}
 	
 	
-	AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
+	//AddVulkanMemoryBarrier(vkPipelineObject, info->descriptorsetid, info->descCount);
+	*/
 
-	return ret;
-}
-
-void RenderInstance::AddVulkanMemoryBarrier(VKPipelineObject *vkPipelineObject, int* descriptorid, int descriptorcount)
-{
-	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
-
-	for (int i = 0; i<descriptorcount; i++)
-	{ 
-		uintptr_t head = descriptorManager.descriptorSets[descriptorid[i]];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-
-		int counter = 0;
-
-		while (counter < set->bindingCount)
-		{
-			ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[counter++];
-			if (header->action == ShaderResourceAction::SHADERWRITE || header->action == ShaderResourceAction::SHADERREADWRITE)
-			{
-				switch (header->type)
-				{
-				case ShaderResourceType::IMAGESTORE2D:
-				{
-					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
-					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
-					ShaderResourceImageBarrier* barrier2 = &barrier[1];
-
-					VkImageSubresourceRange range{};
-					range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-					range.levelCount = 1;
-					range.layerCount = 1;
-
-					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
-					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
-					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
-					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
-
-					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
-					{
-						/*
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
-						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
-							BEFORE,
-							srcStage,
-							dstStage
-						);
-						*/
-					}
-
-
-					srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->srcAction);
-					dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->dstAction);
-					srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->srcStage);
-					dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->dstStage);
-
-					if (barrier2->dstResourceLayout != barrier2->srcResourceLayout)
-					{
-
-						/*
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier2->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), *imageBarrier->textureHandles, range);
-
-						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
-							AFTER,
-							srcStage,
-							dstStage
-						);
-						*/
-					}
-
-					break;
-				}
-				case ShaderResourceType::SAMPLER2D:
-				{
-					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
-
-					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
-
-					VkImageSubresourceRange range{};
-
-					range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-					range.levelCount = 1;
-					range.layerCount = 1;
-
-					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
-					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
-					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
-					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
-
-					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
-					{
-						/*
-						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
-							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
-						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
-							BEFORE,
-							srcStage,
-							dstStage
-						);
-						*/
-					}
-
-					break;
-				}
-				case ShaderResourceType::BUFFER_VIEW:
-				{
-					ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
-
-					if (bufferBarrier->allocationIndex == nullptr) break;
-
-					int arrayCount = bufferBarrier->arrayCount;
-
-					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
-
-					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
-					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
-					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
-					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
-					for (int g = 0; g < arrayCount; g++)
-					{
-						int index = bufferBarrier->allocationIndex[g];
-						size_t size = allocations[index].deviceAllocSize;
-						size_t copiesOfStruct = allocations[index].structureCopies;
-						uint32_t pfo = 0;
-
-
-						if (allocations[index].allocType == AllocationType::PERFRAME)
-						{
-
-							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
-							pfo = static_cast<uint32_t>(size);
-						}
-
-
-
-						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-							bufferHandles[allocations[index].memIndex],
-							allocations[index].offset,
-							size
-						);
-
-
-						vkPipelineObject->AddBufferMemoryBarrier(
-							barrierIndex,
-							AFTER,
-							srcStage,
-							dstStage,
-							pfo
-						);
-					}
-
-					break;
-				}
-				case ShaderResourceType::STORAGE_BUFFER:
-				case ShaderResourceType::UNIFORM_BUFFER:
-				{
-					ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
-
-					if (bufferBarrier->allocationIndex == nullptr) break;
-
-					int arrayCount = bufferBarrier->arrayCount;
-
-					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
-
-					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
-					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
-					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
-					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
-
-
-					for (int g = 0; g < arrayCount; g++)
-					{
-						int index = bufferBarrier->allocationIndex[g];
-						size_t size = allocations[index].deviceAllocSize;
-						size_t copiesOfStruct = allocations[index].structureCopies;
-						uint32_t pfo = 0;
-						VkDeviceSize offset = (bufferBarrier->offsets ? bufferBarrier->offsets[g] : 0);
-
-						if (allocations[index].allocType == AllocationType::PERFRAME)
-						{
-							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
-							pfo = static_cast<uint32_t>(size);
-						}
-						else
-						{
-							size -= offset;
-						}
-
-
-						EntryHandle barrierIndex = dev->CreateBufferMemoryBarrier(srcAction, dstAction, 0, 0,
-							bufferHandles[allocations[index].memIndex],
-							allocations[index].offset + offset,
-							size
-						);
-
-
-						vkPipelineObject->AddBufferMemoryBarrier(
-							barrierIndex,
-							AFTER,
-							srcStage,
-							dstStage,
-							pfo
-						);
-					}
-					
-
-					break;
-				}
-				}
-			}
-		}
-	}
+	return pipelineIndex;
 }
 
 void RenderInstance::DrawScene(uint32_t imageIndex)
@@ -3328,9 +3053,40 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 		{
 			rcb.WriteTimestamp(queryPool, queryCountIndex, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 			
-			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
+			ComputeQueue* queue = &computeQueues.dataArray[command->indexForStreamType];
 
-			computeQueue->DispatchWork(&rcb, currentFrame);
+			for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
+			{
+				PipelineHandle* handle = &stateObjectHandles.dataArray[queue->pipelines[pipeInst]];
+
+				EntryHandle pipelineTemp = pipelinesIdentifier[handle->pipelineIdentifierGroup][0];
+
+				rcb.BindComputePipeline(pipelineTemp);
+
+				for (uint32_t ii = 0; ii < handle->resourceSetCount; ii++)
+				{
+					rcb.BindComputeDescriptorSets(descriptorManager.vkDescriptorSets[handle->resourceSets[ii]], currentFrame, 1, ii, 0, nullptr);
+				}
+
+				for (uint32_t ii = 0, jj = 0, constantBufferPerSet = 0; ii < handle->pushRangeCount && jj < handle->resourceSetCount;)
+				{
+					ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(handle->resourceSets[jj], constantBufferPerSet++);
+					if (!pushArgs)
+					{
+						jj++;
+						constantBufferPerSet = 0;
+						continue;
+					}
+
+					rcb.PushConstantsCommand(pushArgs->offset, pushArgs->size, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage), pushArgs->data);
+
+					ii++;
+				}
+
+				rcb.DispatchCommand(handle->x, handle->y, handle->z);
+
+				AddVulkanMemoryBarrier(&rcb, handle->resourceSets, handle->resourceSetCount);
+			}
 			
 			rcb.WriteTimestamp(queryPool, queryCountIndex+1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -3342,7 +3098,6 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 			{
-
 				rcb.WriteTimestamp(queryPool, queryCountIndex, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
 				AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
@@ -3356,8 +3111,6 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 				int renderTargetPerPassBase = rpInst->baseRenderTargetData;
 
 				int absoluteRenderTargetIndex = currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass;
-
-				VKRenderGraph* graph = dev->GetRenderGraph(renderTargets[absoluteRenderTargetIndex]);
 
 				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
 
@@ -3401,12 +3154,114 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 				if (possibleQueueIndex >= 0)
 				{
-					VKGraphicsOneTimeQueue* graphicsQueue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[possibleQueueIndex]);
+					RenderQueue* queue = &renderTargetQueues.dataArray[possibleQueueIndex];
 
-					graphicsQueue->DrawScene(&rcb, currentFrame);
+					for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
+					{
+						PipelineHandle* handle = &stateObjectHandles.dataArray[queue->pipelines[pipeInst]];
+
+						PipelineTemplateData* pid = &pipelinesInstancesInfo[handle->pipelineIdentifierGroup];
+
+						uint32_t pipelineOffset = 0;
+
+						for (int i = 0; i < pid->frameGraphCount; i++)
+						{
+							if (command->indexForStreamType == pid->frameGraphIndices[i])
+							{
+								pipelineOffset = pid->frameGraphPipelineIndices[i];
+								break;
+							}
+						}
+
+						EntryHandle pipelineTemp = pipelinesIdentifier[handle->pipelineIdentifierGroup][pipelineOffset + sampleLevelForRenderPass];
+
+						uint32_t drawSize = handle->vertexCount;
+
+						uint32_t perFrameCommandOffset = handle->indirectBufferFrames;
+
+						uint32_t perFrameCountOffset = handle->indirectCountBufferStride;
+
+						RenderAllocation vertexAlloc = allocations[handle->vertexBufferIndex];
+
+						RenderAllocation indexAlloc = allocations[handle->indexBufferHandle];
+
+						RenderAllocation indirectBufferAlloc = allocations[handle->indirectBufferHandle];
+
+						RenderAllocation indirectCountBufferAlloc = allocations[handle->indirectCountBufferHandle];
+
+						rcb.BindGraphicsPipeline(pipelineTemp);
+
+						for (uint32_t ii = 0; ii < handle->resourceSetCount; ii++)
+						{
+							rcb.BindDescriptorSets(descriptorManager.vkDescriptorSets[handle->resourceSets[ii]], currentFrame, 1, ii, 0, nullptr);
+						}
+
+						if (handle->vertexBufferIndex != -1)
+						{
+							size_t vertexOffset = handle->vertexBufferOffset;
+							rcb.BindVertexBuffer(bufferHandles[vertexAlloc.memIndex], 0, 1, &vertexOffset);
+						}
+
+						for (uint32_t ii = 0, jj = 0, constantBufferPerSet = 0; ii < handle->pushRangeCount && jj < handle->resourceSetCount;)
+						{
+							ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager.GetConstantBuffer(handle->resourceSets[jj], constantBufferPerSet++);
+							if (!pushArgs)
+							{
+								jj++;
+								constantBufferPerSet = 0;
+								continue;
+							}
+					
+							rcb.PushConstantsCommand(pushArgs->offset, pushArgs->size, API::ConvertShaderStageToVulkanShaderStage(pushArgs->stage), pushArgs->data);
+
+							ii++;
+						}
+
+						if (handle->indirectBufferHandle != -1)
+						{
+							perFrameCommandOffset *=  currentFrame;
+
+							perFrameCountOffset *= currentFrame;
+
+							if (handle->indexBufferHandle != -1)
+							{
+								rcb.BindIndexBuffer(bufferHandles[indexAlloc.memIndex], handle->indexBufferOffset, handle->indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+
+								if (handle->indirectCountBufferHandle != -1)
+								{
+									rcb.BindingDrawIndexedIndirectCount(bufferHandles[indirectBufferAlloc.memIndex], bufferHandles[indirectCountBufferAlloc.memIndex], handle->indirectBufferOffset + perFrameCommandOffset, handle->indirectCountBufferOffset + perFrameCountOffset, handle->indirectDrawCount);
+								}
+								else
+								{
+									rcb.BindingIndexedIndirectDrawCmd(bufferHandles[indirectBufferAlloc.memIndex], handle->indirectDrawCount, handle->indirectBufferOffset + perFrameCommandOffset);
+								}
+							}
+							else
+							{
+								if (handle->indirectCountBufferHandle != -1)
+								{
+									rcb.BindingDrawIndirectCount(bufferHandles[indirectBufferAlloc.memIndex], bufferHandles[indirectCountBufferAlloc.memIndex], handle->indirectBufferOffset + perFrameCommandOffset, handle->indirectCountBufferOffset + perFrameCountOffset, handle->indirectDrawCount);
+								}
+								else
+								{
+									rcb.BindingIndirectDrawCmd(bufferHandles[indirectBufferAlloc.memIndex], handle->indirectDrawCount, handle->indirectBufferOffset + perFrameCommandOffset);
+								}
+							}
+						}
+						else
+						{
+							if (handle->indexBufferHandle != -1)
+							{
+								rcb.BindIndexBuffer(bufferHandles[indexAlloc.memIndex], handle->indexBufferOffset, handle->indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+								rcb.BindingDrawIndexedCmd(static_cast<uint32_t>(handle->indexCount), handle->instanceCount, 0, 0, 0);
+							}
+							else
+							{
+								rcb.BindingDrawCmd(0, drawSize, 0, handle->instanceCount);
+							}
+						}
+					}
 				}
-
-				graph->DrawScene(&rcb, currentFrame);
 
 				rcb.EndRenderPassCommand();
 
@@ -3468,22 +3323,18 @@ void RenderInstance::CreateGraphicsQueueForAttachments(int frameGraphIndex, int 
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle graphicsOTQ = dev->CreateGraphicsOneTimeQueue(pipelineCount);
-
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraphIndex];
 
 	AttachmentRenderPassInstance* passInstance = &graphInstance->passes[renderPassIndex];
 
-	passInstance->graphicsOTQIndex = renderTargetQueues.Allocate(graphicsOTQ);
+	passInstance->graphicsOTQIndex = renderTargetQueues.Allocate().first;
 }
 
 int RenderInstance::CreateComputeQueue(uint32_t maxNumPipelines)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	EntryHandle computeOTQ = dev->CreateComputeOneTimeQueue(maxNumPipelines);
-
-	return computeQueues.Allocate(computeOTQ);
+	return computeQueues.Allocate().first;
 }
 
 
@@ -3514,9 +3365,10 @@ void RenderInstance::EndFrame()
 
 		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
-			VKComputeOneTimeQueue* computeQueue = dev->GetComputeOTQ(computeQueues.dataArray[command->indexForStreamType]);
+			ComputeQueue* computeQueue = &computeQueues.dataArray[command->indexForStreamType];
 
-			computeQueue->UpdateQueue();
+			computeQueue->queueCount = 0;
+
 			passDesc = "Compute Pass : ";
 
 			queryCount = 2;
@@ -3527,15 +3379,12 @@ void RenderInstance::EndFrame()
 
 			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 			{
-				VKRenderGraph* graph = dev->GetRenderGraph(renderTargets[currentGraphInstance->consecutiveRenderTargetsBase + currentGraphInstance->passes[i].baseRenderTargetData + currentGraphInstance->passes[i].currentSampleCount]);
-
-				graph->UpdateLists();
-
+			
 				if (currentGraphInstance->passes[i].graphicsOTQIndex >= 0)
 				{
-					VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[currentGraphInstance->passes[i].graphicsOTQIndex]);
+					RenderQueue* queue = &renderTargetQueues.dataArray[currentGraphInstance->passes[i].graphicsOTQIndex];
 
-					queue->UpdateQueue();
+					queue->queueCount = 0;
 				}
 
 				queryCount += 2;
@@ -3582,34 +3431,15 @@ void RenderInstance::AddPipelineToRPGraphicsQueue(int psoIndex, int frameGraphIn
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
-
-	PipelineInstanceData* instanceData = &pipelinesInstancesInfo[handle->pipelineIdentifierGroup];
-
-	uint32_t pipelineOffset = 0;
-
-	for (int i = 0; i < instanceData->frameGraphCount; i++)
-	{
-		if (frameGraphIndex == instanceData->frameGraphIndices[i])
-		{
-			pipelineOffset = instanceData->frameGraphPipelineIndices[i];
-			break;
-		}
-	}
-
 	AttachmentGraphInstance* currentGraphInstance = &attachmentGraphsInstances[frameGraphIndex];
 
 	AttachmentRenderPassInstance* rendPassInst = &currentGraphInstance->passes[renderPass];
 
-	int MSAALevel = rendPassInst->currentSampleCount;
-
-	EntryHandle ret = renderStateObjects.dataArray[handle->indexForHandles + pipelineOffset + MSAALevel];
-
 	if (rendPassInst->graphicsOTQIndex >= 0)
 	{
-		VKGraphicsOneTimeQueue* queue = dev->GetGraphicsOTQ(renderTargetQueues.dataArray[rendPassInst->graphicsOTQIndex]);
+		RenderQueue* queue = &renderTargetQueues.dataArray[rendPassInst->graphicsOTQIndex];
 
-		queue->AddObject(ret);
+		queue->pipelines[queue->queueCount++] = psoIndex;
 	}
 }
 
@@ -3617,13 +3447,9 @@ void RenderInstance::AddPipelineToComputeQueue(int queueIndex, int psoIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	PipelineHandle* handle = stateObjectHandles.Update(psoIndex);
+	ComputeQueue* queue = &computeQueues.dataArray[queueIndex];
 
-	EntryHandle ret = computeStateObjects.dataArray[handle->indexForHandles];
-
-	VKComputeOneTimeQueue* queue = dev->GetComputeOTQ(computeQueues.dataArray[queueIndex]);
-
-	queue->AddObject(ret);
+	queue->pipelines[queue->queueCount++] = psoIndex;
 }
 
 
@@ -3908,16 +3734,7 @@ void RenderInstance::PipelineUpdateInstanceCommandsBuffer(int pipelineIndex, int
 	
 	if (handle->group == GRAPHICSO)
 	{
-		int pipelineVariationCount = handle->numHandles;
-		int pipelineBase = handle->indexForHandles;
-		for (int i = 0; i < pipelineVariationCount; i++)
-		{
-			EntryHandle pipelineIndex = renderStateObjects.dataArray[i+pipelineBase];
-			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTBUFFERHANDLE, &indirectBufferHandle);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOMMANDSTRIDE, &indirectBufferPerFrameSize);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTBUFFEROFFSET, &indirectOffset);
-		}
+	
 	}
 }
 
@@ -3935,16 +3752,7 @@ void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocatio
 
 	if (handle->group == GRAPHICSO)
 	{
-		int pipelineVariationCount = handle->numHandles;
-		int pipelineBase = handle->indexForHandles;
-		for (int i = 0; i < pipelineVariationCount; i++)
-		{
-			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
-			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXBUFFERINDEX, &vertexBufferHandle);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXBUFFEROFFSET, &vertexOffset);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_VERTEXCOUNT, &vertexCountLL);
-		}
+	
 	}
 }
 
@@ -3962,17 +3770,7 @@ void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocation
 
 	if (handle->group == GRAPHICSO)
 	{
-		int pipelineVariationCount = handle->numHandles;
-		int pipelineBase = handle->indexForHandles;
-		for (int i = 0; i < pipelineVariationCount; i++)
-		{
-			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
-			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXBUFFERHANDLE, &indexBufferHandle);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXBUFFEROFFSET, &indexOffset);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXTYPE, &indexStride);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDEXCOUNT, &indexCountLL);
-		}
+	
 	}
 }
 
@@ -3993,16 +3791,7 @@ void RenderInstance::PipelineUpdateIndirectCountBuffer(int pipelineIndex, int al
 
 	if (handle->group == GRAPHICSO)
 	{
-		int pipelineVariationCount = handle->numHandles;
-		int pipelineBase = handle->indexForHandles;
-		for (int i = 0; i < pipelineVariationCount; i++)
-		{
-			EntryHandle pipelineIndex = renderStateObjects.dataArray[i + pipelineBase];
-			VKGraphicsPipelineObject* vkPipelineObject = dev->GetGraphicsPipelineObject(pipelineIndex);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFERHANDLE, &indirectCountBufferHandle);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTSTRIDE, &indirectCountBufferPerFrameSize);
-			vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_INDIRECTCOUNTBUFFEROFFSET, &indirectCountOffset);
-		}
+		
 	}
 }
 
@@ -4018,13 +3807,7 @@ void RenderInstance::PipelineUpdateDispatchCommands(int pipelineIndex, int x, in
 
 	if (handle->group == COMPUTESO)
 	{
-		int pipelineBase = handle->indexForHandles;
-		EntryHandle pipelineIndex = computeStateObjects.dataArray[pipelineBase];
-		VKComputePipelineObject* vkPipelineObject = dev->GetComputePipelineObject(pipelineIndex);
-
-		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_X, &xU);
-		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_Y, &yU);
-		vkPipelineObject->ChangePipelineMember(PIPELINE_MOD_MEMBER_Z, &zU);
+	
 	}
 }
 
@@ -4068,6 +3851,7 @@ int RenderInstance::CreateUniversalBuffer(size_t size, BufferType bufferMemoryTy
 	
 	bufferHandles[bufferIndex] = bufferHandle;
 	bufferTypes[bufferIndex] = bufferMemoryType;
+	bufferToResourceStatus[bufferIndex] = resourceStateCtr++;
 
 	return bufferIndex;
 }
@@ -4107,6 +3891,231 @@ void RenderInstance::PrintOutTexturePoolAllocations(Logger* outputLogger)
 		int actualSize = snprintf(OutputScratch, 512, "Image Pool with memory allocation %d/%d", (int)details.allocSize, (int)details.totalDataSize);
 
 		outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
+	}
+}
+
+void RenderInstance::AddVulkanMemoryBarrier(RecordingBufferObject* rcb, int* descriptorid, int descriptorcount)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
+
+	for (int i = 0; i < descriptorcount; i++)
+	{
+		uintptr_t head = descriptorManager.descriptorSets[descriptorid[i]];
+		ShaderResourceSet* set = (ShaderResourceSet*)head;
+
+		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+
+		int counter = 0;
+
+		while (counter < set->bindingCount)
+		{
+			ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[counter++];
+			if (header->action == ShaderResourceAction::SHADERWRITE || header->action == ShaderResourceAction::SHADERREADWRITE)
+			{
+				switch (header->type)
+				{
+				case ShaderResourceType::IMAGESTORE2D:
+				{
+					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
+					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
+					ShaderResourceImageBarrier* barrier2 = &barrier[1];
+
+					VkImageSubresourceRange range{};
+					range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+					range.levelCount = 1;
+					range.layerCount = 1;
+
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
+
+					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
+					{
+						/*
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
+						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
+							BEFORE,
+							srcStage,
+							dstStage
+						);
+						*/
+					}
+
+
+					srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->srcAction);
+					dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier2->dstAction);
+					srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->srcStage);
+					dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier2->dstStage);
+
+					if (barrier2->dstResourceLayout != barrier2->srcResourceLayout)
+					{
+
+						/*
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier2->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier2->dstResourceLayout), *imageBarrier->textureHandles, range);
+
+						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
+							AFTER,
+							srcStage,
+							dstStage
+						);
+						*/
+					}
+
+					break;
+				}
+				case ShaderResourceType::SAMPLER2D:
+				{
+					ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
+
+					ShaderResourceImageBarrier* barrier = (ShaderResourceImageBarrier*)(imageBarrier + 1);
+
+					VkImageSubresourceRange range{};
+
+					range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+					range.levelCount = 1;
+					range.layerCount = 1;
+
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
+
+					if (barrier->dstResourceLayout != barrier->srcResourceLayout)
+					{
+						/*
+						EntryHandle barrierIndex = dev->CreateImageMemoryBarrier(srcAction, dstAction, 0, 0, API::ConvertImageLayoutToVulkanImageLayout(barrier->srcResourceLayout),
+							API::ConvertImageLayoutToVulkanImageLayout(barrier->dstResourceLayout), *imageBarrier->textureHandles, range);
+						vkPipelineObject->AddImageMemoryBarrier(barrierIndex,
+							BEFORE,
+							srcStage,
+							dstStage
+						);
+						*/
+					}
+
+					break;
+				}
+				case ShaderResourceType::BUFFER_VIEW:
+				{
+					ShaderResourceBufferView* bufferBarrier = (ShaderResourceBufferView*)header;
+
+					if (bufferBarrier->allocationIndex == nullptr) break;
+
+					int arrayCount = bufferBarrier->arrayCount;
+
+					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
+
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
+					for (int g = 0; g < arrayCount; g++)
+					{
+						int index = bufferBarrier->allocationIndex[g];
+						size_t size = allocations[index].deviceAllocSize;
+						size_t copiesOfStruct = allocations[index].structureCopies;
+						uint32_t pfo = 0;
+
+
+						if (allocations[index].allocType == AllocationType::PERFRAME)
+						{
+
+							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
+							pfo = static_cast<uint32_t>(size);
+						}
+						VkBufferMemoryBarrier vkBarrier{};
+
+						VkBuffer buffer = dev->GetBufferHandle(bufferHandles[allocations[index].memIndex]);
+
+						vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+						vkBarrier.pNext = nullptr;
+						vkBarrier.srcAccessMask = srcAction;
+						vkBarrier.dstAccessMask = dstAction;
+						vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						vkBarrier.buffer = buffer;
+						vkBarrier.offset = allocations[index].offset;
+						vkBarrier.size = size;
+
+						RBOPipelineBarrierArgs args{};
+
+						args.srcStageMask = srcStage;
+						args.dstStageMask = dstStage;
+						args.bufferMemoryBarrierCount = 1;
+						args.pBufferMemoryBarriers = &vkBarrier;
+
+						rcb->BindPipelineBarrierCommand(&args);
+
+					}
+
+					break;
+				}
+				case ShaderResourceType::STORAGE_BUFFER:
+				case ShaderResourceType::UNIFORM_BUFFER:
+				{
+					ShaderResourceBuffer* bufferBarrier = (ShaderResourceBuffer*)header;
+
+					if (bufferBarrier->allocationIndex == nullptr) break;
+
+					int arrayCount = bufferBarrier->arrayCount;
+
+					ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)(bufferBarrier + 1);
+
+					VkAccessFlags srcAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->srcAction);
+					VkAccessFlags dstAction = API::ConvertResourceActionToVulkanAccessFlags(barrier->dstAction);
+					VkShaderStageFlags srcStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->srcStage);
+					VkShaderStageFlags dstStage = API::ConvertBarrierStageToVulkanPipelineStage(barrier->dstStage);
+
+					for (int g = 0; g < arrayCount; g++)
+					{
+						int index = bufferBarrier->allocationIndex[g];
+						size_t size = allocations[index].deviceAllocSize;
+						size_t copiesOfStruct = allocations[index].structureCopies;
+						uint32_t pfo = 0;
+						VkDeviceSize offset = (bufferBarrier->offsets ? bufferBarrier->offsets[g] : 0);
+
+						if (allocations[index].allocType == AllocationType::PERFRAME)
+						{
+							size = ((allocations[index].requestedSize * copiesOfStruct) + allocations[index].alignment - 1) & ~(allocations[index].alignment - 1);
+							pfo = static_cast<uint32_t>(size);
+						}
+						else
+						{
+							size -= offset;
+						}
+
+						VkBufferMemoryBarrier vkBarrier{};
+
+						VkBuffer buffer = dev->GetBufferHandle(bufferHandles[allocations[index].memIndex]);
+
+						vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+						vkBarrier.pNext = nullptr;
+						vkBarrier.srcAccessMask = srcAction;
+						vkBarrier.dstAccessMask = dstAction;
+						vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+						vkBarrier.buffer = buffer;
+						vkBarrier.offset = allocations[index].offset + offset;
+						vkBarrier.size = size;
+
+						RBOPipelineBarrierArgs args{};
+
+						args.srcStageMask = srcStage;
+						args.dstStageMask = dstStage;
+						args.bufferMemoryBarrierCount = 1;
+						args.pBufferMemoryBarriers = &vkBarrier;
+
+						rcb->BindPipelineBarrierCommand(&args);
+
+					}
+					break;
+				}
+				}
+			}
+		}
 	}
 }
 
