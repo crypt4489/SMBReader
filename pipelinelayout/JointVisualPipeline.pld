@@ -1,0 +1,8 @@
+<PipelineDescription sampLo="1" sampHi="16">
+	<PrimitiveType type="linelists" size="2">
+	</PrimitiveType>
+	<CullMode mode="back" winding="ccw">
+	</CullMode>
+	<DepthTest op="always" write="false">
+	</DepthTest>
+</PipelineDescription>

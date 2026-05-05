@@ -1,0 +1,20 @@
+<ShaderGraph>
+	<GLSLShader type="vert">
+		JointVisual.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		JointVisual.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="uniform" used="vf">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="storage" used="v">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

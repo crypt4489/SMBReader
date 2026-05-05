@@ -40,7 +40,7 @@ enum PipelineHandles
 static char StartupMemory[32 * KiB];
 static SlabAllocator StartupMemoryAllocator{ StartupMemory, sizeof(StartupMemory) };
 
-static std::array<StringView, 8> pds = {
+static std::array<StringView, 9> pds = {
 	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.pld"),
 	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.pld"),
 	StartupMemoryAllocator.AllocateFromNullStringCopy("DebugPipeline.pld"),
@@ -48,10 +48,11 @@ static std::array<StringView, 8> pds = {
 	StartupMemoryAllocator.AllocateFromNullStringCopy("SkyboxPipeline.pld"),
 	StartupMemoryAllocator.AllocateFromNullStringCopy("OutlinePipeline.pld"),
 	StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.pld")
+	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.pld"),
+	StartupMemoryAllocator.AllocateFromNullStringCopy("JointVisualPipeline.pld"),
 };
 
-static std::array<StringView, 19> layouts = {
+static std::array<StringView, 20> layouts = {
 		StartupMemoryAllocator.AllocateFromNullStringCopy("3DTexturedLayout.sgr"),
 		StartupMemoryAllocator.AllocateFromNullStringCopy("TextLayout.sgr"),
 		StartupMemoryAllocator.AllocateFromNullStringCopy("InterpolateMeshLayout.sgr"),
@@ -70,7 +71,8 @@ static std::array<StringView, 19> layouts = {
 		StartupMemoryAllocator.AllocateFromNullStringCopy("OutlineLayout.sgr"),
 		StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenLayout.sgr"),
 		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.sgr")
+		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.sgr"),
+		StartupMemoryAllocator.AllocateFromNullStringCopy("JointVisualSL.sgr"),
 };
 
 static std::array<StringView, 5> mainLayoutAttachments =
@@ -1732,7 +1734,18 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 			break;
 		}
 		case GR2:
+			mainAppLogger.AddLogMessage(LogMessageType::LOGINFO, AppInstanceTempAllocator.AllocateFromNullStringCopy("Unhandled SMB Chunk"));
+			break;
 		case Joints:
+		{
+			char* jointStrData = GetJointNames(&GlobalInputScratchAllocator, file, &chunk[i]);
+
+			SMBSkeleton skel{};
+
+			int skelCode = GetBoneData(&GlobalInputScratchAllocator, &skel, file);
+
+			break;
+		}
 		default:
 			mainAppLogger.AddLogMessage(LogMessageType::LOGINFO, AppInstanceTempAllocator.AllocateFromNullStringCopy("Unhandled SMB Chunk"));
 			break;
@@ -3044,6 +3057,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(16, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(17, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(19, 8, frameGraphs.data(), frameRenderPassSelection.data(), 1);
 
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(2);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(3);

@@ -148,6 +148,28 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 
 #define RenderableByIndexNonPB 5292387491162064043
 #define RenderableByIndex 5792287050554945273
+#define MAX_JOINT_NAME 48
+
+
+struct SMBJoint
+{
+	Matrix4f granny_inverseBindPose;
+	uint32_t granny_flags;
+	Vector3f granny_position;
+	Vector4f granny_orientation;
+	float granny_scale;
+	uint32_t granny_parentIndex;
+	char name[MAX_JOINT_NAME];
+};
+
+struct SMBSkeleton
+{
+	uint32_t jointCount;
+	SMBJoint* joints;
+};
+
+
+
 
 enum RenderableFlags
 {
@@ -272,3 +294,7 @@ int GetSMBIndexSize(SMBGeoChunk* geoDef, int renderableIndex);
 void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* vertexDataOut, int decompressed, Allocator* tempMemoryPool);
 
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* indexDataOut);
+
+char* GetJointNames(Allocator* inputAllocator, SMBFile* file, SMBChunk* chunk);
+
+int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file);

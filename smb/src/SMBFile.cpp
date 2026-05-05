@@ -650,3 +650,51 @@ bool cpospack6_c16tex2_bone2_type_h::operator==(const cpospack6_c16tex2_bone2_ty
 		(v.WEIGHTS == this->WEIGHTS) &&
 		(v.BONES == this->BONES);
 }
+
+char* GetJointNames(Allocator* inputAllocator, SMBFile* file, SMBChunk* chunk)
+{
+	OSSeekFile(&file->fileHandle, chunk->offsetInHeader, BEGIN);
+
+	int jointNameSize = 0;
+
+	OSReadFile(&file->fileHandle, 4, (char*)&jointNameSize);
+
+	if (jointNameSize != chunk->stringsize)
+		return nullptr;
+
+	char* stringData = (char*)inputAllocator->Allocate(jointNameSize);
+
+	OSReadFile(&file->fileHandle, jointNameSize, stringData);
+
+	return stringData;
+}
+
+int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file)
+{
+	OSReadFile(&file->fileHandle, 4, (char*)&skel->jointCount);
+
+	skel->joints = (SMBJoint*)inputAllocator->Allocate(sizeof(SMBJoint) * skel->jointCount);
+
+	for (uint32_t i = 0; i < skel->jointCount; i++)
+	{
+		SMBJoint* joint = &skel->joints[i];
+
+		OSReadFile(&file->fileHandle, sizeof(Matrix4f), (char*)&joint->granny_inverseBindPose);
+
+		OSReadFile(&file->fileHandle, 4, (char*)&joint->granny_flags);
+
+		OSReadFile(&file->fileHandle, sizeof(Vector3f), (char*)&joint->granny_position);
+
+		OSReadFile(&file->fileHandle, sizeof(Vector4f), (char*)&joint->granny_orientation);
+
+		OSReadFile(&file->fileHandle, sizeof(float), (char*)&joint->granny_scale);
+
+		OSSeekFile(&file->fileHandle, 4, CURRENT); //random ptr
+
+		OSReadFile(&file->fileHandle, sizeof(uint32_t), (char*)&joint->granny_parentIndex);
+
+		OSSeekFile(&file->fileHandle, 4, CURRENT); // struct padding
+	}
+
+	return 0;
+}
