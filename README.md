@@ -23,7 +23,7 @@ A backend-agnostic rendering hardware interface with Vulkan and DirectX 12 imple
 - Per-mesh point light, spot light (cone-sphere intersection), and directional light culling in a single compute pass
 
 ### Vertex Pipeline
-- Programmable vertex pulling via raw byte buffer â€” no fixed vertex layout
+- Programmable vertex pulling via raw byte buffer ” no fixed vertex layout
 - Runtime vertex format decoding supporting 125+ vertex format variations without PSO explosion
 - Oddworld proprietary vertex compression formats fully reversed and implemented:
   - 6-byte quantized positions (AABB-relative fixed point, signed 16-bit per axis)
@@ -56,9 +56,9 @@ Attachment graphs express render pass dependencies and resource lifetimes. Pipel
 
 ### Memory Model
 Three allocation tiers:
-- **PERFRAME** â€” data valid for one frame, automatically recycled
-- **STATIC** â€” load-time allocations that persist for resource lifetime  
-- **PERDRAW** â€” per-draw scratch allocations within a frame
+- **PERFRAME** ” data valid for one frame, automatically recycled
+- **STATIC** ” load-time allocations that persist for resource lifetime  
+- **PERDRAW** ” per-draw scratch allocations within a frame
 
 ---
 
