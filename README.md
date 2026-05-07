@@ -23,7 +23,7 @@ A backend-agnostic rendering hardware interface with Vulkan and DirectX 12 imple
 - Per-mesh point light, spot light (cone-sphere intersection), and directional light culling in a single compute pass
 
 ### Vertex Pipeline
-- Programmable vertex pulling via raw byte buffer ” no fixed vertex layout
+- Programmable vertex pulling via raw byte buffer with no fixed vertex layout
 - Runtime vertex format decoding supporting 125+ vertex format variations without PSO explosion
 - Oddworld proprietary vertex compression formats fully reversed and implemented:
   - 6-byte quantized positions (AABB-relative fixed point, signed 16-bit per axis)
@@ -40,7 +40,7 @@ A backend-agnostic rendering hardware interface with Vulkan and DirectX 12 imple
 
 ### Asset Pipeline
 - SMB archive parsing for Oddworld: Stranger's Wrath HD and original Xbox
-- GR2 (Granny) skeleton data extraction â€” joint local transforms, parent hierarchy, bind pose
+- GR2 (Granny) skeleton data extraction with joint local transforms, parent hierarchy, bind pose
 - Generic vertex description system with compression metadata
 - AABB and bounding sphere per mesh for culling
 
@@ -56,9 +56,9 @@ Attachment graphs express render pass dependencies and resource lifetimes. Pipel
 
 ### Memory Model
 Three allocation tiers:
-- **PERFRAME** ” data valid for one frame, automatically recycled
-- **STATIC** ” load-time allocations that persist for resource lifetime  
-- **PERDRAW** ” per-draw scratch allocations within a frame
+- **PERFRAME** data valid for one frame, automatically recycled
+- **STATIC** load-time allocations that persist for resource lifetime  
+- **PERDRAW** per-draw scratch allocations within a frame
 
 ---
 
