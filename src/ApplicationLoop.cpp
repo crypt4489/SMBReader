@@ -431,6 +431,8 @@ static int currentFrameGraphIndex = 4;
 static int mainComputeQueueIndex = 0;
 static int mainFullScreenPipeline = 0;
 
+static int jointMeshCPU = -1;
+
 static GPULightSource mainPointLight = { 
 	.color = Vector4f(229, 211, 191, 130.0), 
 	.pos = Vector4f(0.0f, 5.0f, 0.0f, 15.0f),
@@ -610,6 +612,8 @@ void ApplicationLoop::Execute()
 		CreateCrateObject();
 
 		CreateCornerWall(10.0f, 10.0f, 2.0f, 1.0f);
+
+		CreateJointVisualObject();
 
 		LoadObject(mainInputString);
 
@@ -1120,6 +1124,139 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 }
 
 
+
+void ApplicationLoop::CreateJointVisualObject()
+{
+	
+	uint16_t BoxIndices[36] = {
+		2,  1,  0, 
+		1,  2,  3, 
+		4,  5,  6,
+		7,  6,  5, 
+		8,  9,  10, 
+		11, 10, 9,
+	   14, 13, 12, 
+	   13, 14, 15, 
+	   18, 17, 16, 
+	   17, 18, 19, 
+	   20, 21, 22, 
+	   23, 22, 21
+	};
+
+	struct MyVertex
+	{
+		Vector4f pos;
+		Vector4f color;
+	};
+
+
+	MyVertex compVerts[24] =
+	{
+	{ Vector4f(1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,  2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+
+	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+
+	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,   2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+
+	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,  -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,  -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+
+	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+	{ Vector4f(1.0f,  -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+
+	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,   2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,  -2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) }
+	};
+
+
+	static AxisBox BOX =
+	{
+		.min = Vector4f(-1.0, -2.0, -1.0, 0.0),
+		.max = Vector4f(1.0, 2.0, 1.0, 0.0),
+	};
+
+	auto& rendInst = GlobalRenderer::gRenderInstance;
+
+	Matrix4f crateMatrix = Identity4f();
+
+	crateMatrix.translate = Vector4f(-5.0, 5.0, 0.0f, 1.0f);
+
+	Sphere sphere;
+
+	sphere.sphere = Vector4f(0.0, 0.0, 0.0, 2.5f);
+
+	int geomDetailsIndex = -1, meshGPUIndex = -1, meshCPUIndex = -1;
+
+	geomDetailsIndex = AllocateGPUGeometryDetails(1);
+
+	meshGPUIndex = AllocateGPUMeshDetails(1);
+
+	jointMeshCPU = meshCPUIndex = AllocateCPUMeshDetails(1);
+
+	int cpuGeomRenderable = AllocateCPUGeometryInstances(1);
+
+	int gpuGeomRenderable = AllocateGPUGeometryInstances(1);
+
+	int gpuMeshRenderable = AllocateGPUMeshRenderable(1);
+
+	int cpuMeshRenderable = AllocateCPUMeshRenderable(1);
+
+	int materialHandleIndex = AllocateGPUMaterialData(1);
+
+	int materialRangeIndex = AllocateGPUMaterialRanges(1);
+
+	if (geomDetailsIndex < 0 || meshGPUIndex < 0 || meshCPUIndex < 0 || cpuGeomRenderable < 0 || gpuGeomRenderable < 0 || gpuMeshRenderable < 0 || cpuMeshRenderable < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, "Cannot create Joint Visual object", 33);
+		mainAppLogger.ProcessMessage();
+		return;
+	}
+
+	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(MyVertex) * 24, 64);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+
+	CreateMaterial(materialHandleIndex, 0, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 0.0, 0.0, 1.0), 1.0, Vector4f(0.0, 0.0, 0.0, 1.0));
+
+	CreateMaterialRange(materialRangeIndex, 1, &materialHandleIndex);
+
+	CreateGPUGeometryDetails(geomDetailsIndex, BOX);
+
+	CreateMeshHandle(meshCPUIndex, meshGPUIndex, compVerts, BoxIndices, POSITION | COLOR, 24, sizeof(MyVertex), 2, 36, sphere, vertexAlloc, indexAlloc);
+
+	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Update(cpuGeomRenderable);
+
+	rendGeomCPUData->renderableMeshStart = gpuMeshRenderable;
+
+	rendGeomCPUData->renderableMeshCount = 1;
+
+	rendGeomCPUData->geomIndex = gpuGeomRenderable;
+
+	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, crateMatrix, geomDetailsIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
+
+	CreateRenderable(cpuMeshRenderable, gpuMeshRenderable, Identity4f(), gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
+
+	rendInst.UpdateDriverMemory(compVerts, globalVertexBuffer, sizeof(compVerts), vertexAlloc, TransferType::CACHED);
+	rendInst.UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
+
+	mainAppLogger.AddLogMessage(LOGINFO, "Created Joint Object", 20);
+}
+
+
 void ApplicationLoop::CreateCrateObject()
 {
 	VertexInputDescription inputDescription[7];
@@ -1151,10 +1288,6 @@ void ApplicationLoop::CreateCrateObject()
 	inputDescription[6].byteoffset = 68;
 	inputDescription[6].format = ComponentFormatType::R32G32B32A32_SFLOAT;
 	inputDescription[6].vertexusage = VertexUsage::TANGENTS;
-
-
-
-
 
 	uint16_t BoxIndices[52] = {
 		2,  1,  0, 1, 
@@ -3057,7 +3190,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(15, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(16, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
 	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(17, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(19, 8, frameGraphs.data(), frameRenderPassSelection.data(), 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(19, 8, frameGraphs.data(), frameRenderPassSelection.data(), 2);
 
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(2);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(3);

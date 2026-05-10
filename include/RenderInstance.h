@@ -43,8 +43,6 @@ struct RenderInstance
 {
 	RenderInstance() = default;
 
-	RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
-
 	~RenderInstance();
 
 	void CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);

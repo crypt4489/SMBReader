@@ -129,6 +129,8 @@ public:
 	int AllocateGPUBlendDescriptions(int numberOfDescs);
 	int AllocateGPUBlendRanges(int numberOfRanges);
 
+	void CreateJointVisualObject();
+
 	ProgramArgs& args;
 	Semaphore queueSema;
 	std::queue<int> wordCounts;

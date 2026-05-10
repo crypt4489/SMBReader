@@ -453,49 +453,6 @@ namespace API {
 }
 
 
-RenderInstance::RenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
-	:
-	vulkanShaderGraphs{ instanceStorageAllocator->Allocate(10 * KiB), 10*KiB, instanceStorageAllocator->Allocate(5 * KiB), 5*KiB},
-	descriptorManager{ instanceStorageAllocator->Allocate(10 * KiB), 10*KiB},
-	minStorageAlignment(0), minUniformAlignment(0), attachmentGraphs(nullptr), attachmentGraphsInstances(nullptr)
-{
-	vkInstance = (VKInstance*)instanceStorageAllocator->Allocate(sizeof(VKInstance));
-
-	cacheAllocator = instanceCacheAllocator;
-	storageAllocator = instanceStorageAllocator;
-
-	updateCommandsCache = (RingAllocator*)instanceStorageAllocator->Allocate(sizeof(RingAllocator));
-	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(64 * KiB), 64*KiB);
-
-	for (uint32_t i = 0; i < 2; i++)
-	{
-		updateCommandBuffers[i] = (SlabAllocator*)instanceStorageAllocator->Allocate(sizeof(SlabAllocator));
-		std::construct_at(updateCommandBuffers[i], instanceStorageAllocator->Allocate(16 * KiB), 16 * KiB);
-	}
-
-	int driverHostLinkedSize = driverHostMemoryUpdater.GetSize(800);
-	int commandLinkedSize = transferCommandPool.GetSize(20);
-	int resourceUpdateLinkedSize = descriptorUpdatePool.GetSize(30);
-	int driverDeviceLinkedSize = driverDeviceMemoryUpdater.GetSize(60);
-	int imageMemoryLinkedSize = imageMemoryUpdateManager.GetSize(30);
-
-	driverHostMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverHostLinkedSize), driverHostLinkedSize);
-
-	transferCommandPool.AllocateList(instanceStorageAllocator->Allocate(commandLinkedSize), commandLinkedSize);
-
-	driverDeviceMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverDeviceLinkedSize), driverDeviceLinkedSize);
-
-	imageMemoryUpdateManager.AllocateList(instanceStorageAllocator->Allocate(imageMemoryLinkedSize), imageMemoryLinkedSize);
-
-	descriptorUpdatePool.AllocateList(instanceStorageAllocator->Allocate(resourceUpdateLinkedSize), resourceUpdateLinkedSize);
-
-	attachmentGraphsInstances = (AttachmentGraphInstance*)instanceStorageAllocator->Allocate(sizeof(AttachmentGraphInstance) * 10);
-
-	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
-
-	std::construct_at(internalRendererLogger, (char*)instanceStorageAllocator->Allocate(8 * KiB, 8), 8 * KiB);
-};
-
 void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
 
@@ -522,7 +479,7 @@ void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocato
 	storageAllocator = instanceStorageAllocator;
 
 	updateCommandsCache = (RingAllocator*)instanceStorageAllocator->Allocate(sizeof(RingAllocator));
-	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(64 * KiB), 64 * KiB);
+	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(76 * KiB), 76 * KiB);
 
 	for (uint32_t i = 0; i < 2; i++)
 	{
@@ -3481,7 +3438,7 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 
 	if (transferType == TransferType::CACHED)
 	{
-		outData = updateCommandsCache->Allocate(size);
+		outData = updateCommandsCache->Allocate(size, 16);
 		memcpy(outData, data, size);
 	}
 

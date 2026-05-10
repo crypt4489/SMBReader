@@ -370,6 +370,14 @@ void main() {
             mat4 MVP = gs.proj * gs.view * worldMatrix;
             vec4 intPos = ReconstructVEC4(offset);
             gl_Position = MVP * intPos;
+            worldPosition = worldMatrix * intPos;
+            offset += 16;
+        }
+
+        if ((comp&COLOR)==COLOR)
+        {
+            outColor = ReconstructVEC4(offset);
+            offset += 16;
         }
 
         if ((comp & TEXTURES1) == TEXTURES1)
