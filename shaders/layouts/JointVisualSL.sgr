@@ -10,9 +10,7 @@
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="storage" used="v">
-		</ShaderResourceItem>
-		<ShaderResourceItem type="bufferView" used="v" rw="read">
+		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="v" rw="read">
 		</ShaderResourceItem>

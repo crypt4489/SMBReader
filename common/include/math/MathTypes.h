@@ -1003,3 +1003,9 @@ struct Sphere
 {
 	Vector4f sphere;
 };
+
+Vector4f CreateQuatRotationAxes(const Vector4f& right, const Vector4f& up, const Vector4f& forward);
+
+Matrix4f CreateRotationMatFromQuat(const Vector4f& quat);
+
+Matrix4f CreateScaleMatrix(float scale);

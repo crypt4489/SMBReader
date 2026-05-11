@@ -129,7 +129,7 @@ public:
 	int AllocateGPUBlendDescriptions(int numberOfDescs);
 	int AllocateGPUBlendRanges(int numberOfRanges);
 
-	void CreateJointVisualObject();
+	void CreateJointVisualObject(int numberOfJoints);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

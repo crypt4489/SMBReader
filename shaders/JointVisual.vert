@@ -1,5 +1,6 @@
 #version 460
-
+layout(location = 0) in vec4 position;
+layout(location = 1) in vec4 inColor;
 layout(location = 0) out vec4 color;
 
 
@@ -31,14 +32,18 @@ layout(set = 0, binding = 0) uniform GlobalContext {
 } gs;
 
 
+layout(set = 1, binding = 0) readonly buffer JointMeshWorlds
+{
+    mat4 worldMats[];
+} jmw;
+
+layout(set = 1, binding = 1) uniform usamplerBuffer jointParentIndices;
+
 void main()
 {
-   vec2 positions[2] = vec2[](
-        vec2(0.0, 0.0), // bottom
-        vec2(0.0, 1.0) // top
-    );
-
-    gl_Position = vec4(positions[gl_VertexIndex & 1], 0.0, 1.0);
+	vec4 pos = (jmw.worldMats[gl_InstanceIndex] * vec4(position.xyz * 0.05, 1.0));
     
-    color = vec4(1.0, 0.0, 0.0, 1.0);
+	gl_Position = gs.proj * gs.view * pos;
+
+    color = inColor;
 }

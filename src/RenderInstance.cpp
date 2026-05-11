@@ -2670,7 +2670,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
 
 	int bindingCount = set->bindingCount;
 
-	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[set->bindingCount - set->constantsCount - 1];
+	int lastBinding = std::max(bindingCount - set->constantsCount - 1, 0);
+
+	ShaderResourceHeader* lastheader = (ShaderResourceHeader*)offsets[lastBinding];
 
 	if (lastheader->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY)
 	{

@@ -432,6 +432,17 @@ static int mainComputeQueueIndex = 0;
 static int mainFullScreenPipeline = 0;
 
 static int jointMeshCPU = -1;
+static int jointMeshPipeline = -1;
+
+
+static int jointMeshWorldMatrixMaxCount = 164;
+static int jointMeshWorldMatrixCount = 0;
+
+static int jointMeshWorldMatrix = -1;
+static int jointMeshOrientations = -1;
+static int jointMeshPositions = -1;
+static int jointMeshScales = -1;
+static int jointMeshParentIndices = -1;
 
 static GPULightSource mainPointLight = { 
 	.color = Vector4f(229, 211, 191, 130.0), 
@@ -613,7 +624,7 @@ void ApplicationLoop::Execute()
 
 		CreateCornerWall(10.0f, 10.0f, 2.0f, 1.0f);
 
-		CreateJointVisualObject();
+
 
 		LoadObject(mainInputString);
 
@@ -762,6 +773,8 @@ void ApplicationLoop::Execute()
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 1);
 
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 1);
+
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(jointMeshPipeline, currentFrameGraphIndex, 1);
 				}
 				else if (currentFrameGraphIndex == BasicShadow)
 				{
@@ -773,10 +786,14 @@ void ApplicationLoop::Execute()
 
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
-					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 1);
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(jointMeshPipeline, currentFrameGraphIndex, 0);
+
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
 					if (currentFrameGraphIndex == MSAAPost)
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
+
+
 				}
 
 				GlobalRenderer::gRenderInstance.DrawScene(imageIndex);
@@ -1125,7 +1142,7 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 
 
-void ApplicationLoop::CreateJointVisualObject()
+void ApplicationLoop::CreateJointVisualObject(int numberOfJoints)
 {
 	
 	uint16_t BoxIndices[36] = {
@@ -1162,9 +1179,9 @@ void ApplicationLoop::CreateJointVisualObject()
 	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
 	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
 
-	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 0.0f, 1.0f, 1.0f) },
+	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
+	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
 	{ Vector4f(1.0f,   2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
 
 	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
@@ -1202,53 +1219,41 @@ void ApplicationLoop::CreateJointVisualObject()
 
 	int geomDetailsIndex = -1, meshGPUIndex = -1, meshCPUIndex = -1;
 
-	geomDetailsIndex = AllocateGPUGeometryDetails(1);
-
-	meshGPUIndex = AllocateGPUMeshDetails(1);
-
-	jointMeshCPU = meshCPUIndex = AllocateCPUMeshDetails(1);
-
-	int cpuGeomRenderable = AllocateCPUGeometryInstances(1);
-
-	int gpuGeomRenderable = AllocateGPUGeometryInstances(1);
-
-	int gpuMeshRenderable = AllocateGPUMeshRenderable(1);
-
-	int cpuMeshRenderable = AllocateCPUMeshRenderable(1);
-
-	int materialHandleIndex = AllocateGPUMaterialData(1);
-
-	int materialRangeIndex = AllocateGPUMaterialRanges(1);
-
-	if (geomDetailsIndex < 0 || meshGPUIndex < 0 || meshCPUIndex < 0 || cpuGeomRenderable < 0 || gpuGeomRenderable < 0 || gpuMeshRenderable < 0 || cpuMeshRenderable < 0)
-	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Cannot create Joint Visual object", 33);
-		mainAppLogger.ProcessMessage();
-		return;
-	}
-
 	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(MyVertex) * 24, 64);
 	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	CreateMaterial(materialHandleIndex, 0, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(0.0, 0.0, 0.0, 1.0), 1.0, Vector4f(0.0, 0.0, 0.0, 1.0));
+	static Matrix4f matrix = Identity4f();
 
-	CreateMaterialRange(materialRangeIndex, 1, &materialHandleIndex);
+	matrix.translate = Vector4f(-10.0, 0.0, 0.0, 1.0f);
 
-	CreateGPUGeometryDetails(geomDetailsIndex, BOX);
+	int camJointData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(19, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int JointDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(19, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	CreateMeshHandle(meshCPUIndex, meshGPUIndex, compVerts, BoxIndices, POSITION | COLOR, 24, sizeof(MyVertex), 2, 36, sphere, vertexAlloc, indexAlloc);
+	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(nullptr, camJointData, &globalBufferLocation, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(nullptr, JointDesc, &jointMeshWorldMatrix, nullptr, 0, 1, 0);
+	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(nullptr, JointDesc, &jointMeshParentIndices, 0, 1, 1);
 
-	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Update(cpuGeomRenderable);
+	std::array<int, 2> Descs = { camJointData, JointDesc };
 
-	rendGeomCPUData->renderableMeshStart = gpuMeshRenderable;
+	GraphicsIntermediaryPipelineInfo jointInfo = {
+		.drawType = 0,
+		.vertexBufferHandle = globalVertexBuffer,
+		.vertexCount = 24,
+		.pipelinename = 19,
+		.descCount = 2,
+		.descriptorsetid = Descs.data(),
+		.indexBufferHandle = globalIndexBuffer,
+		.indexCount = 36,
+		.instanceCount = (uint32_t)numberOfJoints,
+		.indexSize = 2,
+		.indexOffset = (uint32_t)indexAlloc,
+		.vertexOffset = (uint32_t)vertexAlloc,
+		.indirectAllocation = ~0,
+		.indirectDrawCount = 0,
+		.indirectCountAllocation = ~0
+	};
 
-	rendGeomCPUData->renderableMeshCount = 1;
-
-	rendGeomCPUData->geomIndex = gpuGeomRenderable;
-
-	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, crateMatrix, geomDetailsIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
-
-	CreateRenderable(cpuMeshRenderable, gpuMeshRenderable, Identity4f(), gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
+	jointMeshPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&jointInfo, false);
 
 	rendInst.UpdateDriverMemory(compVerts, globalVertexBuffer, sizeof(compVerts), vertexAlloc, TransferType::CACHED);
 	rendInst.UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
@@ -1876,6 +1881,44 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 			SMBSkeleton skel{};
 
 			int skelCode = GetBoneData(&GlobalInputScratchAllocator, &skel, file);
+
+			int startingJointLocation = jointMeshWorldMatrixCount;
+
+			Matrix4f* worldMats = (Matrix4f*)GlobalInputScratchAllocator.Allocate(sizeof(Matrix4f) * skel.jointCount);
+			
+			for (int joint = 0; joint < skel.jointCount; joint++)
+			{
+				Matrix4f jointRot = CreateRotationMatFromQuat(skel.joints[joint].granny_orientation);
+				
+				Matrix4f scale = CreateScaleMatrix(skel.joints[joint].granny_scale);
+
+				Matrix4f translation = Identity4f();
+
+				translation.translate.x = skel.joints[joint].granny_position.x;
+				translation.translate.y = skel.joints[joint].granny_position.y;
+				translation.translate.z = skel.joints[joint].granny_position.z;
+
+				uint32_t parentIdx = skel.joints[joint].granny_parentIndex;
+
+				Matrix4f worldMat;
+
+				if (parentIdx == 0xFFFFFFFF) {
+					worldMat = translation * jointRot * scale; // root joint
+				}
+				else {
+					worldMat =  worldMats[parentIdx] * translation * jointRot * scale;
+				}
+
+				worldMats[joint] = worldMat;
+
+				GlobalRenderer::gRenderInstance.UpdateDriverMemory(&worldMat, jointMeshWorldMatrix, sizeof(Matrix4f), (startingJointLocation + joint) * sizeof(Matrix4f), TransferType::CACHED);
+				GlobalRenderer::gRenderInstance.UpdateDriverMemory(&skel.joints[joint].granny_parentIndex, jointMeshParentIndices, sizeof(uint32_t), (startingJointLocation + joint) * sizeof(uint32_t), TransferType::CACHED);
+			}
+
+
+			jointMeshWorldMatrixCount += skel.jointCount;
+
+			CreateJointVisualObject(skel.jointCount);
 
 			break;
 		}
@@ -3231,6 +3274,13 @@ void ApplicationLoop::InitializeRuntime()
 
 	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
 	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+
+
+	jointMeshWorldMatrix = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Matrix4f), 1, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	//jointMeshOrientations = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Vector4f), 1, 16, AllocationType::PERFRAME, ComponentFormatType::R32G32B32A32_SFLOAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	//jointMeshPositions = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Vector3f), 1, 12, AllocationType::PERFRAME, ComponentFormatType::R32G32B32_SFLOAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	//jointMeshScales = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(float), 1, alignof(float), AllocationType::PERFRAME, ComponentFormatType::R32_SFLOAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	jointMeshParentIndices = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
 
 	ShaderResourceSetContext globalDescriptorBuilder{ &mainAppLogger, false };
 

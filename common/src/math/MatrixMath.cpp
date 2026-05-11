@@ -490,3 +490,98 @@ Matrix4f CreateViewMatrix(LTM* ltm)
 
 	return View;
 }
+
+Vector4f CreateQuatRotationAxes(const Vector4f& right, const Vector4f& up, const Vector4f& forward)
+{
+	Vector4f out;
+	float trace = right.comp[0] + up.comp[1] + forward.comp[2];
+	if (trace > 1.0f)
+	{
+		float s = 0.5f / sqrtf(trace + 1.0f);
+		out.comp[0] = 0.25f / s;
+		out.comp[1] = (up.comp[2] - forward.comp[1]) * s;
+		out.comp[2] = (forward.comp[0] - right.comp[2]) * s;
+		out.comp[3] = (right.comp[1] - up.comp[0]) * s;
+	}
+	else
+	{
+		if (right.comp[0] > up.comp[1] && right.comp[0] > forward.comp[2])
+		{
+			float s = 2.0f * sqrtf(1.0f + right.comp[0] - up.comp[1] - forward.comp[2]);
+			float invS = 1.0f / s;
+			out.comp[0] = (up.comp[2] - forward.comp[1]) * invS;
+			out.comp[1] = 0.25f * s;
+			out.comp[2] = (right.comp[1] + up.comp[0]) * invS;
+			out.comp[3] = (right.comp[2] + forward.comp[0]) * invS;
+		}
+		else if (up.comp[1] > forward.comp[2])
+		{
+			float s = 2.0f * sqrtf(1.0f + up.comp[1] - right.comp[0] - forward.comp[2]);
+			float invS = 1.0f / s;
+			out.comp[0] = (forward.comp[0] - right.comp[2]) * invS;
+			out.comp[1] = (right.comp[1] + up.comp[0]) * invS;
+			out.comp[2] = 0.25f * s;
+			out.comp[3] = (up.comp[2] + forward.comp[1]) * invS;
+		}
+		else
+		{
+			float s = 2.0f * sqrtf(1.0f + forward.comp[2] - right.comp[0] - up.comp[1]);
+			float invS = 1.0f / s;
+			out.comp[0] = (right.comp[1] - up.comp[0]) * invS;
+			out.comp[1] = (right.comp[2] + forward.comp[0]) * invS;
+			out.comp[2] = (up.comp[2] + forward.comp[1]) * invS;
+			out.comp[3] = 0.25f * s;
+		}
+	}
+
+	return out;
+}
+
+
+Matrix4f CreateRotationMatFromQuat(const Vector4f& quat)
+{
+
+	Matrix4f m = Identity4f(); 
+
+	float q1 = quat.comp[0];
+	float q2 = quat.comp[1];
+	float q3 = quat.comp[2];
+	float q0 = quat.comp[3];
+
+	float q0q0 = q0 * q0;
+	float q0q1 = q0 * q1;
+	float q0q2 = q0 * q2;
+	float q0q3 = q0 * q3;
+
+	float q1q2 = q1 * q2;
+	float q1q3 = q1 * q3;
+
+	float q2q3 = q2 * q3;
+
+	m.comp[0] = 2 * (q0q0 + q1 * q1) - 1;
+	m.comp[4] = 2 * (q1q2 - q0q3);
+	m.comp[8] = 2 * (q1q3 + q0q2);
+
+	m.comp[1] = 2 * (q1q2 + q0q3);
+	m.comp[5] = 2 * (q0q0 + q2 * q2) - 1;
+	m.comp[9] = 2 * (q2q3 - q0q1);
+
+	m.comp[2] = 2 * (q1q3 - q0q2);
+	m.comp[6] = 2 * (q2q3 + q0q1);
+	m.comp[10] = 2 * (q0q0 + q3 * q3) - 1;
+
+	m.comp[15] = 1.0f;
+
+	return m;
+}
+
+Matrix4f CreateScaleMatrix(float scale)
+{
+	Matrix4f scaleM = Identity4f();
+
+	scaleM.right.x *= scale;
+	scaleM.up.y *= scale;
+	scaleM.forward.z *= scale;
+
+	return scaleM;
+}
