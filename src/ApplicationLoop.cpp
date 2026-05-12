@@ -1145,19 +1145,17 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 void ApplicationLoop::CreateJointVisualObject(int numberOfJoints)
 {
 	
-	uint16_t BoxIndices[36] = {
-		2,  1,  0, 
-		1,  2,  3, 
-		4,  5,  6,
-		7,  6,  5, 
-		8,  9,  10, 
-		11, 10, 9,
-	   14, 13, 12, 
-	   13, 14, 15, 
-	   18, 17, 16, 
-	   17, 18, 19, 
-	   20, 21, 22, 
-	   23, 22, 21
+	uint16_t BoxIndices[32] = {
+		// bottom pyramid (root to base)
+		0, 1, 2,
+		0, 2, 3,
+		0, 3, 4,
+		0, 4, 1,
+		// top pyramid (base to tip)
+		5, 2, 1,
+		5, 3, 2,
+		5, 4, 3,
+		5, 1, 4,
 	};
 
 	struct MyVertex
@@ -1165,39 +1163,16 @@ void ApplicationLoop::CreateJointVisualObject(int numberOfJoints)
 		Vector4f pos;
 		Vector4f color;
 	};
-
-
-	MyVertex compVerts[24] =
+	
+	
+	MyVertex compVerts[6] =
 	{
-	{ Vector4f(1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,  2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-
-	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-
-	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,   2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-
-	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,  -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,  -2.0f, -1.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
-
-	{ Vector4f(-1.0f,  2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(1.0f,   2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(-1.0f, -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-	{ Vector4f(1.0f,  -2.0f,  1.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
-
-	{ Vector4f(-1.0f,  2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,   2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(-1.0f, -2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) },
-	{ Vector4f(1.0f,  -2.0f, -1.0f, 1.0f), Vector4f(0.0f, 1.0f, 1.0f, 1.0f) }
+		{ Vector4f(0.0f, 0.0f, 0.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ Vector4f(0.1f, 0.2f, 0.1f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ Vector4f(-0.1f, 0.2f, 0.1f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ Vector4f(-0.1f, 0.2f, -0.1f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
+		{ Vector4f(0.1f, 0.2f, -0.1f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
+		{ Vector4f(0.0f, 1.0f,  0.0f, 1.0f), Vector4f(1.0f, 1.0f, 0.0f, 1.0f) },
 	};
 
 
@@ -1238,12 +1213,12 @@ void ApplicationLoop::CreateJointVisualObject(int numberOfJoints)
 	GraphicsIntermediaryPipelineInfo jointInfo = {
 		.drawType = 0,
 		.vertexBufferHandle = globalVertexBuffer,
-		.vertexCount = 24,
+		.vertexCount = 6,
 		.pipelinename = 19,
 		.descCount = 2,
 		.descriptorsetid = Descs.data(),
 		.indexBufferHandle = globalIndexBuffer,
-		.indexCount = 36,
+		.indexCount = 32,
 		.instanceCount = (uint32_t)numberOfJoints,
 		.indexSize = 2,
 		.indexOffset = (uint32_t)indexAlloc,
@@ -1882,9 +1857,13 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 
 			int skelCode = GetBoneData(&GlobalInputScratchAllocator, &skel, file);
 
+			int successStringOffset = GetStringOffset(file, &skel);
+
 			int startingJointLocation = jointMeshWorldMatrixCount;
 
 			Matrix4f* worldMats = (Matrix4f*)GlobalInputScratchAllocator.Allocate(sizeof(Matrix4f) * skel.jointCount);
+
+			Matrix4f geomRotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 			
 			for (int joint = 0; joint < skel.jointCount; joint++)
 			{
@@ -1903,13 +1882,56 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 				Matrix4f worldMat;
 
 				if (parentIdx == 0xFFFFFFFF) {
-					worldMat = translation * jointRot * scale; // root joint
-				}
-				else {
-					worldMat =  worldMats[parentIdx] * translation * jointRot * scale;
-				}
+					worldMat = geomRotation * translation *  jointRot * scale; // root joint
 
-				worldMats[joint] = worldMat;
+					worldMats[joint] = worldMat;
+				}
+				else 
+				{
+					worldMat = worldMats[parentIdx] * translation * jointRot * scale;
+
+					worldMats[joint] = worldMat;
+					
+					Vector3f parentPos = Vector3f(worldMats[parentIdx].translate.x, worldMats[parentIdx].translate.y, worldMats[parentIdx].translate.z);
+
+					Vector3f childPos = Vector3f(worldMat.translate.x, worldMat.translate.y, worldMat.translate.z);
+
+					Vector3f boneDir =  parentPos - childPos;
+
+					float boneScale = Length(boneDir);
+
+					boneDir = Normalize(boneDir);
+
+					Vector3f from = { 0.0f, 1.0f, 0.0f };
+					Vector3f axis = Cross(from, boneDir);
+					float axisLen = Length(axis);
+					float angle = atan2f(axisLen, Dot(from, boneDir));
+
+					if (axisLen < 0.0001f && Dot(from, boneDir) > 0.0f)
+					{
+						worldMat = Identity4f();
+					}
+					else if (Dot(from, boneDir) < -0.9999f)
+					{
+						worldMat = CreateRotationMatrixMat4({ 1,0,0 }, PI);
+					}
+					else
+					{
+						worldMat = CreateRotationMatrixMat4(Normalize(axis), angle);
+					}
+
+					worldMat.right.x *= boneScale;
+					worldMat.right.y *= boneScale;
+					worldMat.right.z *= boneScale;
+					worldMat.up.x *= boneScale;
+					worldMat.up.y *= boneScale;
+					worldMat.up.z *= boneScale;
+					worldMat.forward.x *= boneScale;
+					worldMat.forward.y *= boneScale;
+					worldMat.forward.z *= boneScale;
+					worldMat.translate = Vector4f(parentPos.x, parentPos.y, parentPos.z, 1.0f);
+					
+				}
 
 				GlobalRenderer::gRenderInstance.UpdateDriverMemory(&worldMat, jointMeshWorldMatrix, sizeof(Matrix4f), (startingJointLocation + joint) * sizeof(Matrix4f), TransferType::CACHED);
 				GlobalRenderer::gRenderInstance.UpdateDriverMemory(&skel.joints[joint].granny_parentIndex, jointMeshParentIndices, sizeof(uint32_t), (startingJointLocation + joint) * sizeof(uint32_t), TransferType::CACHED);

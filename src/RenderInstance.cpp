@@ -305,7 +305,7 @@ namespace API {
 		flags |= (VK_ACCESS_SHADER_READ_BIT) * ((action & READ_SHADER_RESOURCE) != 0);
 		flags |= (VK_ACCESS_UNIFORM_READ_BIT) * ((action & READ_UNIFORM_BUFFER) != 0);
 		flags |= (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) * ((action & READ_VERTEX_INPUT) != 0);
-		flags |= (VK_ACCESS_INDIRECT_COMMAND_READ_BIT) & ((action & READ_INDIRECT_COMMAND) != 0);
+		flags |= (VK_ACCESS_INDIRECT_COMMAND_READ_BIT) * ((action & READ_INDIRECT_COMMAND) != 0);
 		return flags;
 	}
 

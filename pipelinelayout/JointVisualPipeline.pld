@@ -9,6 +9,6 @@
 	</PrimitiveType>
 	<CullMode mode="back" winding="ccw">
 	</CullMode>
-	<DepthTest op="less" write="true">
+	<DepthTest op="always" write="true">
 	</DepthTest>
 </PipelineDescription>

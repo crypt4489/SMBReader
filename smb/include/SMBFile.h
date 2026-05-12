@@ -159,6 +159,7 @@ struct SMBJoint
 	Vector4f granny_orientation;
 	float granny_scale;
 	uint32_t granny_parentIndex;
+	uint32_t nameOffsetInSMB;
 	char name[MAX_JOINT_NAME];
 };
 
@@ -298,3 +299,5 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* fi
 char* GetJointNames(Allocator* inputAllocator, SMBFile* file, SMBChunk* chunk);
 
 int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file);
+
+int GetStringOffset(SMBFile* file, SMBSkeleton* skel);

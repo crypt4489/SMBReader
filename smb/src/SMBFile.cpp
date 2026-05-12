@@ -698,3 +698,23 @@ int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file)
 
 	return 0;
 }
+
+int GetStringOffset(SMBFile* file, SMBSkeleton* skel)
+{
+	int index = 0;
+
+	int numJoints = skel->jointCount;
+
+	while (numJoints--)
+	{
+		uint32_t input = 0;
+
+		OSReadFile(&file->fileHandle, sizeof(int), (char*)&input);
+
+		skel->joints[index].nameOffsetInSMB = input;
+
+		index++;
+	}
+
+	return 1;
+}

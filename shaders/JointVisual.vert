@@ -3,7 +3,6 @@ layout(location = 0) in vec4 position;
 layout(location = 1) in vec4 inColor;
 layout(location = 0) out vec4 color;
 
-
 struct Plane
 {
 	vec4 pointInPlane;
@@ -41,7 +40,7 @@ layout(set = 1, binding = 1) uniform usamplerBuffer jointParentIndices;
 
 void main()
 {
-	vec4 pos = (jmw.worldMats[gl_InstanceIndex] * vec4(position.xyz * 0.05, 1.0));
+	vec4 pos = (jmw.worldMats[gl_InstanceIndex] * vec4(position.xyz, 1.0));
     
 	gl_Position = gs.proj * gs.view * pos;
 
