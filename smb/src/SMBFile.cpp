@@ -18,7 +18,12 @@ SMBFile::~SMBFile()
 
 int SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch)
 {
-	OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
+	int osFlag = OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
+
+	if (osFlag)
+	{
+		return -1;
+	}
 
 	int processReturn = ProcessFile(inputDataAllocator, scratch);
 
@@ -357,7 +362,9 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 
 	SMBVertexTypes type = geoDefinition->vertexTypes[renderableIndex];
 
-	int vertexSize = geoDefinition->verticesCount[renderableIndex];
+	int vCount = geoDefinition->verticesCount[renderableIndex];
+
+	int vertexSize = vCount;
 
 	switch (type)
 	{
@@ -372,22 +379,19 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		break;
 	}
 
-	void* data = tempMemoryPool->Allocate(vertexSize);
-
-	OSReadFile(handle, vertexSize, (char*)data);
-
-	int vSize = geoDefinition->verticesCount[renderableIndex];
-
-	unsigned char* g = (unsigned char*)data;
-
 	if (decompressed)
 	{
+		void* data = tempMemoryPool->Allocate(vertexSize);
+
+		OSReadFile(handle, vertexSize, (char*)data);
+
+		unsigned char* g = (unsigned char*)data;
 
 		switch (type) {
 		case PosPack6_CNorm_C16Tex1_Bone2:
 		{
 			Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertices = (Vertex_PosPack6_CNorm_C16Tex1_Bone2*)vertexDataOut;
-			for (int i = 0; i < vSize; i++)
+			for (int i = 0; i < vCount; i++)
 			{
 
 				Vertex_PosPack6_CNorm_C16Tex1_Bone2* vertex = &vertices[i];
@@ -431,7 +435,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		case PosPack6_C16Tex2_Bone2:
 		{
 			Vertex_PosPack6_C16Tex2_Bone2* vertices = (Vertex_PosPack6_C16Tex2_Bone2*)vertexDataOut;
-			for (int i = 0; i < vSize; i++)
+			for (int i = 0; i < vCount; i++)
 			{
 				Vertex_PosPack6_C16Tex2_Bone2* vertex = &vertices[i];
 				uint32_t l = g[2], h = g[3];
@@ -470,7 +474,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		case PosPack6_C16Tex1_Bone2:
 		{
 			Vertex_PosPack6_C16Tex1_Bone2* vertices = (Vertex_PosPack6_C16Tex1_Bone2*)vertexDataOut;
-			for (int i = 0; i < vSize; i++)
+			for (int i = 0; i < vCount; i++)
 			{
 				Vertex_PosPack6_C16Tex1_Bone2* vertex = &vertices[i];
 				uint32_t l = g[2], h = g[3];
@@ -502,7 +506,7 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		}
 		}
 	} else {
-		memcpy(vertexDataOut, g, vertexSize);
+		OSReadFile(handle, vertexSize, (char*)vertexDataOut);
 	}
 }
 

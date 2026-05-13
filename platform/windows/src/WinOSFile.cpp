@@ -11,7 +11,7 @@ static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
 static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
 static HANDLE stdErrorHandle = INVALID_HANDLE_VALUE;
 
-static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
+static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode, DWORD* creationFlags)
 {
     DWORD outflags = 0;
     if (flags & READ) {
@@ -22,6 +22,19 @@ static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode)
     if (flags & WRITE) {
         outflags |= GENERIC_WRITE;
         *shareMode |= FILE_SHARE_WRITE;
+    }
+
+    if (flags & CREATE_IF_NOT_EXIST)
+    {
+        *creationFlags = OPEN_ALWAYS;
+    }
+    else if (flags & CREATE)
+    {
+        *creationFlags = CREATE_NEW;
+    }
+    else
+    {
+        *creationFlags = OPEN_EXISTING;
     }
 
     return outflags;
@@ -56,6 +69,23 @@ OSFileMemoryRequirements OSGetFileMemoryRequirements(int maxNumberOfOpenFiles)
     return memReqs;
 }
 
+
+void CloseAllFiles()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1;
+        if (freeList[idx].load(
+            std::memory_order_acquire) == -1)
+        {
+            CloseHandle(intFileHandles[idx]);
+            freeList[idx].store(1);
+        }
+    }
+}
+
 int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
 {
     uintptr_t dataHead = (uintptr_t)dataSource;
@@ -83,13 +113,13 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
 {
     char pathscratch[MAX_PATH];
     HANDLE hFile;
-    DWORD fileShare = 0;
-    DWORD hAccess = ConvertOSFlags(flags, &fileShare);
+    DWORD fileShare = 0, creationFlags = 0;
+    DWORD hAccess = ConvertOSFlags(flags, &fileShare, &creationFlags);
 
     memcpy(pathscratch, filename, nameLength);
     pathscratch[nameLength] = '\0';
 
-    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, creationFlags, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -113,13 +143,13 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
     char pathscratch[MAX_PATH];
 
     HANDLE hFile;
-    DWORD fileShare = 0;
-    DWORD hAccess = ConvertOSFlags(flags, &fileShare);
+    DWORD fileShare = 0, creationFlags = 0;
+    DWORD hAccess = ConvertOSFlags(flags, &fileShare, &creationFlags);
 
     memcpy(pathscratch, filename, nameLength);
     pathscratch[nameLength] = '\0';
 
-    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, creationFlags, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -147,6 +177,8 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
+    if (fileHandle->osDataHandle == -1)
+        return -1;
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
     CloseHandle(hFile);
     intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;

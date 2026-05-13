@@ -3179,8 +3179,6 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 	int mipLevels, int layers, VkFormat format, RecordingBufferObject* rbo
 )
 {
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
-
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
 
 	VkBuffer stagingBuffer;

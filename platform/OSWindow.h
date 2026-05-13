@@ -104,6 +104,8 @@ struct OSWindowMemoryRequirements
 
 OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows);
 
+void CloseAllWindows();
+
 int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows);
 
 int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData);

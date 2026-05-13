@@ -502,13 +502,17 @@ void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocato
 	attachmentGraphsInstances = (AttachmentGraphInstance*)instanceStorageAllocator->Allocate(sizeof(AttachmentGraphInstance) * 10);
 
 	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
-	std::construct_at(internalRendererLogger, (char*)instanceStorageAllocator->Allocate(8 * KiB, 8), 8 * KiB);
+	internalRendererLogger->InitLogger((char*)instanceStorageAllocator->Allocate(8 * KiB, 8), 8 * KiB);
 
 	return;
 }
 
 RenderInstance::~RenderInstance()
 {
+
+	if (physicalIndex() == 255 || deviceIndex() == 255)
+		return;
+
 	auto dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 

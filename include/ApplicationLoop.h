@@ -33,8 +33,6 @@ public:
 
 	void AddCommandTS(int wordCount);
 
-	void SetRunning(bool set = false);
-
 	void LoadObject(const StringView& file);
 
 	void LoadThreadedWrapper(StringView& file);
@@ -129,7 +127,8 @@ public:
 	int AllocateGPUBlendDescriptions(int numberOfDescs);
 	int AllocateGPUBlendRanges(int numberOfRanges);
 
-	void CreateJointVisualObject(int numberOfJoints);
+	void CreateJointVisualData();
+	void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation);
 
 	ProgramArgs& args;
 	Semaphore queueSema;

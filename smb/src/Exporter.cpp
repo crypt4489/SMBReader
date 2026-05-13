@@ -59,8 +59,11 @@ void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 
 void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratchMemory)
 {
+	const int MAX_SMB_ARCHIVE_OBJECT_NAME = 55;
 
 	StringView imageName{};
+
+	imageName.stringData = (char*)inputScratchMemory->Allocate(MAX_SMB_ARCHIVE_OBJECT_NAME);
 
 	FileManager::ExtractFileNameFromPath(&chunk.fileName, &imageName);
 
@@ -89,7 +92,7 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 		OSFileHandle handle;
 
-		OSOpenFile(writePath.string().c_str(), writePath.string().size(), WRITE, &handle);
+		OSOpenFile(writePath.string().c_str(), writePath.string().size(), CREATE_IF_NOT_EXIST | WRITE, &handle);
 
 		TexUtils::BMP::WriteOutBMPHeaders(&handle, writeWidth, writeHeight);
 

@@ -23,6 +23,10 @@ struct Frustum
     float nearDistance;
 };
 
+layout(push_constant) uniform JointContext {
+    uint startingLocation;
+} jointStart;
+
 layout(set = 0, binding = 0) uniform GlobalContext {
     mat4 view;
     mat4 proj;
@@ -40,7 +44,7 @@ layout(set = 1, binding = 1) uniform usamplerBuffer jointParentIndices;
 
 void main()
 {
-	vec4 pos = (jmw.worldMats[gl_InstanceIndex] * vec4(position.xyz, 1.0));
+	vec4 pos = (jmw.worldMats[gl_InstanceIndex + jointStart.startingLocation] * vec4(position.xyz, 1.0));
     
 	gl_Position = gs.proj * gs.view * pos;
 

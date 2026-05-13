@@ -14,12 +14,15 @@ struct OSFileHandle
 	}
 };
 
-enum OSFileFlags
+enum OSFileFlagsTypes
 {
 	READ = 1,
 	WRITE = 2,
 	CREATE = 4,
+	CREATE_IF_NOT_EXIST = 8
 };
+
+typedef int OSFileFlags;
 
 enum OSRelativeFlags
 {
@@ -82,3 +85,5 @@ int OSNextFile(OSFileIterator* iterator);
 void OSGetSTDInput(OSFileHandle* fileHandle);
 void OSGetSTDOutput(OSFileHandle* fileHandle);
 void OSGetSTDError(OSFileHandle* fileHandle);
+
+void CloseAllFiles();

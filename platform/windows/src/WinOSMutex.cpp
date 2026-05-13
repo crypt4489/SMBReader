@@ -32,6 +32,22 @@ static int FindFreeIndex()
 	return -1;
 }
 
+void CloseAllSyncObject()
+{
+	for (int i = 0; i < maxFreeListEntry; i++)
+	{
+		int idx = i;
+
+		int8_t expected = 1;
+		if (freeList[idx].load(
+			std::memory_order_acquire) == -1)
+		{
+			CloseHandle(handles[idx]);
+			freeList[idx].store(1);
+		}
+	}
+}
+
 OSSyncMemoryRequirements OSGetSyncMemoryRequirements(int maxNumberOfOpenSyncObjects)
 {
 	int handlesSize = (maxNumberOfOpenSyncObjects) * sizeof(void*);
@@ -127,6 +143,9 @@ int NotifyOSSemaphore(OSSemaphore* semaphore)
 
 int DeleteOSSemaphore(OSSemaphore* semaphore)
 {
+	if (semaphore->osDataHandle == -1)
+		return -1;
+
 	HANDLE sema = handles[semaphore->osDataHandle];
 	CloseHandle(sema);
 	handles[semaphore->osDataHandle] = INVALID_HANDLE_VALUE;

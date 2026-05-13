@@ -99,8 +99,28 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
     return 0;
 }
 
+void CloseAllThreads()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1;
+        if (freeList[idx].load(
+            std::memory_order_acquire) == -1)
+        {
+            CloseHandle(handles[idx]);
+            freeList[idx].store(1);
+        }
+    }
+}
+
 int OSCloseThread(OSThreadHandle* handle)
 {
+
+    if (handle->osDataHandle == -1)
+        return -1;
+
     HANDLE hand = handles[handle->osDataHandle];
 
     CloseHandle(hand);

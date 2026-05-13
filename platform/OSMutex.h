@@ -29,6 +29,8 @@ struct OSSyncMemoryRequirements
 
 OSSyncMemoryRequirements OSGetSyncMemoryRequirements(int maxNumberOfOpenSyncObjects);
 
+void CloseAllSyncObject();
+
 int OSSeedSyncMemory(void* dataSource, int dataSize, int maxNumberSyncObjects);
 
 int CreateOSSemaphore(OSSemaphore* semaphore, int count);

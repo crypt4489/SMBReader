@@ -35,6 +35,8 @@ struct OSThreadMemoryRequirements
 
 OSThreadMemoryRequirements OSGetThreadMemoryRequirements(int maxNumberOfOpenThreads);
 
+void CloseAllThreads();
+
 int OSSeedThreadMemory(void* dataSource, int dataSize, int numberOfOpenThreads);
 
 int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer routine, OSThreadFlags flags);

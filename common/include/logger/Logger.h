@@ -1,6 +1,7 @@
 #pragma once
 
 #include "OSFile.h"
+#include "OSMutex.h"
 #include "StringUtils.h"
 #include <cstdint>
 
@@ -29,10 +30,9 @@ struct Logger
 	uint64_t head, tail;
 	char* structuredLogBuffer;
 	OSFileHandle fileHandle;
+	OSSharedExclusive writerLock;
 
-	Logger(OSFileHandle _handle, char* _buffer, size_t _bufferSize);
-	
-	Logger(char* _buffer, size_t _bufferSize);
+	void InitLogger(char* _buffer, size_t _bufferSize);
 
 	void AddLogMessage(LogMessageType type, const char* format, int charCount);
 

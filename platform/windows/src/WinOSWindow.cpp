@@ -42,6 +42,22 @@ OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows)
     return memReqs;
 }
 
+void CloseAllWindows()
+{
+    for (int i = 0; i < maxFreeListEntry; i++)
+    {
+        int idx = i;
+
+        int8_t expected = 1;
+        if (freeList[idx].load(
+            std::memory_order_acquire) == -1)
+        {
+            DestroyWindow(windowPtrs[idx]);
+            freeList[idx].store(1);
+        }
+    }
+}
+
 int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows)
 {
     uintptr_t dataHead = (uintptr_t)dataSource;

@@ -1,14 +1,4 @@
 #include "ThreadManager.h"
-void ThreadManager::ASyncThreadsDone()
-{
-  
-}
-
-void ThreadManager::DestroyThreadManager()
-{
-
-}
-
 
 void Semaphore::Create(int c)
 {

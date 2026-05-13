@@ -55,11 +55,6 @@ struct SemaphoreGuard
 
 struct ThreadManager
 {
-    static void ASyncThreadsDone();
-
-    static void DestroyThreadManager();
-
-
     static void LaunchOSASyncThread(ThreadPointer routine, void* args)
     {
         OSThreadHandle thread;
@@ -67,13 +62,10 @@ struct ThreadManager
         return;
     }
 
-
     static OSThreadHandle LaunchOSBackgroundThread(ThreadPointer routine, void* args)
     {
         OSThreadHandle thread;
         OSCreateThread(&thread, args, routine, OS_THREAD_NONE);
         return thread;
     }
-
-
 };
