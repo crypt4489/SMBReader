@@ -43,6 +43,7 @@ enum OSFileErrorFlags
 	OS_FAILED_SEARCH_ITER = -7,
 	OS_REACH_ITER_END = -8,
 	OS_STD_HANDLE_INVALID = -9,
+	OS_FILE_POLL_TIMEOUT = -10
 };
 
 struct OSFileIterator
@@ -87,3 +88,5 @@ void OSGetSTDOutput(OSFileHandle* fileHandle);
 void OSGetSTDError(OSFileHandle* fileHandle);
 
 void CloseAllFiles();
+
+int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut);

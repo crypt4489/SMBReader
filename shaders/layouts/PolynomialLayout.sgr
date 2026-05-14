@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		polynomialimage.comp
+		SamplePolynomialImage.comp
 		<ComputeLayout x="8" y="8" z="1">
 		</ComputeLayout>
 	</GLSLShader>

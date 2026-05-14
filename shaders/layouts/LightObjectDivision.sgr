@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		organizelight.comp
+		LightWorldCount.comp
 		<ComputeLayout x="1024" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>

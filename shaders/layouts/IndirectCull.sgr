@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		indirectcull.comp
+		3dMeshCulling.comp
 		<ComputeLayout x="32" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>

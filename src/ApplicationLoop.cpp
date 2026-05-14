@@ -721,7 +721,12 @@ void ApplicationLoop::Execute()
 					updateLights = framesInFlight;
 				}
 
-				previousGlobalLightCount = globalLightCount;
+				if (previousGlobalLightCount != globalLightCount)
+				{
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(lightAssignment.deviceCountsAlloc, lightAssignment.totalElementsCount * sizeof(uint32_t), 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+				
+					previousGlobalLightCount = globalLightCount;
+				}
 
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.preWorldSpaceDivisionPipeline);
 
@@ -747,20 +752,28 @@ void ApplicationLoop::Execute()
 
 			if (cameraMove || mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount || updateMainDrawCommand)
 			{
-				if (!updateMainDrawCommand || cameraMove) {
+				if (!updateMainDrawCommand || cameraMove) 
+				{
 					updateMainDrawCommand = framesInFlight;
 					GlobalRenderer::gRenderInstance.InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
 				}
 
+				if (mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount)
+				{
+					if (updateMainDrawCommand == framesInFlight)
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(worldSpaceAssignment.deviceCountsAlloc, worldSpaceAssignment.totalElementsCount * sizeof(uint32_t), 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.preWorldSpaceDivisionPipeline);
+
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.prefixSumPipeline);
+
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.postWorldSpaceDivisionPipeline);
+
+					if (!updateMainDrawCommand)
+						mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
+				}
+
 				updateMainDrawCommand--;
-
-				mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
-
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.preWorldSpaceDivisionPipeline);
-
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.prefixSumPipeline);
-
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.postWorldSpaceDivisionPipeline);
 
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, mainIndirectDrawData.indirectCullPipeline);
 			}
@@ -823,8 +836,6 @@ void ApplicationLoop::Execute()
 
 					if (currentFrameGraphIndex == MSAAPost)
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
-
-
 				}
 
 				GlobalRenderer::gRenderInstance.DrawScene(imageIndex);
@@ -1949,6 +1960,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 					worldMat.forward.x *= boneScale;
 					worldMat.forward.y *= boneScale;
 					worldMat.forward.z *= boneScale;
+
 					worldMat.translate = Vector4f(parentPos.x, parentPos.y, parentPos.z, 1.0f);
 					
 				}
@@ -2077,7 +2089,6 @@ int CreateDebugCommandBuffers(int count)
 	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
 
 	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-
 
 	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
@@ -3704,13 +3715,12 @@ int ApplicationLoop::CreateGPUGeometryRenderable(int geomCPURenderableIndex, int
 
 void ScanSTDIN(void* data)
 {
+
 	HANDLE stdInHandle = GetStdHandle(STD_INPUT_HANDLE);
 
-	if (stdInHandle == INVALID_HANDLE_VALUE)
-	{
-		std::osyncstream(std::cerr) << "Cannot open handle to STD INPUT\n";
-		return;
-	}
+	OSFileHandle stdIn;
+
+	OSGetSTDInput(&stdIn);
 
 	DWORD numberOfBytesRead;
 	DWORD events;
@@ -3718,23 +3728,20 @@ void ScanSTDIN(void* data)
 
 	char inputBuffer[1024];
 
-	std::this_thread::sleep_for(std::chrono::seconds(2));
-
-	std::osyncstream(std::cout) << "Ready for commands... \n" << "Hit enter and then write command > ";
+	mainAppLogger.AddLogMessage(LOGINFO, "Ready for commands... \nHit enter and then write command > ", 58);
 
 	volatile bool* stopToken = (volatile bool*)data;
 
 	while (!*stopToken)
 	{
+		int ret = OSPollFile(&stdIn, 500);
 
-		DWORD ret = WaitForSingleObject(stdInHandle, 500);
-
-		if (ret == WAIT_TIMEOUT) continue;
+		if (ret < 0) continue;
 
 		BOOL success = ReadConsoleInput(stdInHandle, &record, 1, &events);
 
 		if (!success) {
-			std::osyncstream(std::cerr) << "Cannot get ReadConsoleInput\n";
+			mainAppLogger.AddLogMessage(LOGERROR, "Cannot get ReadConsoleInput\n", 28);
 			break;
 		}
 
@@ -3751,11 +3758,11 @@ void ScanSTDIN(void* data)
 			continue;
 		}
 
-		success = ReadFile(stdInHandle, inputBuffer, 1024, &numberOfBytesRead, NULL);
+		numberOfBytesRead = OSReadFile(&stdIn, 1024, inputBuffer);
 
-		if (!success)
+		if (numberOfBytesRead <= 0)
 		{
-			std::osyncstream(std::cerr) << "Cannot get ReadFile from stdinput\n";
+			mainAppLogger.AddLogMessage(LOGERROR, "Cannot get ReadFile from stdinput\n", 34);
 			break;
 		}
 
@@ -3766,9 +3773,8 @@ void ScanSTDIN(void* data)
 
 		loop->AddCommandTS(wordCount);
 
-		std::osyncstream(std::cout) << "Hit enter and then write command > ";
+		mainAppLogger.AddLogMessage(LOGINFO, "Hit enter and then write command > ", 35);
 	}
-
 
 	return;
 }
@@ -3891,7 +3897,11 @@ void LoadObjectThreaded(void* data)
 		charCount--;
 	}
 
-	StringView truncatedView{ file->stringData + offset, charCount };
+	char fileName[125];
+
+	memcpy(fileName, file->stringData + offset, charCount);
+
+	StringView truncatedView{ fileName, charCount };
 
 	loop->LoadObject(truncatedView);
 }

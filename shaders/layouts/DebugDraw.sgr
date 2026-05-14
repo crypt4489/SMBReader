@@ -1,9 +1,9 @@
 <ShaderGraph>
 	<GLSLShader type="vert">
-		DebugDraw.vert
+		3dDebugDraw.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		DebugDraw.frag
+		3dDebugDraw.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="vf">

@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		mesh_interpolate.comp
+		BasicMeshInterpolate.comp
 		<ComputeLayout x="8" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>

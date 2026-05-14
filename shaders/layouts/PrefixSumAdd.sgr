@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		addincrementsPFS.comp
+		SumAfterPrefixScan.comp
 		<ComputeLayout x="1024" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>

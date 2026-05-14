@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ShaderGraph>
 	<GLSLShader type="vert">
-		normaldebug.vert
+		3dNormalDebug.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		normaldebug.frag
+		3dNormalDebug.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="vf">
@@ -14,8 +14,7 @@
 		<ShaderResourceItem type="sampler" used="vf" count="1">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="image2D" used="vf" count="1024" unbounded="true">
-		</ShaderResourceItem>
-		
+		</ShaderResourceItem>	
 	</ShaderResourceSet>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="storage" used="v" rw="read">

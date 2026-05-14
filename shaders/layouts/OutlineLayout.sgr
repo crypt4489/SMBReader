@@ -1,9 +1,9 @@
 <ShaderGraph>
 	<GLSLShader type="vert">
-		outline.vert
+		3dOutline.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		outline.frag
+		3dOutline.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="uniform" used="vf">

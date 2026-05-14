@@ -1,9 +1,9 @@
 <ShaderGraph>
 	<GLSLShader type="vert">
-		fullscreen.vert
+		2dFullscreenDraw.vert
 	</GLSLShader>
 	<GLSLShader type="fragment">
-		fullscreen.frag
+		2dFullscreenDraw.frag
 	</GLSLShader>
 	<ShaderResourceSet>
 		<ShaderResourceItem type="constantbuffer" used="f" size="4" offset="0" pushstage="0">

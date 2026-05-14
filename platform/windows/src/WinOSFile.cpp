@@ -375,3 +375,31 @@ void OSGetSTDError(OSFileHandle* fileHandle)
     fileHandle->fileLength = -1;
     fileHandle->filePointer = -1;
 }
+
+int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
+{
+    HANDLE hFile = INVALID_HANDLE_VALUE;
+
+    if (fileHandle->osDataHandle == maxFreeListEntry)
+    {
+        hFile = stdInputHandle;
+    }
+    else if (fileHandle->osDataHandle == maxFreeListEntry + 1)
+    {
+        hFile = stdErrorHandle;
+    }
+    else if (fileHandle->osDataHandle == maxFreeListEntry + 2)
+    {
+        hFile = stdOutputHandle;
+    }
+    else if (fileHandle->osDataHandle < maxFreeListEntry)
+    {
+        hFile = intFileHandles[fileHandle->osDataHandle];
+    }
+
+    DWORD ret = WaitForSingleObject(hFile, 500);
+
+    if (ret == WAIT_TIMEOUT) return OS_FILE_POLL_TIMEOUT;
+
+    return 0;
+}

@@ -1,6 +1,6 @@
 <ShaderGraph>
 	<GLSLShader type="compute">
-		meshworldsort.comp
+		MeshWorldAssignment.comp
 		<ComputeLayout x="1024" y="1" z="1">
 		</ComputeLayout>
 	</GLSLShader>
