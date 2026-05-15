@@ -20,7 +20,7 @@ public:
 
 	static void SetFileCurrentDirectory(std::filesystem::path& path);
 
-	static void ExtractFileNameFromPath(StringView* nameView, StringView* outView);
+	static void ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer);
 
 	static std::filesystem::path GetCurrentDirectoryFM();
 

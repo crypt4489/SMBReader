@@ -38,7 +38,14 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 	val = atomic.load(std::memory_order_relaxed);
 	do {
 		out = val;
-		desired = val + stride;
+
+		if (wrapAroundSize && out >= wrapAroundSize)
+		{
+			out = 0;
+		}
+
+		desired = out + stride;
+
 		if (wrapAroundSize && desired >= wrapAroundSize)
 		{
 			out = 0;
@@ -76,6 +83,8 @@ struct Allocator
 	virtual StringView* AllocateFromNullString(const char* name) = 0;
 	virtual StringView AllocateFromNullStringCopy(const char* name) = 0;
 
+	virtual int OffsetInAllocator(void* dataPtr) = 0;
+
 	std::pair<int, int> GetUsageAndCapacity() const;
 };
 
@@ -97,6 +106,8 @@ struct RingAllocator : public Allocator
 
 	StringView* AllocateFromNullString(const char* name);
 	StringView AllocateFromNullStringCopy(const char* name);
+
+	int OffsetInAllocator(void* dataPtr);
 };
 
 
@@ -118,6 +129,8 @@ struct SlabAllocator : public Allocator
 
 	StringView* AllocateFromNullString(const char* name);
 	StringView AllocateFromNullStringCopy(const char* name);
+
+	int OffsetInAllocator(void* dataPtr);
 };
 
 struct DeviceSlabAllocator

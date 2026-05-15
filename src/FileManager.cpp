@@ -28,7 +28,7 @@ void FileManager::SetFileCurrentDirectory(std::filesystem::path& path)
 	currDir = path;
 }
 
-void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outView)
+void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer)
 {
 	std::smatch match;
 
@@ -47,7 +47,9 @@ void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outV
 
 	outView->charCount = returnName.size();
 
-	memcpy(outView->stringData, returnName.c_str(), outView->charCount);
+	memcpy(inputBuffer, returnName.c_str(), outView->charCount);
+
+	outView->stringData = inputBuffer;
 }
 
 std::filesystem::path FileManager::GetCurrentDirectoryFM()

@@ -12,6 +12,9 @@
 #define PIDIV4 0.78539816339744830961566084581988f
 
 
+#define MAX(a, b) (a >= b) ? a : b
+#define MIN(a, b) (a <= b) ? a : b
+
 inline float DegToRad(float Deg)
 {
 	return (Deg / 180.0f) * PI;

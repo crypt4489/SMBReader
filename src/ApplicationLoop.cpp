@@ -9,13 +9,15 @@
 #include "TextureDictionary.h"
 #include "SMBTexture.h"
 #include "allocator/AppAllocator.h"
-
+#include "StringUtils.h"
 #include <cassert>
 
 ApplicationLoop* loop;
 
 #define MAX_MESH_TEXTURES 8192
 #define MAX_IMAGE_DIM 4096
+
+#define MAX_GPU_MATERIALS 8
 
 enum ShaderResourceLayoutIdentifiers
 {
@@ -41,49 +43,46 @@ enum ShaderResourceLayoutIdentifiers
 	JOINTVISUAL
 };
 
-static char StartupMemory[32 * KiB];
-static SlabAllocator StartupMemoryAllocator{ StartupMemory, sizeof(StartupMemory) };
-
 static std::array<StringView, 9> pds = {
-	StartupMemoryAllocator.AllocateFromNullStringCopy("GenericPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("TextPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("DebugPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebugPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("SkyboxPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("OutlinePipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenPipeline.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMap.pld"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("JointVisualPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("GenericPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("TextPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("DebugPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("NormalDebugPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("SkyboxPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("OutlinePipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("FullscreenPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("ShadowMap.pld"),
+	STRING_VIEW_FROM_LITERAL_ARR("JointVisualPipeline.pld"),
 };
 
 static std::array<StringView, 20> layouts = {
-		StartupMemoryAllocator.AllocateFromNullStringCopy("3DTexturedLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("TextLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("InterpolateMeshLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PolynomialLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectCull.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("DebugDraw.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("IndirectDebug.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSum.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("PrefixSumAdd.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("WorldObjectDivison.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("MeshWorldAssignments.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("LightObjectDivision.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("LightWorldAssignment.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("NormalDebug.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("Skybox.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("OutlineLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("FullscreenLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapLayout.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowMapClipping.sgr"),
-		StartupMemoryAllocator.AllocateFromNullStringCopy("JointVisualSL.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("3DTexturedLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("TextLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("InterpolateMeshLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("PolynomialLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("IndirectCull.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("DebugDraw.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("IndirectDebug.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("PrefixSum.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("PrefixSumAdd.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("WorldObjectDivison.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("MeshWorldAssignments.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("LightObjectDivision.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("LightWorldAssignment.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("NormalDebug.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("Skybox.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("OutlineLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("FullscreenLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("ShadowMapLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("ShadowMapClipping.sgr"),
+		STRING_VIEW_FROM_LITERAL_ARR("JointVisualSL.sgr"),
 };
 
 static std::array<StringView, 3> mainLayoutAttachments =
 {
-	StartupMemoryAllocator.AllocateFromNullStringCopy("MSAAPostProcess.adf"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("BasicShadowMapAtt.adf"),
-	StartupMemoryAllocator.AllocateFromNullStringCopy("ShadowAtlasUse.adf")
+	STRING_VIEW_FROM_LITERAL_ARR("MSAAPostProcess.adf"),
+	STRING_VIEW_FROM_LITERAL_ARR("BasicShadowMapAtt.adf"),
+	STRING_VIEW_FROM_LITERAL_ARR("ShadowAtlasUse.adf")
 };
 
 enum MaterialFlags
@@ -292,6 +291,8 @@ struct MeshCPUData
 	int indexSize;
 	int deviceIndices;
 	int deviceVertices;
+	int cpuVertices;
+	int cpuIndices;
 	int meshDeviceIndex;
 };
 
@@ -340,7 +341,7 @@ static int globalIndexBufferSize = 1024 * KiB;
 static int globalVertexBuffer = 0;
 static int globalVertexBufferSize = 1024 * KiB;
 
-static int globalLightBufferSize = 1024 * KiB;
+static int globalLightBufferSize = 16 * KiB;
 static int globalLightMax = globalLightBufferSize / sizeof(GPULightSource);
 static int globalLightTypesBufferSize = globalLightMax * sizeof(LightType);
 
@@ -609,16 +610,16 @@ void ApplicationLoop::Execute()
 
 		if (loadSMBRet)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "Cannot read SMB file for export", 31);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot read SMB file for export"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
 		StringView fileName{};
 
-		fileName.stringData = (char*)SMBThreadedFileScratchAllocator.Allocate(MAX_SMB_STRING_NAME);
+		char* strBuf = (char*)SMBThreadedFileScratchAllocator.Allocate(MAX_SMB_STRING_NAME);
 
-		FileManager::ExtractFileNameFromPath(&mainInputString, &fileName);
+		FileManager::ExtractFileNameFromPath(&mainInputString, &fileName, strBuf);
 
 		FileManager::SetFileCurrentDirectory(&fileName);
 
@@ -712,6 +713,15 @@ void ApplicationLoop::Execute()
 
 			ProcessKeys(mainWindow.windowData.info.actions);
 
+			if (mainWindow.windowData.info.HandleResizeRequested())
+			{
+				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainPresentationSwapChain);
+				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
+				UpdateCameraMatrix();
+				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain), GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain));
+				continue;
+			}
+
 			bool cameraMove = MoveCamera(FPS);
 
 			if (previousGlobalLightCount != globalLightCount || updateLights)
@@ -769,7 +779,7 @@ void ApplicationLoop::Execute()
 
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.postWorldSpaceDivisionPipeline);
 
-					if (!updateMainDrawCommand)
+					if (updateMainDrawCommand == 1)
 						mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
 				}
 
@@ -788,14 +798,6 @@ void ApplicationLoop::Execute()
 				mainDebugDrawRenderableCount = debugIndirectDrawData.commandBufferCount;
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, debugIndirectDrawData.indirectCullPipeline);
 				updateMainDebugCommand--;
-			}
-
-			if (mainWindow.windowData.info.HandleResizeRequested())
-			{
-				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainPresentationSwapChain);
-				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
-				UpdateCameraMatrix();
-				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain), GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain));
 			}
 
 			imageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainPresentationSwapChain);
@@ -844,7 +846,7 @@ void ApplicationLoop::Execute()
 			}
 			else
 			{
-				mainAppLogger.AddLogMessage(LOGERROR, "Missed image handle during drawing, closing app", 47);
+				mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Missed image handle during drawing, closing app"));
 				running = false;
 			}
 			
@@ -861,7 +863,6 @@ void ApplicationLoop::Execute()
 			debugIndirectDrawData.commandBufferCount = globalDebugStructCount;
 
 			mainAppLogger.ProcessMessage();
-			
 		}
 	}
 }
@@ -890,11 +891,10 @@ void ApplicationLoop::CreateTexturePools()
 
 		if (texturePoolHandle < 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "Failed to create a texture image pool", 37);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed to create a texture image pool"));
 		}
 
 		mainDictionary.texturePoolHandle[i] = texturePoolHandle;
-
 	}
 }
 
@@ -963,11 +963,6 @@ void ApplicationLoop::UpdateCameraMatrix()
 {
 	c.UpdateCamera();
 
-	WriteCameraMatrix();
-}
-
-void ApplicationLoop::WriteCameraMatrix()
-{
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 }
 
@@ -989,7 +984,7 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 		ret = mainDictionary.texturePoolHandle[3];
 		break;
 	default:
-		mainAppLogger.AddLogMessage(LOGERROR, "unhandled texture format", 24);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("unhandled texture format"));
 		break;
 	}
 	return ret;
@@ -1013,10 +1008,10 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	AxisBox box;
 
-	xDiv = max(xDiv, 1.0f);
-	yDiv = max(yDiv, 1.0f);
+	xDiv = MAX(xDiv, 1.0f);
+	yDiv = MAX(yDiv, 1.0f);
 
-	int vertexCount = (int)(xDiv+1.0f) * (int)( yDiv+1.0f);
+	int vertexCount = (int)(xDiv+1.0f) * (int)(yDiv+1.0f);
 
 	float xStart = -width / 2.0f;
 	float xEnd = width / 2.0f;
@@ -1106,6 +1101,18 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	int totalDataSize = CompressMeshFromVertexStream(inputDescription, 2, sizeof(GridVertex), vertexCount, box, poses, compPoses, &compressedSize, &vertexFlags);
 
+	Matrix4f sideFrontPanel = CreateRotationMatrixMat4(Vector3f(0.0f, 0.0f, 1.0), DegToRad(-90.0f));
+
+	sideFrontPanel.translate = Vector4f(10.0f, 3.0, -5.0, 1.0);
+
+	Matrix4f backPanel = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0), DegToRad(-90.0f));
+
+	backPanel.translate = Vector4f(5.0f, 3.0, -10.0, 1.0);
+
+	Matrix4f floorPanel = Identity4f();
+
+	floorPanel.translate = { 5.0f, -2.0, -5.0, 1.0 };
+
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
 	int geomDetailsIndex = -1, meshGPUIndex = -1, meshCPUIndex = -1;
@@ -1128,29 +1135,38 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 
 	int materialRangeIndex = AllocateGPUMaterialRanges(1);
 
-	if (geomDetailsIndex < 0 || meshGPUIndex < 0 || meshCPUIndex < 0 || geomRenderableCPUDataIndex < 0 || gpuGeomRenderable < 0 || gpuMeshRendrables < 0 || cpuMeshRenderable < 0)
+	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * vertexCount, 16);
+
+	int indexAlloc = indexBufferAlloc.Allocate(indexCount * sizeof(uint16_t), 16);
+
+	if (geomDetailsIndex < 0 || 
+		meshGPUIndex < 0 || 
+		meshCPUIndex < 0 || 
+		geomRenderableCPUDataIndex < 0 || 
+		gpuGeomRenderable < 0 || 
+		gpuMeshRendrables < 0 || 
+		cpuMeshRenderable < 0 ||
+		materialHandleIndex < 0 ||
+		materialRangeIndex < 0 ||
+		indexAlloc < 0 ||
+		vertexAlloc < 0
+	)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Cannot create corner object", 27);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot create corner object"));
 		mainAppLogger.ProcessMessage();
 		return;
 	}
 
 	CreateGPUGeometryDetails(geomDetailsIndex, box);
 
-	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * vertexCount, 16);
-	int indexAlloc = indexBufferAlloc.Allocate(indexCount * sizeof(uint16_t), 16);
-
-	CreateMeshHandle(meshCPUIndex, meshGPUIndex, compPoses, indices, vertexFlags, vertexCount, compressedSize, 2, indexCount, sphere, vertexAlloc, indexAlloc);
-
-	Matrix4f sideFrontPanel = CreateRotationMatrixMat4(Vector3f(0.0f, 0.0f, 1.0), DegToRad(-90.0f));
-
-	sideFrontPanel.translate = Vector4f(10.0f, 3.0, -5.0, 1.0);
-
-	Matrix4f backPanel = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0), DegToRad(-90.0f));
-
-	backPanel.translate = Vector4f(5.0f, 3.0, -10.0, 1.0);
-
-	Matrix4f floorPanel = { { 1.0, 0.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0, 0.0 }, { 0.0 , 0.0, 1.0, 0.0 }, { 5.0f, -2.0, -5.0, 1.0 } };
+	CreateMeshHandle(
+		meshCPUIndex, meshGPUIndex, 
+		vertexFlags, vertexCount, compressedSize, 
+		2, indexCount, 
+		sphere, 
+		vertexAlloc, indexAlloc,
+		-1, -1
+	);
 
 	rendInst.UpdateDriverMemory(compPoses, globalVertexBuffer, vertexCount * compressedSize, vertexAlloc, TransferType::CACHED);
 	rendInst.UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::CACHED);
@@ -1175,14 +1191,14 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 	
 	CreateRenderable(cpuMeshRenderable + 2, gpuMeshRendrables +2, backPanel, gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
 
-	mainAppLogger.AddLogMessage(LOGINFO, "Created Corner Object", 21);
+	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Corner Object"));
 
 	return;
 }
 
 void ApplicationLoop::CreateJointVisualData()
 {
-	uint16_t BoxIndices[32] = {
+	uint16_t Indices[32] = {
 		// bottom pyramid (root to base)
 		0, 1, 2,
 		0, 2, 3,
@@ -1201,7 +1217,7 @@ void ApplicationLoop::CreateJointVisualData()
 		Vector4f color;
 	};
 
-	MyVertex compVerts[6] =
+	MyVertex Verts[6] =
 	{
 		{ Vector4f(0.0f, 0.0f, 0.0f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
 		{ Vector4f(0.1f, 0.2f, 0.1f, 1.0f), Vector4f(1.0f, 0.0f, 1.0f, 1.0f) },
@@ -1214,20 +1230,28 @@ void ApplicationLoop::CreateJointVisualData()
 
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
-	int vertexAlloc = jointMeshVertexAlloc = vertexBufferAlloc.Allocate(sizeof(MyVertex) * 24, 64);
-	int indexAlloc = jointMeshIndexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+	int vertexAlloc = jointMeshVertexAlloc = vertexBufferAlloc.Allocate(sizeof(Verts), 64);
+	int indexAlloc = jointMeshIndexAlloc = indexBufferAlloc.Allocate(sizeof(Indices), 64);
 
-	rendInst.UpdateDriverMemory(compVerts, globalVertexBuffer, sizeof(compVerts), vertexAlloc, TransferType::CACHED);
-	rendInst.UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
+	if (indexAlloc < 0 ||
+		vertexAlloc < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot create joint object"));
+		mainAppLogger.ProcessMessage();
+		return;
+	}
 
-	mainAppLogger.AddLogMessage(LOGINFO, "Created Joint Object", 20);
+	rendInst.UpdateDriverMemory(Verts, globalVertexBuffer, sizeof(Verts), vertexAlloc, TransferType::CACHED);
+	rendInst.UpdateDriverMemory(Indices, globalIndexBuffer, sizeof(Indices), indexAlloc, TransferType::CACHED);
+
+	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Joint Object"));
 }
 
 void ApplicationLoop::CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 {
 	if (jointMeshPipelinesCount >= MAX_JOINT_VISUALIZERS)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many joint visualizer objects", 33);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many joint visualizer objects"));
 		return;
 	}
 
@@ -1460,6 +1484,26 @@ void ApplicationLoop::CreateCrateObject()
 
 	sphere.sphere = Vector4f(0.0, 0.0, 0.0, 1.5f);
 
+	StringView blendname = STRING_VIEW_FROM_LITERAL("blendmap.bmp");
+
+	StringView skyname = STRING_VIEW_FROM_LITERAL("sky.bmp");
+
+	StringView normalmapname = STRING_VIEW_FROM_LITERAL("WNN2.bmp");
+
+	StringView albedomapname = STRING_VIEW_FROM_LITERAL("WNN.bmp");
+
+	int albedoMapped = Read2DImage(&albedomapname, 1, BMP);
+	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
+	int blendMapped = Read2DImage(&blendname, 1, BMP);
+	int skymapped = Read2DImage(&skyname, 1, BMP);
+
+	if (skymapped < 0 || albedoMapped < 0 || normalMapped < 0 || blendMapped < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot create crate object"));
+		mainAppLogger.ProcessMessage();
+		return;
+	}
+
 	int geomDetailsIndex = -1, meshGPUIndex = -1, meshCPUIndex = -1;
 
 	geomDetailsIndex = AllocateGPUGeometryDetails(1);
@@ -1484,25 +1528,27 @@ void ApplicationLoop::CreateCrateObject()
 
 	int blendRangesIndex = AllocateGPUBlendRanges(2);
 
-	if (geomDetailsIndex < 0 || meshGPUIndex < 0 || meshCPUIndex < 0 || cpuGeomRenderable < 0 || gpuGeomRenderable < 0 || gpuMeshRenderable < 0 || cpuMeshRenderable < 0)
+	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
+	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
+
+	if (geomDetailsIndex < 0 || 
+		meshGPUIndex < 0 || 
+		meshCPUIndex < 0 || 
+		cpuGeomRenderable < 0 || 
+		gpuGeomRenderable < 0 || 
+		gpuMeshRenderable < 0 || 
+		cpuMeshRenderable < 0 || 
+		materialHandleIndex < 0 ||
+		materialRangeIndex < 0 ||
+		blendDetailsIndex < 0 ||
+		blendRangesIndex < 0 ||
+		vertexAlloc < 0 ||
+		indexAlloc < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Cannot create crate object", 26);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot create crate object"));
 		mainAppLogger.ProcessMessage();
 		return;
 	}
-
-	StringView blendname = AppInstanceTempAllocator.AllocateFromNullStringCopy("blendmap.bmp");
-
-	StringView skyname = AppInstanceTempAllocator.AllocateFromNullStringCopy("sky.bmp");
-
-	StringView normalmapname = AppInstanceTempAllocator.AllocateFromNullStringCopy("WNN2.bmp");
-
-	StringView albedomapname = AppInstanceTempAllocator.AllocateFromNullStringCopy("WNN.bmp");
-
-	int alebdoMapped = Read2DImage(&albedomapname, 1, BMP);
-	int normalMapped = Read2DImage(&normalmapname, 1, BMP);
-	int blendMapped = Read2DImage(&blendname, 1, BMP);
-	int skymapped = Read2DImage(&skyname, 1, BMP);
 
 	CreateBlendDetails(blendDetailsIndex, BlendMaterialType::ConstantAlpha, 1.0f);
 	CreateBlendDetails(blendDetailsIndex + 1, BlendMaterialType::BlendMap, blendMapped);
@@ -1511,7 +1557,7 @@ void ApplicationLoop::CreateCrateObject()
 
 	CreateBlendRange(blendRangesIndex, blendIndices.data(), 2);
 
-	std::array textureHandles = { alebdoMapped, normalMapped, skymapped };
+	std::array textureHandles = { albedoMapped, normalMapped, skymapped };
 
 	CreateMaterial(materialHandleIndex, ALBEDOMAPPED | TANGENTNORMALMAPPED, textureHandles.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0));
 
@@ -1522,12 +1568,17 @@ void ApplicationLoop::CreateCrateObject()
 	int materialRangeCount = 2;
 	int materialRangeStart = CreateMaterialRange(materialRangeIndex, materialRangeCount, materialIDs.data());
 
-	int vertexAlloc = vertexBufferAlloc.Allocate(compressedSize * 24, 16);
-	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
-
 	CreateGPUGeometryDetails(geomDetailsIndex, BOX);
 	
-	CreateMeshHandle(meshCPUIndex, meshGPUIndex, compVerts, BoxIndices, vertexFlags, 24, compressedSize, 2, 52, sphere, vertexAlloc, indexAlloc);
+	CreateMeshHandle(
+		meshCPUIndex, meshGPUIndex,
+		vertexFlags, 24, 
+		compressedSize, 
+		2, 52, 
+		sphere, 
+		vertexAlloc, indexAlloc,
+		-1, -1
+	);
 
 	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Update(cpuGeomRenderable);
 
@@ -1544,7 +1595,7 @@ void ApplicationLoop::CreateCrateObject()
 	rendInst.UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
 	rendInst.UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
 
-	mainAppLogger.AddLogMessage(LOGINFO, "Created Crate Object", 20);
+	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Crate Object"));
 }
 
 void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase)
@@ -1579,9 +1630,19 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 
 	int blendRangesIndex = AllocateGPUBlendRanges(1);
 
-	if (geomDetailsIndex < 0 || meshGPUIndex < 0 || meshCPUIndex < 0 || cpuGeomRenderable < 0 || gpuGeomRenderable < 0 || gpuMeshRenderable < 0 || cpuMeshRenderable < 0)
+	if (geomDetailsIndex < 0 || 
+		meshGPUIndex < 0 || 
+		meshCPUIndex < 0 || 
+		cpuGeomRenderable < 0 || 
+		gpuGeomRenderable < 0 || 
+		gpuMeshRenderable < 0 || 
+		cpuMeshRenderable < 0 ||
+		materialHandleIndex < 0 ||
+		materialRangeIndex < 0 ||
+		blendDetailsIndex < 0 ||
+		blendRangesIndex < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Cannot smb object", 17);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot smb object"));
 		mainAppLogger.ProcessMessage();
 		return;
 	}
@@ -1717,11 +1778,14 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 		
 		CreateMaterialRange(materialRangeIndex + i, materialRangeCount, &outMaterialHandle);
 		
-		CreateMeshHandle(meshCPUIndex + i, meshGPUIndex + i, vertexData, indices,
-			vertexFlags, vertexCount, vertexSize, 2, 
+		CreateMeshHandle(
+			meshCPUIndex + i, meshGPUIndex + i,
+			vertexFlags, vertexCount, 
+			vertexSize, 2, 
 			indexCount,
 			geoDef->spheres[i], 
-			vertexAlloc, indexAlloc
+			vertexAlloc, indexAlloc,
+			vertexAndIndicesAlloc.OffsetInAllocator(vertexData), vertexAndIndicesAlloc.OffsetInAllocator(indices)
 		);
 
 		CreateRenderable(cpuMeshRenderable + i, gpuMeshRenderable + i, Identity4f(), gpuGeomRenderable, materialRangeIndex + i, materialRangeCount, blendRangesIndex, meshGPUIndex + i, 1);
@@ -1731,7 +1795,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 
 	CreateAABBDebugStruct(geoDef->axialBox, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.5, 0.5, 1.0, 0.0));
 
-	mainAppLogger.AddLogMessage(LOGINFO, "Created SMB Object", 18);
+	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created SMB Object"));
 }
 
 
@@ -1763,7 +1827,7 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, ui
 
 	if (globalDebugStructCount == globalDebugStructMaxCount)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many debug structs created", 30);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many debug structs created"));
 		return -1;
 	}
 
@@ -1808,7 +1872,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 
 	if (globalDebugStructCount == globalDebugStructMaxCount)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many debug structs created", 30);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many debug structs created"));
 		return -1;
 	}
 
@@ -1860,7 +1924,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 
 			if (geometryPorcessRet < 0)
 			{
-				mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, "Geometry failed from SMB failed loading", 39);
+				mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, STRING_VIEW_FROM_LITERAL("Geometry failed from SMB failed loading"));
 				break;
 			}
 
@@ -1873,7 +1937,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 			int texErrorRet = textures[totalTextureCount].CreateTextureDetails(file, chunk[i]);	
 			if (texErrorRet < 0)
 			{
-				mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, "Texture from SMB failed loading", 31);
+				mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, STRING_VIEW_FROM_LITERAL("Texture from SMB failed loading"));
 				break;
 			}
 			totalTextureCount++;
@@ -1980,7 +2044,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 		}
 		case GR2:
 		default:
-			mainAppLogger.AddLogMessage(LogMessageType::LOGINFO, "Unhandled SMB Chunk", 19);
+			mainAppLogger.AddLogMessage(LogMessageType::LOGINFO, STRING_VIEW_FROM_LITERAL("Unhandled SMB Chunk"));
 			break;
 		}
 	}
@@ -2062,7 +2126,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 				if (gg == totalTextureCount)
 				{
 					flattenMatHandles[hh + base] = 0;
-					mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, "Unhandled Mesh Material Image", 29);
+					mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled Mesh Material Image"));
 				}
 			}
 			base += count;
@@ -2137,7 +2201,7 @@ int CreateDebugCommandBuffers(int count)
 
 	if (debugIndirectDrawData.indirectCullPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Indirect cull pipeline failed creation", 38);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Indirect cull pipeline failed creation"));
 		return -1;
 	}
 
@@ -2181,7 +2245,7 @@ int CreateDebugCommandBuffers(int count)
 
 	if (debugIndirectDrawData.indirectDrawPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "indirect draw pipeline failed creation", 38);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("indirect draw pipeline failed creation"));
 		return -1;
 	}
 
@@ -2282,7 +2346,7 @@ int CreateGenericMeshCommandBuffers(int count)
 
 	if (mainIndirectDrawData.indirectDrawPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "indirect draw pipeline failed creation", 39);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("indirect draw pipeline failed creation"));
 		return -1;
 	}
 
@@ -2365,7 +2429,7 @@ int CreateGenericMeshCommandBuffers(int count)
 	
 	if (outlinePipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Outline pipeline failed creation", 39);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Outline pipeline failed creation"));
 		return -1;
 	}
 	
@@ -2436,7 +2500,7 @@ int CreateMeshWorldAssignment(int count)
 
 	if (worldSpaceAssignment.prefixSumPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "World Space sum after failed creation", 39);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Space sum after failed creation"));
 		return -1;
 	}
 	
@@ -2474,7 +2538,7 @@ int CreateMeshWorldAssignment(int count)
 
 		if (worldSpaceAssignment.sumAfterPipeline < 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "World Space sum after failed creation", 39);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Space sum after failed creation"));
 			return -1;
 		}
 
@@ -2507,7 +2571,7 @@ int CreateMeshWorldAssignment(int count)
 
 		if (worldSpaceAssignment.sumAppliedToBinPipeline < 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "World Space sum applied failed creation", 39);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Space sum applied failed creation"));
 			return -1;
 		}
 	}
@@ -2551,7 +2615,7 @@ int CreateMeshWorldAssignment(int count)
 
 	if (worldSpaceAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "World Space pre division failed creation", 40);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Space pre division failed creation"));
 		return -1;
 	}
 
@@ -2591,7 +2655,7 @@ int CreateMeshWorldAssignment(int count)
 
 	if (worldSpaceAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "World Space assign failed creation", 34);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Space assign failed creation"));
 		return -1;
 	}
 
@@ -2655,7 +2719,7 @@ int CreateLightAssignments(int count)
 
 	if (lightAssignment.prefixSumPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Prefix Sum After failed creation", 32);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Prefix Sum After failed creation"));
 		return -1;
 	}
 
@@ -2693,7 +2757,7 @@ int CreateLightAssignments(int count)
 
 		if (lightAssignment.sumAfterPipeline < 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "World Sum After failed creation", 31);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Sum After failed creation"));
 			return -1;
 		}
 
@@ -2727,7 +2791,7 @@ int CreateLightAssignments(int count)
 
 		if (lightAssignment.sumAppliedToBinPipeline < 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "World Sum failed creation", 25);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("World Sum failed creation"));
 			return -1;
 		}
 	}
@@ -2769,7 +2833,7 @@ int CreateLightAssignments(int count)
 
 	if (lightAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Pre World Division Pipeline failed creation", 43);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Pre World Division Pipeline failed creation"));
 		return -1;
 	}
 
@@ -2806,7 +2870,7 @@ int CreateLightAssignments(int count)
 
 	if (lightAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Post World Division failed creation", 35);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Post World Division failed creation"));
 		return -1;
 	}
 
@@ -2916,7 +2980,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 	if (mainShadowMapManager.shadowClippingPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Shadow Clipping Pipeline failed creation", 40);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Shadow Clipping Pipeline failed creation"));
 		return -1;
 	}
 
@@ -2960,7 +3024,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 	if (smdpd.shadowMapPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Shadow Map Pipeline failed creation", 35);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Shadow Map Pipeline failed creation"));
 		return -1;
 	}
 	
@@ -3007,7 +3071,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 	if (smdpd.fullScreenPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Shadow Full Screen Pipeline failed creation", 43);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Shadow Full Screen Pipeline failed creation"));
 		return -1;
 	}
 
@@ -3081,7 +3145,7 @@ int ApplicationLoop::CreateMSAAPostFullScreen()
 
 	if (mainFullScreenPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Main Full Screen Pipeline failed creation", 31);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Main Full Screen Pipeline failed creation"));
 		return -1;
 	}
 
@@ -3140,12 +3204,12 @@ int ApplicationLoop::CreateSkyBox()
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
 
 	StringView names[6] = {
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face4.bmp"),
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face1.bmp"),
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face5.bmp"),
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face2.bmp"),
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face6.bmp"),
-		AppInstanceTempAllocator.AllocateFromNullStringCopy("face3.bmp"),
+		STRING_VIEW_FROM_LITERAL("face4.bmp"),
+		STRING_VIEW_FROM_LITERAL("face1.bmp"),
+		STRING_VIEW_FROM_LITERAL("face5.bmp"),
+		STRING_VIEW_FROM_LITERAL("face2.bmp"),
+		STRING_VIEW_FROM_LITERAL("face6.bmp"),
+		STRING_VIEW_FROM_LITERAL("face3.bmp"),
 	};
 
 	ShaderResourceSetContext genericSkyBoxRSontext{ &mainAppLogger, false };
@@ -3194,7 +3258,7 @@ int ApplicationLoop::CreateSkyBox()
 
 	if (skyboxPipeline < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Skybox Pipeline failed creation", 31);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Skybox Pipeline failed creation"));
 		return -1;
 	}
 
@@ -3364,7 +3428,7 @@ void ApplicationLoop::InitializeRuntime()
 		creationRetSM < 0 ||
 		creationRetFS < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGINFO, "Shutting down environment, cannot create minimal sandbox", 56);
+		mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Shutting down environment, cannot create minimal sandbox"));
 		return;
 	}
 
@@ -3373,12 +3437,9 @@ void ApplicationLoop::InitializeRuntime()
 	
 	c.CamLookAt(Vector3f(25.0 * -mainDirectionalLight.direction.x, 25.0 * -mainDirectionalLight.direction.y,  25.0 * -mainDirectionalLight.direction.z), Vector3f(0.0f, 0.0f, 0.0f), Vector3f(0.0f, 1.0f, 0.0f));
 
-	c.UpdateCamera();
-
 	c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 
-	WriteCameraMatrix();	
-	
+	UpdateCameraMatrix();
 }
 
 void ApplicationLoop::CleanupRuntime()
@@ -3423,7 +3484,7 @@ void ApplicationLoop::LoadObject(const StringView& file)
 
 	if (loadSmbRet)
 	{	
-		mainAppLogger.AddLogMessage(LOGERROR, "SMB Load Failed", 15);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("SMB Load Failed"));
 	}
 	else 
 	{
@@ -3507,6 +3568,15 @@ int ApplicationLoop::CreateRenderable(int meshCPURenderableIndex, int meshGPURen
 
 	meshCpuRenderable = renderablesMeshObjects.Update(meshCPURenderableIndex);
 
+	if (materialStart < 0 ||
+		materialCount < 0 || materialCount > MAX_GPU_MATERIALS ||
+		blendStart < 0 ||
+		meshIndex < 0 ||
+		instanceCount < 1)
+	{
+		mainAppLogger.AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Data validation for GPU Renderable incorrect"));
+	}
+
 	GPUMeshRenderable renderable{};
 
 	meshCpuRenderable->instanceCount = renderable.instanceCount = instanceCount;
@@ -3585,16 +3655,28 @@ int ApplicationLoop::CreateMaterial(
 
 int ApplicationLoop::CreateMeshHandle(
 	int meshCPUDataIndex, int meshGPUDataIndex,
-	void* vertexData, void* indexData,
 	int vertexFlags, int vertexCount, int vertexStride,
 	int indexStride, int indexCount,
-	 Sphere& sphere,
-	int vertexAlloc, int indexAlloc
+	Sphere& sphere,
+	int gpuVertexAlloc, int gpuIndexAlloc,
+	int cpuVertexAlloc, int cpuIndexAlloc
 )
 {
 	MeshCPUData* mesh = nullptr;
 
 	mesh = meshCPUData.Update(meshCPUDataIndex);
+
+	if (indexCount <= 0 || 
+		vertexCount <= 0 || 
+		vertexStride <= 0 || 
+		vertexFlags == 0 || 
+		indexStride <= 0 || 
+		gpuIndexAlloc < 0 || 
+		gpuVertexAlloc < 0
+		)
+	{
+		mainAppLogger.AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Data validation is incorrect for GPU Mesh Handle"));
+	}
 
 	mesh->indicesCount = indexCount;
 
@@ -3608,9 +3690,13 @@ int ApplicationLoop::CreateMeshHandle(
 
 	mesh->vertexFlags = vertexFlags;
 
-	mesh->deviceIndices = indexAlloc;
+	mesh->deviceIndices = gpuIndexAlloc;
 
-	mesh->deviceVertices = vertexAlloc;
+	mesh->deviceVertices = gpuVertexAlloc;
+
+	mesh->cpuVertices = cpuVertexAlloc;
+
+	mesh->cpuIndices = cpuIndexAlloc;
 
 	GPUMeshDetails handles{};
 
@@ -3618,8 +3704,8 @@ int ApplicationLoop::CreateMeshHandle(
 	handles.stride = vertexStride;
 
 	handles.indexCount = mesh->indicesCount;
-	handles.firstIndex = indexAlloc / mesh->indexSize;
-	handles.vertexByteOffset = vertexAlloc;
+	handles.firstIndex = gpuIndexAlloc / mesh->indexSize;
+	handles.vertexByteOffset = gpuVertexAlloc;
 
 	memcpy(&handles.sphere, &sphere, sizeof(Vector4f));
 
@@ -3636,7 +3722,7 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 	if (geomIndex >= renderablesGeomObjects.allocatorPtr.load())
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Incorrect Geometry Location", 27);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Incorrect Geometry Location"));
 		return;
 	}
 
@@ -3678,7 +3764,7 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 		PrintDebugMemoryAllocation();
 	}
 	else {
-		mainAppLogger.AddLogMessage(LOGERROR, "Unprocessed command entered", 27);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unprocessed command entered"));
 	}
 
 	ThreadSharedMessageQueue.Read();
@@ -3728,7 +3814,7 @@ void ScanSTDIN(void* data)
 
 	char inputBuffer[1024];
 
-	mainAppLogger.AddLogMessage(LOGINFO, "Ready for commands... \nHit enter and then write command > ", 58);
+	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Ready for commands... \nHit enter and then write command > "));
 
 	volatile bool* stopToken = (volatile bool*)data;
 
@@ -3741,7 +3827,7 @@ void ScanSTDIN(void* data)
 		BOOL success = ReadConsoleInput(stdInHandle, &record, 1, &events);
 
 		if (!success) {
-			mainAppLogger.AddLogMessage(LOGERROR, "Cannot get ReadConsoleInput\n", 28);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot get ReadConsoleInput\n"));
 			break;
 		}
 
@@ -3762,7 +3848,7 @@ void ScanSTDIN(void* data)
 
 		if (numberOfBytesRead <= 0)
 		{
-			mainAppLogger.AddLogMessage(LOGERROR, "Cannot get ReadFile from stdinput\n", 34);
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot get ReadFile from stdinput\n"));
 			break;
 		}
 
@@ -3773,7 +3859,7 @@ void ScanSTDIN(void* data)
 
 		loop->AddCommandTS(wordCount);
 
-		mainAppLogger.AddLogMessage(LOGINFO, "Hit enter and then write command > ", 35);
+		mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Hit enter and then write command > "));
 	}
 
 	return;
@@ -3969,79 +4055,109 @@ void UpdateLight(GPULightSource& lightDesc, int lightIndex)
 
 int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 {
-	TextureDetails* details;
-
-	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
+	TextureDetails details;
 
 	OSFileHandle outHandle{};
 
 	int nRet = OSOpenFile(name->stringData, name->charCount, READ, &outHandle);
 
+	if (nRet)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open cube image file"));
+		return -1;
+	}
+
 	int size = outHandle.fileLength;
 
 	void* fileData = GlobalInputScratchAllocator.Allocate(size);
 
-	OSReadFile(&outHandle, size, (char*)fileData);
+	int nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 	OSCloseFile(&outHandle);
 
-	int filePointer = ReadBMPDetails((char*)fileData, details);
+	if (nRead < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot read cube image file"));
+		return -1;
+	}
 
-	details->data = (char*)mainDictionary.AllocateImageCache(details->dataSize);
 
-	details->currPointer = details->data;
+	int filePointer = ReadBMPDetails((char*)fileData, &details);
+
+	details.data = (char*)mainDictionary.AllocateImageCache(details.dataSize);
+
+	details.currPointer = details.data;
 
 	for (int i = 1; i < textureCount; i++)
 	{
-		ReadBMPData((char*)fileData, filePointer, details);
+		ReadBMPData((char*)fileData, filePointer, &details);
 
 		nRet = OSOpenFile(name[i].stringData, name[i].charCount, READ, &outHandle);
+
+		if (nRet)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open cube image file"));
+			return -1;
+		}
 
 		size = outHandle.fileLength;
 
 		fileData = GlobalInputScratchAllocator.Allocate(size);
 
-		OSReadFile(&outHandle, size, (char*)fileData);
+		nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 		OSCloseFile(&outHandle);
+
+		if (nRead < 0)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot read cube image file"));
+			return -1;
+		}
 
 		TextureDetails stubDetails{};
 
 		filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
 
-		if (stubDetails.width != details->width) {
-			printf("Mismatched Image array\n");
+		if (stubDetails.width != details.width || stubDetails.height != details.height) {
+			mainAppLogger.AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Cube Image Dimension mismatch"));
 		}
 
-		details->currPointer = (char*)mainDictionary.AllocateImageCache(details->dataSize);
+		details.currPointer = (char*)mainDictionary.AllocateImageCache(details.dataSize);
 	}
 
-	ReadBMPData((char*)fileData, filePointer, details);
+	ReadBMPData((char*)fileData, filePointer, &details);
 
-	details->arrayLayers = textureCount;
+	details.arrayLayers = textureCount;
 
-	int ret = mainDictionary.textureHandles[textureStart] =
+	int imageIndex = 
 		GlobalRenderer::gRenderInstance.CreateCubeImageHandle(
-			textureCount * details->dataSize,
-			details->width,
-			details->height,
-			details->miplevels,
-			details->type,
-			loop->GetPoolIndexByFormat(details->type),
+			textureCount * details.dataSize,
+			details.width,
+			details.height,
+			details.miplevels,
+			details.type,
+			loop->GetPoolIndexByFormat(details.type),
 			mainLinearSampler);
 
-	GlobalRenderer::gRenderInstance.UpdateImageMemory(
-		details->data,
-		ret,
-		textureCount * details->dataSize,
-		details->width,
-		details->height,
-		details->miplevels,
-		details->arrayLayers,
-		details->type
-	);
+	if (imageIndex >= 0)
+	{
+		GlobalRenderer::gRenderInstance.UpdateImageMemory(
+			details.data,
+			imageIndex,
+			textureCount * details.dataSize,
+			details.width,
+			details.height,
+			details.miplevels,
+			details.arrayLayers,
+			details.type
+		);
+	}
+	else
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed to register image to renderer"));
+	}
 
-	return ret;
+	return imageIndex;
 }
 
 int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
@@ -4051,8 +4167,8 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 	int textureStart = mainDictionary.AllocateNTextureHandles(1, &details);
 
 	int totalBlobSize = 0;
-	
-	int ret;
+
+	int imageIndex = -1;
 
 	for (int i = 0; i < mipCounts; i++)
 	{
@@ -4062,36 +4178,43 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 		int nRet = OSOpenFile(name[i].stringData, name[i].charCount, READ, &outHandle);
 
+		if (nRet)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open 2d image file"));
+			return -1;
+		}
+
 		int size = outHandle.fileLength;
 
 		void* fileData = GlobalInputScratchAllocator.Allocate(size);
 
-		OSReadFile(&outHandle, size, (char*)fileData);
+		int nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 		OSCloseFile(&outHandle);
 
-		int filePointer = ReadBMPDetails((char*)fileData, &stubDetails);
-
-		stubDetails.data = (char*)mainDictionary.AllocateImageCache(stubDetails.dataSize);
-
-		stubDetails.currPointer = stubDetails.data;
-
-		totalBlobSize += stubDetails.dataSize;
-
-		ReadBMPData((char*)fileData, filePointer, &stubDetails);
-
-		if (!i)
+		if (nRead < 0)
 		{
-			memcpy(details, &stubDetails, sizeof(TextureDetails));
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot read 2d image file"));
+			return -1;
 		}
 
-	}
+		TextureDetails* currDetailPtr = (!i) ? details : &stubDetails;
 
+		int filePointer = ReadBMPDetails((char*)fileData, currDetailPtr);
+
+		currDetailPtr->data = (char*)mainDictionary.AllocateImageCache(currDetailPtr->dataSize);
+
+		currDetailPtr->currPointer = currDetailPtr->data;
+
+		totalBlobSize += currDetailPtr->dataSize;
+
+		ReadBMPData((char*)fileData, filePointer, currDetailPtr);
+	}
 
 	details->miplevels = mipCounts;
 	details->arrayLayers = 1;
 
-	ret = mainDictionary.textureHandles[textureStart] =
+	imageIndex  =
 		GlobalRenderer::gRenderInstance.CreateImageHandle(
 			totalBlobSize,
 			details->width,
@@ -4099,26 +4222,38 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->miplevels,
 			details->type,
 			loop->GetPoolIndexByFormat(details->type),
-			mainLinearSampler);
+			mainLinearSampler
+		);
 
-	GlobalRenderer::gRenderInstance.UpdateImageMemory(
-		details->data,
-		mainDictionary.textureHandles[textureStart],
-		totalBlobSize,
-		details->width,
-		details->height,
-		details->miplevels,
-		details->arrayLayers,
-		details->type
-	);
+	if (imageIndex >= 0)
+	{
+		GlobalRenderer::gRenderInstance.UpdateImageMemory(
+			details->data,
+			imageIndex,
+			totalBlobSize,
+			details->width,
+			details->height,
+			details->miplevels,
+			details->arrayLayers,
+			details->type
+		);
 
-	DeviceHandleArrayUpdate update;
+		mainDictionary.textureHandles[textureStart] = imageIndex;
 
-	update.resourceCount = 1;
-	update.resourceDstBegin = textureStart;
-	update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
+		DeviceHandleArrayUpdate update;
 
-	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
+		update.resourceCount = 1;
+		update.resourceDstBegin = textureStart;
+		update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
+
+		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
+	}
+	else
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed to register 2d image to renderer"));
+
+		return -1;
+	}
 
 	return textureStart;
 }
@@ -4187,9 +4322,7 @@ void PrintDebugMemoryAllocation()
 
 	std::pair<int, int> allocDetails{};
 
-	allocDetails = StartupMemoryAllocator.GetUsageAndCapacity();
-
-	int actualSize = snprintf(StringBuffer, 512, "Start up memory allocation %d/%d", allocDetails.first, allocDetails.second);
+	int actualSize = 0;
 
 	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
 
@@ -4256,7 +4389,7 @@ int ApplicationLoop::AllocateGPUGeometryDetails(int numberOfDetails)
 
 	if (globalGeometryDescriptionsCount+numberOfDetails > globalGeometryDescriptionsCountMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many geometry details created", 33);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many geometry details created"));
 		return geomDescriptionsIndex;
 	}
 
@@ -4275,7 +4408,7 @@ int ApplicationLoop::AllocateCPUMeshDetails(int numberOfDetails) {
 
 	if (meshIndex < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many CPU meshes created", 27);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many CPU meshes created"));
 	}
 
 	return meshIndex;
@@ -4287,7 +4420,7 @@ int ApplicationLoop::AllocateGPUMeshDetails(int numberOfDetails) {
 
 	if (globalMeshCount+numberOfDetails > globalMeshCountMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many GPU meshes created", 27);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU meshes created"));
 		return -1;
 	}
 
@@ -4306,7 +4439,7 @@ int ApplicationLoop::AllocateCPUMeshRenderable(int numberOfRenderables)
 
 	if (meshRenderableIndex < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many CPU Mesh renderables created", 37);	
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many CPU Mesh renderables created"));
 	}
 
 	return meshRenderableIndex;
@@ -4318,7 +4451,7 @@ int ApplicationLoop::AllocateGPUMeshRenderable(int numberOfRenderables)
 
 	if (globalRenderableCount + numberOfRenderables > globalRenderableMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many GPU Mesh renderables created", 37);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU Mesh renderables created"));
 		return meshRenderableIndex;
 	}
 
@@ -4337,7 +4470,7 @@ int ApplicationLoop::AllocateCPUGeometryInstances(int numberOfInstances)
 
 	if (geomRendCPUCode < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many CPU geometry renderables created", 41);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many CPU geometry renderables created"));
 	}
 
 	return geomRendCPUCode;
@@ -4349,7 +4482,7 @@ int ApplicationLoop::AllocateGPUGeometryInstances(int numberOfInstances) {
 
 	if (globalGeometryRenderableCount+numberOfInstances > globalGeometryRenderableCountMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many GPU geometry renderables created", 41);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU geometry renderables created"));
 		return geomRenderableIndex;
 	}
 
@@ -4367,7 +4500,7 @@ int ApplicationLoop::AllocateGPUMaterialData(int numberOfMaterials)
 
 	if (globalMaterialsIndex + numberOfMaterials > globalMaterialsMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many materials created", 26);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many materials created"));
 		return materialIndexReturn;
 	}
 
@@ -4384,7 +4517,7 @@ int ApplicationLoop::AllocateGPUMaterialRanges(int numberOfRanges)
 
 	if (globalMaterialRangeMax < globalMaterialRangeCount + numberOfRanges)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many material ranges created", 32);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many material ranges created"));
 		return materialRangeIndex;
 	}
 
@@ -4401,7 +4534,7 @@ int ApplicationLoop::AllocateGPUBlendDescriptions(int numberOfDescs)
 
 	if (globalBlendDetailCount + numberOfDescs > globalBlendDetailMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many blend details allocated", 32);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many blend details allocated"));
 		return blendDescIndex;
 	}
 
@@ -4418,7 +4551,7 @@ int ApplicationLoop::AllocateGPUBlendRanges(int numberOfRanges)
 
 	if (globalBlendRangeCount + numberOfRanges > globalBlendRangeMax)
 	{
-		mainAppLogger.AddLogMessage(LOGERROR, "Too many blend ranges allocated", 31);
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many blend ranges allocated"));
 		return blendRangeReturn;
 	}
 

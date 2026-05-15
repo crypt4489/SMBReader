@@ -63,9 +63,9 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 	StringView imageName{};
 
-	imageName.stringData = (char*)inputScratchMemory->Allocate(MAX_SMB_ARCHIVE_OBJECT_NAME);
+	char* strBuf = (char*)inputScratchMemory->Allocate(MAX_SMB_ARCHIVE_OBJECT_NAME);
 
-	FileManager::ExtractFileNameFromPath(&chunk.fileName, &imageName);
+	FileManager::ExtractFileNameFromPath(&chunk.fileName, &imageName, strBuf);
 
 	auto pathToTextures = FileManager::SetupDirectory(&imageName);
 

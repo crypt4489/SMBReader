@@ -39,14 +39,17 @@ int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
 
 	if (stringsize < 0 || stringsize >= MAX_STRING_SIZE)
 	{
-		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("SMB Broken String Size Count"));
+		scratch->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("SMB Broken String Size Count"));
 		return -1;
 	}
 
-	name.stringData = (char*)inputDataAllocator->Allocate(stringsize);
+	char* strBuf = (char*)inputDataAllocator->Allocate(stringsize);
+
 	name.charCount = stringsize;
 
-	OSReadFile(&fileHandle, stringsize, name.stringData);
+	OSReadFile(&fileHandle, stringsize, strBuf);
+
+	name.stringData = strBuf;
 
 	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset));
 
@@ -59,21 +62,24 @@ int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* s
 
 	if (chunk.chunkId != chunk.chunkIdCopy)
 	{
-		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("Chunk ID does not match on both for chunk header"));
+		scratch->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Chunk ID does not match on both for chunk header"));
 		return -1;
 	}
 
 	if ((chunk.stringsize <= 0 || chunk.stringsize >= MAX_STRING_SIZE) && chunk.chunkType != Joints)
 	{
-		scratch->AddLogMessage(LOGERROR, inputDataAllocator->AllocateFromNullStringCopy("SMB Broken String Size Count"));
+		scratch->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("SMB Broken String Size Count"));
 		return -1;
 	}
 
 	chunk.fileName.charCount = chunk.stringsize;
-	chunk.fileName.stringData = (char*)inputDataAllocator->Allocate(chunk.stringsize);
-	OSReadFile(&fileHandle, chunk.stringsize, chunk.fileName.stringData);
+	char* strBuf = (char*)inputDataAllocator->Allocate(chunk.stringsize);
+	OSReadFile(&fileHandle, chunk.stringsize, strBuf);
+
+	chunk.fileName.stringData = strBuf;
 
 	chunk.offsetInHeader = fileHandle.filePointer;
+
 	int offset = (chunk.numOfBytesAfterTag - (chunk.stringsize + 16));
 	chunk.headerSize = offset;
 	int next = chunk.offsetInHeader + offset;
@@ -174,7 +180,7 @@ int ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int c
 	}
 	else
 	{
-		outputLogger->AddLogMessage(LOGERROR, inputAllocator->AllocateFromNullStringCopy("Unhandled geometry type"));
+		outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled geometry type"));
 		return -1;
 	}
 
@@ -184,7 +190,7 @@ int ProcessGeometryClass(char* data, int numMaterials, SMBGeoChunk* chunk, int c
 
 	if (numRenderables <= 0 || numRenderables > MAX_POSSIBLE_RENDERABLES)
 	{
-		outputLogger->AddLogMessage(LOGERROR, inputAllocator->AllocateFromNullStringCopy("Bad number of renderables read from file"));
+		outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Bad number of renderables read from file"));
 		return -1;
 	}
 

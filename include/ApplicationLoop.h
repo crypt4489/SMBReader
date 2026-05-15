@@ -41,8 +41,6 @@ public:
 
 	void UpdateCameraMatrix();
 
-	void WriteCameraMatrix();
-
 	bool MoveCamera(double fps);
 
 	void CreateTexturePools();
@@ -100,11 +98,11 @@ public:
 
 	int CreateMeshHandle(
 		int meshCPUDataIndex, int meshGPUDataIndex,
-		void* vertexData, void* indexData,
 		int vertexFlags, int vertexCount, int vertexStride,
 		int indexStride, int indexCount,
 		Sphere& sphere,
-		int vertexAlloc, int indexAlloc
+		int gpuVertexAlloc, int gpuIndexAlloc,
+		int cpuVertexAlloc, int cpuIndexAlloc
 	);
 
 	int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox);
