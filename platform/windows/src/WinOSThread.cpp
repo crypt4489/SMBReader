@@ -110,7 +110,7 @@ void CloseAllThreads()
             std::memory_order_acquire) == -1)
         {
             CloseHandle(handles[idx]);
-            freeList[idx].store(1);
+            freeList[idx].store(1, std::memory_order_release);
         }
     }
 }
@@ -122,6 +122,8 @@ int OSCloseThread(OSThreadHandle* handle)
         return -1;
 
     HANDLE hand = handles[handle->osDataHandle];
+
+    freeList[handle->osDataHandle].store(1, std::memory_order_release);
 
     CloseHandle(hand);
 
@@ -145,6 +147,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
     if (data->flags & OS_THREAD_ASYNC)
     {
         CloseHandle(handles[data->index]);
+        freeList[data->index].store(1, std::memory_order_release);
     }
 
     ExitThread(0);

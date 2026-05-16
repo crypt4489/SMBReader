@@ -262,11 +262,11 @@ public:
 
 	SMBFile() = default;
 
-	SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch);
-
 	~SMBFile();
 
-	int LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch);
+	int OpenFile(StringView name);
+
+	int LoadFile(Allocator* inputDataAllocator, Logger* scratch);
 
 	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
 	{

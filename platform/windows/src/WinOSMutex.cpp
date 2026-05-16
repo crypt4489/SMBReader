@@ -43,7 +43,7 @@ void CloseAllSyncObject()
 			std::memory_order_acquire) == -1)
 		{
 			CloseHandle(handles[idx]);
-			freeList[idx].store(1);
+			freeList[idx].store(1, std::memory_order_release);
 		}
 	}
 }
@@ -144,6 +144,9 @@ int NotifyOSSemaphore(OSSemaphore* semaphore)
 int DeleteOSSemaphore(OSSemaphore* semaphore)
 {
 	if (semaphore->osDataHandle == -1)
+		return -1;
+
+	if (freeList[semaphore->osDataHandle].load(std::memory_order_acquire) == 1)
 		return -1;
 
 	HANDLE sema = handles[semaphore->osDataHandle];

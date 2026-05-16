@@ -47,9 +47,9 @@ public:
 
 	int GetPoolIndexByFormat(ImageFormat format);
 
-	void ProcessSMBFile(SMBFile* file);
+	void ProcessSMBFile(SMBFile* file, int arenaIndex);
 
-	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase);
+	void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex);
 
 	void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 

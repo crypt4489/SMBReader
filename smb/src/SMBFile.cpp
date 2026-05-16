@@ -6,17 +6,12 @@
 //constexpr float bx = 0.0019550342f;
 #define MAX_STRING_SIZE 250
 
-SMBFile::SMBFile(StringView file, Allocator* inputDataAllocator, Logger* scratch) 
-{
-	LoadFile(file, inputDataAllocator, scratch);
-}
-
 SMBFile::~SMBFile()
 {
 	OSCloseFile(&fileHandle);
 }
 
-int SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* scratch)
+int SMBFile::OpenFile(StringView name)
 {
 	int osFlag = OSOpenFile(name.stringData, name.charCount, READ, &fileHandle);
 
@@ -25,6 +20,11 @@ int SMBFile::LoadFile(StringView name, Allocator* inputDataAllocator, Logger* sc
 		return -1;
 	}
 
+	return fileHandle.fileLength;
+}
+
+int SMBFile::LoadFile( Allocator* inputDataAllocator, Logger* scratch)
+{
 	int processReturn = ProcessFile(inputDataAllocator, scratch);
 
 	return processReturn;

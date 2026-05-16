@@ -3356,7 +3356,7 @@ void RenderInstance::EndFrame()
 			passDesc = "Render Pass : ";
 		}
 
-		if (previousFrame < MAX_FRAMES_IN_FLIGHT)
+		if (previousFrame < MAX_FRAMES_IN_FLIGHT && (queryCounts[previousFrame] >= queryOffset + queryCount))
 		{
 			dev->ReadbackResultsFromQueries(
 				queryPool,

@@ -488,19 +488,81 @@ static char PollingThreadSharedCmdMemory[4 * KiB];
 static char PollingThreadStringViewMemory[4 * KiB];
 static char LoggerMessageMemory[64 * KiB];
 
-
-static OSSharedExclusive smbThreadedFileLock{};
-static char SMBThreadedFileInputMemory[12 * MiB];
-static char SMBThreadedFileScratchMemory[16 * KiB];
-
 static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
 static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
 static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
 static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
-static SlabAllocator SMBThreadedFileInputAllocator{ SMBThreadedFileInputMemory, sizeof(SMBThreadedFileInputMemory) };
-static SlabAllocator SMBThreadedFileScratchAllocator{ SMBThreadedFileScratchMemory, sizeof(SMBThreadedFileScratchMemory) };
 static MessageQueue ThreadSharedMessageQueue{ PollingThreadSharedCmdMemory, sizeof(PollingThreadSharedCmdMemory) };
 static RingAllocator ThreadSharedStringViewAllocator{ PollingThreadStringViewMemory, sizeof(PollingThreadStringViewMemory) };
+
+static char SMBThreadedFileInputMemory[48 * MiB];
+static char SMBThreadedFileScratchMemory[60 * KiB];
+
+#define MAX_SMB_ARENAS 10
+
+static const int SMBArenasSize[MAX_SMB_ARENAS] =
+{
+	1 * MiB,
+	1 * MiB,
+	1 * MiB,
+	1 * MiB,
+	4 * MiB,
+	4 * MiB,
+	4 * MiB,
+	4 * MiB,
+	12 * MiB,
+	16 * MiB
+};
+
+static const int SMBArenasOffset[MAX_SMB_ARENAS] =
+{
+	0,
+	1 * MiB,
+	2 * MiB,
+	3 * MiB,
+	4 * MiB,
+	8 * MiB,
+	12 * MiB,
+	16 * MiB,
+	20 * MiB,
+	32 * MiB
+};
+
+static SlabAllocator SMBThreadedFileInputAllocators[MAX_SMB_ARENAS] = 
+{ 
+	{SMBThreadedFileInputMemory					    , SMBArenasSize[0] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[1], SMBArenasSize[1] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[2], SMBArenasSize[2] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[3], SMBArenasSize[3] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[4], SMBArenasSize[4] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[5], SMBArenasSize[5] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[6], SMBArenasSize[6] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[7], SMBArenasSize[7] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[8], SMBArenasSize[8] },
+	{SMBThreadedFileInputMemory + SMBArenasOffset[9], SMBArenasSize[9] },
+};
+
+static SlabAllocator SMBThreadedFileScratchAllocators[MAX_SMB_ARENAS] =
+{
+	{SMBThreadedFileInputMemory + (6 * KiB * 0), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 1), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 2), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 3), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 4), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 5), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 6), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 7), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 8), 6 * KiB  },
+	{SMBThreadedFileInputMemory + (6 * KiB * 9), 6 * KiB  },
+};
+
+static std::atomic_bool arenasUsed[MAX_SMB_ARENAS];
+
+static char DebugAllocQueueMemory[512];
+static char RenderableAllocQueueMemory[512];
+
+static MessageQueue DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
+static MessageQueue RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
 
 static Logger mainAppLogger{};
 
@@ -540,6 +602,9 @@ static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
 static void PrintDebugMemoryAllocation();
 static void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
+
+static int FindSMBArenaForUse(int requestedSize);
+static int ReturnSMBArena(int arenaIndex);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -606,7 +671,18 @@ void ApplicationLoop::Execute()
 
 		SMBFile mainSMB{};
 
-		int loadSMBRet = mainSMB.LoadFile(mainInputString, &SMBThreadedFileInputAllocator, &mainAppLogger);
+		int fileSize = mainSMB.OpenFile(mainInputString);
+
+		if (fileSize <= 0)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open SMB file for export"));
+			mainAppLogger.ProcessMessage();
+			return;
+		}
+
+		int arenaIndex = FindSMBArenaForUse(fileSize);
+
+		int loadSMBRet = mainSMB.LoadFile(&SMBThreadedFileInputAllocators[arenaIndex], &mainAppLogger);
 
 		if (loadSMBRet)
 		{
@@ -617,19 +693,18 @@ void ApplicationLoop::Execute()
 
 		StringView fileName{};
 
-		char* strBuf = (char*)SMBThreadedFileScratchAllocator.Allocate(MAX_SMB_STRING_NAME);
+		char* strBuf = (char*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(MAX_SMB_STRING_NAME);
 
 		FileManager::ExtractFileNameFromPath(&mainInputString, &fileName, strBuf);
 
 		FileManager::SetFileCurrentDirectory(&fileName);
 
-		ExportChunksFromFile(&mainSMB, &SMBThreadedFileInputAllocator);
+		ExportChunksFromFile(&mainSMB, &SMBThreadedFileInputAllocators[arenaIndex]);
+
+		ReturnSMBArena(arenaIndex);
 	}
 	else
 	{
-
-		CreateOSSharedExclusive(&smbThreadedFileLock);
-
 		InitializeRuntime();
 
 		cleaned = false;
@@ -829,12 +904,12 @@ void ApplicationLoop::Execute()
 
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(debugIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
+
 					for (int jointPipeline = 0; jointPipeline < jointMeshPipelinesCount; jointPipeline++)
 					{
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(jointMeshPipelines[jointPipeline], currentFrameGraphIndex, 0);
 					}
-
-					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainIndirectDrawData.indirectDrawPipeline, currentFrameGraphIndex, 0);
 
 					if (currentFrameGraphIndex == MSAAPost)
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
@@ -1598,7 +1673,7 @@ void ApplicationLoop::CreateCrateObject()
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Crate Object"));
 }
 
-void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase)
+void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1713,7 +1788,7 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);
 
-		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed, &SMBThreadedFileInputAllocator);
+		SMBCopyVertexData(geoDef, i, file, vertexData, decompressed, &SMBThreadedFileInputAllocators[arenaIndex]);
 
 		int vertexFlags = POSITION | TEXTURE0;
 
@@ -1889,7 +1964,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 	return debugStructLocation;
 }
 
-void ApplicationLoop::ProcessSMBFile(SMBFile *file)
+void ApplicationLoop::ProcessSMBFile(SMBFile *file, int arenaIndex)
 {
 	const int MAX_GEO_FILES = 2;
 	const int MAX_TEXTURES = 10;
@@ -1898,11 +1973,11 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 
 	auto& chunk = file->chunks;
 
-	SMBTexture* textures = (SMBTexture*)SMBThreadedFileScratchAllocator.CAllocate(sizeof(SMBTexture) * MAX_TEXTURES);
+	SMBTexture* textures = (SMBTexture*)SMBThreadedFileInputAllocators[arenaIndex].CAllocate(sizeof(SMBTexture) * MAX_TEXTURES);
 
-	SMBGeoChunk* geoDefs = (SMBGeoChunk*)SMBThreadedFileScratchAllocator.Allocate(sizeof(SMBGeoChunk) * MAX_GEO_FILES);
+	SMBGeoChunk* geoDefs = (SMBGeoChunk*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(sizeof(SMBGeoChunk) * MAX_GEO_FILES);
 
-	SMBSkeleton* skels = (SMBSkeleton*)SMBThreadedFileScratchAllocator.Allocate(sizeof(SMBSkeleton) * MAX_GEO_FILES);;
+	SMBSkeleton* skels = (SMBSkeleton*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(sizeof(SMBSkeleton) * MAX_GEO_FILES);;
 
 	for (size_t i = 0; i<file->numResources; i++)
 	{
@@ -1916,11 +1991,11 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 
 			OSSeekFile(&file->fileHandle, seekpos, BEGIN);
 
-			char* geomHeader = (char*)SMBThreadedFileInputAllocator.Allocate(chunk[i].headerSize);
+			char* geomHeader = (char*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(chunk[i].headerSize);
 
 			OSReadFile(&file->fileHandle, chunk[i].headerSize, geomHeader);
 
-		    int geometryPorcessRet = ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file->fileOffset, chunk[i].fileOffset + file->numContiguousBytes + file->fileOffset, &mainAppLogger, &SMBThreadedFileInputAllocator);
+		    int geometryPorcessRet = ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file->fileOffset, chunk[i].fileOffset + file->numContiguousBytes + file->fileOffset, &mainAppLogger, &SMBThreadedFileInputAllocators[arenaIndex]);
 
 			if (geometryPorcessRet < 0)
 			{
@@ -1948,15 +2023,15 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 		{
 			SMBSkeleton* skel = &skels[totalSkeletonCount];
 
-			char* jointStrData = GetJointNames(&SMBThreadedFileInputAllocator, file, &chunk[i]);
+			char* jointStrData = GetJointNames(&SMBThreadedFileInputAllocators[arenaIndex], file, &chunk[i]);
 
-			int skelCode = GetBoneData(&SMBThreadedFileInputAllocator, skel, file);
+			int skelCode = GetBoneData(&SMBThreadedFileInputAllocators[arenaIndex], skel, file);
 
 			int successStringOffset = GetStringOffset(file, skel);
 
 			int startingJointLocation = jointMeshWorldMatrixCount;
 
-			Matrix4f* worldMats = (Matrix4f*)SMBThreadedFileInputAllocator.Allocate(sizeof(Matrix4f) * skel->jointCount);
+			Matrix4f* worldMats = (Matrix4f*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(sizeof(Matrix4f) * skel->jointCount);
 
 			Matrix4f geomRotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 			
@@ -2053,7 +2128,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 
 	if (totalTextureCount)
 	{
-		TextureDetails** details = (TextureDetails**)SMBThreadedFileScratchAllocator.Allocate(sizeof(TextureDetails*) * totalTextureCount);
+		TextureDetails** details = (TextureDetails**)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(TextureDetails*) * totalTextureCount);
 
 		globalTextureStartIndex = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
 
@@ -2103,7 +2178,7 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 	{
 		SMBGeoChunk* geoDef = &geoDefs[i];
 
-		int* flattenMatHandles = (int*)SMBThreadedFileScratchAllocator.Allocate(sizeof(int) * geoDef->numMaterials);
+		int* flattenMatHandles = (int*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(int) * geoDef->numMaterials);
 
 		int base = 0;
 
@@ -2132,11 +2207,11 @@ void ApplicationLoop::ProcessSMBFile(SMBFile *file)
 			base += count;
 		}
 
-		SMBGeometricalObject(geoDef, file, flattenMatHandles, globalTextureStartIndex);
+		SMBGeometricalObject(geoDef, file, flattenMatHandles, globalTextureStartIndex, arenaIndex);
 	}
 
-	SMBThreadedFileInputAllocator.Reset();
-	SMBThreadedFileScratchAllocator.Reset();
+	SMBThreadedFileInputAllocators[arenaIndex].Reset();
+	SMBThreadedFileScratchAllocators[arenaIndex].Reset();
 
 	mainAppLogger.ProcessMessage();
 }
@@ -3476,11 +3551,25 @@ void ApplicationLoop::AddCommandTS(int wordCount)
 
 void ApplicationLoop::LoadObject(const StringView& file)
 {
-	ExclusiveAcquireOSSharedExclusive(&smbThreadedFileLock);
-
 	SMBFile SMB{};
 
-	int loadSmbRet = SMB.LoadFile(file, &SMBThreadedFileInputAllocator, &mainAppLogger);
+	int fileSize = SMB.OpenFile(file);
+
+	if (fileSize <= 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open SMB file for viewing"));
+		return;
+	}
+
+	int arenaIndex = FindSMBArenaForUse(fileSize);
+
+	if (arenaIndex < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Cannot find arena for loading mesh"));
+		return;
+	}
+
+	int loadSmbRet = SMB.LoadFile(&SMBThreadedFileInputAllocators[arenaIndex], &mainAppLogger);
 
 	if (loadSmbRet)
 	{	
@@ -3488,10 +3577,10 @@ void ApplicationLoop::LoadObject(const StringView& file)
 	}
 	else 
 	{
-		ProcessSMBFile(&SMB);
+		ProcessSMBFile(&SMB, arenaIndex);
 	}
 
-	ExclusiveReleaseOSSharedExclusive(&smbThreadedFileLock);
+	ReturnSMBArena(arenaIndex);
 }
 
 void ApplicationLoop::LoadThreadedWrapper(StringView& file)
@@ -3501,7 +3590,7 @@ void ApplicationLoop::LoadThreadedWrapper(StringView& file)
 
 int ApplicationLoop::FindWords(const char* words, int charCount)
 {
-	int wordCount = 1;
+	int wordCount = 0;
 	size_t size = charCount;
 	int i = 0, j = 1;
 	int wordSize = 0; 
@@ -3510,22 +3599,25 @@ int ApplicationLoop::FindWords(const char* words, int charCount)
 		if (words[j] == 0x20)
 		{
 			wordSize = j - i;
-			StringView* out = (StringView*)ThreadSharedMessageQueue.AcquireWrite(sizeof(StringView));
-			char* stringData = (char*)ThreadSharedStringViewAllocator.Allocate(wordSize);
-			out->stringData = stringData;
-			out->charCount = wordSize;
-			memcpy(stringData, words + i, wordSize);
-			wordCount++;
+			if (wordSize > 1) {
+				StringView* out = (StringView*)ThreadSharedMessageQueue.AcquireWrite(sizeof(StringView));
+				char* stringData = (char*)ThreadSharedStringViewAllocator.Allocate(wordSize);
+				out->stringData = stringData;
+				out->charCount = wordSize;
+				memcpy(stringData, words + i, wordSize);
+				wordCount++;
+			}
 			j++;
 			i = j;
 		}
 		else if (words[j] == 0x22) //capture quote
 		{
-
-			while (j <= size - 1 && words[++j] != 0x22)
+			j++;
+			while (j <= size-1 && words[j++] != 0x22)
 			{
 			
 			}
+
 			wordSize = j - i;
 			StringView* out = (StringView*)ThreadSharedMessageQueue.AcquireWrite(sizeof(StringView));
 			char* stringData = (char*)ThreadSharedStringViewAllocator.Allocate(wordSize);
@@ -3742,7 +3834,8 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 	StringView* args = (StringView*)(ThreadSharedMessageQueue.bufferLocation);
 	if (strncmp(command.stringData, "load", 4) == 0)
 	{
-		LoadThreadedWrapper(args[1]);
+		for (int i = 1; i<wordCount; i++)
+			LoadThreadedWrapper(args[i]);
 	}
 	else if (strncmp(command.stringData, "end", 4) == 0)
 	{
@@ -4024,7 +4117,9 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 	static int dir = -1;
 
-	if (keyActions[KC_Q].state == PRESSED)
+	static bool clamped = false;
+
+	if (keyActions[KC_Q].state == PRESSED && !clamped)
 	{
 		int next = currentFrameGraphIndex + dir;
 
@@ -4044,6 +4139,12 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 		GlobalRenderer::gRenderInstance.ResetCommandList();
 		GlobalRenderer::gRenderInstance.AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
 		GlobalRenderer::gRenderInstance.AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
+
+		clamped = true;
+	}
+	else if (keyActions[KC_Q].state == RELEASED && clamped)
+	{
+		clamped = false;
 	}
 }
 
@@ -4323,8 +4424,6 @@ void PrintDebugMemoryAllocation()
 	std::pair<int, int> allocDetails{};
 
 	int actualSize = 0;
-
-	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
 
 	allocDetails = RenderInstanceMemoryAllocator.GetUsageAndCapacity();
 
@@ -4648,4 +4747,31 @@ void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices,
 
 		outNormals[lead] = normal;
 	}
+}
+
+int FindSMBArenaForUse(int requestedSize)
+{
+	int smbArenaIndex = -1;
+
+	for (int i = 0; i < MAX_SMB_ARENAS; i++)
+	{
+		if (requestedSize > SMBArenasSize[i])
+			continue;
+
+		bool expectedCase = false;
+
+		if (arenasUsed[i].compare_exchange_weak(expectedCase, true, std::memory_order_acquire, std::memory_order_relaxed))
+		{
+			smbArenaIndex = i;
+			break;
+		}
+	}
+
+	return smbArenaIndex;
+}
+
+int ReturnSMBArena(int arenaIndex)
+{
+	arenasUsed[arenaIndex].store(false, std::memory_order_release);
+	return 0;
 }
