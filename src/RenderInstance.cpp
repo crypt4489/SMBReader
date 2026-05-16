@@ -974,7 +974,7 @@ int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int gr
 
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
-	EntryHandle* backBuffers = swapChain->CreateSwapchainViews();
+	EntryHandle* backBuffers = swapChain->imageViews;
 
 	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears);
 }
@@ -1239,6 +1239,8 @@ void RenderInstance::CreateSwapChainData(EntryHandle swapChainIndex, uint32_t wi
 	{
 		swapChain->CreateSwapChain(width, height);
 	}
+
+	swapChain->CreateSwapchainViews();
 }
 
 void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
@@ -2498,7 +2500,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	features2.features.wideLines = VK_TRUE;
 
 	void* driverDeviceDataHead = storageAllocator->Allocate((12 * MiB) + (16 * KiB));
-	void* deviceDataHead = storageAllocator->Allocate(64 * KiB + (96 * KiB) + 64);
+	void* deviceDataHead = storageAllocator->Allocate(64 * KiB + (96 * KiB) + (16 * KiB) + 64);
 
 	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
 		vkInstance->instanceLayerCount,
@@ -2507,7 +2509,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT,
 		&features2, vkInstance->renderSurface,
 		64 * KiB,
-		8 * KiB,
+		16 * KiB,
 		96 * KiB,
 		12 * MiB,
 		16 * KiB,

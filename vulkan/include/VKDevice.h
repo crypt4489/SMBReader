@@ -601,8 +601,6 @@ struct VKDevice
 
 	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
 
-	EntryHandle RequestWithPossibleBufferResetAndFenceReset(uint64_t timeout, EntryHandle bufferIndex, bool commnadBufferReset, bool fenceReset);
-
 	void ResetRenderTarget(EntryHandle handle);
 
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);

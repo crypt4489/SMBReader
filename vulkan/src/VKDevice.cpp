@@ -580,6 +580,12 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 EntryHandle VKDevice::AddVkTypeToEntry(void* handle, HandleType type)
 {
 	size_t ret = indexForEntries.fetch_add(1);
+
+	if (ret >= numberOfEntries)
+	{
+		return EntryHandle();
+	}
+
 	entries[ret].memoryLocation = reinterpret_cast<uintptr_t>(handle);
 	entries[ret].type = type;
 	return EntryHandle(ret);

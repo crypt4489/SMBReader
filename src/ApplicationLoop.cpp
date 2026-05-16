@@ -544,16 +544,16 @@ static SlabAllocator SMBThreadedFileInputAllocators[MAX_SMB_ARENAS] =
 
 static SlabAllocator SMBThreadedFileScratchAllocators[MAX_SMB_ARENAS] =
 {
-	{SMBThreadedFileInputMemory + (6 * KiB * 0), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 1), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 2), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 3), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 4), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 5), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 6), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 7), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 8), 6 * KiB  },
-	{SMBThreadedFileInputMemory + (6 * KiB * 9), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 0), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 1), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 2), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 3), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 4), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 5), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 6), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 7), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 8), 6 * KiB  },
+	{SMBThreadedFileScratchMemory + (6 * KiB * 9), 6 * KiB  },
 };
 
 static std::atomic_bool arenasUsed[MAX_SMB_ARENAS];
