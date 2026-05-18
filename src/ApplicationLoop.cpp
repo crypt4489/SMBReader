@@ -23,6 +23,21 @@
 #define MAX_IMAGE_DIM 4096
 
 #define MAX_GPU_MATERIALS 8
+#define DEFAULT_GPU_ITEM_ARRAY_INDEX 0
+#define MAX_JOINT_VISUALIZERS 10
+#define MAX_SMB_ARENAS 10
+
+enum DIRS {
+	RIGHT = 0,
+	LEFT = 1,
+	FORWARD = 2,
+	BACK = 3,
+	ROTATEYRIGHT = 4,
+	PITCHUP = 5,
+	ROTATEYLEFT = 6,
+	PITCHDOWN = 7,
+	MAXDIRS
+};
 
 enum ShaderResourceLayoutIdentifiers
 {
@@ -359,7 +374,6 @@ static int normalDebugAlloc;
 static int globalDebugStructAlloc = 0;
 static const int globalDebugStructAllocSize = 10 * KiB;
 static int globalDebugTypesAlloc = 0;
-static int globalDebugStructCount = 0;
 
 static int globalBufferLocation;
 static int globalBufferDescriptor;
@@ -367,34 +381,38 @@ static int globalTexturesDescriptor;
 
 static int globalMeshLocation;
 static const int globalMeshSize = 24 * KiB;
-static int globalMeshCount = 0;
 
 static int globalGeometryDescriptionsLocation;
 static const int globalGeometryDescriptionsSize = 1 * KiB;
-static int globalGeometryDescriptionsCount = 0;
 
 static int globalGeometryRenderableLocation;
 static const int globalGeometryRenderableSize = 1 * KiB;
-static int globalGeometryRenderableCount = 0;
 
 static int globalRenderableLocation;
 static const int globalRenderableSize = 24 * KiB;
-static int globalRenderableCount = 0;
 
 static int globalMaterialIndicesLocation;
 static const int globalMaterialIndicesSize = 4 * KiB;
-static int globalMaterialRangeCount = 0;
 
 static int globalMaterialsLocation; 
 static const int globalMaterialsSize = 4 * KiB;
-static int globalMaterialsIndex = 0;
+
 
 static int globalBlendDetailsLocation;
 static int globalBlendRangesLocation;
 static const int globalBlendDetailsSize = 1 * KiB;
 static const int globalBlendRangesSize = 1 * KiB;
-static int globalBlendDetailCount = 0;
-static int globalBlendRangeCount = 0;
+
+
+static std::atomic<int> globalRenderableCount = 0;
+static std::atomic<int> globalBlendDetailCount = 0;
+static std::atomic<int> globalBlendRangeCount = 0;
+static std::atomic<int> globalMaterialsIndex = 0;
+static std::atomic<int> globalGeometryRenderableCount = 0;
+static std::atomic<int> globalGeometryDescriptionsCount = 0;
+static std::atomic<int> globalMeshCount = 0;
+static std::atomic<int> globalDebugStructCount = 0;
+static std::atomic<int> globalMaterialRangeCount = 0;
 
 static const int globalMaterialsMax = globalMaterialsSize / sizeof(GPUMaterial);
 static const int globalBlendDetailMax = globalBlendDetailsSize / sizeof(GPUBlendDetails);
@@ -419,8 +437,6 @@ static OSThreadHandle threadHandle;
 static int currentFrameGraphIndex = 4;
 static int mainComputeQueueIndex = 0;
 static int mainFullScreenPipeline = 0;
-
-#define MAX_JOINT_VISUALIZERS 10
 
 static int jointMeshPipelines[MAX_JOINT_VISUALIZERS];
 static uint32_t jointMeshStaringLocations[MAX_JOINT_VISUALIZERS];
@@ -465,7 +481,7 @@ static ArrayAllocator<GeometryCPUData, globalGeometryDescriptionsCountMax> geome
 static ArrayAllocator<RenderableGeomCPUData, globalGeometryRenderableCountMax> renderablesGeomObjects{};
 static ArrayAllocator<RenderableMeshCPUData, globalRenderableMax> renderablesMeshObjects{};
 
-static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
+
 
 static UniformGrid mainGrid = {	
 	.max = Vector4f(100.0f, 50.0f, 100.0f, 0.0),
@@ -481,8 +497,6 @@ static char RenderableAllocQueueMemory[512];
 
 static MessageQueue DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
 static MessageQueue RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
-
-static int ReadDeferredMessageQueue(MessageQueue* queue);
 
 static Logger mainAppLogger{};
 
@@ -508,25 +522,12 @@ static bool stopThreadServer = false;
 
 static WindowManager mainWindow;
 
-enum DIRS {
-	RIGHT = 0,
-	LEFT = 1,
-	FORWARD = 2,
-	BACK = 3,
-	ROTATEYRIGHT = 4,
-	PITCHUP = 5,
-	ROTATEYLEFT = 6,
-	PITCHDOWN = 7,
-	MAXDIRS
-};
-
 std::array<bool, MAXDIRS> camMovements;
 
 static Semaphore queueSema;
 static std::queue<int> wordCounts;
 
 static Camera c;
-
 
 static char RenderInstanceMemoryPool[256 * MiB];
 static char RenderInstanceTemporaryPool[64 * KiB];
@@ -545,8 +546,6 @@ static RingAllocator ThreadSharedStringViewAllocator{ PollingThreadStringViewMem
 
 static char SMBThreadedFileInputMemory[48 * MiB];
 static char SMBThreadedFileScratchMemory[60 * KiB];
-
-#define MAX_SMB_ARENAS 10
 
 static const int SMBArenasSize[MAX_SMB_ARENAS] =
 {
@@ -631,7 +630,7 @@ static SMBImageFormat ConvertAppImageFormatToSMBFormat(ImageFormat format);
 static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
 static void PrintDebugMemoryAllocation();
-static void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
+static void CreateBitTangentFromNormalTristrips(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
 static int GetPoolIndexByFormat(ImageFormat format);
 static int FindSMBArenaForUse(int requestedSize);
 static int ReturnSMBArena(int arenaIndex);
@@ -643,6 +642,8 @@ static void ProcessSMBFile(SMBFile* file, int arenaIndex);
 static void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex);
 static bool ProcessCommands();
 static void AddCommandTS(int wordCount);
+static int ReadDeferredMessageQueue(MessageQueue* queue);
+static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
 static int CreateMaterial(
 	int gpuMaterialID,
@@ -711,8 +712,6 @@ static void CreateJointVisualData();
 static void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation);
 static void UpdateCameraMatrix();
 static bool MoveCamera(double fps);
-
-
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -1613,7 +1612,7 @@ void CreateCrateObject()
 	Vector3f totalNormals[24];
 	Vector4f tangents[24];
 
-	CreateBitTangentFromNormal(BoxVerts, texturesCoordinate, BoxIndices, 52, 24, tangents, totalNormals, &AppInstanceTempAllocator);
+	CreateBitTangentFromNormalTristrips(BoxVerts, texturesCoordinate, BoxIndices, 52, 24, tangents, totalNormals, &AppInstanceTempAllocator);
 
 	struct MyVertex
 	{
@@ -2002,7 +2001,9 @@ int CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, con
 	GPUDebugRenderable drawStruct;
 	DebugDrawType type = DebugDrawType::DEBUGSPHERE;
 
-	if (globalDebugStructCount == globalDebugStructMaxCount)
+	int debugStructLocation = -1;
+
+	if (((debugStructLocation = globalDebugStructCount.fetch_add(1)) + 1) >= globalDebugStructMaxCount)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many debug structs created"));
 		return -1;
@@ -2011,8 +2012,6 @@ int CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, con
 	int* allocQueueWrite = (int*)DebugAllocQueue.AcquireWrite(sizeof(int));
 
 	*allocQueueWrite = 1;
-
-	int debugStructLocation = globalDebugStructCount++;
 
 	drawStruct.center = Vector4f(center.x, center.y, center.z, 1.0f);
 
@@ -2050,7 +2049,9 @@ int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, c
 	DebugDrawType type = DebugDrawType::DEBUGBOX;
 	GPUDebugRenderable drawStruct;
 
-	if (globalDebugStructCount == globalDebugStructMaxCount)
+	int debugStructLocation = -1;
+
+	if (((debugStructLocation = globalDebugStructCount.fetch_add(1)) + 1) >= globalDebugStructMaxCount)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many debug structs created"));
 		return -1;
@@ -2060,8 +2061,6 @@ int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, c
 	int* allocQueueWrite = (int*)DebugAllocQueue.AcquireWrite(sizeof(int));
 
 	*allocQueueWrite = 1;
-
-	int debugStructLocation = globalDebugStructCount++;
 	
 	drawStruct.center = Vector4f(center.x , center.y, center.z, 1.0f);
 	drawStruct.scale = scale;
@@ -4592,7 +4591,9 @@ void PrintDebugMemoryAllocation()
 	GlobalRenderer::gRenderInstance.PrintOutTexturePoolAllocations(&mainAppLogger);
 }
 
+
 int AllocateCPUGeometryDetails(int numberOfDetails) {
+	mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("AllocateCPUGeometryDetails : unimplemented"));
 	return -1;
 }
 
@@ -4600,22 +4601,18 @@ int AllocateGPUGeometryDetails(int numberOfDetails)
 {
 	int geomDescriptionsIndex = -1;
 
-	if (globalGeometryDescriptionsCount+numberOfDetails > globalGeometryDescriptionsCountMax)
+	if (((geomDescriptionsIndex = globalGeometryDescriptionsCount.fetch_add(numberOfDetails)) + numberOfDetails) > globalGeometryDescriptionsCountMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many geometry details created"));
-		return geomDescriptionsIndex;
+		return -1;
 	}
-
-	geomDescriptionsIndex = (globalGeometryDescriptionsCount);
-
-	globalGeometryDescriptionsCount += numberOfDetails;
 
 	return geomDescriptionsIndex;
 }
 
-int AllocateCPUMeshDetails(int numberOfDetails) {
-	
-	int meshIndex;
+int AllocateCPUMeshDetails(int numberOfDetails) 
+{	
+	int meshIndex = -1;
 
 	meshIndex = meshCPUData.AllocateN(numberOfDetails);
 
@@ -4627,19 +4624,15 @@ int AllocateCPUMeshDetails(int numberOfDetails) {
 	return meshIndex;
 }
 
-int AllocateGPUMeshDetails(int numberOfDetails) {
-	
-	int meshIndex;
+int AllocateGPUMeshDetails(int numberOfDetails) 
+{	
+	int meshIndex = -1;
 
-	if (globalMeshCount+numberOfDetails > globalMeshCountMax)
+	if (((meshIndex = globalMeshCount.fetch_add(numberOfDetails)) + numberOfDetails) > globalMeshCountMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU meshes created"));
 		return -1;
 	}
-
-	meshIndex = globalMeshCount;
-
-	globalMeshCount += numberOfDetails;
 
 	return meshIndex;
 }
@@ -4662,21 +4655,17 @@ int AllocateGPUMeshRenderable(int numberOfRenderables)
 {
 	int meshRenderableIndex = -1;
 
-	if (globalRenderableCount + numberOfRenderables > globalRenderableMax)
+	if (((meshRenderableIndex = globalRenderableCount.fetch_add(numberOfRenderables)) + numberOfRenderables) > globalRenderableMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU Mesh renderables created"));
-		return meshRenderableIndex;
+		return -1;
 	}
 
 	int* allocQueueWrite = (int*)RenderableAllocQueue.AcquireWrite(sizeof(int));
 
 	*allocQueueWrite = numberOfRenderables;
 
-	int renderableLocation = (globalRenderableCount);
-
-	globalRenderableCount += numberOfRenderables;
-
-	return renderableLocation;
+	return meshRenderableIndex;
 }
 
 int AllocateCPUGeometryInstances(int numberOfInstances) 
@@ -4693,37 +4682,28 @@ int AllocateCPUGeometryInstances(int numberOfInstances)
 	return geomRendCPUCode;
 }
 
-int AllocateGPUGeometryInstances(int numberOfInstances) {
-	
+int AllocateGPUGeometryInstances(int numberOfInstances) 
+{	
 	int geomRenderableIndex = -1;
 
-	if (globalGeometryRenderableCount+numberOfInstances > globalGeometryRenderableCountMax)
+	if (((geomRenderableIndex = globalGeometryRenderableCount.fetch_add(numberOfInstances)) + numberOfInstances) > globalGeometryRenderableCountMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many GPU geometry renderables created"));
-		return geomRenderableIndex;
+		return -1;
 	}
-
-	geomRenderableIndex = globalGeometryRenderableCount;
-
-	globalGeometryRenderableCount += numberOfInstances;
 
 	return geomRenderableIndex;
 }
-
 
 int AllocateGPUMaterialData(int numberOfMaterials)
 {
 	int materialIndexReturn = -1;
 
-	if (globalMaterialsIndex + numberOfMaterials > globalMaterialsMax)
+	if (((materialIndexReturn = globalMaterialsIndex.fetch_add(numberOfMaterials)) + numberOfMaterials) > globalMaterialsMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many materials created"));
-		return materialIndexReturn;
+		return -1;
 	}
-
-	materialIndexReturn = globalMaterialsIndex;
-
-	globalMaterialsIndex += numberOfMaterials;
 
 	return materialIndexReturn;
 }
@@ -4732,15 +4712,11 @@ int AllocateGPUMaterialRanges(int numberOfRanges)
 {
 	int materialRangeIndex = -1;
 
-	if (globalMaterialRangeMax < globalMaterialRangeCount + numberOfRanges)
+	if (((materialRangeIndex = globalMaterialRangeCount.fetch_add(numberOfRanges)) + numberOfRanges) > globalMaterialRangeMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many material ranges created"));
-		return materialRangeIndex;
+		return -1;
 	}
-
-	materialRangeIndex = globalMaterialRangeCount;
-
-	globalMaterialRangeCount += numberOfRanges;
 
 	return materialRangeIndex;
 }
@@ -4749,15 +4725,11 @@ int AllocateGPUBlendDescriptions(int numberOfDescs)
 {
 	int blendDescIndex = -1;
 
-	if (globalBlendDetailCount + numberOfDescs > globalBlendDetailMax)
+	if (((blendDescIndex = globalBlendDetailCount.fetch_add(numberOfDescs)) + numberOfDescs) > globalBlendDetailMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many blend details allocated"));
-		return blendDescIndex;
+		return -1;
 	}
-
-	blendDescIndex = globalBlendDetailCount;
-
-	globalBlendDetailCount += numberOfDescs;
 
 	return blendDescIndex;
 }
@@ -4766,20 +4738,16 @@ int AllocateGPUBlendRanges(int numberOfRanges)
 {
 	int blendRangeReturn = -1;
 
-	if (globalBlendRangeCount + numberOfRanges > globalBlendRangeMax)
+	if (((blendRangeReturn = globalBlendRangeCount.fetch_add(numberOfRanges)) + numberOfRanges) > globalBlendRangeMax)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many blend ranges allocated"));
-		return blendRangeReturn;
+		return -1;;
 	}
-
-	blendRangeReturn = globalBlendRangeCount;
-
-	globalBlendRangeCount += numberOfRanges;
 
 	return blendRangeReturn;
 }
 
-void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator)
+void CreateBitTangentFromNormalTristrips(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator)
 {
 
 	Vector3f* totalTangents = (Vector3f*)tempAllocator->CAllocate(sizeof(Vector3f) * totalVertCount, 16);
