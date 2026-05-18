@@ -1,18 +1,23 @@
 #include "ApplicationLoop.h"
+#include "allocator/AppAllocator.h"
+#include "Camera.h"
+#include "CommonRenderTypes.h"
+#include "SMBExporter.h"
+#include "logger/Logger.h"
 #include "RenderInstance.h"
+#include "SMBFile.h"
+#include "SMBTexture.h"
+#include "StringUtils.h"
+#include "TextureDictionary.h"
+#include "ThreadManager.h"
+#include "WindowManager.h"
+
 #if defined(_WIN32) || defined(_WIN64)
 #include <Windows.h>
 #endif
-#include "Camera.h"
-#include "Exporter.h"
-#include "logger/Logger.h"
-#include "TextureDictionary.h"
-#include "SMBTexture.h"
-#include "allocator/AppAllocator.h"
-#include "StringUtils.h"
-#include <cassert>
 
-ApplicationLoop* loop;
+#include <array>
+#include <queue>
 
 #define MAX_MESH_TEXTURES 8192
 #define MAX_IMAGE_DIM 4096
@@ -44,45 +49,45 @@ enum ShaderResourceLayoutIdentifiers
 };
 
 static std::array<StringView, 9> pds = {
-	STRING_VIEW_FROM_LITERAL_ARR("GenericPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("TextPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("DebugPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("NormalDebugPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("SkyboxPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("OutlinePipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("FullscreenPipeline.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("ShadowMap.pld"),
-	STRING_VIEW_FROM_LITERAL_ARR("JointVisualPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("GenericPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("TextPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("DebugPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("NormalDebugPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("SkyboxPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("OutlinePipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("FullscreenPipeline.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMap.pld"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("JointVisualPipeline.pld"),
 };
 
 static std::array<StringView, 20> layouts = {
-		STRING_VIEW_FROM_LITERAL_ARR("3DTexturedLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("TextLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("InterpolateMeshLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("PolynomialLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("IndirectCull.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("DebugDraw.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("IndirectDebug.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("PrefixSum.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("PrefixSumAdd.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("WorldObjectDivison.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("MeshWorldAssignments.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("LightObjectDivision.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("LightWorldAssignment.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("NormalDebug.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("Skybox.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("OutlineLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("FullscreenLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("ShadowMapLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("ShadowMapClipping.sgr"),
-		STRING_VIEW_FROM_LITERAL_ARR("JointVisualSL.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("PolynomialLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectCull.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("DebugDraw.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectDebug.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSum.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSumAdd.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("WorldObjectDivison.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("MeshWorldAssignments.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("LightObjectDivision.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("LightWorldAssignment.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("NormalDebug.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("Skybox.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("OutlineLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("FullscreenLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapLayout.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapClipping.sgr"),
+		STRING_VIEW_FROM_LITERAL_INIT_LIST("JointVisualSL.sgr"),
 };
 
 static std::array<StringView, 3> mainLayoutAttachments =
 {
-	STRING_VIEW_FROM_LITERAL_ARR("MSAAPostProcess.adf"),
-	STRING_VIEW_FROM_LITERAL_ARR("BasicShadowMapAtt.adf"),
-	STRING_VIEW_FROM_LITERAL_ARR("ShadowAtlasUse.adf")
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("MSAAPostProcess.adf"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("BasicShadowMapAtt.adf"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowAtlasUse.adf")
 };
 
 enum MaterialFlags
@@ -403,15 +408,6 @@ static const int globalGeometryRenderableCountMax = globalGeometryRenderableSize
 
 static int shadowMapIndex = 0;
 
-static char vertexAndIndicesMemory[16 * MiB];
-static char geometryObjectSpecificMemory[4 * KiB];
-static char mainTextureCacheMemory[256 * MiB];
-static char mainOSDataManagement[KiB];
-
-static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
-static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
-static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
-
 static DeviceSlabAllocator indexBufferAlloc(globalIndexBufferSize);
 
 static DeviceSlabAllocator vertexBufferAlloc(globalVertexBufferSize);
@@ -480,6 +476,58 @@ static UniformGrid mainGrid = {
 static int skyboxPipeline = 0;
 static int skyboxCubeImage = -1;
 
+static char DebugAllocQueueMemory[512];
+static char RenderableAllocQueueMemory[512];
+
+static MessageQueue DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
+static MessageQueue RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
+
+static int ReadDeferredMessageQueue(MessageQueue* queue);
+
+static Logger mainAppLogger{};
+
+static int mainLinearSampler = -1;
+
+static uint32_t imageIndex = 0;
+
+static int graphNoMSAAIndex = -1;
+static int graphMSAAIndex = -1;
+static int MSAAPost = -1;
+static int BasicShadow = -1;
+static int MSAAShadowMapping = -1;
+static int frameGraphsCount = 0;
+
+static ShadowMapBase mainShadowMapManager{};
+
+static ShadowMapDebugPipelineData smdpd{};
+
+static int mainShadowWidth = 4096;
+static int mainShadowHeight = 4096;
+
+static bool stopThreadServer = false;
+
+static WindowManager mainWindow;
+
+enum DIRS {
+	RIGHT = 0,
+	LEFT = 1,
+	FORWARD = 2,
+	BACK = 3,
+	ROTATEYRIGHT = 4,
+	PITCHUP = 5,
+	ROTATEYLEFT = 6,
+	PITCHDOWN = 7,
+	MAXDIRS
+};
+
+std::array<bool, MAXDIRS> camMovements;
+
+static Semaphore queueSema;
+static std::queue<int> wordCounts;
+
+static Camera c;
+
+
 static char RenderInstanceMemoryPool[256 * MiB];
 static char RenderInstanceTemporaryPool[64 * KiB];
 static char AppInstanceTempMemory[64 * KiB];
@@ -528,8 +576,8 @@ static const int SMBArenasOffset[MAX_SMB_ARENAS] =
 	32 * MiB
 };
 
-static SlabAllocator SMBThreadedFileInputAllocators[MAX_SMB_ARENAS] = 
-{ 
+static SlabAllocator SMBThreadedFileInputAllocators[MAX_SMB_ARENAS] =
+{
 	{SMBThreadedFileInputMemory					    , SMBArenasSize[0] },
 	{SMBThreadedFileInputMemory + SMBArenasOffset[1], SMBArenasSize[1] },
 	{SMBThreadedFileInputMemory + SMBArenasOffset[2], SMBArenasSize[2] },
@@ -558,36 +606,18 @@ static SlabAllocator SMBThreadedFileScratchAllocators[MAX_SMB_ARENAS] =
 
 static std::atomic_bool arenasUsed[MAX_SMB_ARENAS];
 
-static char DebugAllocQueueMemory[512];
-static char RenderableAllocQueueMemory[512];
+static char vertexAndIndicesMemory[16 * MiB];
+static char geometryObjectSpecificMemory[4 * KiB];
+static char mainTextureCacheMemory[256 * MiB];
+static char mainOSDataManagement[KiB];
 
-static MessageQueue DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
-static MessageQueue RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
+static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
+static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
+static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
 
-static Logger mainAppLogger{};
-
-static int mainLinearSampler = -1;
-
-static uint32_t imageIndex = 0;
-
-static int graphNoMSAAIndex = -1;
-static int graphMSAAIndex = -1;
-static int MSAAPost = -1;
-static int BasicShadow = -1;
-static int MSAAShadowMapping = -1;
-static int frameGraphsCount = 0;
-
-static ShadowMapBase mainShadowMapManager{};
-
-static ShadowMapDebugPipelineData smdpd{};
-
-static int mainShadowWidth = 4096;
-static int mainShadowHeight = 4096;
-
-static bool stopThreadServer = false;
-
-static WindowManager mainWindow;
-
+static bool ExecuteCommands(const StringView& command, int argCount);
+static void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
+static void CreateCrateObject();
 static void ScanSTDIN(void*);
 static int AddLight(GPULightSource& lightDesc, LightType type);
 static void UpdateLight(GPULightSource& lightDesc, int lightIndex);
@@ -602,17 +632,93 @@ static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
 static void PrintDebugMemoryAllocation();
 static void CreateBitTangentFromNormal(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
-
+static int GetPoolIndexByFormat(ImageFormat format);
 static int FindSMBArenaForUse(int requestedSize);
 static int ReturnSMBArena(int arenaIndex);
+static void LoadObject(const StringView& file);
+static void LoadThreadedWrapper(StringView& file);
+static int FindWords(const char* words, int charCount);
+static void CreateTexturePools();
+static void ProcessSMBFile(SMBFile* file, int arenaIndex);
+static void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex);
+static bool ProcessCommands();
+static void AddCommandTS(int wordCount);
+
+static int CreateMaterial(
+	int gpuMaterialID,
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& color
+);
+
+static int CreateMaterial(
+	int gpuMaterialID,
+	int flags,
+	int* texturesIDs,
+	int textureCount,
+	const Vector4f& diffuseColor,
+	const Vector4f& specularColor,
+	float shininess,
+	const Vector4f& emissiveColor
+);
+
+static int CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color);
+static int CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color);
+static int CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color);
+
+static int CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, const Vector4f& scale, const Vector4f& color);
+
+static int CreateAABBDebugStruct(const AxisBox& box, const Vector4f& scale, const Vector4f& color);
+static int CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color);
+static int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color);
+
+static int CreateMaterialRange(int gpuMaterialRangeID, int count, int* ids);
+static int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, const Matrix4f& mat, int geomIndex, int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount);
+
+static void CreateCornerWall(float width, float height, float xDiv, float yDiv);
+
+static int CreateSkyBox();
+
+static int CreateMSAAPostFullScreen();
+
+static void RecreateFrameGraphAttachments(uint32_t width, uint32_t height);
+
+static int CreateMeshHandle(
+	int meshCPUDataIndex, int meshGPUDataIndex,
+	int vertexFlags, int vertexCount, int vertexStride,
+	int indexStride, int indexCount,
+	Sphere& sphere,
+	int gpuVertexAlloc, int gpuIndexAlloc,
+	int cpuVertexAlloc, int cpuIndexAlloc
+);
+
+static int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox);
+static int CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
+static int AllocateCPUGeometryDetails(int numberOfDetails);
+static int AllocateGPUGeometryDetails(int numberOfDetails);
+static int AllocateCPUMeshDetails(int numberOfDetails);
+static int AllocateGPUMeshDetails(int numberOfDetails);
+static int AllocateCPUMeshRenderable(int numberOfRenderables);
+static int AllocateGPUMeshRenderable(int numberOfRenderables);
+static int AllocateCPUGeometryInstances(int numberOfInstances);
+static int AllocateGPUGeometryInstances(int numberOfInstances);
+static int AllocateGPUMaterialData(int numberOfMaterials);
+static int AllocateGPUMaterialRanges(int numberOfRanges);
+static int AllocateGPUBlendDescriptions(int numberOfDescs);
+static int AllocateGPUBlendRanges(int numberOfRanges);
+static void CreateJointVisualData();
+static void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation);
+static void UpdateCameraMatrix();
+static bool MoveCamera(double fps);
+
+
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
-	queueSema(Semaphore()),
 	running(true),
 	cleaned(true)
 {
-	loop = this;
 	Execute();
 }
 
@@ -755,13 +861,9 @@ void ApplicationLoop::Execute()
 		QueryPerformanceFrequency(&frequency);
 		QueryPerformanceCounter(&startTime);
 
-		mainIndirectDrawData.commandBufferCount = globalRenderableCount;
-
-		debugIndirectDrawData.commandBufferCount = globalDebugStructCount;
-
 		uint32_t framesInFlight = GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT;
 
-		int updateMainDrawCommand = framesInFlight, updateMainDebugCommand = framesInFlight, updateLights = framesInFlight, updateShadowMap = framesInFlight;
+		int updateMainDrawCommand = 0, updateMainDebugCommand = 0, updateLights = framesInFlight, updateShadowMap = 0;
 
 		int mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
 
@@ -796,6 +898,10 @@ void ApplicationLoop::Execute()
 				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain), GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain));
 				continue;
 			}
+
+			mainIndirectDrawData.commandBufferCount += ReadDeferredMessageQueue(&RenderableAllocQueue);
+
+			debugIndirectDrawData.commandBufferCount += ReadDeferredMessageQueue(&DebugAllocQueue);
 
 			bool cameraMove = MoveCamera(FPS);
 
@@ -927,22 +1033,18 @@ void ApplicationLoop::Execute()
 			
 			GlobalRenderer::gRenderInstance.EndFrame();	
 
-			ProcessCommands();
+			running = ProcessCommands();
 
 			fps();
 
 			frameCounter++;
-
-			mainIndirectDrawData.commandBufferCount = globalRenderableCount;
-
-			debugIndirectDrawData.commandBufferCount = globalDebugStructCount;
 
 			mainAppLogger.ProcessMessage();
 		}
 	}
 }
 
-void ApplicationLoop::CreateTexturePools()
+void CreateTexturePools()
 {
 	std::array<ImageFormat, 4> formats = {
 		ImageFormat::DXT1,
@@ -973,7 +1075,7 @@ void ApplicationLoop::CreateTexturePools()
 	}
 }
 
-bool ApplicationLoop::MoveCamera(double fps)
+bool MoveCamera(double fps)
 {
 	bool moved = false;
 
@@ -1034,14 +1136,14 @@ bool ApplicationLoop::MoveCamera(double fps)
 	return moved;
 }
 
-void ApplicationLoop::UpdateCameraMatrix()
+void UpdateCameraMatrix()
 {
 	c.UpdateCamera();
 
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 }
 
-int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
+int GetPoolIndexByFormat(ImageFormat format)
 {
 	int ret = -1;
 	switch (format)
@@ -1065,7 +1167,7 @@ int ApplicationLoop::GetPoolIndexByFormat(ImageFormat format)
 	return ret;
 }
 
-void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, float yDiv)
+void CreateCornerWall(float width, float height, float xDiv, float yDiv)
 {
 	Sphere sphere;
 
@@ -1271,9 +1373,9 @@ void ApplicationLoop::CreateCornerWall(float width, float height, float xDiv, fl
 	return;
 }
 
-void ApplicationLoop::CreateJointVisualData()
+void CreateJointVisualData()
 {
-	uint16_t Indices[32] = {
+	uint16_t Indices[24] = {
 		// bottom pyramid (root to base)
 		0, 1, 2,
 		0, 2, 3,
@@ -1322,7 +1424,7 @@ void ApplicationLoop::CreateJointVisualData()
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Joint Object"));
 }
 
-void ApplicationLoop::CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
+void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 {
 	if (jointMeshPipelinesCount >= MAX_JOINT_VISUALIZERS)
 	{
@@ -1366,7 +1468,7 @@ void ApplicationLoop::CreateJointVisualObject(int numberOfJoints, uint32_t start
 }
 
 
-void ApplicationLoop::CreateCrateObject()
+void CreateCrateObject()
 {
 	VertexInputDescription inputDescription[7];
 
@@ -1673,7 +1775,7 @@ void ApplicationLoop::CreateCrateObject()
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Crate Object"));
 }
 
-void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex)
+void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1874,17 +1976,17 @@ void ApplicationLoop::SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, i
 }
 
 
-int ApplicationLoop::CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color)
+int CreateSphereDebugStruct(const Sphere& sphere, uint32_t count, const Vector4f& scale, const Vector4f& color)
 {
 	return CreateSphereDebugStruct(Vector3f(sphere.sphere.x, sphere.sphere.y, sphere.sphere.z), sphere.sphere.w, count, scale, color);
 }
 
-int ApplicationLoop::CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color)
+int CreateSphereDebugStruct(const AxisBox& box, uint32_t count, const Vector4f& scale, const Vector4f& color)
 {
 	return CreateSphereDebugStruct(box.min, box.max, count, scale, color);
 }
 
-int ApplicationLoop::CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color)
+int CreateSphereDebugStruct(const Vector4f& minExtent, const Vector4f& maxExtent, uint32_t count, const Vector4f& scale, const Vector4f& color)
 {
 	Vector4f center = ((maxExtent - minExtent) * 0.5 + (minExtent));
 
@@ -1895,7 +1997,7 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector4f& minExtent, const Ve
 	return CreateSphereDebugStruct(Vector3f(center.x, center.y, center.z), r, count, scale, color);
 }
 
-int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, const Vector4f& scale, const Vector4f& color)
+int CreateSphereDebugStruct(const Vector3f& center, float r, uint32_t count, const Vector4f& scale, const Vector4f& color)
 {
 	GPUDebugRenderable drawStruct;
 	DebugDrawType type = DebugDrawType::DEBUGSPHERE;
@@ -1906,6 +2008,10 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, ui
 		return -1;
 	}
 
+	int* allocQueueWrite = (int*)DebugAllocQueue.AcquireWrite(sizeof(int));
+
+	*allocQueueWrite = 1;
+
 	int debugStructLocation = globalDebugStructCount++;
 
 	drawStruct.center = Vector4f(center.x, center.y, center.z, 1.0f);
@@ -1915,14 +2021,13 @@ int ApplicationLoop::CreateSphereDebugStruct(const Vector3f& center, float r, ui
 
 	drawStruct.halfExtents = Vector4f(r, std::bit_cast<float, uint32_t>(count), 1.0, 1.0);
 
-
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&drawStruct, globalDebugStructAlloc, sizeof(GPUDebugRenderable), sizeof(GPUDebugRenderable) * debugStructLocation, TransferType::CACHED);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&type,  globalDebugTypesAlloc, sizeof(DebugDrawType), sizeof(DebugDrawType) * debugStructLocation, TransferType::CACHED);
 
 	return debugStructLocation;
 }
 
-int ApplicationLoop::CreateAABBDebugStruct(const AxisBox& box, const Vector4f& scale, const Vector4f& color)
+int CreateAABBDebugStruct(const AxisBox& box, const Vector4f& scale, const Vector4f& color)
 {
 	Vector4f half = ((box.max - box.min) * 0.5);
 
@@ -1931,7 +2036,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const AxisBox& box, const Vector4f& s
 	return CreateAABBDebugStruct(Vector3f(center.x, center.y, center.z), half, scale, color);
 }
 
-int ApplicationLoop::CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color)
+int CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4f& boxMax, const Vector4f& scale, const Vector4f& color)
 {
 	Vector4f half = ((boxMax - boxMin) * 0.5);;
 
@@ -1940,7 +2045,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector4f& boxMin, const Vector4
 	return CreateAABBDebugStruct(Vector3f(center.x, center.y, center.z), half, scale, color);
 }
 
-int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color)
+int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, const Vector4f& scale, const Vector4f& color)
 {
 	DebugDrawType type = DebugDrawType::DEBUGBOX;
 	GPUDebugRenderable drawStruct;
@@ -1950,6 +2055,11 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Too many debug structs created"));
 		return -1;
 	}
+
+
+	int* allocQueueWrite = (int*)DebugAllocQueue.AcquireWrite(sizeof(int));
+
+	*allocQueueWrite = 1;
 
 	int debugStructLocation = globalDebugStructCount++;
 	
@@ -1964,7 +2074,7 @@ int ApplicationLoop::CreateAABBDebugStruct(const Vector3f& center, const Vector4
 	return debugStructLocation;
 }
 
-void ApplicationLoop::ProcessSMBFile(SMBFile *file, int arenaIndex)
+void ProcessSMBFile(SMBFile *file, int arenaIndex)
 {
 	const int MAX_GEO_FILES = 2;
 	const int MAX_TEXTURES = 10;
@@ -3153,7 +3263,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	return 0;
 }
 
-void ApplicationLoop::RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
+void RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 {
 	if (BasicShadow >= 0)
 	{
@@ -3174,7 +3284,7 @@ void ApplicationLoop::RecreateFrameGraphAttachments(uint32_t width, uint32_t hei
 	}
 }
 
-int ApplicationLoop::CreateMSAAPostFullScreen()
+int CreateMSAAPostFullScreen()
 {
 	ShaderResourceSetContext genericMSAARSContext{ &mainAppLogger, false };
 
@@ -3227,7 +3337,7 @@ int ApplicationLoop::CreateMSAAPostFullScreen()
 	return 0;
 }
 
-int ApplicationLoop::CreateSkyBox()
+int CreateSkyBox()
 {
 	uint16_t BoxIndices[36] = {
 		2,  1,  0,
@@ -3526,12 +3636,12 @@ void ApplicationLoop::CleanupRuntime()
 	cleaned = true;
 }
 
-void ApplicationLoop::ProcessCommands()
+bool ProcessCommands()
 {
 	queueSema.Wait();
 	if (!wordCounts.size()) {
 		queueSema.Notify();
-		return;
+		return true;
 	}
 	int wordCount = wordCounts.front();
 
@@ -3540,16 +3650,16 @@ void ApplicationLoop::ProcessCommands()
 
 	StringView* commandType = (StringView*)(ThreadSharedMessageQueue.bufferLocation);
 
-	ExecuteCommands(*commandType, wordCount);
+	return ExecuteCommands(*commandType, wordCount);
 }
 
-void ApplicationLoop::AddCommandTS(int wordCount)
+void AddCommandTS(int wordCount)
 {
 	SemaphoreGuard lock(queueSema);
 	wordCounts.push(wordCount);
 }
 
-void ApplicationLoop::LoadObject(const StringView& file)
+void LoadObject(const StringView& file)
 {
 	SMBFile SMB{};
 
@@ -3583,12 +3693,12 @@ void ApplicationLoop::LoadObject(const StringView& file)
 	ReturnSMBArena(arenaIndex);
 }
 
-void ApplicationLoop::LoadThreadedWrapper(StringView& file)
+void LoadThreadedWrapper(StringView& file)
 {
 	ThreadManager::LaunchOSASyncThread(LoadObjectThreaded, &file);
 }
 
-int ApplicationLoop::FindWords(const char* words, int charCount)
+int FindWords(const char* words, int charCount)
 {
 	int wordCount = 0;
 	size_t size = charCount;
@@ -3647,14 +3757,14 @@ int ApplicationLoop::FindWords(const char* words, int charCount)
 	return wordCount;
 }
 
-int ApplicationLoop::CreateMaterialRange(int gpuMaterialRangeID, int count, int* ids)
+int CreateMaterialRange(int gpuMaterialRangeID, int count, int* ids)
 {
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(ids, globalMaterialIndicesLocation, sizeof(uint32_t) * count, sizeof(uint32_t) * gpuMaterialRangeID, TransferType::CACHED);
 
 	return 0;
 }
 
-int ApplicationLoop::CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, const Matrix4f& mat, int geomIndex,  int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
+int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, const Matrix4f& mat, int geomIndex,  int materialStart, int materialCount, int blendStart, int meshIndex, int instanceCount)
 {
 	RenderableMeshCPUData* meshCpuRenderable = nullptr;
 
@@ -3686,7 +3796,7 @@ int ApplicationLoop::CreateRenderable(int meshCPURenderableIndex, int meshGPURen
 	return 0;
 }
 
-int ApplicationLoop::CreateMaterial(
+int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
 	int* texturesIDs,
@@ -3712,7 +3822,7 @@ int ApplicationLoop::CreateMaterial(
 	return 0;
 }
 
-int ApplicationLoop::CreateMaterial(
+int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
 	int* texturesIDs,
@@ -3745,7 +3855,7 @@ int ApplicationLoop::CreateMaterial(
 }
 
 
-int ApplicationLoop::CreateMeshHandle(
+int CreateMeshHandle(
 	int meshCPUDataIndex, int meshGPUDataIndex,
 	int vertexFlags, int vertexCount, int vertexStride,
 	int indexStride, int indexCount,
@@ -3806,7 +3916,7 @@ int ApplicationLoop::CreateMeshHandle(
 	return 0;
 }
 
-void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
+void SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 	
@@ -3829,8 +3939,10 @@ void ApplicationLoop::SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 	rendInst.UpdateDriverMemory(&transform, globalGeometryRenderableLocation, sizeof(Matrix4f), (sizeof(GPUMeshRenderable) * geomRenderable) + 16, TransferType::CACHED);
 }
 
-void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
+bool ExecuteCommands(const StringView& command, int wordCount)
 {
+	bool stillRunning = true;
+
 	StringView* args = (StringView*)(ThreadSharedMessageQueue.bufferLocation);
 	if (strncmp(command.stringData, "load", 4) == 0)
 	{
@@ -3839,12 +3951,12 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 	}
 	else if (strncmp(command.stringData, "end", 4) == 0)
 	{
-		running = false;
+		stillRunning = false;
 	}
 	else if (strncmp(command.stringData, "positiong", 9) == 0)
 	{
 		if (wordCount != 5)
-			return;
+			return stillRunning;
 
 		int geomIndex = std::stoi(std::string(args[1].stringData, args[1].charCount));
 		float x1 = std::stof(std::string(args[2].stringData, args[2].charCount));
@@ -3861,9 +3973,11 @@ void ApplicationLoop::ExecuteCommands(const StringView& command, int wordCount)
 	}
 
 	ThreadSharedMessageQueue.Read();
+
+	return stillRunning;
 }
 
-int ApplicationLoop::CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox)
+int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -3876,7 +3990,7 @@ int ApplicationLoop::CreateGPUGeometryDetails(int geometryDetailsIndex, const Ax
 	return 0;
 }
 
-int ApplicationLoop::CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount)
+int CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -3948,9 +4062,9 @@ void ScanSTDIN(void* data)
 		if (numberOfBytesRead <= 2)
 			continue;
 
-		int wordCount = loop->FindWords(inputBuffer, numberOfBytesRead - 2);
+		int wordCount = FindWords(inputBuffer, numberOfBytesRead - 2);
 
-		loop->AddCommandTS(wordCount);
+		AddCommandTS(wordCount);
 
 		mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Hit enter and then write command > "));
 	}
@@ -4013,7 +4127,7 @@ void CreateUniformGrid()
 			{
 				Vector3f center = Vector3f(maxHalf.x - (i * xMove), maxHalf.y - (j * yMove), maxHalf.z - (g * zMove));
 
-				loop->CreateAABBDebugStruct(center, half, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 0.0, 0.0, 0.0));
+				CreateAABBDebugStruct(center, half, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 0.0, 0.0, 0.0));
 			}
 		}
 	}
@@ -4082,27 +4196,27 @@ void LoadObjectThreaded(void* data)
 
 	StringView truncatedView{ fileName, charCount };
 
-	loop->LoadObject(truncatedView);
+	LoadObject(truncatedView);
 }
 
 void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 {
 
-	loop->camMovements[ApplicationLoop::RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
+	camMovements[RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
+	camMovements[LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
+	camMovements[FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
+	camMovements[BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
+	camMovements[PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
+	camMovements[PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
+	camMovements[ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
 
-	loop->camMovements[ApplicationLoop::ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
+	camMovements[ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
 
 
 	if (keyActions[KC_TWO].state == PRESSED)
@@ -4237,7 +4351,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 			details.height,
 			details.miplevels,
 			details.type,
-			loop->GetPoolIndexByFormat(details.type),
+			GetPoolIndexByFormat(details.type),
 			mainLinearSampler);
 
 	if (imageIndex >= 0)
@@ -4322,7 +4436,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->height,
 			details->miplevels,
 			details->type,
-			loop->GetPoolIndexByFormat(details->type),
+			GetPoolIndexByFormat(details->type),
 			mainLinearSampler
 		);
 
@@ -4478,11 +4592,11 @@ void PrintDebugMemoryAllocation()
 	GlobalRenderer::gRenderInstance.PrintOutTexturePoolAllocations(&mainAppLogger);
 }
 
-int ApplicationLoop::AllocateCPUGeometryDetails(int numberOfDetails) {
+int AllocateCPUGeometryDetails(int numberOfDetails) {
 	return -1;
 }
 
-int ApplicationLoop::AllocateGPUGeometryDetails(int numberOfDetails) 
+int AllocateGPUGeometryDetails(int numberOfDetails) 
 {
 	int geomDescriptionsIndex = -1;
 
@@ -4499,7 +4613,7 @@ int ApplicationLoop::AllocateGPUGeometryDetails(int numberOfDetails)
 	return geomDescriptionsIndex;
 }
 
-int ApplicationLoop::AllocateCPUMeshDetails(int numberOfDetails) {
+int AllocateCPUMeshDetails(int numberOfDetails) {
 	
 	int meshIndex;
 
@@ -4513,7 +4627,7 @@ int ApplicationLoop::AllocateCPUMeshDetails(int numberOfDetails) {
 	return meshIndex;
 }
 
-int ApplicationLoop::AllocateGPUMeshDetails(int numberOfDetails) {
+int AllocateGPUMeshDetails(int numberOfDetails) {
 	
 	int meshIndex;
 
@@ -4530,7 +4644,7 @@ int ApplicationLoop::AllocateGPUMeshDetails(int numberOfDetails) {
 	return meshIndex;
 }
 
-int ApplicationLoop::AllocateCPUMeshRenderable(int numberOfRenderables) 
+int AllocateCPUMeshRenderable(int numberOfRenderables) 
 {
 	int meshRenderableIndex = -1;
 
@@ -4544,7 +4658,7 @@ int ApplicationLoop::AllocateCPUMeshRenderable(int numberOfRenderables)
 	return meshRenderableIndex;
 }
 
-int ApplicationLoop::AllocateGPUMeshRenderable(int numberOfRenderables) 
+int AllocateGPUMeshRenderable(int numberOfRenderables) 
 {
 	int meshRenderableIndex = -1;
 
@@ -4554,6 +4668,10 @@ int ApplicationLoop::AllocateGPUMeshRenderable(int numberOfRenderables)
 		return meshRenderableIndex;
 	}
 
+	int* allocQueueWrite = (int*)RenderableAllocQueue.AcquireWrite(sizeof(int));
+
+	*allocQueueWrite = numberOfRenderables;
+
 	int renderableLocation = (globalRenderableCount);
 
 	globalRenderableCount += numberOfRenderables;
@@ -4561,7 +4679,7 @@ int ApplicationLoop::AllocateGPUMeshRenderable(int numberOfRenderables)
 	return renderableLocation;
 }
 
-int ApplicationLoop::AllocateCPUGeometryInstances(int numberOfInstances) 
+int AllocateCPUGeometryInstances(int numberOfInstances) 
 {	
 	int geomRendCPUCode = 0;
 
@@ -4575,7 +4693,7 @@ int ApplicationLoop::AllocateCPUGeometryInstances(int numberOfInstances)
 	return geomRendCPUCode;
 }
 
-int ApplicationLoop::AllocateGPUGeometryInstances(int numberOfInstances) {
+int AllocateGPUGeometryInstances(int numberOfInstances) {
 	
 	int geomRenderableIndex = -1;
 
@@ -4593,7 +4711,7 @@ int ApplicationLoop::AllocateGPUGeometryInstances(int numberOfInstances) {
 }
 
 
-int ApplicationLoop::AllocateGPUMaterialData(int numberOfMaterials)
+int AllocateGPUMaterialData(int numberOfMaterials)
 {
 	int materialIndexReturn = -1;
 
@@ -4610,7 +4728,7 @@ int ApplicationLoop::AllocateGPUMaterialData(int numberOfMaterials)
 	return materialIndexReturn;
 }
 
-int ApplicationLoop::AllocateGPUMaterialRanges(int numberOfRanges)
+int AllocateGPUMaterialRanges(int numberOfRanges)
 {
 	int materialRangeIndex = -1;
 
@@ -4627,7 +4745,7 @@ int ApplicationLoop::AllocateGPUMaterialRanges(int numberOfRanges)
 	return materialRangeIndex;
 }
 
-int ApplicationLoop::AllocateGPUBlendDescriptions(int numberOfDescs)
+int AllocateGPUBlendDescriptions(int numberOfDescs)
 {
 	int blendDescIndex = -1;
 
@@ -4644,7 +4762,7 @@ int ApplicationLoop::AllocateGPUBlendDescriptions(int numberOfDescs)
 	return blendDescIndex;
 }
 
-int ApplicationLoop::AllocateGPUBlendRanges(int numberOfRanges)
+int AllocateGPUBlendRanges(int numberOfRanges)
 {
 	int blendRangeReturn = -1;
 
@@ -4774,4 +4892,22 @@ int ReturnSMBArena(int arenaIndex)
 {
 	arenasUsed[arenaIndex].store(false, std::memory_order_release);
 	return 0;
+}
+
+int ReadDeferredMessageQueue(MessageQueue* queue)
+{
+	int intCount = 0;
+
+	uint64_t totalInts = queue->SizeOfBuffer() / sizeof(int);
+
+	int* counts = (int*)queue->Head();
+
+	while (totalInts--)
+	{
+		intCount += counts[totalInts];
+	}
+
+	queue->Read();
+
+	return intCount;
 }

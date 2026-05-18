@@ -1,6 +1,5 @@
-#include "Exporter.h"
+#include "SMBExporter.h"
 
-#include <iostream>
 #include "imageutils/TextureIO.h"
 #include "FileManager.h"
 #include "imageutils/DXTCompression.h"

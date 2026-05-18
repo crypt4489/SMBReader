@@ -167,11 +167,13 @@ struct ArrayAllocator
 
 	std::pair<int, T_Type*> Allocate() requires ClassType<T_Type>
 	{
-		if (allocatorPtr == T_Count)
+		int retI = UpdateAtomic(allocatorPtr, 1, 0);
+
+		if (retI >= T_Count)
 		{
 			return { -1, nullptr };
 		}
-		int retI = UpdateAtomic(allocatorPtr, 1, 0);
+
 		T_Type* ret = &dataArray[retI];
 		return { retI, ret };
 	}
@@ -179,22 +181,27 @@ struct ArrayAllocator
 	
 	int Allocate(T_Type insert) requires ValueType<T_Type>
 	{
-		if (allocatorPtr == T_Count)
+		int ret = UpdateAtomic(allocatorPtr, 1, 0);
+		
+		if (ret >= T_Count)
 		{
 			return { -1 };
 		}
-		int ret = UpdateAtomic(allocatorPtr, 1, 0);
+
 		dataArray[ret] = insert;
 		return ret;
 	}
 
 	int AllocateN(int num)
 	{
-		if (allocatorPtr + num >= T_Count)
+		
+		int ret = UpdateAtomic(allocatorPtr, num, 0);
+
+		if (ret + num >= T_Count)
 		{
 			return { -1 };
 		}
-		int ret = UpdateAtomic(allocatorPtr, num, 0);
+
 		return ret;
 	}
 	
@@ -211,7 +218,7 @@ struct ArrayAllocator
 
 struct MessageQueue
 {
-	uint64_t write;
+	std::atomic<uint64_t> write;
 	uintptr_t bufferLocation;
 	uint64_t bufferSize;
 
@@ -221,18 +228,79 @@ struct MessageQueue
 
 	}
 
-	void* AcquireWrite(size_t dataSize)
+	bool IsEmpty() const
 	{
-		uint64_t head		  = write + dataSize;
-		if (head >= bufferSize) return nullptr;
+		return (write != 0);
+	}
 
-		void* ret = (void*)(bufferLocation + write);
-		write = head;
+	void* Head() const
+	{
+		return (void*)bufferLocation;
+	}
+
+	uint64_t SizeOfBuffer() const
+	{
+		return write.load(std::memory_order_acquire);
+	}
+
+	void* AcquireWrite(uint64_t dataSize)
+	{
+		uint64_t head = UpdateAtomic(write, dataSize, 0ull);
+		if (write >= bufferSize) return nullptr;
+
+		void* ret = (void*)(bufferLocation + head);
 		return ret;
 	}
 
 	void Read()
 	{
 		write = 0;
+	}
+};
+
+struct CircularMessageQueue
+{
+	std::atomic<uint64_t> write;
+	uint64_t read;
+	uintptr_t bufferLocation;
+	uint64_t bufferSize;
+
+	CircularMessageQueue(void* data, size_t size) :
+		write(0), 
+		read(0), 
+		bufferLocation((uintptr_t)data), 
+		bufferSize(size)
+	{
+
+	}
+
+	bool IsEmpty() const
+	{
+		return (write != 0);
+	}
+
+	void* Head() const
+	{
+		return (void*)bufferLocation;
+	}
+
+	uint64_t SizeOfBuffer() const
+	{
+		return write.load(std::memory_order_acquire) - read;
+	}
+
+	void* AcquireWrite(uint64_t dataSize)
+	{
+		uint64_t head = UpdateAtomic(write, dataSize, bufferSize);
+
+		void* ret = (void*)(bufferLocation + head);
+
+		return ret;
+	}
+
+	void Read(uint64_t dataReadSize)
+	{
+		read += dataReadSize;
+
 	}
 };
