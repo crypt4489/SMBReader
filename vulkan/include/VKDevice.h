@@ -87,22 +87,28 @@ struct RBOPipelineBarrierArgs
 	VkImageMemoryBarrier* pImageMemoryBarriers;
 };
 
+enum RecordingBufferObjectErrorCodes
+{
+	RBO_FAILED_TO_BEGIN_RECORD = 1,
+	RBO_FAILED_TO_END_RECORD = 2,
+	RBO_FAILED_TO_RESET_BUFFER = 3,
+	RBO_FAILED_TO_RESET_POOL = 4
+};
+
 struct RecordingBufferObject
 {
-
-
 	RecordingBufferObject(VKDevice* device, VKCommandBuffer buffer);
 
-	void BindGraphicsPipeline(EntryHandle pipelinename);
+	int BindGraphicsPipeline(EntryHandle pipelinename);
 
-	void BindComputePipeline(EntryHandle pipelineId);
+	int BindComputePipeline(EntryHandle pipelineId);
 
-	void BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint);
+	int BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint);
 
-	void BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+	int BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
-	void BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+	int BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
 	void BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets);
@@ -134,15 +140,15 @@ struct RecordingBufferObject
 
 	void SetScissorCommand(int xo, int yo, uint32_t extentx, uint32_t extenty);
 
-	void BeginRecordingCommand(VkCommandBufferInheritanceInfo* info, VkCommandBufferUsageFlags flags);
+	int BeginRecordingCommand(VkCommandBufferInheritanceInfo* info, VkCommandBufferUsageFlags flags);
 
-	void EndRecordingCommand();
+	int EndRecordingCommand();
 
-	void CommandBufferReset();
+	int CommandBufferReset();
 
-	void ResetCommandPoolForBuffer();
+	int ResetCommandPoolForBuffer();
 
-	void ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
+	int ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count);
 
 	void FillBuffer(EntryHandle bufferHandle, size_t size, size_t offset, uint32_t val);
 
@@ -191,12 +197,10 @@ enum VKQueueCapabilities
 
 struct QueueManager
 {
-
-
 	QueueManager(uint32_t* _cqs, uint32_t _cqss,
 		int32_t _mqc, uint32_t _qfi,
 		uint32_t _queueCapabilities, bool present,
-		VKDevice& _d, void* data);
+		VKDevice* _d, void* data);
 
 	uint32_t GetQueue();
 
@@ -209,11 +213,11 @@ struct QueueManager
 	const uint32_t queueFamilyIndex;
 	const uint32_t queueCapabilities;
 	EntryHandle* poolIndices;
-	VKDevice& device;
+	VKDevice* device;
 	std::mutex queueSema;
 	std::condition_variable queueCV;
 	int queueCountCV;
-	std::mutex bitwiseMutex;
+	std::mutex submitSema;
 };
 
 struct ShaderHandle
@@ -290,17 +294,28 @@ enum HandleType
 	VulkMaxEnum
 };
 
+enum DeviceErrorCode
+{
+	DEVICE_HANDLE_RETRIEVE_OVERFLOW = 1,
+	DEVICE_HANDLE_ENTRIES_EXHAUSTION = 2,
+	DEVICE_STORAGE_EXHAUSTED = 3,
+	DEVICE_VK_TYPE_CREATION_FAILED = 4,
+};
+
 struct HandlePoolObject
 {
 	HandleType type;
 	uintptr_t memoryLocation;
 };
 
+struct DeviceErrorCodes
+{
+	int internalErrorCode;
+	VkResult vkResult;
+};
 
 struct VKDevice
 {
-
-	
 	VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst);
 
 	//CREATORS
@@ -524,8 +539,6 @@ struct VKDevice
 
 	void DestroyBufferView(EntryHandle handle);
 
-	
-
 	void DestroyCommandBuffer(EntryHandle handle);
 
 	void DestroyCommandPool(EntryHandle handle);
@@ -660,8 +673,6 @@ struct VKDevice
 
 	void ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount, void* dataOut, size_t sizeOfDataOut, VkDeviceSize dataStride, VkQueryResultFlags flags);
 
-	//mutable std::shared_mutex deviceLock;
-
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
@@ -675,9 +686,16 @@ struct VKDevice
 	DeviceOwnedAllocator deviceCacheAlloc;
 
 	HandlePoolObject* entries;
-	std::atomic<size_t> indexForEntries = 0;
+	size_t indexForEntries = 0;
 	size_t numberOfEntries = 0;
 
+	int* handlesFreeList;
+	int freeListTop = 0;
+
 	VKAllocationCB *deviceDriverAllocator;
+
+	static const int errorCodeWrapSize = 16;
+	DeviceErrorCodes errorCodes[errorCodeWrapSize];
+	int currentErrorCodePos = 0;
 };
 

@@ -257,12 +257,18 @@ DeviceOwnedAllocator::DeviceOwnedAllocator() {
 void* DeviceOwnedAllocator::Alloc(size_t inSize)
 {
 	size_t val, desired, out;
-	val = writeHead.load(std::memory_order_relaxed);
+	val = writeHead.load(std::memory_order_acquire);
 	do {
 		desired = val + inSize;
+
+		if (desired >= size)
+		{
+			return nullptr;
+		}
+
 		out = val;
-	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
-		std::memory_order_relaxed));
+
+	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_release, std::memory_order_relaxed));
 
 	uintptr_t dest = memHead + out;
 
@@ -274,18 +280,24 @@ void* DeviceOwnedAllocator::Alloc(size_t inSize)
 void* DeviceOwnedAllocator::AllocWrapAround(size_t inSize)
 {
 	size_t val, desired, out;
-	val = writeHead.load(std::memory_order_relaxed);
+	val = writeHead.load(std::memory_order_acquire);
 	do {
 		desired = val + inSize;
+		
 		out = val;
+
 		if (desired >= size)
 		{
 			out = 0;
 			desired = inSize;
 		}
 
-	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_relaxed,
-		std::memory_order_relaxed));
+		if (desired > size)
+		{
+			return nullptr;
+		}
+
+	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_release, std::memory_order_relaxed));
 
 	uintptr_t dest = memHead + out;
 
@@ -301,23 +313,26 @@ RecordingBufferObject::RecordingBufferObject(VKDevice* device, VKCommandBuffer b
 
 }
 
-void RecordingBufferObject::BindGraphicsPipeline(EntryHandle pipelinename)
+int RecordingBufferObject::BindGraphicsPipeline(EntryHandle pipelinename)
 {
-	BindPipelineInternal(pipelinename, VK_PIPELINE_BIND_POINT_GRAPHICS);
+	int retCode = BindPipelineInternal(pipelinename, VK_PIPELINE_BIND_POINT_GRAPHICS);
+	return retCode;
 }
 
-void RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) {
-	BindPipelineInternal(pipelineId, VK_PIPELINE_BIND_POINT_COMPUTE);
+int RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) {
+	int retCode = BindPipelineInternal(pipelineId, VK_PIPELINE_BIND_POINT_COMPUTE);
+	return retCode;
 }
 
-void RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) {
+int RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) {
 	auto pco = vkDeviceHandle->GetPipelineCacheObject(id);
 	currLayout = pco->pipelineLayout;
 	currPipeline = pco->pipeline;
 	vkCmdBindPipeline(cbBufferHandler.buffer, bindPoint, currPipeline);
+	return 0;
 }
 
-void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
+int RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet, 
 	uint32_t dynamicOffsetCount, uint32_t* offsets)
 {
 	auto descset = vkDeviceHandle->GetDescriptorSet(descriptorname, descriptorNumber);
@@ -327,9 +342,10 @@ void RecordingBufferObject::BindDescriptorSets(EntryHandle descriptorname, uint3
 		firstDescriptorSet, descriptorCount, 
 		&descset, dynamicOffsetCount, 
 		offsets);
+	return 0;
 }
 
-void RecordingBufferObject::BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+int RecordingBufferObject::BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 	uint32_t dynamicOffsetCount, uint32_t* offsets)
 {
 	auto descset = vkDeviceHandle->GetDescriptorSet(descriptorname, descriptorNumber);
@@ -339,6 +355,7 @@ void RecordingBufferObject::BindComputeDescriptorSets(EntryHandle descriptorname
 		firstDescriptorSet, descriptorCount,
 		&descset, dynamicOffsetCount,
 		offsets);
+	return 0;
 }
 
 void RecordingBufferObject::BindVertexBuffer(EntryHandle bufferIndex, uint32_t firstBindingCount, uint32_t bindingCount, size_t* offsets)
@@ -419,8 +436,6 @@ void RecordingBufferObject::BindPipelineBarrierCommand(RBOPipelineBarrierArgs* a
 		args->pMemoryBarriers, args->bufferMemoryBarrierCount,
 		args->pBufferMemoryBarriers, args->imageMemoryBarrierCount,
 		args->pImageMemoryBarriers);
-
-
 }
 
 
@@ -447,39 +462,57 @@ void RecordingBufferObject::SetScissorCommand(int xo, int yo, uint32_t extentx, 
 }
 
 
-void RecordingBufferObject::BeginRecordingCommand(VkCommandBufferInheritanceInfo *info, VkCommandBufferUsageFlags flags)
+int RecordingBufferObject::BeginRecordingCommand(VkCommandBufferInheritanceInfo *info, VkCommandBufferUsageFlags flags)
 {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = flags;
 	beginInfo.pInheritanceInfo = info;
 
-	if (vkBeginCommandBuffer(cbBufferHandler.buffer, &beginInfo) != VK_SUCCESS) {
-		throw std::runtime_error("failed to begin recording command buffer!");
+	if (vkBeginCommandBuffer(cbBufferHandler.buffer, &beginInfo) != VK_SUCCESS) 
+	{
+		return -(RBO_FAILED_TO_BEGIN_RECORD);
 	}
+
+	return 0;
 }
 
-void RecordingBufferObject::EndRecordingCommand()
+int RecordingBufferObject::EndRecordingCommand()
 {
-	if (vkEndCommandBuffer(cbBufferHandler.buffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to record command buffer!");
+	if (vkEndCommandBuffer(cbBufferHandler.buffer) != VK_SUCCESS) 
+	{
+		return -(RBO_FAILED_TO_END_RECORD);
 	}
+
+	return 0;
 }
 
-void RecordingBufferObject::CommandBufferReset()
+int RecordingBufferObject::CommandBufferReset()
 {
-	vkResetCommandBuffer(cbBufferHandler.buffer, 0);
+	if (vkResetCommandBuffer(cbBufferHandler.buffer, 0) != VK_SUCCESS)
+	{
+		return -(RBO_FAILED_TO_RESET_BUFFER);
+	}
+
+	return 0;
 }
 
-void RecordingBufferObject::ResetCommandPoolForBuffer()
+int RecordingBufferObject::ResetCommandPoolForBuffer()
 {
 	VkCommandPool pool = vkDeviceHandle->GetCommandPool(cbBufferHandler.poolIndex);
-	vkResetCommandPool(vkDeviceHandle->device, pool, 0);
+	
+	if (vkResetCommandPool(vkDeviceHandle->device, pool, 0) != VK_SUCCESS)
+	{
+		return -(RBO_FAILED_TO_RESET_POOL);
+	}
+
+	return 0;
 }
 
-void RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count)
+int RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint32_t count)
 {
 	VkCommandBuffer* lbuffers = reinterpret_cast<VkCommandBuffer*>(vkDeviceHandle->AllocFromDeviceCache(sizeof(VkCommandBuffer) * count));
+	
 	for (uint32_t i = 0; i < count; i++)
 	{
 		VKCommandBuffer* lbuffer = vkDeviceHandle->GetCommandBuffer(handles[i]);
@@ -487,6 +520,8 @@ void RecordingBufferObject::ExecuteSecondaryCommands(EntryHandle* handles, uint3
 	}
 
 	vkCmdExecuteCommands(cbBufferHandler.buffer, count, lbuffers);
+
+	return 0;
 }
 
 void RecordingBufferObject::FillBuffer(EntryHandle bufferHandle, size_t size, size_t offset, uint32_t val)
@@ -565,7 +600,6 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 	parentInstance(_inst),
 	queueManagers(),
 	queueManagersSize(0),
-	//deviceLock(),
 	entries(nullptr),
 	indexForEntries(0),
 	numberOfEntries(0),
@@ -579,7 +613,7 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 
 EntryHandle VKDevice::AddVkTypeToEntry(void* handle, HandleType type)
 {
-	size_t ret = indexForEntries.fetch_add(1);
+	size_t ret = indexForEntries++;
 
 	if (ret >= numberOfEntries)
 	{
@@ -588,6 +622,7 @@ EntryHandle VKDevice::AddVkTypeToEntry(void* handle, HandleType type)
 
 	entries[ret].memoryLocation = reinterpret_cast<uintptr_t>(handle);
 	entries[ret].type = type;
+
 	return EntryHandle(ret);
 }
 
@@ -646,14 +681,15 @@ struct BufferView
 
 EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset, uint32_t numberOfAllocs)
 {
-
-
 	BufferView* viewsHandles = (BufferView*)AllocFromPerDeviceData(sizeof(BufferView));
+	
 	viewsHandles->views = (VkBufferView*)AllocFromPerDeviceData(sizeof(VkBufferView) * numberOfAllocs);
 	viewsHandles->count = numberOfAllocs;
 
 	VkBuffer buffer = GetBufferHandle(bufferHandle);
+	
 	VkBufferViewCreateInfo info{};
+
 	info.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
 	info.buffer = buffer;
 	info.offset = offset;
@@ -667,7 +703,6 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 			throw std::runtime_error("failed to create buffer view!");
 		}
 		info.offset += rangeSize;
-
 	}
 
 	EntryHandle poolIndex = AddVkTypeToEntry(viewsHandles, VulkBufferView);
@@ -677,8 +712,6 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 
 EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFormat format, size_t rangeSize, size_t offset)
 {
-	
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(poolIndex);
 
 	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation) 
@@ -713,7 +746,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -733,7 +766,7 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 
 EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 	uint32_t poolSizeCount = static_cast<uint32_t>(builder->numPoolSizes);
 
@@ -762,7 +795,7 @@ DescriptorPoolBuilder VKDevice::CreateDescriptorPoolBuilder(size_t poolSize, VkD
 
 DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets, uint32_t varDescriptorCounts)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
 
@@ -774,7 +807,7 @@ DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex
 
 DescriptorSetBuilder* VKDevice::UpdateDescriptorSet(EntryHandle descriptorHandle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
 
@@ -826,7 +859,7 @@ EntryHandle VKDevice::CreateDescriptorSetLayout(DescriptorSetLayoutBuilder* buil
 
 EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
@@ -851,7 +884,7 @@ EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 
 EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D extent)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkImageView* attachments = reinterpret_cast<VkImageView*>(AllocFromDeviceCache(sizeof(VkImageView) * attachmentsCount));
 
@@ -881,7 +914,7 @@ EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t
 
 EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -907,7 +940,7 @@ EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, Vk
 
 EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -944,7 +977,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1001,7 +1034,7 @@ EntryHandle VKDevice::CreateStorageImage(
 	EntryHandle memIndex,
     VkImageAspectFlags flags, VkImageLayout layout)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	
 
 	EntryHandle imageIndex = CreateImage(
@@ -1045,7 +1078,7 @@ EntryHandle VKDevice::CreateStorageImage(
 
 EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkDeviceMemory deviceMemory;
 
 	VkMemoryAllocateInfo allocInfo{};
@@ -1072,7 +1105,7 @@ EntryHandle VKDevice::CreateImageView(
 	EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkImageViewCreateInfo viewInfo{};
 
 	VkImage image = GetImageByHandle(imageIndex);
@@ -1105,7 +1138,7 @@ EntryHandle VKDevice::CreateImageView(
 	VkImage image, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkImageViewCreateInfo viewInfo{};
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
@@ -1272,7 +1305,7 @@ void VKDevice::CreateLogicalDevice(
 
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkRenderPass renderPass = VK_NULL_HANDLE;
 
@@ -1288,7 +1321,7 @@ VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle r
 
 VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numberOfDescriptors, uint32_t pushConstantRangeCount)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	auto computePB = reinterpret_cast<VKComputePipelineBuilder*>(AllocFromDeviceCache(sizeof(VKComputePipelineBuilder)));
 
@@ -1297,15 +1330,13 @@ VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numberOf
 
 void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
-	//std::shared_lock lock(deviceLock);
-
 	void* queueManagerData = reinterpret_cast<void*>(AllocFromPerDeviceData(sizeof(size_t) * maxCount));
 
 	std::construct_at(manager, 
 		nullptr, 0, 
 		maxCount, queueIndex, 
 		queueFlags, presentsupport, 
-		*this, queueManagerData);
+		this, queueManagerData);
 }
 
 EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries)
@@ -1332,7 +1363,7 @@ EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQu
 
 EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	PipelineCacheObject* perObj = reinterpret_cast<PipelineCacheObject*>(AllocFromPerDeviceData(sizeof(PipelineCacheObject)));
 
@@ -1352,7 +1383,7 @@ EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 
 EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	auto renderPassDataHandle = reinterpret_cast<RenderPassData*>(AllocFromPerDeviceData(sizeof(RenderPassData)));
 
@@ -1365,7 +1396,7 @@ EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t 
 
 EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkRenderPass ref = VK_NULL_HANDLE;
 
@@ -1383,7 +1414,7 @@ VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint
 
 EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount, uint32_t width, uint32_t height, uint32_t wOffset, uint32_t hOffset)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	auto renderTarget = reinterpret_cast<RenderTarget*>(AllocFromPerDeviceData(sizeof(RenderTarget)));
 	
 	EntryHandle ret;
@@ -1401,7 +1432,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 	uint32_t numberOfCommandBuffers, bool createFences, uint32_t capabilites, VkCommandBufferLevel level)
 {
 
-	//std::shared_lock lock(deviceLock);
+	
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(capabilites);
 
 	VkCommandBufferAllocateInfo allocInfo{};
@@ -1454,7 +1485,7 @@ EntryHandle VKDevice::CreateImage(
 	EntryHandle memIndex,
 	EntryHandle hostIndex, VkImageAspectFlags flags)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
 
 
@@ -1628,7 +1659,7 @@ EntryHandle VKDevice::CreateCubeMapedImageHandle(
 
 EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkPhysicalDeviceProperties properties{};
 	vkGetPhysicalDeviceProperties(gpu, &properties);
 
@@ -1672,7 +1703,7 @@ EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 
 EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
@@ -1715,7 +1746,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat)
 {
 
-	//std::shared_lock lock(deviceLock);
+	
 
 	VKSwapChain* swc = reinterpret_cast<VKSwapChain*>(AllocFromPerDeviceData(sizeof(VKSwapChain)));
 
@@ -1733,7 +1764,7 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 
 void VKDevice::DestroyBuffer(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -1755,7 +1786,7 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 
 void VKDevice::DestroyBufferView(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
@@ -1774,7 +1805,7 @@ void VKDevice::DestroyBufferView(EntryHandle handle)
 
 void VKDevice::DestroyTexelBufferView(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -1794,7 +1825,7 @@ void VKDevice::DestroyTexelBufferView(EntryHandle handle)
 
 void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKCommandBuffer* buff = GetCommandBuffer(handle);
 	if (!buff) return;
 	if (buff->fenceIdx != EntryHandle()) {
@@ -1833,7 +1864,7 @@ void VKDevice::DestroyFrameBuffer(EntryHandle handle)
 
 void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkDescriptorPool pool = GetDescriptorPool(handle);
 	if (!pool) return;
 	vkDestroyDescriptorPool(device, pool, nullptr);
@@ -1843,7 +1874,7 @@ void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 
 void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkDescriptorSetLayout lay = GetDescriptorSetLayout(handle);
 	if (!lay) return;
 	vkDestroyDescriptorSetLayout(device, lay, nullptr);
@@ -1996,7 +2027,7 @@ void VKDevice::DestroyDevice()
 
 void VKDevice::DestroyImage(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2022,7 +2053,7 @@ void VKDevice::DestroyImage(EntryHandle handle)
 
 void VKDevice::DestroyImagePool(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2038,7 +2069,7 @@ void VKDevice::DestroyImagePool(EntryHandle handle)
 
 void VKDevice::DestroyRenderPass(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkRenderPass pass = GetRenderPass(handle);
 
@@ -2052,7 +2083,7 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 
 void VKDevice::DestroyRenderTarget(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	RenderTarget* target = GetRenderTarget(handle);
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j<i; j++)
@@ -2080,7 +2111,7 @@ void VKDevice::DestoryQueryPool(EntryHandle handle)
 
 void VKDevice::ResetRenderTarget(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	RenderTarget* target = GetRenderTarget(handle);
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j < i; j++)
@@ -2091,7 +2122,7 @@ void VKDevice::ResetRenderTarget(EntryHandle handle)
 
 void VKDevice::DestroyImageView(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2108,7 +2139,7 @@ void VKDevice::DestroyImageView(EntryHandle handle)
 
 void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	PipelineCacheObject* obj = GetPipelineCacheObject(handle);
 
@@ -2124,7 +2155,7 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 
 void VKDevice::DestroySampler(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageSampler || !objHandle.memoryLocation)
@@ -2140,7 +2171,7 @@ void VKDevice::DestroySampler(EntryHandle handle)
 
 void VKDevice::DestroySemaphore(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	VkSemaphore sema = GetSemaphore(handle);
 
@@ -2154,7 +2185,7 @@ void VKDevice::DestroySemaphore(EntryHandle handle)
 
 void VKDevice::DestroyShader(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 		
 	ShaderHandle* shader = GetShader(handle);
 
@@ -2178,7 +2209,7 @@ void VKDevice::DestroySwapChain(EntryHandle handle)
 
 void VKDevice::DestroyTexture(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKTexture* tex = GetTexture(handle);
 
 	for (int i = 0; tex->samplerIndex[i] != EntryHandle(); i++)
@@ -2198,7 +2229,7 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 
 VkBufferView VKDevice::GetBufferView(EntryHandle handle, uint32_t index)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2212,7 +2243,7 @@ VkBufferView VKDevice::GetBufferView(EntryHandle handle, uint32_t index)
 
 VKCommandBuffer* VKDevice::GetCommandBuffer(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2231,7 +2262,7 @@ VkCommandBuffer VKDevice::GetCommandBufferHandle(EntryHandle handle)
 
 VkCommandPool VKDevice::GetCommandPool(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkCommandPool || !objHandle.memoryLocation)
@@ -2242,7 +2273,7 @@ VkCommandPool VKDevice::GetCommandPool(EntryHandle handle)
 
 VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2254,7 +2285,7 @@ VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle handle)
 
 VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorSet || !objHandle.memoryLocation)
@@ -2271,7 +2302,7 @@ VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 
 VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorSet || !objHandle.memoryLocation)
@@ -2284,7 +2315,7 @@ VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
 
 VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2297,7 +2328,7 @@ VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle handle)
 
 uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t *size, uint32_t capabilities)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
 
@@ -2322,7 +2353,7 @@ uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t
 
 VkFence VKDevice::GetFence(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkFence || !objHandle.memoryLocation)
@@ -2333,7 +2364,7 @@ VkFence VKDevice::GetFence(EntryHandle handle)
 
 VkFramebuffer VKDevice::GetFrameBuffer(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2345,7 +2376,7 @@ VkFramebuffer VKDevice::GetFrameBuffer(EntryHandle handle)
 
 VkBuffer VKDevice::GetBufferHandle(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2359,7 +2390,7 @@ VkBuffer VKDevice::GetBufferHandle(EntryHandle handle)
 
 VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageHandle || !objHandle.memoryLocation)
@@ -2372,7 +2403,7 @@ VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 
 VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKTexture* tex = GetTexture(handle);
 	if (!tex) return VK_NULL_HANDLE;
 	return GetImageByHandle(tex->imageIndex);
@@ -2380,7 +2411,7 @@ VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 
 VkImageView VKDevice::GetImageViewByHandle(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2392,7 +2423,7 @@ VkImageView VKDevice::GetImageViewByHandle(EntryHandle handle)
 
 VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKTexture* tex = GetTexture(handle);
 	if (!tex) return VK_NULL_HANDLE;
 	return GetImageViewByHandle(tex->viewIndex[imageViewIndex]);
@@ -2400,7 +2431,7 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewInd
 
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2428,7 +2459,6 @@ int32_t VKDevice::GetPresentQueue(QueueIndex* queueIdx,
 			*queueIdx = QueueIndex(i);
 			return 0;
 		}
-		i++;
 	}
 	return -1;
 }
@@ -2448,7 +2478,6 @@ int32_t VKDevice::GetQueueByMask(QueueIndex* queueIdx,
 			*maxQueueCount = QueueIndex(props->queueCount);
 			return 0;
 		}
-		i++;
 	}
 	return -1;
 }
@@ -2458,7 +2487,7 @@ VkQueryPool VKDevice::GetQueryPool(EntryHandle poolHandle)
 	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
 
 	if (objHandle.type != VulkQueryPool || !objHandle.memoryLocation)
-		 VK_NULL_HANDLE;
+		 return VK_NULL_HANDLE;
 
 	VkQueryPool queryPool = reinterpret_cast<VkQueryPool>(objHandle.memoryLocation);
 
@@ -2484,13 +2513,13 @@ VKDevice::QueueDetails VKDevice::GetQueueHandle(uint32_t capabilites)
 
 RecordingBufferObject VKDevice::GetRecordingBufferObject(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	return { this, *GetCommandBuffer(handle) };
 }
 
 VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkRenderTargetData || !objHandle.memoryLocation)
@@ -2503,7 +2532,7 @@ VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle handle)
 
 VkRenderPass VKDevice::GetRenderPass(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2517,7 +2546,7 @@ VkRenderPass VKDevice::GetRenderPass(EntryHandle handle)
 
 RenderTarget* VKDevice::GetRenderTarget(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2532,7 +2561,7 @@ RenderTarget* VKDevice::GetRenderTarget(EntryHandle handle)
 
 RenderTarget* VKDevice::GetRenderTargetByGraph(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkRenderTargetData || !objHandle.memoryLocation)
@@ -2556,7 +2585,7 @@ VkSampler VKDevice::GetSamplerByHandle(EntryHandle handle)
 
 VkSampler VKDevice::GetSamplerByTexture(EntryHandle handle, int samplerIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKTexture* tex = GetTexture(handle);
 	if (!tex) return VK_NULL_HANDLE;
 	return GetSamplerByHandle(tex->samplerIndex[samplerIndex]);
@@ -2564,7 +2593,7 @@ VkSampler VKDevice::GetSamplerByTexture(EntryHandle handle, int samplerIndex)
 
 VkSemaphore VKDevice::GetSemaphore(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2576,7 +2605,7 @@ VkSemaphore VKDevice::GetSemaphore(EntryHandle handle)
 
 ShaderHandle* VKDevice::GetShader(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2588,7 +2617,7 @@ ShaderHandle* VKDevice::GetShader(EntryHandle handle)
 
 VKSwapChain* VKDevice::GetSwapChain(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2600,7 +2629,7 @@ VKSwapChain* VKDevice::GetSwapChain(EntryHandle handle)
 
 VKTexture* VKDevice::GetTexture(EntryHandle handle)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
@@ -2622,7 +2651,7 @@ void VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samp
 
 uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t currentFrame)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKSwapChain* swapChain = GetSwapChain(swapChainIndex);
 
 	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, currentFrame);
@@ -2661,7 +2690,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -2695,7 +2724,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 
 size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
 {
-	//std::shared_lock lock(deviceLock);
+	
 
 
 	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
@@ -2710,7 +2739,7 @@ size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_
 
 uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VkQueue queue;
 	uint32_t managerIndex = ~0, queueIndex = ~0, queueFamilyIndex = ~0;
 	if (commandBufferIndex == ~0ui64)
@@ -2820,7 +2849,7 @@ uint32_t VKDevice::SubmitCommandBuffer(
 	uint32_t signalCount,
 	EntryHandle cbIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	auto vkcb = GetCommandBuffer(cbIndex);
 	VkQueue queue;
 	vkGetDeviceQueue(device, vkcb->queueFamilyIndex, vkcb->queueIndex, &queue);
@@ -2863,7 +2892,7 @@ uint32_t VKDevice::SubmitCommandBuffer(
 
 uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
 
 	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags)));
@@ -2880,19 +2909,23 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 	uint32_t mips, uint32_t layers)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(TRANSFERQUEUE);
 
 	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
+	
 	VkImage image = GetImageByHandle(imageIndex);
-	VkQueue queue;
+	
+	VkQueue queue = VK_NULL_HANDLE;
+	
 	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
+	
 	VK::Utils::TransitionImageLayout(
 		device,
 		pool, queue,
 		image, format,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		1, 1
+		oldLayout, newLayout,
+		mips, layers
 	);
 
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
@@ -2901,8 +2934,6 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 
 void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle *perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet)
 {
-//	//std::shared_lock lock(deviceLock);
-
 	auto graph = GetRenderGraph(renderPass);
 	for (uint32_t i = 0; i < descriptorCount; i++)
 	{
@@ -2920,7 +2951,7 @@ void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffset
 
 int32_t VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	auto vkcb = GetCommandBuffer(bufferIndex);
 
 	if (vkcb->fenceIdx == ~0ui64)
@@ -2938,7 +2969,7 @@ int32_t VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 
 void VKDevice::CommandBufferResetFence(EntryHandle bufferIndex)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	auto vkcb = GetCommandBuffer(bufferIndex);
 
 	if (vkcb->fenceIdx == ~0ui64)
@@ -2959,7 +2990,7 @@ void VKDevice::WaitOnDevice()
 
 void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
 
 	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
@@ -3019,7 +3050,7 @@ void VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, si
 
 void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
-	//std::shared_lock lock(deviceLock);
+	
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(TRANSFERQUEUE);
 
 	VkQueue queue;
@@ -3292,17 +3323,17 @@ void VKDevice::ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQ
 /*---------------------------------------------------------*/
 
 QueueManager::QueueManager(
-	uint32_t* _cqs, uint32_t _cqss, 
-	int32_t _mqc, uint32_t _qfi, 
-	uint32_t _queueCapabilities, bool present, 
-	VKDevice& _d, void *data) :
+	uint32_t* _cqs, uint32_t _cqss,
+	int32_t _mqc, uint32_t _qfi,
+	uint32_t _queueCapabilities, bool present,
+	VKDevice* _d, void* data) :
 	bitmap(0U),
 	maxQueueCount(_mqc),
 	queueFamilyIndex(_qfi),
 	queueCapabilities(ConvertQueueProps(_queueCapabilities, present)),
 	device(_d),
 	queueSema(),
-	bitwiseMutex()
+	submitSema()
 {
 
 	assert(maxQueueCount <= 16);
@@ -3315,7 +3346,7 @@ QueueManager::QueueManager(
 
 	for (int32_t i = 0; i<_mqc; i++)
 	{
-		poolIndices[i] = _d.CreateCommandPool(index);
+		poolIndices[i] = _d->CreateCommandPool(index);
 	}
 
 	for (size_t i = 0; i < _cqss; i++)
@@ -3326,33 +3357,28 @@ QueueManager::QueueManager(
 
 uint32_t QueueManager::GetQueue()
 {
-	{
-		std::unique_lock guard(queueSema);
-		queueCV.wait(guard, [this]() { return queueCountCV > 0; });
-		queueCountCV--;
-	}
-
-	std::unique_lock lock(bitwiseMutex);
+	std::unique_lock guard(queueSema);
+	
+	queueCV.wait(guard, [this]() { return queueCountCV > 0; });
+	
 	for (int32_t i = 0; i < maxQueueCount; i++)
 	{
 		if (!bitmap.test(i))
 		{
 			bitmap.set(i);
+			queueCountCV--;
 			return i;
 		}
 	}
-	return 0;
+
+	return ~0ui32;
 }
 
 void QueueManager::ReturnQueue(size_t queueNum)
 {
 	{
-		std::scoped_lock lock(bitwiseMutex);
-		bitmap.reset(queueNum);
-	}
-
-	{
 		std::scoped_lock guard(queueSema);
+		bitmap.reset(queueNum);
 		queueCountCV++;
 	}
 	queueCV.notify_one();
