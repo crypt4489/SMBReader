@@ -18,7 +18,7 @@ layout(set = 0, binding = 2) buffer Sums {
 } sums;
 
 
-const int BlockSize = 2048;
+const int BlockSize = 64;
 
 shared uint sharedTemp[BlockSize];
 
@@ -26,13 +26,11 @@ layout (local_size_x = BlockSize/2, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
-
 	uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
 
 	uint lIndex =  gl_LocalInvocationID.x;
 
 	uint n = gs.count;
-
 
 	if (2*globalIndex < n)
 	{
@@ -73,15 +71,13 @@ void main()
 		offset *= 2;
 	}
 
-
-
 	if (lIndex == 0)
 	{
 		sharedTemp[BlockSize-1] = 0;
 	}
-	barrier();
-	 
 
+	barrier();
+	
 	for (uint d = 1; d < BlockSize; d <<= 1)
 	{
 

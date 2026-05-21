@@ -9,7 +9,7 @@ template <typename T_AtomicType>
 T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride, T_AtomicType wrapAroundSize, T_AtomicType alignment)
 {
 	T_AtomicType val, desired, out;
-	val = atomic.load(std::memory_order_relaxed);
+	val = atomic.load(std::memory_order_acquire);
 	do {
 		out = (val + alignment - 1) & ~(alignment - 1);
 		
@@ -25,7 +25,7 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 			out = 0;
 			desired = stride;
 		}
-	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
+	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_release,
 		std::memory_order_relaxed));
 
 	return out;
@@ -35,7 +35,7 @@ template <typename T_AtomicType>
 T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride, T_AtomicType wrapAroundSize)
 {
 	T_AtomicType val, desired, out;
-	val = atomic.load(std::memory_order_relaxed);
+	val = atomic.load(std::memory_order_acquire);
 	do {
 		out = val;
 
@@ -51,7 +51,7 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 			out = 0;
 			desired = stride;
 		}
-	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_relaxed,
+	} while (!atomic.compare_exchange_weak(val, desired, std::memory_order_release,
 		std::memory_order_relaxed));
 
 	return out;
@@ -238,7 +238,7 @@ struct MessageQueue
 		return (void*)bufferLocation;
 	}
 
-	uint64_t SizeOfBuffer() const
+	uint64_t BytesUnread() const
 	{
 		return write.load(std::memory_order_acquire);
 	}
@@ -258,14 +258,14 @@ struct MessageQueue
 	}
 };
 
-struct CircularMessageQueue
+struct CircularMessageQueueMPSC
 {
 	std::atomic<uint64_t> write;
 	uint64_t read;
 	uintptr_t bufferLocation;
 	uint64_t bufferSize;
 
-	CircularMessageQueue(void* data, size_t size) :
+	CircularMessageQueueMPSC(void* data, size_t size) :
 		write(0), 
 		read(0), 
 		bufferLocation((uintptr_t)data), 
@@ -274,24 +274,24 @@ struct CircularMessageQueue
 
 	}
 
-	bool IsEmpty() const
-	{
-		return (write != 0);
-	}
-
 	void* Head() const
 	{
 		return (void*)bufferLocation;
 	}
 
-	uint64_t SizeOfBuffer() const
+	uint64_t BytesUnread() const
 	{
 		return write.load(std::memory_order_acquire) - read;
 	}
 
+	bool IsEmpty() const
+	{
+		return (BytesUnread() != 0);
+	}
+
 	void* AcquireWrite(uint64_t dataSize)
 	{
-		uint64_t head = UpdateAtomic(write, dataSize, bufferSize);
+		uint64_t head = UpdateAtomic(write, dataSize, 0ull);
 
 		void* ret = (void*)(bufferLocation + head);
 
@@ -301,6 +301,14 @@ struct CircularMessageQueue
 	void Read(uint64_t dataReadSize)
 	{
 		read += dataReadSize;
+	}
 
+	void* Pop(uint32_t dataSize)
+	{
+		void* ret = (void*)(bufferLocation + (read & bufferSize-1));
+
+		read += dataSize;
+
+		return ret;
 	}
 };

@@ -1,11 +1,11 @@
 #include "logger/Logger.h"
 #include <string.h>
-static size_t RoundUpPower2(size_t _inSize)
+static size_t RoundDownPower2(size_t _inSize)
 {
 	size_t v = _inSize - 1;
 	v |= v >> 1; v |= v >> 2; v |= v >> 4;
 	v |= v >> 8; v |= v >> 16; v |= v >> 32;
-	return  v + 1;
+	return  (v + 1) >> 1;
 }
 
 
@@ -15,7 +15,7 @@ void Logger::InitLogger(char* _buffer, size_t _bufferSize) {
 	head = tail = 0;
 	if (_bufferSize & (_bufferSize - 1))
 	{
-		size = RoundUpPower2(_bufferSize);
+		size = RoundDownPower2(_bufferSize);
 	}
 	CreateOSSharedExclusive(&writerLock);  // always init here
 }

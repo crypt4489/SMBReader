@@ -44,10 +44,6 @@ layout(set = 0, binding = 2, r32ui) uniform uimageBuffer WorldAssignments;
 layout(set = 0, binding = 3) uniform usamplerBuffer globalLightTypes;
 
 
-
-layout (local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
-
-
 void HandlePointLightAssignment(uint lIndex)
 {
     vec4 posLoad = lightBuffer.objects[lIndex].pos;
@@ -197,6 +193,7 @@ void HandleSpotLightAssignment(uint lIndex)
     }
 }
 
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {

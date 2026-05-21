@@ -76,26 +76,26 @@ static std::array<StringView, 9> pds = {
 };
 
 static std::array<StringView, 20> layouts = {
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("PolynomialLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectCull.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("DebugDraw.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectDebug.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSum.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSumAdd.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("WorldObjectDivison.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("MeshWorldAssignments.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("LightObjectDivision.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("LightWorldAssignment.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("NormalDebug.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("Skybox.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("OutlineLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("FullscreenLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapLayout.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapClipping.sgr"),
-		STRING_VIEW_FROM_LITERAL_INIT_LIST("JointVisualSL.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("PolynomialLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectCull.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("DebugDraw.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("IndirectDebug.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSum.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("PrefixSumAdd.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("WorldObjectDivison.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("MeshWorldAssignments.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("LightObjectDivision.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("LightWorldAssignment.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("NormalDebug.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("Skybox.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("OutlineLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("FullscreenLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapLayout.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowMapClipping.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("JointVisualSL.sgr"),
 };
 
 static std::array<StringView, 3> mainLayoutAttachments =
@@ -217,7 +217,7 @@ struct WorldSpaceGPUPartition
 	int worldSpaceDivisionAlloc; //where all the assignments go 
 };
 
-enum class LightType
+enum class LightType : uint32_t
 {
 	DIRECTIONAL = 0,
 	POINT = 1,
@@ -232,7 +232,7 @@ struct GPULightSource
 	Vector4f ancillary; //for spot, x, y are cosine theta cutoffs
 };
 
-enum class DebugDrawType
+enum class DebugDrawType : uint32_t
 {
 	DEBUGBOX = 1,
 	DEBUGSPHERE = 2,
@@ -245,7 +245,6 @@ struct GPUDebugRenderable
 	Vector4f color;
 	Vector4f halfExtents;
 };
-
 
 struct ShadowMapBase
 {
@@ -278,7 +277,6 @@ struct ShadowMapBase
 	int shadowClippingDescriptor2;
 	int shadowClippingPipeline;
 };
-
 
 struct ShadowMapDebugPipelineData
 {
@@ -495,8 +493,8 @@ static int skyboxCubeImage = -1;
 static char DebugAllocQueueMemory[512];
 static char RenderableAllocQueueMemory[512];
 
-static MessageQueue DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
-static MessageQueue RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
+static CircularMessageQueueMPSC DebugAllocQueue{ DebugAllocQueueMemory, sizeof(DebugAllocQueueMemory) };
+static CircularMessageQueueMPSC RenderableAllocQueue{ RenderableAllocQueueMemory, sizeof(RenderableAllocQueueMemory) };
 
 static Logger mainAppLogger{};
 
@@ -642,7 +640,7 @@ static void ProcessSMBFile(SMBFile* file, int arenaIndex);
 static void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex);
 static bool ProcessCommands();
 static void AddCommandTS(int wordCount);
-static int ReadDeferredMessageQueue(MessageQueue* queue);
+static int ReadDeferredMessageQueue(CircularMessageQueueMPSC* queue);
 static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 
 static int CreateMaterial(
@@ -695,7 +693,7 @@ static int CreateMeshHandle(
 );
 
 static int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox);
-static int CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
+static int CreateGPUGeometryRenderable(int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount);
 static int AllocateCPUGeometryDetails(int numberOfDetails);
 static int AllocateGPUGeometryDetails(int numberOfDetails);
 static int AllocateCPUMeshDetails(int numberOfDetails);
@@ -712,6 +710,7 @@ static void CreateJointVisualData();
 static void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation);
 static void UpdateCameraMatrix();
 static bool MoveCamera(double fps);
+static void CreateGPUGenericObjects();
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -813,6 +812,8 @@ void ApplicationLoop::Execute()
 		InitializeRuntime();
 
 		cleaned = false;
+
+		CreateGPUGenericObjects();
 
 		CreateCrateObject();
 
@@ -1359,13 +1360,13 @@ void CreateCornerWall(float width, float height, float xDiv, float yDiv)
 
 	geomRendCPUData->geomIndex = gpuGeomRenderable;
 
-	CreateGPUGeometryRenderable(geomRenderableCPUDataIndex, gpuGeomRenderable, Identity4f(), geomDetailsIndex, geomRendCPUData->renderableMeshStart, geomRendCPUData->renderableMeshCount);
+	CreateGPUGeometryRenderable(gpuGeomRenderable, Identity4f(), geomDetailsIndex, geomRendCPUData->renderableMeshStart, geomRendCPUData->renderableMeshCount);
 
-	CreateRenderable(cpuMeshRenderable, gpuMeshRendrables, floorPanel, gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
+	CreateRenderable(cpuMeshRenderable, gpuMeshRendrables, floorPanel, gpuGeomRenderable, materialRangeIndex, 1, DEFAULT_GPU_ITEM_ARRAY_INDEX, meshGPUIndex, 1);
 
-	CreateRenderable(cpuMeshRenderable + 1, gpuMeshRendrables + 1, sideFrontPanel, gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
+	CreateRenderable(cpuMeshRenderable + 1, gpuMeshRendrables + 1, sideFrontPanel, gpuGeomRenderable, materialRangeIndex, 1, DEFAULT_GPU_ITEM_ARRAY_INDEX, meshGPUIndex, 1);
 	
-	CreateRenderable(cpuMeshRenderable + 2, gpuMeshRendrables +2, backPanel, gpuGeomRenderable, materialRangeIndex, 1, -1, meshGPUIndex, 1);
+	CreateRenderable(cpuMeshRenderable + 2, gpuMeshRendrables +2, backPanel, gpuGeomRenderable, materialRangeIndex, 1, DEFAULT_GPU_ITEM_ARRAY_INDEX, meshGPUIndex, 1);
 
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Corner Object"));
 
@@ -1680,6 +1681,8 @@ void CreateCrateObject()
 		return;
 	}
 
+	int materialRangeCount = 2;
+
 	int geomDetailsIndex = -1, meshGPUIndex = -1, meshCPUIndex = -1;
 
 	geomDetailsIndex = AllocateGPUGeometryDetails(1);
@@ -1696,9 +1699,9 @@ void CreateCrateObject()
 
 	int cpuMeshRenderable = AllocateCPUMeshRenderable(1);
 
-	int materialHandleIndex = AllocateGPUMaterialData(1);
+	int materialHandleIndex = AllocateGPUMaterialData(materialRangeCount);
 
-	int materialRangeIndex = AllocateGPUMaterialRanges(1);
+	int materialRangeIndex = AllocateGPUMaterialRanges(materialRangeCount);
 
 	int blendDetailsIndex = AllocateGPUBlendDescriptions(2);
 
@@ -1741,8 +1744,7 @@ void CreateCrateObject()
 
 	std::array<int, 2> materialIDs = { materialHandleIndex, materialHandleIndex + 1 };
 
-	int materialRangeCount = 2;
-	int materialRangeStart = CreateMaterialRange(materialRangeIndex, materialRangeCount, materialIDs.data());
+	CreateMaterialRange(materialRangeIndex, materialRangeCount, materialIDs.data());
 
 	CreateGPUGeometryDetails(geomDetailsIndex, BOX);
 	
@@ -1764,9 +1766,9 @@ void CreateCrateObject()
 
 	rendGeomCPUData->geomIndex = gpuGeomRenderable;
 
-	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, crateMatrix, geomDetailsIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
+	CreateGPUGeometryRenderable(gpuGeomRenderable, crateMatrix, geomDetailsIndex, rendGeomCPUData->renderableMeshStart, rendGeomCPUData->renderableMeshCount);
 
-	CreateRenderable(cpuMeshRenderable, gpuMeshRenderable, Identity4f(), gpuGeomRenderable, materialRangeStart, materialRangeCount, blendRangesIndex, meshGPUIndex, 1);
+	CreateRenderable(cpuMeshRenderable, gpuMeshRenderable, Identity4f(), gpuGeomRenderable, materialRangeIndex, materialRangeCount, blendRangesIndex, meshGPUIndex, 1);
 	
 	rendInst.UpdateDriverMemory(compressedVertexData, globalVertexBuffer, compressedSize * 24,  vertexAlloc, TransferType::CACHED);
 	rendInst.UpdateDriverMemory(BoxIndices, globalIndexBuffer,  sizeof(BoxIndices),  indexAlloc, TransferType::CACHED);
@@ -1849,7 +1851,7 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 
 	geomSpecificData = geomSpecificData * rotation;
 
-	CreateGPUGeometryRenderable(cpuGeomRenderable, gpuGeomRenderable, geomSpecificData, geomDetailsIndex, gpuMeshRenderable, meshCount);
+	CreateGPUGeometryRenderable(gpuGeomRenderable, geomSpecificData, geomDetailsIndex, gpuMeshRenderable, meshCount);
 
 	for (int i = 0; i < meshCount; i++)
 	{
@@ -2372,7 +2374,7 @@ int CreateDebugCommandBuffers(int count)
 	ShaderComputeLayout* debugCullDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(DEBUGCULL);
 
 	ComputeIntermediaryPipelineInfo debugCullPipelineCreate = {
-			.x = 4096 / debugCullDescriptorLayout->x,
+			.x = count / debugCullDescriptorLayout->x,
 			.y = 1,
 			.z = 1,
 			.pipelinename = DEBUGCULL,
@@ -2554,7 +2556,7 @@ int CreateGenericMeshCommandBuffers(int count)
 	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor, cullLightDescriptor };
 
 	ComputeIntermediaryPipelineInfo mainCullComputeSetup = {
-			.x = 4096 / layout->x,
+			.x = count / layout->x,
 			.y = 1,
 			.z = 1,
 			.pipelinename = RENDEROBJCULL,
@@ -3005,7 +3007,7 @@ int CreateLightAssignments(int count)
 	}
 
 	ComputeIntermediaryPipelineInfo preWorldDivComputePipeline = {
-			.x = 1,
+			.x = assignmentGroupCount,
 			.y = 1,
 			.z = 1,
 			.pipelinename = LIGHTORGANIZE,
@@ -3042,7 +3044,7 @@ int CreateLightAssignments(int count)
 	}
 
 	ComputeIntermediaryPipelineInfo postWorldDivComputePipeline = {
-			.x = 1,
+			.x = assignmentGroupCount,
 			.y = 1,
 			.z = 1,
 			.pipelinename = LIGHTASSIGN,
@@ -3074,6 +3076,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	mainShadowMapManager.totalShadowMaps = (int)((float)(shadowMapAtlasHeight * shadowMapAtlasWidth) / (float)(shadowMapWidth * shadowMapHeight));
 	mainShadowMapManager.zoneAlloc = 0;
 
+	
 	
 
 	mainShadowMapManager.shadowMapCountsAllocSize =  maxObjCount;
@@ -3151,8 +3154,12 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		return -1;
 	}
 
+	ShaderComputeLayout* shadowMapCullLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(SHADOWMAPCULL);
+
+	uint32_t maxCullInvocations = (uint32_t)ceil(maxObjCount / (float)shadowMapCullLayout->x);
+
 	ComputeIntermediaryPipelineInfo shadowClipPipelineInfo = {
-			.x = 1,
+			.x = maxCullInvocations,
 			.y = 1,
 			.z = 1,
 			.pipelinename = SHADOWMAPCULL,
@@ -3989,7 +3996,7 @@ int CreateGPUGeometryDetails(int geometryDetailsIndex, const AxisBox& minMaxBox)
 	return 0;
 }
 
-int CreateGPUGeometryRenderable(int geomCPURenderableIndex, int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount)
+int CreateGPUGeometryRenderable(int geomGPURenderableIndex, const Matrix4f& matrix, int geomDesc, int renderableStart, int renderableCount)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -4862,20 +4869,73 @@ int ReturnSMBArena(int arenaIndex)
 	return 0;
 }
 
-int ReadDeferredMessageQueue(MessageQueue* queue)
+int ReadDeferredMessageQueue(CircularMessageQueueMPSC* queue)
 {
 	int intCount = 0;
 
-	uint64_t totalInts = queue->SizeOfBuffer() / sizeof(int);
-
-	int* counts = (int*)queue->Head();
+	uint64_t totalInts = queue->BytesUnread() / sizeof(int);
 
 	while (totalInts--)
 	{
-		intCount += counts[totalInts];
+		int newCount = *(int*)queue->Pop(sizeof(int));
+		intCount += newCount;
 	}
 
-	queue->Read();
-
 	return intCount;
+}
+
+void CreateGPUGenericObjects()
+{
+
+#define MAX_OBJECT_DISTANCE 100000.0f
+
+	int geomDetailsIndex = AllocateGPUGeometryDetails(1);
+
+	int meshGPUIndex = AllocateGPUMeshDetails(1);
+
+	int meshCPUIndex = AllocateCPUMeshDetails(1);
+
+	int gpuGeomRenderable = AllocateGPUGeometryInstances(1);
+
+	int gpuMeshRendrables = AllocateGPUMeshRenderable(1);
+
+	int cpuMeshRenderable = AllocateCPUMeshRenderable(1);
+
+	int materialHandleIndex = AllocateGPUMaterialData(1);
+
+	int materialRangeIndex = AllocateGPUMaterialRanges(1);
+
+	int blendDetailsIndex = AllocateGPUBlendDescriptions(1);
+
+	int blendRangesIndex = AllocateGPUBlendRanges(1);
+	
+	AxisBox box{
+		.min = Vector4f(MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, 1.0f),
+		.max = Vector4f(MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, 1.0f),
+	};
+
+	Sphere sphere{ Vector4f(MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, MAX_OBJECT_DISTANCE, 0.0f) };
+
+	CreateGPUGeometryDetails(geomDetailsIndex, box);
+
+	CreateMeshHandle(
+		meshCPUIndex, meshGPUIndex,
+		0, 0, 0,
+		1, 0,
+		sphere,
+		0, 0,
+		-1, -1
+	);
+
+	CreateBlendDetails(blendDetailsIndex, BlendMaterialType::ConstantAlpha, 1.0f);
+
+	CreateBlendRange(blendRangesIndex, &blendDetailsIndex, 1);
+
+	CreateMaterial(materialHandleIndex, 0, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 1.0, 1.0, 1.0), 1.0, Vector4f(1.0, 1.0, 1.0, 1.0));
+
+	CreateMaterialRange(materialRangeIndex, 1, &materialHandleIndex);
+
+	CreateGPUGeometryRenderable(gpuGeomRenderable, Identity4f(), geomDetailsIndex, gpuMeshRendrables, 1);
+
+	CreateRenderable(cpuMeshRenderable, gpuMeshRendrables, Identity4f(), gpuGeomRenderable, materialRangeIndex, 1, blendRangesIndex, meshGPUIndex, 1);
 }
