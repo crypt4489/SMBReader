@@ -255,6 +255,12 @@ struct DescriptorPoolBuilder
 	size_t counter;
 };
 
+struct ImageMemoryPool
+{
+	VkDeviceMemory memory;
+	VKMemoryAllocator alloc;
+};
+
 
 enum HandleType
 {
@@ -294,12 +300,25 @@ enum HandleType
 	VulkMaxEnum
 };
 
-enum DeviceErrorCode
+enum DeviceErrorCodeMajor
 {
 	DEVICE_HANDLE_RETRIEVE_OVERFLOW = 1,
 	DEVICE_HANDLE_ENTRIES_EXHAUSTION = 2,
 	DEVICE_STORAGE_EXHAUSTED = 3,
-	DEVICE_VK_TYPE_CREATION_FAILED = 4,
+	DEVICE_CACHE_ALLOC_TOO_LARGE = 4,
+	DEVICE_VK_TYPE_CREATION_FAILED = 5,
+};
+
+#define MINOR_CODE_PACK(x) ((int)x << 6)
+
+enum DeviceErrorCodeMinor
+{
+	DEVICE_VK_TYPE_BUFFER_VIEW_FAILED = 1,
+	DEVICE_VK_TYPE_BUFFER_FAILED = 2,
+	DEVICE_VK_TYPE_COMMAND_POOL_FAILED = 3,
+	DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED = 4,
+	DEVICE_VK_TYPE_FENCE_FAILED = 5,
+	DEVICE_VK_TYPE_FRAMEBUFFER_FAILED = 6,
 };
 
 struct HandlePoolObject
@@ -308,7 +327,7 @@ struct HandlePoolObject
 	uintptr_t memoryLocation;
 };
 
-struct DeviceErrorCodes
+struct DeviceErrorCodeStruct
 {
 	int internalErrorCode;
 	VkResult vkResult;
@@ -481,6 +500,8 @@ struct VKDevice
 
 	VkImage GetImageByTexture(EntryHandle handle);
 
+	ImageMemoryPool* GetImageMemoryPool(EntryHandle handle);
+
 	VkImageView GetImageViewByHandle(EntryHandle handle);
 
 	VkImageView GetImageViewByTexture(EntryHandle handle, int imageViewIndex);
@@ -591,6 +612,10 @@ struct VKDevice
 
 	void* AllocFromDeviceCache(size_t size);
 
+	void ReturnHandleObject(EntryHandle index);
+
+	void AddDeviceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
+
 
 	//ACTIONS/HELPERS
 
@@ -689,13 +714,15 @@ struct VKDevice
 	size_t indexForEntries = 0;
 	size_t numberOfEntries = 0;
 
-	int* handlesFreeList;
-	int freeListTop = 0;
+	size_t* handlesFreeList;
+	int freeListTop = -1;
+	size_t numberOfFreeListEntries = 0;
 
 	VKAllocationCB *deviceDriverAllocator;
 
 	static const int errorCodeWrapSize = 16;
-	DeviceErrorCodes errorCodes[errorCodeWrapSize];
+	DeviceErrorCodeStruct errorCodes[errorCodeWrapSize];
 	int currentErrorCodePos = 0;
+	int readErrorCodePos = 0;
 };
 

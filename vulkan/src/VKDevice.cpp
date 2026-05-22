@@ -22,13 +22,6 @@ struct BufferAlloc
 	VKMemoryAllocator alloc;
 };
 
-struct ImageMemoryPool
-{
-	VkDeviceMemory memory;
-	VKMemoryAllocator alloc;
-};
-
-
 struct RenderPassData
 {
 	EntryHandle target;
@@ -613,11 +606,20 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 
 EntryHandle VKDevice::AddVkTypeToEntry(void* handle, HandleType type)
 {
-	size_t ret = indexForEntries++;
+	size_t ret = ~0ull;
 
-	if (ret >= numberOfEntries)
+	if (freeListTop >= 0)
 	{
-		return EntryHandle();
+		ret = handlesFreeList[freeListTop--];
+	} 
+	else
+	{
+		if (indexForEntries >= numberOfEntries)
+		{
+			return EntryHandle();
+		}
+
+		ret = indexForEntries++;
 	}
 
 	entries[ret].memoryLocation = reinterpret_cast<uintptr_t>(handle);
@@ -635,10 +637,36 @@ void* VKDevice::AllocFromPerDeviceData(size_t size)
 HandlePoolObject VKDevice::GetVkTypeFromEntry(EntryHandle index)
 {
 	if (index() >= indexForEntries) {
-		throw std::runtime_error("Entry Index Overflow");
+		return { VulkMaxEnum, ~0ull };
 	}
 
 	return entries[index()];
+}
+
+void VKDevice::ReturnHandleObject(EntryHandle index)
+{
+	if (index() >= indexForEntries) {
+		return;
+	}
+
+	entries[index()].memoryLocation = 0;
+	entries[index()].type = VulkMaxEnum;
+
+	int freeListLoc = ++freeListTop;
+
+	handlesFreeList[freeListLoc] = index();
+}
+
+void VKDevice::AddDeviceErrorCode(int internalErrorCode, VkResult vulkSpecificResult)
+{
+	int instErrorCodePos = currentErrorCodePos;
+
+	currentErrorCodePos = (currentErrorCodePos + 1) & (errorCodeWrapSize - 1);
+
+	DeviceErrorCodeStruct* errorCode = &errorCodes[instErrorCodePos];
+
+	errorCode->internalErrorCode = internalErrorCode;
+	errorCode->vkResult = vulkSpecificResult;
 }
 
 
@@ -659,10 +687,21 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 
 	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
 
+	if (!modHandle)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	modHandle->sMod = mod;
 	modHandle->flags = flags;
 
-	ret = AddVkTypeToEntry((void*)modHandle, VulkShaderHandle);
+	ret = AddVkTypeToEntry(modHandle, VulkShaderHandle);
+
+	if (ret == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 
 	return ret;
 }
@@ -681,12 +720,23 @@ struct BufferView
 
 EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset, uint32_t numberOfAllocs)
 {
-	BufferView* viewsHandles = (BufferView*)AllocFromPerDeviceData(sizeof(BufferView));
+	BufferView* viewsHandles = (BufferView*)AllocFromPerDeviceData(sizeof(BufferView) + (sizeof(VkBufferView) * numberOfAllocs));
+
+	if (!viewsHandles)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 	
-	viewsHandles->views = (VkBufferView*)AllocFromPerDeviceData(sizeof(VkBufferView) * numberOfAllocs);
+	viewsHandles->views = (VkBufferView*)(viewsHandles + 1);
 	viewsHandles->count = numberOfAllocs;
 
 	VkBuffer buffer = GetBufferHandle(bufferHandle);
+
+	if (!buffer)
+	{
+		return EntryHandle();
+	}
 	
 	VkBufferViewCreateInfo info{};
 
@@ -698,27 +748,41 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 
 	for (uint32_t i = 0; i < numberOfAllocs; i++)
 	{
+		VkResult vkRes = VK_SUCCESS;
 
-		if (vkCreateBufferView(device, &info, nullptr, &viewsHandles->views[i]) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create buffer view!");
+		if ((vkRes = vkCreateBufferView(device, &info, nullptr, &viewsHandles->views[i])) != VK_SUCCESS) {
+			
+			AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_VIEW_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+
+			for (uint32_t j = 0; j < i; j++)
+			{
+				vkDestroyBufferView(device, viewsHandles->views[j], nullptr);
+			}
+
+			return EntryHandle();
 		}
+
 		info.offset += rangeSize;
 	}
 
 	EntryHandle poolIndex = AddVkTypeToEntry(viewsHandles, VulkBufferView);
+
+	if (poolIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 
 	return poolIndex;
 }
 
 EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFormat format, size_t rangeSize, size_t offset)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(poolIndex);
+	ImageMemoryPool* pool = GetImageMemoryPool(poolIndex);
 
-	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation) 
+	if (!pool)
+	{
 		return EntryHandle();
-	
-	
-	ImageMemoryPool* pool = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
+	}
 
 	VkBuffer buffer;
 
@@ -728,26 +792,51 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	bufferInfo.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
 
-	if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create buffer!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreateBuffer(device, &bufferInfo, nullptr, &buffer)) != VK_SUCCESS) {
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
 	EntryHandle buffHandle = AddVkTypeToEntry(buffer, VulkBuffer);
 
+	if (buffHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	EntryHandle viewHandle = CreateBufferView(buffHandle, format, rangeSize, offset, 1);
 
+	if (viewHandle == EntryHandle())
+	{
+		return EntryHandle();
+	}
+
 	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
+
+	if (!viewData)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	viewData->bufferHandle = buffHandle;
 	viewData->viewHandle = viewHandle;
 
-	return AddVkTypeToEntry(viewData, VulkImageBufferView);
+	EntryHandle finalBufferViewHandle = AddVkTypeToEntry(viewData, VulkImageBufferView);
+
+	if (finalBufferViewHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+
+	return finalBufferViewHandle;
 }
 
 EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 {
-	
-
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -755,19 +844,27 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 
 	VkCommandPool pool = nullptr;
 
-	if (vkCreateCommandPool(device, &poolInfo, nullptr, &pool) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create command pool!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreateCommandPool(device, &poolInfo, nullptr, &pool)) != VK_SUCCESS) {
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_COMMAND_POOL_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
 	EntryHandle poolIndex = AddVkTypeToEntry(pool, VulkCommandPool);
+
+	if (poolIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 
 	return poolIndex;
 }
 
 EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets)
 {
-	
 	VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+	
 	uint32_t poolSizeCount = static_cast<uint32_t>(builder->numPoolSizes);
 
 	VkDescriptorPoolCreateInfo poolInfo{};
@@ -777,11 +874,19 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32
 	poolInfo.maxSets = maxSets;
 	poolInfo.flags = builder->flags;
 
-	if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor pool!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool)) != VK_SUCCESS) {
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
 	EntryHandle poolIndex = AddVkTypeToEntry(descriptorPool, VulkDescriptorPool);
+
+	if (poolIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 
 	return poolIndex;
 }
@@ -795,20 +900,19 @@ DescriptorPoolBuilder VKDevice::CreateDescriptorPoolBuilder(size_t poolSize, VkD
 
 DescriptorSetBuilder* VKDevice::CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets, uint32_t varDescriptorCounts)
 {
-	
-
 	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
 
 	DescriptorSetBuilder *dsb = std::construct_at(data, this, numberofsets);
-	auto ref = GetDescriptorSetLayout(descriptorLayout);
+	
+	VkDescriptorSetLayout ref = GetDescriptorSetLayout(descriptorLayout);
+
 	dsb->AllocDescriptorSets(GetDescriptorPool(poolIndex), ref, numberofsets, varDescriptorCounts);
+
 	return dsb;
 }
 
 DescriptorSetBuilder* VKDevice::UpdateDescriptorSet(EntryHandle descriptorHandle)
 {
-	
-
 	DescriptorSetBuilder* data = reinterpret_cast<DescriptorSetBuilder*>(AllocFromDeviceCache(sizeof(DescriptorSetBuilder)));
 
 	DescriptorSetBuilder* dsb = std::construct_at(data, this, descriptorHandle);
@@ -834,62 +938,111 @@ struct DescriptorSetAlloc
 EntryHandle VKDevice::CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets) {
 	
 	DescriptorSetAlloc* alloc = reinterpret_cast<DescriptorSetAlloc*>(AllocFromPerDeviceData(sizeof(DescriptorSetAlloc)));
+
+	if (!alloc)
+	{
+		return EntryHandle();
+	}
 	
 	alloc->numberOfSets = numberOfSets;
 	alloc->sets = set;
 	
-	EntryHandle ret;
+	EntryHandle setHandle;
 
-	ret = AddVkTypeToEntry(alloc, VulkDescriptorSet);
+	setHandle = AddVkTypeToEntry(alloc, VulkDescriptorSet);
+
+	if (setHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 	
-	return ret;
+	return setHandle;
 }
 
 EntryHandle VKDevice::CreateDescriptorSetLayout(DescriptorSetLayoutBuilder* builder)
 {
 	VkDescriptorSetLayout descLay = builder->CreateDescriptorSetLayout();
 
-	EntryHandle ret;
+	EntryHandle setLayoutHandle;
 
-	ret = AddVkTypeToEntry(descLay, VulkDescriptorLayout);
+	setLayoutHandle = AddVkTypeToEntry(descLay, VulkDescriptorLayout);
+
+	if (setLayoutHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 	
-	return ret;
+	return setLayoutHandle;
 }
 
 
 EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 {
-	
+	EntryHandle* tempFenceIndices = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
-	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
+	if (!tempFenceIndices)
+	{
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
 
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = flags;
 
-	VkFence fence = nullptr;
-
 	for (uint32_t i = 0; i < count; i++) {
 
-		if (vkCreateFence(device, &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create fences!");
+		VkResult vkRes = VK_SUCCESS;
+
+		VkFence fence = VK_NULL_HANDLE;
+
+		if ((vkRes = vkCreateFence(device, &fenceInfo, nullptr, &fence)) != VK_SUCCESS) 
+		{
+			AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_FENCE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+
+			for (uint32_t j = 0; j < i; j++)
+			{
+				DestroyFence(tempFenceIndices[j]);
+			}
+
+			return nullptr;
 		}
 	
-		ret[i] = AddVkTypeToEntry(fence, VulkFence);
+		tempFenceIndices[i] = AddVkTypeToEntry(fence, VulkFence);
+
+		if (tempFenceIndices[i] == EntryHandle())
+		{
+			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+
+			for (uint32_t j = 0; j <= i; j++)
+			{
+				DestroyFence(tempFenceIndices[j]);
+			}
+
+			return nullptr;
+		}
 	}
 	
-
-	return ret;
+	return tempFenceIndices;
 }
 
 EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D extent)
 {
-	
-
 	VkImageView* attachments = reinterpret_cast<VkImageView*>(AllocFromDeviceCache(sizeof(VkImageView) * attachmentsCount));
 
-	for (uint32_t i = 0; i < attachmentsCount; i++) {
+	if (!attachments)
+	{
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	for (uint32_t i = 0; i < attachmentsCount; i++) 
+	{
 		attachments[i] = GetImageViewByHandle(attachmentIndices[i]);
+		if (attachments[i] == VK_NULL_HANDLE)
+		{
+			return EntryHandle();
+		}
 	}
 
 	VkFramebufferCreateInfo framebufferInfo{};
@@ -901,21 +1054,29 @@ EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t
 	framebufferInfo.height = extent.height;
 	framebufferInfo.layers = 1;
 
-	VkFramebuffer frameBuffer;
+	VkFramebuffer frameBuffer = VK_NULL_HANDLE;
 
-	if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &frameBuffer) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create framebuffer!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreateFramebuffer(device, &framebufferInfo, nullptr, &frameBuffer)) != VK_SUCCESS) 
+	{	
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_FRAMEBUFFER_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+
+		return EntryHandle();
 	}
 
-	EntryHandle ret = AddVkTypeToEntry(frameBuffer, VulkFrameBuffer);
+	EntryHandle fbIndex = AddVkTypeToEntry(frameBuffer, VulkFrameBuffer);
 
-	return ret;
+	if (fbIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+
+	return fbIndex;
 }
 
 EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage)
 {
-	
-
 	VkBuffer buffer;
 	VkDeviceMemory memory;
 
@@ -1208,11 +1369,20 @@ void VKDevice::CreateLogicalDevice(
 	deviceDataAlloc.memHead = tempDeviceHead;
 
 	tempDeviceHead += deviceDataAlloc.size;
+
+	size_t handleEntrySize = perEntriesSize >> 1;
+	size_t freeListEntrySize = perEntriesSize >> 1;
 	
-	numberOfEntries = perEntriesSize / sizeof(HandlePoolObject);
+	numberOfEntries = handleEntrySize / sizeof(HandlePoolObject);
 	entries = (HandlePoolObject*)tempDeviceHead;
 
-	tempDeviceHead += perEntriesSize;
+	tempDeviceHead += handleEntrySize;
+
+	freeListTop = -1;
+	handlesFreeList = (size_t*)tempDeviceHead;
+	numberOfFreeListEntries = freeListEntrySize / sizeof(int);
+
+	tempDeviceHead += freeListEntrySize;
 	
 	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
 	uint32_t familyCount;
@@ -1764,8 +1934,6 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 
 void VKDevice::DestroyBuffer(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
@@ -1773,15 +1941,15 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 
 	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
 
-
-
 	if (!alloc) return;
+	
 	VkBuffer ret = alloc->buffer;
 	auto deviceMem = alloc->memory;
+	
 	vkDestroyBuffer(device, ret, nullptr);
 	vkFreeMemory(device, deviceMem, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyBufferView(EntryHandle handle)
@@ -1799,8 +1967,8 @@ void VKDevice::DestroyBufferView(EntryHandle handle)
 	{
 		vkDestroyBufferView(device, viewHandles->views[i], nullptr);
 	}
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyTexelBufferView(EntryHandle handle)
@@ -1817,8 +1985,9 @@ void VKDevice::DestroyTexelBufferView(EntryHandle handle)
 	if (!alloc) return;
 	DestroyBuffer(alloc->bufferHandle);
 	DestroyBufferView(alloc->viewHandle);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+
+	ReturnHandleObject(handle);
+
 }
 
 
@@ -1831,8 +2000,7 @@ void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 	if (buff->fenceIdx != EntryHandle()) {
 		DestroyFence(buff->fenceIdx);
 	}
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyCommandPool(EntryHandle handle)
@@ -1840,8 +2008,7 @@ void VKDevice::DestroyCommandPool(EntryHandle handle)
 	VkCommandPool pool = GetCommandPool(handle);
 	if (!pool) return;
 	vkDestroyCommandPool(device, pool, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyFence(EntryHandle handle)
@@ -1849,8 +2016,7 @@ void VKDevice::DestroyFence(EntryHandle handle)
 	VkFence fence = GetFence(handle);
 	if (!fence) return;
 	vkDestroyFence(device, fence, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyFrameBuffer(EntryHandle handle)
@@ -1858,8 +2024,7 @@ void VKDevice::DestroyFrameBuffer(EntryHandle handle)
 	VkFramebuffer fb = GetFrameBuffer(handle);
 	if (!fb) return;
 	vkDestroyFramebuffer(device, fb, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDescriptorPool(EntryHandle handle)
@@ -1868,8 +2033,7 @@ void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 	VkDescriptorPool pool = GetDescriptorPool(handle);
 	if (!pool) return;
 	vkDestroyDescriptorPool(device, pool, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
@@ -1878,8 +2042,7 @@ void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
 	VkDescriptorSetLayout lay = GetDescriptorSetLayout(handle);
 	if (!lay) return;
 	vkDestroyDescriptorSetLayout(device, lay, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDevice()
@@ -2047,8 +2210,7 @@ void VKDevice::DestroyImage(EntryHandle handle)
 		alloc->alloc.FreeMemory(image->deviceMemoryAddress);
 	}
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyImagePool(EntryHandle handle)
@@ -2063,8 +2225,7 @@ void VKDevice::DestroyImagePool(EntryHandle handle)
 	auto iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
 
 	vkFreeMemory(device, iter->memory, nullptr);
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyRenderPass(EntryHandle handle)
@@ -2077,13 +2238,11 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 
 	vkDestroyRenderPass(device, pass, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyRenderTarget(EntryHandle handle)
 {
-	
 	RenderTarget* target = GetRenderTarget(handle);
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j<i; j++)
@@ -2091,8 +2250,7 @@ void VKDevice::DestroyRenderTarget(EntryHandle handle)
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestoryQueryPool(EntryHandle handle)
@@ -2104,14 +2262,11 @@ void VKDevice::DestoryQueryPool(EntryHandle handle)
 
 	vkDestroyQueryPool(device, pool, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
-
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::ResetRenderTarget(EntryHandle handle)
 {
-	
 	RenderTarget* target = GetRenderTarget(handle);
 	uint32_t i = target->count;
 	for (uint32_t j = 0; j < i; j++)
@@ -2122,8 +2277,6 @@ void VKDevice::ResetRenderTarget(EntryHandle handle)
 
 void VKDevice::DestroyImageView(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageView || !objHandle.memoryLocation)
@@ -2133,14 +2286,11 @@ void VKDevice::DestroyImageView(EntryHandle handle)
 
 	vkDestroyImageView(device, view, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 {
-	
-
 	PipelineCacheObject* obj = GetPipelineCacheObject(handle);
 
 	if (!obj) return;
@@ -2149,13 +2299,11 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 
 	vkDestroyPipelineLayout(device, obj->pipelineLayout, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroySampler(EntryHandle handle)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageSampler || !objHandle.memoryLocation)
@@ -2165,36 +2313,29 @@ void VKDevice::DestroySampler(EntryHandle handle)
 
 	vkDestroySampler(device, sampler, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroySemaphore(EntryHandle handle)
 {
-	
-
 	VkSemaphore sema = GetSemaphore(handle);
 
 	if (!sema) return;
 
 	vkDestroySemaphore(device, sema, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyShader(EntryHandle handle)
 {
-	
-		
 	ShaderHandle* shader = GetShader(handle);
 
 	if (!shader) return;
 
 	vkDestroyShaderModule(device, shader->sMod, nullptr);
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroySwapChain(EntryHandle handle)
@@ -2203,13 +2344,11 @@ void VKDevice::DestroySwapChain(EntryHandle handle)
 
 	swc->DestroySwapChain();
 
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyTexture(EntryHandle handle)
 {
-	
 	VKTexture* tex = GetTexture(handle);
 
 	for (int i = 0; tex->samplerIndex[i] != EntryHandle(); i++)
@@ -2220,8 +2359,7 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 
 	DestroyImage(tex->imageIndex);
 	
-	entries[handle()].memoryLocation = 0;
-	entries[handle()].type = VulkMaxEnum;
+	ReturnHandleObject(handle);
 }
 
 
@@ -2390,7 +2528,6 @@ VkBuffer VKDevice::GetBufferHandle(EntryHandle handle)
 
 VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageHandle || !objHandle.memoryLocation)
@@ -2403,10 +2540,21 @@ VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 
 VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 {
-	
 	VKTexture* tex = GetTexture(handle);
 	if (!tex) return VK_NULL_HANDLE;
 	return GetImageByHandle(tex->imageIndex);
+}
+
+ImageMemoryPool* VKDevice::GetImageMemoryPool(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
+		return nullptr;
+
+	ImageMemoryPool* pool = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
+
+	return pool;
 }
 
 VkImageView VKDevice::GetImageViewByHandle(EntryHandle handle)
