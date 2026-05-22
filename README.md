@@ -86,7 +86,7 @@ The Oddworld data contains 125+ distinct vertex format variants. PSO permutation
 **Why atlas shadow maps?**
 Packing multiple shadow maps into a single atlas reduces descriptor overhead and allows shadow map assignment to be resolved during the GPU culling pass rather than requiring a separate CPU-side pass.
 
-**Vertex compression formats** were reversed from the SMB binary data using Ghidra and cross-referenced against known quantization constants in the Oddworld modding community's prior work. All decompressors were implemented from first principles.
+**Vertex compression formats** were reversed from the SMB binary data using Ghidra and cross-referenced against released PDBs.
 
 ---
 
