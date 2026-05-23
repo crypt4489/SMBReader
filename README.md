@@ -106,7 +106,7 @@ Finish app level architecture
 - Create OS linux layer with what is already done in agnostic interface
 - Make robust the shader translation layer and have compute shader execute in uniform way (minimize divergence among wave invocations)
 - Try to finish any unimplemented paths in the shaders (uncompressed data loading, light assignment and culling, etc.)
-- Finish build system and create 
+- Finish build system and manage the Vulkan dependency properly
 
 ## Longer term to-do list
 
