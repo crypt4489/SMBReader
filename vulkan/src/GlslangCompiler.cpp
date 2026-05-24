@@ -2,10 +2,6 @@
 
 #include "GlslangCompiler.h"
 
-#include "VKUtilities.h"
-#include <stdexcept>
-
-#include <glslang/Include/glslang_c_interface.h>
 #include <glslang/Include/ResourceLimits.h>
 #include "glslang/Public/resource_limits_c.h"
 
@@ -122,7 +118,14 @@ namespace GLSLANG
 
     }
 
-    VkShaderModule CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage)
+    void DeleteShader(GLSLShaderProgram* shaderProgram)
+    {
+        glslang_program_delete(shaderProgram->programData);
+
+        glslang_shader_delete(shaderProgram->shaderInfoData);
+    }
+
+    int CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage, GLSLShaderProgram* shaderProgram)
     {
         glslang_stage_t glslstage = GLSLANG_STAGE_COUNT;
 
@@ -134,8 +137,11 @@ namespace GLSLANG
         case VK_SHADER_STAGE_FRAGMENT_BIT:
             glslstage = GLSLANG_STAGE_FRAGMENT;
             break;
+        case VK_SHADER_STAGE_COMPUTE_BIT:
+            glslstage = GLSLANG_STAGE_COMPUTE;
+            break;
         default:
-            throw std::runtime_error("Cannot find appropriate shader stage for glslang");
+            return -1;
         }
 
         if (notProcessInitialized)
@@ -162,57 +168,49 @@ namespace GLSLANG
             .resource = reinterpret_cast<glslang_resource_t*>(&gpuResource)
         };
 
-
-
         glslang_shader_t* shader = glslang_shader_create(&input);
 
-        if (!glslang_shader_preprocess(shader, &input))
+        if (!(shaderProgram->retCode = glslang_shader_preprocess(shader, &input)))
         {
-            // use glslang_shader_get_info_log() and glslang_shader_get_info_debug_log()
+            glslang_shader_delete(shader);
 
-            std::cerr << "INFOLOG" << glslang_shader_get_info_log(shader) << "\n"
-                << "DEBUG" << glslang_shader_get_info_debug_log(shader) << "\n";
-            throw std::runtime_error("glslang preprocess error");
+            return -1;
         }
 
-        if (!glslang_shader_parse(shader, &input))
+        if (!(shaderProgram->retCode = glslang_shader_parse(shader, &input)))
         {
-            // use glslang_shader_get_info_log() and glslang_shader_get_info_debug_log()
+            glslang_shader_delete(shader);
 
-            std::cerr << "INFOLOG" << glslang_shader_get_info_log(shader) << "\n"
-                << "DEBUG" << glslang_shader_get_info_debug_log(shader) << "\n";
-            throw std::runtime_error("glslang parse error");
+            return -2;
         }
 
         glslang_program_t* program = glslang_program_create();
         glslang_program_add_shader(program, shader);
 
-        if (!glslang_program_link(program, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT))
+        if (!(shaderProgram->retCode = glslang_program_link(program, GLSLANG_MSG_SPV_RULES_BIT | GLSLANG_MSG_VULKAN_RULES_BIT)))
         {
-            // use glslang_program_get_info_log() and glslang_program_get_info_debug_log();
+            glslang_program_delete(program);
 
-            std::cerr << "INFOLOG" << glslang_shader_get_info_log(shader) << "\n"
-                << "DEBUG" << glslang_shader_get_info_debug_log(shader) << "\n";
-            throw std::runtime_error("glslang link error");
+            glslang_shader_delete(shader);
+
+            return -3;
         }
 
         glslang_program_SPIRV_generate(program, input.stage);
 
-        if (glslang_program_SPIRV_get_messages(program))
+        if ((shaderProgram->glslangMessages = glslang_program_SPIRV_get_messages(program)))
         {
-            std::cerr << glslang_program_SPIRV_get_messages(program) << "\n";
+            return -4;
         }
 
-        char* ptr = reinterpret_cast<char*>(glslang_program_SPIRV_get_ptr(program));
+        shaderProgram->shaderRawData = reinterpret_cast<char*>(glslang_program_SPIRV_get_ptr(program));
 
-        size_t size = glslang_program_SPIRV_get_size(program) * sizeof(unsigned int);
+        shaderProgram->shaderRawDataSize = glslang_program_SPIRV_get_size(program) * sizeof(unsigned int);
 
-        VkShaderModule ret = VK::Utils::createShaderModule(device, ptr, size);
+        shaderProgram->shaderInfoData = shader;
 
-        glslang_program_delete(program);
+        shaderProgram->programData = program;
 
-        glslang_shader_delete(shader);
-
-        return ret;
+        return 0;
     }
 }

@@ -240,48 +240,73 @@ namespace VK {
 				return VK_FORMAT_UNDEFINED;
 		}
 
-		VkShaderModule createShaderModule(VkDevice& device, char* code, size_t size) {
+		int CreateShaderModule(VkDevice& device, char* code, size_t size, VkShaderModule* outModule, VkResult* outResult) {
+				
 				VkShaderModuleCreateInfo createInfo{};
+
 				createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 				createInfo.codeSize = size;;
 				createInfo.pCode = reinterpret_cast<const uint32_t*>(code);
+
 				VkShaderModule shaderModule;
-				if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-					throw std::runtime_error("failed to create shader module!");
+
+				VkResult result = VK_SUCCESS;
+
+				if ((result = vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule)) != VK_SUCCESS) {
+					*outResult = result;
+					return -1;
 				}
-				return shaderModule;
+
+				*outModule = shaderModule;
+
+				return 0;
 			}
 
-			std::pair<VkBuffer, VkDeviceMemory> createBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice,
+			int CreateBuffer(VkDevice device, VkPhysicalDevice physicalDevice,
 				VkDeviceSize bufferSize,
 				VkMemoryPropertyFlags memprops, VkSharingMode sharingMode,
-				VkBufferUsageFlags usage)
+				VkBufferUsageFlags usage, VkBuffer* outBufferHandle, VkDeviceMemory* outDeviceMemory, VkResult* outResult)
 			{
 				VkBuffer buffer;
 				VkDeviceMemory bufferMemory;
+				VkResult result = VK_SUCCESS;
+
 				VkBufferCreateInfo bufferInfo{};
 				bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 				bufferInfo.size = bufferSize;
 				bufferInfo.sharingMode = sharingMode;
 				bufferInfo.usage = usage;
-				if (vkCreateBuffer(device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-					throw std::runtime_error("failed to create buffer!");
+
+				if ((result = vkCreateBuffer(device, &bufferInfo, nullptr, &buffer)) != VK_SUCCESS) {
+					*outResult = result;
+					return -1;
 				}
 
 				VkMemoryRequirements memRequirements;
 				vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
 				VkMemoryAllocateInfo allocInfo{};
 				allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 				allocInfo.allocationSize = memRequirements.size;
 				allocInfo.memoryTypeIndex = findMemoryType(physicalDevice, memRequirements.memoryTypeBits, memprops);
 
-				if (vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-					throw std::runtime_error("failed to allocate buffer memory!");
+				if ((result = vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory)) != VK_SUCCESS) {
+					vkDestroyBuffer(device, buffer, nullptr);
+					*outResult = result;
+					return -2;
 				}
 
-				vkBindBufferMemory(device, buffer, bufferMemory, 0);
+				if ((vkBindBufferMemory(device, buffer, bufferMemory, 0)) != VK_SUCCESS) {
+					vkFreeMemory(device, bufferMemory, nullptr);
+					vkDestroyBuffer(device, buffer, nullptr);
+					*outResult = result;
+					return -3;
+				}
 
-				return std::make_pair<>(buffer, bufferMemory);
+				*outBufferHandle = buffer;
+				*outDeviceMemory = bufferMemory;
+
+				return 0;
 			}
 
 			VkCommandBuffer BeginOneTimeCommands(VkDevice& device, VkCommandPool& pool)

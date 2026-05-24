@@ -51,12 +51,16 @@ namespace VK {
 
 		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-		VkShaderModule createShaderModule(VkDevice& device, char* code, size_t size);
+		int CreateShaderModule(VkDevice& device, char* code, size_t size, VkShaderModule* outModule, VkResult* outResult);
 
-		std::pair<VkBuffer, VkDeviceMemory> createBuffer(VkDevice& device, VkPhysicalDevice& physicalDevice,
-				VkDeviceSize bufferSize,
-				VkMemoryPropertyFlags memprops, VkSharingMode sharingMode,
-				VkBufferUsageFlags usage);
+		int CreateBuffer(
+			VkDevice device, VkPhysicalDevice physicalDevice,
+			VkDeviceSize bufferSize,
+			VkMemoryPropertyFlags memprops, VkSharingMode sharingMode,
+			VkBufferUsageFlags usage, 
+			VkBuffer* outBufferHandle, VkDeviceMemory* outDeviceMemory, 
+			VkResult* outResult
+		);
 
 		VkCommandBuffer BeginOneTimeCommands(VkDevice& device, VkCommandPool& pool);
 

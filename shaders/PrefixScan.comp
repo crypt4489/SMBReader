@@ -18,7 +18,7 @@ layout(set = 0, binding = 2) buffer Sums {
 } sums;
 
 
-const int BlockSize = 64;
+const int BlockSize = 2048;
 
 shared uint sharedTemp[BlockSize];
 
@@ -26,9 +26,9 @@ layout (local_size_x = BlockSize/2, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
-	uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + gl_LocalInvocationID.x;
-
 	uint lIndex =  gl_LocalInvocationID.x;
+
+	uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + lIndex;
 
 	uint n = gs.count;
 
@@ -51,10 +51,7 @@ void main()
 		sharedTemp[(2*lIndex)+1] = 0;
 	}
 
-
 	uint offset = 1;
-
-	
 
 	for (uint d = BlockSize >> 1; d > 0; d = d>>1)
 	{
@@ -80,7 +77,6 @@ void main()
 	
 	for (uint d = 1; d < BlockSize; d <<= 1)
 	{
-
 		offset >>= 1;
 		barrier();
 
@@ -105,23 +101,13 @@ void main()
 		offsets.offsetAtN[(2*globalIndex)+1] = sharedTemp[(2*lIndex)+1];
 	} 
 
-	
-
-
 	if (n > BlockSize)
 	{
-		if (lIndex == ((BlockSize-1)/2))
+		if (lIndex == 0)
 		{
-			uint index = BlockSize-1;
-			uint sumGlobalIndex = (2*globalIndex)+1;
-
-			if (gl_WorkGroupID.x+1 == gl_NumWorkGroups.x) 
-			{
-				sumGlobalIndex = n-1;
-				index = sumGlobalIndex - ((gl_WorkGroupID.x) * BlockSize);
-			}
-
-			sums.sumsAtN[gl_WorkGroupID.x] = sharedTemp[index] + counts.countsAtN[sumGlobalIndex];
+			uint sharedMemIndex = BlockSize-1;
+			uint globalLastElement = min((gl_WorkGroupID.x + 1) * BlockSize, n) - 1;
+			sums.sumsAtN[gl_WorkGroupID.x] = sharedTemp[sharedMemIndex] + counts.countsAtN[globalLastElement];
 		} 
 	}
 

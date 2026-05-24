@@ -251,7 +251,8 @@ void* DeviceOwnedAllocator::Alloc(size_t inSize)
 {
 	size_t val, desired, out;
 	val = writeHead.load(std::memory_order_acquire);
-	do {
+	do 
+	{
 		desired = val + inSize;
 
 		if (desired >= size)
@@ -274,7 +275,8 @@ void* DeviceOwnedAllocator::AllocWrapAround(size_t inSize)
 {
 	size_t val, desired, out;
 	val = writeHead.load(std::memory_order_acquire);
-	do {
+	do 
+	{
 		desired = val + inSize;
 		
 		out = val;
@@ -312,12 +314,14 @@ int RecordingBufferObject::BindGraphicsPipeline(EntryHandle pipelinename)
 	return retCode;
 }
 
-int RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) {
+int RecordingBufferObject::BindComputePipeline(EntryHandle pipelineId) 
+{
 	int retCode = BindPipelineInternal(pipelineId, VK_PIPELINE_BIND_POINT_COMPUTE);
 	return retCode;
 }
 
-int RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) {
+int RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint) 
+{
 	auto pco = vkDeviceHandle->GetPipelineCacheObject(id);
 	currLayout = pco->pipelineLayout;
 	currPipeline = pco->pipeline;
@@ -577,7 +581,8 @@ static size_t FindQueueManagerByCapapbilites(QueueManager* managers, size_t mana
 	size_t i = 0;
 	for (; i < managerSize; i++)
 	{
-		if ((managers[i].queueCapabilities & capabilities) == capabilities) {
+		if ((managers[i].queueCapabilities & capabilities) == capabilities) 
+		{
 			return i;
 		}
 	}
@@ -636,7 +641,8 @@ void* VKDevice::AllocFromPerDeviceData(size_t size)
 
 HandlePoolObject VKDevice::GetVkTypeFromEntry(EntryHandle index)
 {
-	if (index() >= indexForEntries) {
+	if (index() >= indexForEntries) 
+	{
 		return { VulkMaxEnum, ~0ull };
 	}
 
@@ -645,7 +651,8 @@ HandlePoolObject VKDevice::GetVkTypeFromEntry(EntryHandle index)
 
 void VKDevice::ReturnHandleObject(EntryHandle index)
 {
-	if (index() >= indexForEntries) {
+	if (index() >= indexForEntries) 
+	{
 		return;
 	}
 
@@ -681,9 +688,9 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 {
 	VkShaderModule mod = VK_NULL_HANDLE;
 
-	mod = GLSLANG::CompileShader(device, data, flags);
+	VkResult vkRes = VK_SUCCESS;
 
-	EntryHandle ret;
+	GLSLShaderProgram shaderProgramHold;
 
 	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
 
@@ -693,13 +700,29 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 		return EntryHandle();
 	}
 
+	int retCode = GLSLANG::CompileShader(device, data, flags, &shaderProgramHold);
+
+	if (retCode < 0)
+	{
+		return EntryHandle();
+	}
+
+	retCode = VK::Utils::CreateShaderModule(device, shaderProgramHold.shaderRawData, shaderProgramHold.shaderRawDataSize, &mod, &vkRes);
+
+	if (retCode < 0)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SHADER_MODULE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
+
 	modHandle->sMod = mod;
 	modHandle->flags = flags;
 
-	ret = AddVkTypeToEntry(modHandle, VulkShaderHandle);
+	EntryHandle ret = AddVkTypeToEntry(modHandle, VulkShaderHandle);
 
 	if (ret == EntryHandle())
 	{
+		vkDestroyShaderModule(device, mod, nullptr);
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 	}
 
@@ -750,7 +773,8 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 	{
 		VkResult vkRes = VK_SUCCESS;
 
-		if ((vkRes = vkCreateBufferView(device, &info, nullptr, &viewsHandles->views[i])) != VK_SUCCESS) {
+		if ((vkRes = vkCreateBufferView(device, &info, nullptr, &viewsHandles->views[i])) != VK_SUCCESS) 
+		{
 			
 			AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_VIEW_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 
@@ -770,6 +794,11 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 	if (poolIndex == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+
+		for (uint32_t j = 0; j < numberOfAllocs; j++)
+		{
+			vkDestroyBufferView(device, viewsHandles->views[j], nullptr);
+		}
 	}
 
 	return poolIndex;
@@ -784,6 +813,14 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 		return EntryHandle();
 	}
 
+	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
+
+	if (!viewData)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	VkBuffer buffer;
 
 	VkBufferCreateInfo bufferInfo{};
@@ -794,8 +831,16 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 	VkResult vkRes = VK_SUCCESS;
 
-	if ((vkRes = vkCreateBuffer(device, &bufferInfo, nullptr, &buffer)) != VK_SUCCESS) {
+	if ((vkRes = vkCreateBuffer(device, &bufferInfo, nullptr, &buffer)) != VK_SUCCESS) 
+	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
+
+	if ((vkRes = vkBindBufferMemory(device, buffer, pool->memory, offset)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BIND_MEMORY_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		vkDestroyBuffer(device, buffer, nullptr);
 		return EntryHandle();
 	}
 
@@ -804,6 +849,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 	if (buffHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyBuffer(device, buffer, nullptr);
 		return EntryHandle();
 	}
 
@@ -811,14 +857,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 	if (viewHandle == EntryHandle())
 	{
-		return EntryHandle();
-	}
-
-	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
-
-	if (!viewData)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		vkDestroyBuffer(device, buffer, nullptr);
 		return EntryHandle();
 	}
 
@@ -830,6 +869,8 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 	if (finalBufferViewHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyBuffer(device, buffer, nullptr);
+		DestroyBufferView(viewHandle);
 	}
 
 	return finalBufferViewHandle;
@@ -846,7 +887,8 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 
 	VkResult vkRes = VK_SUCCESS;
 
-	if ((vkRes = vkCreateCommandPool(device, &poolInfo, nullptr, &pool)) != VK_SUCCESS) {
+	if ((vkRes = vkCreateCommandPool(device, &poolInfo, nullptr, &pool)) != VK_SUCCESS) 
+	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_COMMAND_POOL_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 		return EntryHandle();
 	}
@@ -856,6 +898,7 @@ EntryHandle VKDevice::CreateCommandPool(QueueIndex queueIndex)
 	if (poolIndex == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyCommandPool(device, pool, nullptr);
 	}
 
 	return poolIndex;
@@ -876,7 +919,8 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32
 
 	VkResult vkRes = VK_SUCCESS;
 
-	if ((vkRes = vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool)) != VK_SUCCESS) {
+	if ((vkRes = vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool)) != VK_SUCCESS) 
+	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 		return EntryHandle();
 	}
@@ -886,6 +930,7 @@ EntryHandle VKDevice::CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32
 	if (poolIndex == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	}
 
 	return poolIndex;
@@ -935,12 +980,13 @@ struct DescriptorSetAlloc
 	VkDescriptorSet* sets;
 };
 
-EntryHandle VKDevice::CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets) {
-	
+EntryHandle VKDevice::CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberOfSets) 
+{
 	DescriptorSetAlloc* alloc = reinterpret_cast<DescriptorSetAlloc*>(AllocFromPerDeviceData(sizeof(DescriptorSetAlloc)));
 
 	if (!alloc)
 	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
 		return EntryHandle();
 	}
 	
@@ -990,7 +1036,8 @@ EntryHandle* VKDevice::CreateFences(uint32_t count, VkFenceCreateFlags flags)
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = flags;
 
-	for (uint32_t i = 0; i < count; i++) {
+	for (uint32_t i = 0; i < count; i++) 
+	{
 
 		VkResult vkRes = VK_SUCCESS;
 
@@ -1070,6 +1117,7 @@ EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t
 	if (fbIndex == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyFramebuffer(device, frameBuffer, nullptr);
 	}
 
 	return fbIndex;
@@ -1079,50 +1127,125 @@ EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, Vk
 {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
-
-	std::tie(buffer, memory) = VK::Utils::createBuffer(device, gpu, allocSize,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | (coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0), VK_SHARING_MODE_EXCLUSIVE, usage);
-
+	VkResult vkRes = VK_SUCCESS;
 
 	BufferAlloc* alloc = nullptr;
-		
+
 	alloc = reinterpret_cast<BufferAlloc*>(AllocFromPerDeviceData(sizeof(BufferAlloc)));
+
+	if (!alloc)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	int retCode =  VK::Utils::CreateBuffer(
+		device, gpu, allocSize,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+		(coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0), 
+		VK_SHARING_MODE_EXCLUSIVE, usage,
+		&buffer, &memory, &vkRes
+	);
+
+	if (retCode < 0)
+	{
+		int minorCode = 0;
+		switch (retCode)
+		{
+		case -1:
+			minorCode = DEVICE_VK_TYPE_BUFFER_FAILED;
+			break;
+		case -2:
+			minorCode = DEVICE_VK_TYPE_MEMORY_FAILED;
+			break;
+		case -3:
+			minorCode = DEVICE_VK_TYPE_BIND_MEMORY_FAILED;
+			break;
+		default:
+			break;
+		}
+
+		AddDeviceErrorCode(MINOR_CODE_PACK(minorCode) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
 
 	alloc->buffer = buffer;
 	alloc->memory = memory;
 
 	std::construct_at(&alloc->alloc, allocSize);
 
-	EntryHandle ret = AddVkTypeToEntry(alloc, VulkBuffer);
+	EntryHandle buffIndex = AddVkTypeToEntry(alloc, VulkBuffer);
 
-	return ret;
+	if (buffIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkFreeMemory(device, memory, nullptr);
+		vkDestroyBuffer(device, buffer, nullptr);
+	}
+
+	return buffIndex;
 }
 
 
 EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage)
 {
-	
-
 	VkBuffer buffer;
 	VkDeviceMemory memory;
-
-	std::tie(buffer, memory) = VK::Utils::createBuffer(device, gpu, allocSize,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_SHARING_MODE_EXCLUSIVE, usage);
-
+	VkResult vkRes = VK_SUCCESS;
 
 	BufferAlloc* alloc = nullptr;
 
 	alloc = reinterpret_cast<BufferAlloc*>(AllocFromPerDeviceData(sizeof(BufferAlloc)));
+
+	if (!alloc)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	int retCode = VK::Utils::CreateBuffer(
+		device, gpu, allocSize,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_SHARING_MODE_EXCLUSIVE, usage,
+		&buffer, &memory, &vkRes
+	);
+
+	if (retCode < 0)
+	{
+		int minorCode = 0;
+		switch (retCode)
+		{
+		case -1:
+			minorCode = DEVICE_VK_TYPE_BUFFER_FAILED;
+			break;
+		case -2:
+			minorCode = DEVICE_VK_TYPE_MEMORY_FAILED;
+			break;
+		case -3:
+			minorCode = DEVICE_VK_TYPE_BIND_MEMORY_FAILED;
+			break;
+		default:
+			break;
+		}
+
+		AddDeviceErrorCode(MINOR_CODE_PACK(minorCode) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
 
 	alloc->buffer = buffer;
 	alloc->memory = memory;
 
 	std::construct_at(&alloc->alloc, allocSize);
 
+	EntryHandle buffIndex = AddVkTypeToEntry(alloc, VulkBuffer);
 
-	EntryHandle ret = AddVkTypeToEntry(alloc, VulkBuffer);
+	if (buffIndex == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkFreeMemory(device, memory, nullptr);
+		vkDestroyBuffer(device, buffer, nullptr);
+	}
 
-	return ret;
+	return buffIndex;
 }
 
 struct ImageAllocation
@@ -1138,9 +1261,27 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
+
 	VkImage image;
+
+	ImageMemoryPool* imageMemoryPool = GetImageMemoryPool(memIndex);
+
+	if (!imageMemoryPool)
+	{
+		return EntryHandle();
+	}
+
+	ImageAllocation* alloc = reinterpret_cast<ImageAllocation*>(AllocFromPerDeviceData(sizeof(ImageAllocation)));
+
+	if (!alloc)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	VkImageCreateInfo imageInfo{};
+
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = imageType;
 	imageInfo.extent.width = width;
@@ -1157,35 +1298,39 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
 	imageInfo.flags = cflags;
 
-	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create image!");
+	if ((vkRes = vkCreateImage(device, &imageInfo, nullptr, &image)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
 	VkMemoryRequirements memRequirements;
 	vkGetImageMemoryRequirements(device, image, &memRequirements);
 
-	HandlePoolObject objHandle = GetVkTypeFromEntry(memIndex);
-
-	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
-		return EntryHandle();
-
-	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
-
-	VkDeviceSize addr = iter->alloc.GetMemory(memRequirements.size, memRequirements.alignment);
-
-	vkBindImageMemory(device, image, iter->memory, addr);
-
-	ImageAllocation* alloc = reinterpret_cast<ImageAllocation*>(AllocFromPerDeviceData(sizeof(ImageAllocation)));
+	VkDeviceSize addr = imageMemoryPool->alloc.GetMemory(memRequirements.size, memRequirements.alignment);
 
 	alloc->imageHandle = image;
 	alloc->deviceMemoryAddress = addr;
 	alloc->memIndex = memIndex;
 
-	EntryHandle ret;
+	if ((vkRes = vkBindImageMemory(device, image, imageMemoryPool->memory, addr)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BIND_MEMORY_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		vkDestroyImage(device, image, nullptr);
+		imageMemoryPool->alloc.FreeMemory(addr);
+		return EntryHandle();
+	}
 
-	ret = AddVkTypeToEntry(alloc, VulkImageHandle);
+	EntryHandle imageHandle = AddVkTypeToEntry(alloc, VulkImageHandle);
+
+	if (imageHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyImage(device, image, nullptr);
+		imageMemoryPool->alloc.FreeMemory(addr);
+	}
 	
-	return ret;
+	return imageHandle;
 }
 
 
@@ -1196,7 +1341,7 @@ EntryHandle VKDevice::CreateStorageImage(
     VkImageAspectFlags flags, VkImageLayout layout)
 {
 	
-	
+	/*
 
 	EntryHandle imageIndex = CreateImage(
 		width, height, mipLevels, type, 1,
@@ -1232,44 +1377,68 @@ EntryHandle VKDevice::CreateStorageImage(
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
+	*/
 
-	return ret;
+	return EntryHandle();
 }
 
 
 EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
+
 	VkDeviceMemory deviceMemory;
+
+	ImageMemoryPool* alloc = reinterpret_cast<ImageMemoryPool*>(AllocFromPerDeviceData(sizeof(ImageMemoryPool)));
+
+	if (!alloc)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = poolSize;
 	allocInfo.memoryTypeIndex = memoryTypeIndex;
 
-	if (vkAllocateMemory(device, &allocInfo, nullptr, &deviceMemory) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate image memory!");
+	if ((vkRes = vkAllocateMemory(device, &allocInfo, nullptr, &deviceMemory)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
-
-	ImageMemoryPool* alloc = reinterpret_cast<ImageMemoryPool*>(AllocFromPerDeviceData(sizeof(ImageMemoryPool)));
 
 	std::construct_at(&alloc->alloc, poolSize);
 
 	alloc->memory = deviceMemory;
 
-	EntryHandle ret = AddVkTypeToEntry(alloc, VulkImageMemoryPool);
+	EntryHandle imageMemoryPoolHandle = AddVkTypeToEntry(alloc, VulkImageMemoryPool);
+
+	if (imageMemoryPoolHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkFreeMemory(device, deviceMemory, nullptr);
+	}
 	
-	return ret;
+	return imageMemoryPoolHandle;
 }
 
 EntryHandle VKDevice::CreateImageView(
 	EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
+
 	VkImageViewCreateInfo viewInfo{};
 
 	VkImage image = GetImageByHandle(imageIndex);
+
+	VkImageView imageView = VK_NULL_HANDLE;
+
+	if (image == VK_NULL_HANDLE)
+	{
+		return EntryHandle();
+	}
 
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
@@ -1280,27 +1449,34 @@ EntryHandle VKDevice::CreateImageView(
 	viewInfo.subresourceRange.levelCount = mipLevels;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 	viewInfo.subresourceRange.layerCount = layersCount;
-	VkImageView imageView = VK_NULL_HANDLE;
-	if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create texture image view!");
+
+	if ((vkRes = vkCreateImageView(device, &viewInfo, nullptr, &imageView)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
-	EntryHandle ret;
+	EntryHandle imageViewHandle = AddVkTypeToEntry(imageView, VulkImageView);
 
-
-
-	ret = AddVkTypeToEntry(imageView, VulkImageView);
+	if (imageViewHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyImageView(device, imageView, nullptr);
+	}
 	
-
-	return ret;
+	return imageViewHandle;
 }
 
 EntryHandle VKDevice::CreateImageView(
 	VkImage image, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
+
 	VkImageViewCreateInfo viewInfo{};
+
+	VkImageView imageView = VK_NULL_HANDLE;
+
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
 	viewInfo.viewType = imageViewType;
@@ -1310,18 +1486,22 @@ EntryHandle VKDevice::CreateImageView(
 	viewInfo.subresourceRange.levelCount = mipLevels;
 	viewInfo.subresourceRange.baseArrayLayer = 0;
 	viewInfo.subresourceRange.layerCount = layersCount;
-	VkImageView imageView = VK_NULL_HANDLE;
-	if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create texture image view!");
+
+	if ((vkRes = vkCreateImageView(device, &viewInfo, nullptr, &imageView)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
-	EntryHandle ret;
+	EntryHandle imageViewHandle = AddVkTypeToEntry(imageView, VulkImageView);
 
-	
-	ret = AddVkTypeToEntry(imageView, VulkImageView);
-	
+	if (imageViewHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyImageView(device, imageView, nullptr);
+	}
 
-	return ret;
+	return imageViewHandle;
 }
 
 void VKDevice::CreateLogicalDevice(
@@ -1419,7 +1599,8 @@ void VKDevice::CreateLogicalDevice(
 
 	uint32_t i = 0;
 
-	for (const auto& queueFamily : queueIndices) {
+	for (const auto& queueFamily : queueIndices) 
+	{
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queueCreateInfo.queueFamilyIndex = queueFamily.first;
@@ -1453,9 +1634,10 @@ void VKDevice::CreateLogicalDevice(
 
 
 	queueManagers = AddVkTypeToEntry(ptr, VulkQueueManager);
-	
 
-	for (const auto queueFamily : queueIndices) {
+
+	for (const auto queueFamily : queueIndices) 
+	{
 
 		uint32_t queueIndex = queueFamily.first;
 		uint32_t maxCount = std::get<uint32_t>(queueFamily.second);
@@ -1475,14 +1657,7 @@ void VKDevice::CreateLogicalDevice(
 
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount)
 {
-	
-
-	VkRenderPass renderPass = VK_NULL_HANDLE;
-
-	if (renderPassIndex != EntryHandle())
-	{
-		renderPass = GetRenderPass(renderPassIndex);
-	}
+	VkRenderPass renderPass = GetRenderPass(renderPassIndex);
 
 	auto renderPassData = reinterpret_cast<VKGraphicsPipelineBuilder*>(AllocFromDeviceCache(sizeof(VKGraphicsPipelineBuilder)));
 
@@ -1491,29 +1666,37 @@ VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle r
 
 VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numberOfDescriptors, uint32_t pushConstantRangeCount)
 {
-	
-
 	auto computePB = reinterpret_cast<VKComputePipelineBuilder*>(AllocFromDeviceCache(sizeof(VKComputePipelineBuilder)));
 
 	return std::construct_at(computePB, this, numberOfDescriptors, pushConstantRangeCount);
 }
 
-void VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
+int VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
 	void* queueManagerData = reinterpret_cast<void*>(AllocFromPerDeviceData(sizeof(size_t) * maxCount));
 
-	std::construct_at(manager, 
-		nullptr, 0, 
-		maxCount, queueIndex, 
-		queueFlags, presentsupport, 
+	if (!queueManagerData)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return -1;
+	}
+
+	std::construct_at(manager,
+		nullptr, 0,
+		maxCount, queueIndex,
+		queueFlags, presentsupport,
 		this, queueManagerData);
+
+	return 0;
 }
 
 EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries)
 {
-	EntryHandle ret;
+	EntryHandle queryPoolHandle;
 
-	VkQueryPool poolVKHandle;
+	VkQueryPool vkPoolHandle = VK_NULL_HANDLE;
+
+	VkResult vkRes = VK_SUCCESS;
 
 	VkQueryPoolCreateInfo createInfo{};
 
@@ -1524,28 +1707,47 @@ EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQu
 	createInfo.pNext = nullptr;
 	createInfo.flags = 0;
 
-	vkCreateQueryPool(device, &createInfo, nullptr, &poolVKHandle);
+	if ((vkRes = vkCreateQueryPool(device, &createInfo, nullptr, &vkPoolHandle)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUERY_POOL_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
 
-	ret = AddVkTypeToEntry(poolVKHandle, VulkQueryPool);
+	queryPoolHandle = AddVkTypeToEntry(vkPoolHandle, VulkQueryPool);
 
-	return ret;
+	if (queryPoolHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyQueryPool(device, vkPoolHandle, nullptr);
+	}
+
+	return queryPoolHandle;
 }
 
 EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 {
-	
-
 	PipelineCacheObject* perObj = reinterpret_cast<PipelineCacheObject*>(AllocFromPerDeviceData(sizeof(PipelineCacheObject)));
+
+	if (!perObj)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	perObj->descLayout = obj->descLayout;
 	perObj->pipeline = obj->pipeline;
 	perObj->pipelineLayout = obj->pipelineLayout;
 
-	EntryHandle ret;
+	EntryHandle pipeObjHandle;
 
-	ret = AddVkTypeToEntry(perObj, VulkPipelineCacheObject);
+	pipeObjHandle = AddVkTypeToEntry(perObj, VulkPipelineCacheObject);
+
+	if (pipeObjHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 	
-	return ret;
+	return pipeObjHandle;
 }
 
 #define MAX_PIPELINE_OBJECTS 50
@@ -1553,28 +1755,49 @@ EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 
 EntryHandle VKDevice::CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount)
 {
-	
-
 	auto renderPassDataHandle = reinterpret_cast<RenderPassData*>(AllocFromPerDeviceData(sizeof(RenderPassData)));
+
+	if (!renderPassDataHandle)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	renderPassDataHandle->target = renderTarget;
 
-	auto graph = std::construct_at(&renderPassDataHandle->graph, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, this);
+	std::construct_at(&renderPassDataHandle->graph, &deviceDataAlloc, MAX_DYNAMIC_OFFSETS, descriptorCount, MAX_PIPELINE_OBJECTS, this);
 
-	return AddVkTypeToEntry(renderPassDataHandle, VulkRenderTargetData);
+	EntryHandle renderTargetHandle = AddVkTypeToEntry(renderPassDataHandle, VulkRenderTargetData);
+
+	if (renderTargetHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+
+	return renderTargetHandle;
 }
 
 EntryHandle VKDevice::CreateRenderPasses(VKRenderPassBuilder& builder)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
 
-	VkRenderPass ref = VK_NULL_HANDLE;
+	VkRenderPass vkRenderPassHandle = VK_NULL_HANDLE;
 
-	if (vkCreateRenderPass(device, &builder.createInfo, nullptr, &ref) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create render pass!");
+	if ((vkRes = vkCreateRenderPass(device, &builder.createInfo, nullptr, &vkRenderPassHandle)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_RENDER_PASS_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
-	return AddVkTypeToEntry(ref, VulkRenderPassHandle);
+	EntryHandle renderPassHandle = AddVkTypeToEntry(vkRenderPassHandle, VulkRenderPassHandle);
+
+	if (renderPassHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroyRenderPass(device, vkRenderPassHandle, nullptr);
+	}
+
+	return renderPassHandle;
 }
 
 VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint32_t numDeps, uint32_t numDescs)
@@ -1584,164 +1807,108 @@ VKRenderPassBuilder VKDevice::CreateRenderPassBuilder(uint32_t numAttaches, uint
 
 EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount, uint32_t width, uint32_t height, uint32_t wOffset, uint32_t hOffset)
 {
-	
 	auto renderTarget = reinterpret_cast<RenderTarget*>(AllocFromPerDeviceData(sizeof(RenderTarget)));
-	
-	EntryHandle ret;
-	
-	ret = AddVkTypeToEntry(renderTarget, VulkRenderTarget);
 
 	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount);
-	
-	std::construct_at(renderTarget, renderPassIndex, framebufferCount, width, height, wOffset, hOffset, data);
 
-	return ret;
+	if (!renderTarget || !data)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	std::construct_at(renderTarget, renderPassIndex, framebufferCount, width, height, wOffset, hOffset, data);
+	
+	EntryHandle renderTargetHandle = AddVkTypeToEntry(renderTarget, VulkRenderTarget);
+
+	if (renderTargetHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+	
+	return renderTargetHandle;
 }
 
 EntryHandle* VKDevice::CreateReusableCommandBuffers(
-	uint32_t numberOfCommandBuffers, bool createFences, uint32_t capabilites, VkCommandBufferLevel level)
+	uint32_t numberOfCommandBuffers, 
+	bool createFences, 
+	uint32_t capabilites, 
+	VkCommandBufferLevel level
+)
 {
+	VkResult vkRes = VK_SUCCESS;
 
-	
+	EntryHandle* intHandles = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * numberOfCommandBuffers));
+
+	VKCommandBuffer** temp = reinterpret_cast<VKCommandBuffer**>(AllocFromDeviceCache(sizeof(VKCommandBuffer*) * numberOfCommandBuffers));
+
+	VKCommandBuffer* cbObjects = reinterpret_cast<VKCommandBuffer*>(AllocFromPerDeviceData(sizeof(VKCommandBuffer) * numberOfCommandBuffers));
+
+	if (!intHandles || !temp || !cbObjects)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
+	VkCommandBuffer* l = reinterpret_cast<VkCommandBuffer*>(AllocFromDeviceCache(sizeof(VkCommandBuffer) * numberOfCommandBuffers));
+
+	if (!l)
+	{
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(capabilites);
 
 	VkCommandBufferAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.commandPool = GetCommandPool(queueDetails.poolIndex);
 	allocInfo.level = level;
 	allocInfo.commandBufferCount = numberOfCommandBuffers;
-	VkCommandBuffer* l = reinterpret_cast<VkCommandBuffer*>(AllocFromDeviceCache(sizeof(VkCommandBuffer) * numberOfCommandBuffers));
 
-	if (vkAllocateCommandBuffers(device, &allocInfo, l) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate command buffers!");
+	if ((vkRes = vkAllocateCommandBuffers(device, &allocInfo, l)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return nullptr;
 	}
 
-	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * numberOfCommandBuffers));
+	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) 
+	{	
+		cbObjects[i].buffer = l[i];
+		cbObjects[i].queueFamilyIndex = queueDetails.queueFamilyIndex;
+		cbObjects[i].queueIndex = queueDetails.queueIndex;
+		cbObjects[i].poolIndex = queueDetails.poolIndex;
+		cbObjects[i].fenceIdx = EntryHandle();
 
-	VKCommandBuffer** temp = reinterpret_cast<VKCommandBuffer**>(AllocFromDeviceCache(sizeof(VKCommandBuffer*) * numberOfCommandBuffers));
-	
+		intHandles[i] = AddVkTypeToEntry(&cbObjects[i], VulkVKCommandBuffer);
 
-	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
-		auto iter = reinterpret_cast<VKCommandBuffer*>(AllocFromPerDeviceData(sizeof(VKCommandBuffer)));
-		iter->buffer = l[i];
-		iter->queueFamilyIndex = queueDetails.queueFamilyIndex;
-		iter->queueIndex = queueDetails.queueIndex;
-		iter->poolIndex = queueDetails.poolIndex;
-		iter->fenceIdx = EntryHandle();
-		ret[i] = AddVkTypeToEntry(iter, VulkVKCommandBuffer);
-		temp[i] = iter;
+		if (intHandles[i] == EntryHandle())
+		{
+			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+			return nullptr;
+		}
+		
+		temp[i] = &cbObjects[i];
 	}
 	
 
 	if (createFences)
 	{
-		auto fencesidx = CreateFences(numberOfCommandBuffers, VK_FENCE_CREATE_SIGNALED_BIT);
+		EntryHandle* fencesidx = CreateFences(numberOfCommandBuffers, VK_FENCE_CREATE_SIGNALED_BIT);
 
-		for (uint32_t i = 0; i < numberOfCommandBuffers; i++) {
+		if (!fencesidx)
+		{
+			return nullptr;
+		}
+
+		for (uint32_t i = 0; i < numberOfCommandBuffers; i++) 
+		{
 			temp[i]->fenceIdx = fencesidx[i];
 		}
 	}
 
-	return ret;
-}
-
-EntryHandle VKDevice::CreateImage(
-	char* imageData,
-	uint32_t* imageSizes,
-	uint32_t blobSize,
-	uint32_t width, uint32_t height,
-	uint32_t mipLevels, VkFormat type,
-	EntryHandle memIndex,
-	EntryHandle hostIndex, VkImageAspectFlags flags)
-{
-	
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
-
-
-	VkQueue queue;
-	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
-
-	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
-
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
-		return EntryHandle();
-
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	stagingBuffer = alloc->buffer;
-	stagingMemory = alloc->memory;
-
-	char* data;
-	auto& pixels = imageData;
-	vkMapMemory(device, stagingMemory, 0, imagesSize, 0, reinterpret_cast<void**>(&data));
-	
-	std::memcpy(data, pixels, imagesSize);
-		
-	vkUnmapMemory(device, stagingMemory);
-
-	VkFormat format = type;
-
-	EntryHandle imageIndex = CreateImage(
-		width, height, mipLevels, type, 1,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, memIndex);
-
-
-	VkImage image = GetImageByHandle(imageIndex);
-
-	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
-
-	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
-
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
-
-	VkDeviceSize offset = 0UL;
-
-	if (mipLevels > 1)
-
-	{
-		for (auto i = 0U; i < mipLevels; i++) {
-
-			VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, 1);
-
-			offset += static_cast<VkDeviceSize>(imageSizes[i]);
-		}
-	}
-	else
-	{
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width, height, 0, 0, { 0, 0, 0 }, 0, 1);
-	}
-
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, 1);
-
-	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
-
-	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
-
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, 1, type, flags, VK_IMAGE_VIEW_TYPE_2D);
-
-	EntryHandle samplerIndex = CreateSampler(mipLevels);
-
-	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
-
-	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, &samplerIndex, 1);
-
-	EntryHandle ret;
-
-	
-
-	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
-	
-
-	return ret;
+	return intHandles;
 }
 
 EntryHandle VKDevice::CreateImageHandle(
@@ -1753,19 +1920,28 @@ EntryHandle VKDevice::CreateImageHandle(
 	VkImageType imageType
 )
 {
+	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+
+	if (!tex)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
 
-	EntryHandle imageIndex;
-	
-	imageIndex = CreateImage(
+	EntryHandle imageIndex = CreateImage(
 		width, height, mipLevels, imageFormat, layers,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
-	
 
+	if (imageIndex == EntryHandle())
+	{
+		return imageIndex;
+	}
+	
 	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_2D;
 
 	switch (imageType)
@@ -1778,18 +1954,26 @@ EntryHandle VKDevice::CreateImageHandle(
 		break;
 	}
 
-
 	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
-	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+	if (viewIndex == EntryHandle())
+	{
+		DestroyImage(imageIndex);
+		return viewIndex;
+	}
 
 	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
 
-	EntryHandle ret;
+	EntryHandle texImageHandle = AddVkTypeToEntry(tex, VulkTextureHandle);
 
-	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
+	if (texImageHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		DestroyImageView(viewIndex);
+		DestroyImage(imageIndex);
+	}
 
-	return ret;
+	return texImageHandle;
 }
 
 EntryHandle VKDevice::CreateCubeMapedImageHandle(
@@ -1800,36 +1984,59 @@ EntryHandle VKDevice::CreateCubeMapedImageHandle(
 	VkImageAspectFlags flags
 )
 {
+	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+
+	if (!tex)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(blobSize);
 
-	EntryHandle imageIndex;
-
-	imageIndex = CreateImage(
+	EntryHandle imageIndex = CreateImage(
 		width, height, mipLevels, imageFormat, layers,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
 		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_IMAGE_TYPE_2D, memIndex);
 
+	if (imageIndex == EntryHandle())
+	{
+		return imageIndex;
+	}
 
 	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
 	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
-	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
+	if (viewIndex == EntryHandle())
+	{
+		DestroyImage(imageIndex);
+		return viewIndex;
+	}
 
 	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
 
-	EntryHandle ret;
+	EntryHandle texImageHandle = AddVkTypeToEntry(tex, VulkTextureHandle);
 
-	ret = AddVkTypeToEntry(tex, VulkTextureHandle);
+	if (texImageHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		DestroyImageView(viewIndex);
+		DestroyImage(imageIndex);
+	}
 
-	return ret;
+	return texImageHandle;
+
 }
 
 EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 {
-	
+	VkSampler sampler = VK_NULL_HANDLE;
+
+	VkResult vkRes = VK_SUCCESS;
+
 	VkPhysicalDeviceProperties properties{};
 	vkGetPhysicalDeviceProperties(gpu, &properties);
 
@@ -1857,76 +2064,122 @@ EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 	samplerInfo.minLod = 0.0f;
 	samplerInfo.maxLod = static_cast<float>(mipLevels);
 
-	VkSampler sampler = VK_NULL_HANDLE;
-
-	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create texture sampler!");
+	if ((vkRes = vkCreateSampler(device, &samplerInfo, nullptr, &sampler)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SAMPLER_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
 	}
 
-	EntryHandle ret;
+	EntryHandle samplerHandle = AddVkTypeToEntry(sampler, VulkImageSampler);
 
-	
-	ret = AddVkTypeToEntry(sampler, VulkImageSampler);
+	if (samplerHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		vkDestroySampler(device, sampler, nullptr);
+	}
 
-	return ret;
+	return samplerHandle;
 }
 
 EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
 
-	EntryHandle* ret = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
+	EntryHandle* semaphoreHandles = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
 
-	VkSemaphore sema = nullptr;
+	if (!semaphoreHandles)
+	{
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
+	VkSemaphore vkSemaHandle = nullptr;
 
 	VkSemaphoreCreateInfo semaphoreInfo{};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-
-
 	for (uint32_t i = 0; i < count; i++)
 	{
-		if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &sema) != VK_SUCCESS) {
-			throw std::runtime_error("failed to create semaphores!");
+		if ((vkRes = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &vkSemaHandle)) != VK_SUCCESS) 
+		{
+			AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SEMAPHORE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+			return nullptr;
 		}
-		ret[i] = AddVkTypeToEntry(sema, VulkSemaphores);
+
+		semaphoreHandles[i] = AddVkTypeToEntry(vkSemaHandle, VulkSemaphores);
+
+		if (semaphoreHandles[i] == EntryHandle())
+		{
+			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+			for (uint32_t j = 0; j <= i; j++)
+			{
+				vkDestroySemaphore(device, vkSemaHandle, nullptr);
+			}
+			return nullptr;
+		}
 	}
 
-
-	return ret;
+	return semaphoreHandles;
 }
 
 EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags)
 {
 	VkShaderModule mod = VK_NULL_HANDLE;
-
-	mod = VK::Utils::createShaderModule(device, data, dataSize);
+	
+	VkResult vkRes = VK_SUCCESS;
 
 	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
+
+	if (!modHandle)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	int retCode = VK::Utils::CreateShaderModule(device, data, dataSize, &mod, &vkRes);
+
+	if (retCode < 0)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SHADER_MODULE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
 
 	modHandle->sMod = mod;
 
 	modHandle->flags = flags;
 
-	EntryHandle ret = AddVkTypeToEntry((void*)modHandle, VulkShaderHandle);
+	EntryHandle shaderModHandle = AddVkTypeToEntry(modHandle, VulkShaderHandle);
 
-	return ret;
+	if (shaderModHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+
+	return shaderModHandle;
 }
 
 EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat)
 {
-
-	
-
 	VKSwapChain* swc = reinterpret_cast<VKSwapChain*>(AllocFromPerDeviceData(sizeof(VKSwapChain)));
+
+	if (!swc)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
 
-	swc = std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
+	std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
 
-	EntryHandle index = AddVkTypeToEntry(swc, VulkSwapChain);
+	EntryHandle swcHandle = AddVkTypeToEntry(swc, VulkSwapChain);
 
-	return index;
+	if (swcHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
+
+	return swcHandle;
 }
 
 
@@ -1997,7 +2250,8 @@ void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 	
 	VKCommandBuffer* buff = GetCommandBuffer(handle);
 	if (!buff) return;
-	if (buff->fenceIdx != EntryHandle()) {
+	if (buff->fenceIdx != EntryHandle()) 
+	{
 		DestroyFence(buff->fenceIdx);
 	}
 	ReturnHandleObject(handle);
@@ -2432,7 +2686,7 @@ VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(objHandle.memoryLocation);
 
 	if (!set) return VK_NULL_HANDLE;
-	if (set->numberOfSets <= index) throw std::runtime_error("Come on!");
+	if (set->numberOfSets <= index) return VK_NULL_HANDLE;
 
 	return set->sets[index];
 
@@ -2621,7 +2875,8 @@ int32_t VKDevice::GetQueueByMask(QueueIndex* queueIdx,
 	for (uint32_t i = 0; i < famPropsCount; i++)
 	{
 		VkQueueFamilyProperties* props = &famProps[i];
-		if ((props->queueFlags & queueMask) == queueMask) {
+		if ((props->queueFlags & queueMask) == queueMask) 
+		{
 			*queueIdx = QueueIndex(i);
 			*maxQueueCount = QueueIndex(props->queueCount);
 			return 0;
@@ -2838,7 +3093,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	VkImageUsageFlags flags, uint32_t sampleCount,
 	VkMemoryPropertyFlags memProps)
 {
-	
+	VkResult vkRes = VK_SUCCESS;
 	VkImage image;
 	VkImageCreateInfo imageInfo{};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -2857,12 +3112,16 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 	imageInfo.samples = static_cast<VkSampleCountFlagBits>(sampleCount);
 	imageInfo.flags = 0;
 
-	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create image!");
+	if ((vkRes = vkCreateImage(device, &imageInfo, nullptr, &image)) != VK_SUCCESS) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return { 0, 0 };
 	}
 
 	VkMemoryRequirements memRequirements;
+	
 	vkGetImageMemoryRequirements(device, image, &memRequirements);
+	
 	uint32_t memoryTypeIndex = VK::Utils::findMemoryType(gpu, memRequirements.memoryTypeBits, memProps);
 
 	vkDestroyImage(device, image, nullptr);
@@ -2897,7 +3156,8 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageInde
 		queueIndex = queueDetails.queueIndex;
 		queueFamilyIndex = queueDetails.queueFamilyIndex;
 	}
-	else {
+	else 
+	{
 		auto rbo = GetCommandBuffer(commandBufferIndex);
 		queueIndex = rbo->queueIndex;
 		queueFamilyIndex = rbo->queueFamilyIndex;
@@ -2948,10 +3208,12 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageInde
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
 
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) 
+	{
 		return 0;
 	}
-	else if (result != VK_SUCCESS) {
+	else if (result != VK_SUCCESS) 
+	{
 		throw std::runtime_error("failed to present swap chain image!");
 	}
 
@@ -3031,7 +3293,8 @@ uint32_t VKDevice::SubmitCommandBuffer(
 
 	VkFence fence = GetFence(vkcb->fenceIdx);
 
-	if (vkQueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS) {
+	if (vkQueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS) 
+	{
 		throw std::runtime_error("failed to submit draw command buffer!");
 	}
 
@@ -3394,7 +3657,8 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	VkDeviceSize offset = offsetAlloc;
 
-	for (auto i = 0U; i < mipLevels; i++) {
+	for (auto i = 0U; i < mipLevels; i++) 
+	{
 
 		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
 

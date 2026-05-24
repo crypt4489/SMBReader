@@ -307,6 +307,7 @@ enum DeviceErrorCodeMajor
 	DEVICE_STORAGE_EXHAUSTED = 3,
 	DEVICE_CACHE_ALLOC_TOO_LARGE = 4,
 	DEVICE_VK_TYPE_CREATION_FAILED = 5,
+	DEVICE_VK_TYPE_HANDLE_INPUT_INVALID = 6,
 };
 
 #define MINOR_CODE_PACK(x) ((int)x << 6)
@@ -319,6 +320,17 @@ enum DeviceErrorCodeMinor
 	DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED = 4,
 	DEVICE_VK_TYPE_FENCE_FAILED = 5,
 	DEVICE_VK_TYPE_FRAMEBUFFER_FAILED = 6,
+	DEVICE_VK_TYPE_MEMORY_FAILED = 7,
+	DEVICE_VK_TYPE_BIND_MEMORY_FAILED = 8,
+	DEVICE_VK_TYPE_SHADER_MODULE_FAILED = 9,
+	DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED = 10,
+	DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED = 11,
+	DEVICE_VK_TYPE_IMAGE_VIEW_FAILED = 12,
+	DEVICE_VK_TYPE_QUERY_POOL_FAILED = 13,
+	DEVICE_VK_TYPE_RENDER_PASS_FAILED = 14,
+	DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED = 15,
+	DEVICE_VK_TYPE_SAMPLER_FAILED = 15,
+	DEVICE_VK_TYPE_SEMAPHORE_FAILED = 15,
 };
 
 struct HandlePoolObject
@@ -347,13 +359,19 @@ struct VKDevice
 
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
+	EntryHandle CreateCubeMapedImageHandle(
+		uint32_t blobSize,
+		uint32_t width, uint32_t height, uint32_t layers,
+		uint32_t mipLevels, VkFormat imageFormat,
+		EntryHandle memIndex,
+		VkImageAspectFlags flags
+	);
+
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize, VkDescriptorPoolCreateFlags flags);
 
 	DescriptorSetBuilder* CreateDescriptorSetBuilder(EntryHandle poolIndex, EntryHandle descriptorLayout, uint32_t numberofsets, uint32_t varDescriptorCount);
-
-	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
 	DescriptorSetLayoutBuilder* CreateDescriptorSetLayoutBuilder(uint32_t bindingCount);
 
@@ -375,11 +393,14 @@ struct VKDevice
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
 
-	EntryHandle CreateStorageImage(
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, VkFormat type,
+	EntryHandle CreateImageHandle(
+		uint32_t blobSize,
+		uint32_t width, uint32_t height, uint32_t layers,
+		uint32_t mipLevels, VkFormat imageFormat,
 		EntryHandle memIndex,
-		VkImageAspectFlags flags, VkImageLayout layout);
+		VkImageAspectFlags flags,
+		VkImageType imageType
+	);
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
@@ -414,7 +435,7 @@ struct VKDevice
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
-	void CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
+	int CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	EntryHandle CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries);
 
@@ -433,39 +454,17 @@ struct VKDevice
 		VkCommandBufferLevel level
 	);
 
-	EntryHandle CreateImage(
-		char* imageData,
-		uint32_t* imageSizes,
-		uint32_t blobSize,
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, VkFormat type,
-		EntryHandle memIndex,
-		EntryHandle hostIndex, VkImageAspectFlags flags);
-
-
-	EntryHandle CreateImageHandle(
-		uint32_t blobSize,
-		uint32_t width, uint32_t height, uint32_t layers,
-		uint32_t mipLevels, VkFormat imageFormat,
-		EntryHandle memIndex,
-		VkImageAspectFlags flags,
-		VkImageType imageType
-	);
-
-	EntryHandle CreateCubeMapedImageHandle(
-		uint32_t blobSize,
-		uint32_t width, uint32_t height, uint32_t layers,
-		uint32_t mipLevels, VkFormat imageFormat,
-		EntryHandle memIndex,
-		VkImageAspectFlags flags
-	);
-
-
 	EntryHandle CreateSampler(uint32_t mipLevels);
 
 	EntryHandle* CreateSemaphores(uint32_t count);
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
+
+	EntryHandle CreateStorageImage(
+		uint32_t width, uint32_t height,
+		uint32_t mipLevels, VkFormat type,
+		EntryHandle memIndex,
+		VkImageAspectFlags flags, VkImageLayout layout);
 
 	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat);
 
@@ -656,6 +655,8 @@ struct VKDevice
 	void TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
+
+	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
 	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet);
 
