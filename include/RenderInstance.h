@@ -208,7 +208,6 @@ struct RenderInstance
 
 
 	int renderTargetsDrawDataAlloc = 0;
-	std::array<EntryHandle, 20> renderTargets{};
 	int vulkanRenderPassAlloc = 0;
 	std::array<EntryHandle, 20> renderPasses{};
 

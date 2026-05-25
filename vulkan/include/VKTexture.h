@@ -2,8 +2,6 @@
 #include "IndexTypes.h"
 struct VKTexture
 {
-
-
 	VKTexture(EntryHandle piIndex, EntryHandle *pvIndex, int numViews, EntryHandle* psIndex, int numSamplers);
 
 	VKTexture(VKTexture&& other) noexcept;

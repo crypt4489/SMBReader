@@ -261,8 +261,33 @@ struct ImageMemoryPool
 	VKMemoryAllocator alloc;
 };
 
+struct BufferAlloc
+{
+	VkBuffer buffer;
+	VkDeviceMemory memory;
+	VKMemoryAllocator alloc;
+};
 
-enum HandleType
+struct BufferView
+{
+	uint32_t count;
+	VkBufferView* views;
+};
+
+struct TexelBufferView
+{
+	EntryHandle bufferHandle;
+	EntryHandle viewHandle;
+};
+
+struct ImageAllocation
+{
+	VkImage imageHandle;
+	size_t deviceMemoryAddress;
+	EntryHandle memIndex;
+};
+
+enum HandleType : uint64_t
 {
 	VulkBuffer = 0,
 	VulkImageHandle = 1,
@@ -308,6 +333,11 @@ enum DeviceErrorCodeMajor
 	DEVICE_CACHE_ALLOC_TOO_LARGE = 4,
 	DEVICE_VK_TYPE_CREATION_FAILED = 5,
 	DEVICE_VK_TYPE_HANDLE_INPUT_INVALID = 6,
+	DEVICE_VK_TYPE_SWC_PRESENT_FAILED= 7,
+	DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED = 8,
+	DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED = 9,
+	DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE = 10,
+	DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS = 11,
 };
 
 #define MINOR_CODE_PACK(x) ((int)x << 6)
@@ -329,8 +359,19 @@ enum DeviceErrorCodeMinor
 	DEVICE_VK_TYPE_QUERY_POOL_FAILED = 13,
 	DEVICE_VK_TYPE_RENDER_PASS_FAILED = 14,
 	DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED = 15,
-	DEVICE_VK_TYPE_SAMPLER_FAILED = 15,
-	DEVICE_VK_TYPE_SEMAPHORE_FAILED = 15,
+	DEVICE_VK_TYPE_SAMPLER_FAILED = 16,
+	DEVICE_VK_TYPE_SEMAPHORE_FAILED = 17,
+	DEVICE_VK_TYPE_LOGICAL_DEVICE_FAILED = 18,
+	DEVICE_VK_TYPE_BUFFER_ALLOC_FAILED = 19,
+	DEVICE_VK_TYPE_BUFFER_VIEW_CONTAINER_FAILED = 20,
+	DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED = 21,
+	DEVICE_VK_TYPE_DESCRIPTOR_LAYOUT_FAILED = 22,
+	DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED = 23,
+	DEVICE_VK_TYPE_IMAGE_MEMORY_POOL_FAILED = 24,
+	DEVICE_VK_TYPE_IMAGE_PIPELINE_CACHE_FAILED = 25,
+	DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED = 26,
+	DEVICE_VK_TYPE_TEXEL_BUFFER_VIEW_FAILED = 27,
+	DEVICE_VK_TYPE_TEXTURE_FAILED = 28,
 };
 
 struct HandlePoolObject
@@ -412,7 +453,7 @@ struct VKDevice
 		VkImage image, uint32_t mipLevels, uint32_t layersCount,
 		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
-	void CreateLogicalDevice(
+	int CreateLogicalDevice(
 		const char** instanceLayers,
 		uint32_t layerCount,
 		const char** deviceExtensions,
@@ -471,7 +512,13 @@ struct VKDevice
 	
 	//GETTERS
 
+	BufferAlloc* GetBufferAlloc(EntryHandle handle);
+
+	VkBuffer GetBufferHandle(EntryHandle handle);
+
 	VkBufferView GetBufferView(EntryHandle handle, uint32_t index);
+
+	BufferView* GetBufferViewContainer(EntryHandle handle);
 
 	VKCommandBuffer* GetCommandBuffer(EntryHandle handle);
 
@@ -493,7 +540,7 @@ struct VKDevice
 
 	VkFramebuffer GetFrameBuffer(EntryHandle handle);
 	
-	VkBuffer GetBufferHandle(EntryHandle handle);
+	ImageAllocation* GetImageAllocation(EntryHandle handle);
 
 	VkImage GetImageByHandle(EntryHandle handle);
 
@@ -533,13 +580,9 @@ struct VKDevice
 
 	RecordingBufferObject GetRecordingBufferObject(EntryHandle handle);
 
-	VKRenderGraph* GetRenderGraph(EntryHandle handle);
-
 	VkRenderPass GetRenderPass(EntryHandle handle);
 
 	RenderTarget* GetRenderTarget(EntryHandle handle);
-
-	RenderTarget* GetRenderTargetByGraph(EntryHandle handle);
 
 	VkSampler GetSamplerByHandle(EntryHandle handle);
 
@@ -550,6 +593,8 @@ struct VKDevice
 	ShaderHandle* GetShader(EntryHandle handle);
 
 	VKSwapChain* GetSwapChain(EntryHandle handle);
+
+	TexelBufferView* GetTexelBufferView(EntryHandle handle);
 
 	VKTexture* GetTexture(EntryHandle handle);
 
@@ -634,7 +679,7 @@ struct VKDevice
 
 	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	uint32_t PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
+	int PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
 	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
 
@@ -642,7 +687,7 @@ struct VKDevice
 
 	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
-	uint32_t SubmitCommandBuffer(
+	int SubmitCommandBuffer(
 		EntryHandle* wait,
 		VkPipelineStageFlags* waitStages,
 		EntryHandle* signal,
@@ -650,15 +695,13 @@ struct VKDevice
 		uint32_t signalCount,
 		EntryHandle cbIndex);
 
-	uint32_t SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex);
+	int SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex);
 
 	void TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
-
-	void UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle* perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet);
 
 	int32_t CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex);
 	

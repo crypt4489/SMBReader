@@ -642,7 +642,7 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[attachmentGraphInstancesCount];
 
-	attachmentGraphInstancesCount++;
+	int retAddress = attachmentGraphInstancesCount++;
 
 	graphInstance->graphLayout = graph;
 
@@ -728,7 +728,7 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 	renderTargetsDrawDataAlloc += totalRenderTargetsCreated;
 
-	return attachmentGraphInstancesCount-1;
+	return retAddress;
 }
 
 
@@ -949,11 +949,16 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	uint32_t res = dev->SubmitCommandsForSwapChain(swapChainIndex, currentFrame, imageIndex, currentCBIndex[currentFrame]);
+	int res = dev->SubmitCommandsForSwapChain(swapChainIndex, currentFrame, imageIndex, currentCBIndex[currentFrame]);
+
+	if (res)
+	{
+		return -1;
+	}
 
 	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 
-	if (!res) {
+	if (res) {
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 		int ret = RecreateSwapChain(swapChainIndex);
 		return -1;
@@ -2638,8 +2643,8 @@ void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int d
 		for (uint32_t j = 0; j < samplesCount; j++)
 		{
 			int index = renderTargetBase + j;
-			renderTargets[index] = majorDevice->CreateRenderTargetData(mainRenderTargets[index], descCount);
-			majorDevice->UpdateRenderGraph(renderTargets[index], nullptr, 0, descIDs, descCount, nullptr);
+			//renderTargets[index] = majorDevice->CreateRenderTargetData(mainRenderTargets[index], descCount);
+			//majorDevice->UpdateRenderGraph(renderTargets[index], nullptr, 0, descIDs, descCount, nullptr);
 		}
 
 		renderTargetBase += samplesCount;

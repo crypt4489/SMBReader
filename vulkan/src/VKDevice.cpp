@@ -15,13 +15,6 @@
 
 
 
-struct BufferAlloc
-{
-	VkBuffer buffer;
-	VkDeviceMemory memory;
-	VKMemoryAllocator alloc;
-};
-
 struct RenderPassData
 {
 	EntryHandle target;
@@ -709,6 +702,8 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 
 	retCode = VK::Utils::CreateShaderModule(device, shaderProgramHold.shaderRawData, shaderProgramHold.shaderRawDataSize, &mod, &vkRes);
 
+	GLSLANG::DeleteShader(&shaderProgramHold);
+
 	if (retCode < 0)
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SHADER_MODULE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
@@ -728,18 +723,6 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 
 	return ret;
 }
-
-struct TexelBufferView
-{
-	EntryHandle bufferHandle;
-	EntryHandle viewHandle;
-};
-
-struct BufferView
-{
-	uint32_t count;
-	VkBufferView* views;
-};
 
 EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format, size_t rangeSize, size_t offset, uint32_t numberOfAllocs)
 {
@@ -784,6 +767,7 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 			}
 
 			return EntryHandle();
+
 		}
 
 		info.offset += rangeSize;
@@ -1248,13 +1232,6 @@ EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFl
 	return buffIndex;
 }
 
-struct ImageAllocation
-{
-	VkImage imageHandle;
-	size_t deviceMemoryAddress;
-	EntryHandle memIndex;
-};
-
 EntryHandle VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
@@ -1504,7 +1481,7 @@ EntryHandle VKDevice::CreateImageView(
 	return imageViewHandle;
 }
 
-void VKDevice::CreateLogicalDevice(
+int VKDevice::CreateLogicalDevice(
 	const char** instanceLayers,
 	uint32_t layerCount,
 	const char** deviceExtensions,
@@ -1625,16 +1602,15 @@ void VKDevice::CreateLogicalDevice(
 
 	if (res != VK_SUCCESS)
 	{
-		throw std::runtime_error("failed to create logical GPU, mate!");
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_LOGICAL_DEVICE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, res);
+		return -1;
 	}
 
 	QueueManager* ptr = (QueueManager*)AllocFromPerDeviceData(sizeof(QueueManager) * queueIndices.size());
 
 	queueManagersSize = queueIndices.size();
 
-
 	queueManagers = AddVkTypeToEntry(ptr, VulkQueueManager);
-
 
 	for (const auto queueFamily : queueIndices) 
 	{
@@ -1646,13 +1622,7 @@ void VKDevice::CreateLogicalDevice(
 		ptr = std::next(ptr);
 	}
 
-
-
-	VkDeviceGroupPresentInfoKHR info{};
-	info.sType = VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR;
-	info.swapchainCount = 1;
-	info.mode = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
-	info.pDeviceMasks = &deviceMask;
+	return 0;
 }
 
 VKGraphicsPipelineBuilder* VKDevice::CreateGraphicsPipelineBuilder(EntryHandle renderPassIndex, uint32_t colorCount, uint32_t descLayoutCount, uint32_t dynamicStateCount, uint32_t pushConstantRangeCount)
@@ -2187,19 +2157,15 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 
 void VKDevice::DestroyBuffer(EntryHandle handle)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+	BufferAlloc* alloc = GetBufferAlloc(handle);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!alloc) 
 		return;
-
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	if (!alloc) return;
 	
-	VkBuffer ret = alloc->buffer;
-	auto deviceMem = alloc->memory;
+	VkBuffer deviceBuffer = alloc->buffer;
+	VkDeviceMemory deviceMem = alloc->memory;
 	
-	vkDestroyBuffer(device, ret, nullptr);
+	vkDestroyBuffer(device, deviceBuffer, nullptr);
 	vkFreeMemory(device, deviceMem, nullptr);
 
 	ReturnHandleObject(handle);
@@ -2207,14 +2173,10 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 
 void VKDevice::DestroyBufferView(EntryHandle handle)
 {
-	
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+	BufferView* viewHandles = GetBufferViewContainer(handle);
 
-	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
+	if (!viewHandles)
 		return;
-
-
-	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
 
 	for (uint32_t i = 0; i < viewHandles->count; i++)
 	{
@@ -2226,76 +2188,89 @@ void VKDevice::DestroyBufferView(EntryHandle handle)
 
 void VKDevice::DestroyTexelBufferView(EntryHandle handle)
 {
-	
+	TexelBufferView* tbv = GetTexelBufferView(handle);
 
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkImageBufferView || !objHandle.memoryLocation)
+	if (!tbv) 
 		return;
 
-	TexelBufferView* alloc = reinterpret_cast<TexelBufferView*>(objHandle.memoryLocation);
-
-	if (!alloc) return;
-	DestroyBuffer(alloc->bufferHandle);
-	DestroyBufferView(alloc->viewHandle);
+	DestroyBuffer(tbv->bufferHandle);
+	DestroyBufferView(tbv->viewHandle);
 
 	ReturnHandleObject(handle);
-
 }
-
-
 
 void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 {
-	
 	VKCommandBuffer* buff = GetCommandBuffer(handle);
-	if (!buff) return;
+
+	if (!buff) 
+		return;
+	
 	if (buff->fenceIdx != EntryHandle()) 
 	{
 		DestroyFence(buff->fenceIdx);
 	}
+	
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyCommandPool(EntryHandle handle)
 {
 	VkCommandPool pool = GetCommandPool(handle);
-	if (!pool) return;
+
+	if (!pool) 
+		return;
+
 	vkDestroyCommandPool(device, pool, nullptr);
+
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyFence(EntryHandle handle)
 {
 	VkFence fence = GetFence(handle);
-	if (!fence) return;
+
+	if (!fence) 
+		return;
+
 	vkDestroyFence(device, fence, nullptr);
+
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyFrameBuffer(EntryHandle handle)
 {
 	VkFramebuffer fb = GetFrameBuffer(handle);
-	if (!fb) return;
+
+	if (!fb) 
+		return;
+
 	vkDestroyFramebuffer(device, fb, nullptr);
+
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDescriptorPool(EntryHandle handle)
 {
-	
 	VkDescriptorPool pool = GetDescriptorPool(handle);
-	if (!pool) return;
+
+	if (!pool) 
+		return;
+
 	vkDestroyDescriptorPool(device, pool, nullptr);
+
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
 {
-	
 	VkDescriptorSetLayout lay = GetDescriptorSetLayout(handle);
-	if (!lay) return;
+
+	if (!lay) 
+		return;
+	
 	vkDestroyDescriptorSetLayout(device, lay, nullptr);
+	
 	ReturnHandleObject(handle);
 }
 
@@ -2444,51 +2419,39 @@ void VKDevice::DestroyDevice()
 
 void VKDevice::DestroyImage(EntryHandle handle)
 {
-	
+	ImageAllocation* image = GetImageAllocation(handle);
 
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkImageHandle || !objHandle.memoryLocation)
+	if (!image)
 		return;
-
-	auto image = reinterpret_cast<ImageAllocation*>(objHandle.memoryLocation);
 
 	vkDestroyImage(device, image->imageHandle, nullptr);
 
-	objHandle = GetVkTypeFromEntry(image->memIndex);
+	ImageMemoryPool* memPool = GetImageMemoryPool(image->memIndex);
 
-	if (objHandle.type == VulkImageMemoryPool && objHandle.memoryLocation)
-	{
-		auto alloc = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
-
-		alloc->alloc.FreeMemory(image->deviceMemoryAddress);
-	}
+	if (memPool)
+		memPool->alloc.FreeMemory(image->deviceMemoryAddress);
 
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyImagePool(EntryHandle handle)
 {
-	
+	ImageMemoryPool* pool = GetImageMemoryPool(handle);
 
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
+	if (!pool)
 		return;
 
-	auto iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
+	vkFreeMemory(device, pool->memory, nullptr);
 
-	vkFreeMemory(device, iter->memory, nullptr);
 	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyRenderPass(EntryHandle handle)
 {
-	
-
 	VkRenderPass pass = GetRenderPass(handle);
 
-	if (!pass) return;
+	if (!pass) 
+		return;
 
 	vkDestroyRenderPass(device, pass, nullptr);
 
@@ -2498,8 +2461,8 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 void VKDevice::DestroyRenderTarget(EntryHandle handle)
 {
 	RenderTarget* target = GetRenderTarget(handle);
-	uint32_t i = target->count;
-	for (uint32_t j = 0; j<i; j++)
+
+	for (uint32_t j = 0; j < target->count; j++)
 	{
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
@@ -2522,8 +2485,8 @@ void VKDevice::DestoryQueryPool(EntryHandle handle)
 void VKDevice::ResetRenderTarget(EntryHandle handle)
 {
 	RenderTarget* target = GetRenderTarget(handle);
-	uint32_t i = target->count;
-	for (uint32_t j = 0; j < i; j++)
+	
+	for (uint32_t j = 0; j < target->count; j++)
 	{
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
@@ -2531,12 +2494,10 @@ void VKDevice::ResetRenderTarget(EntryHandle handle)
 
 void VKDevice::DestroyImageView(EntryHandle handle)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+	VkImageView view = GetImageViewByHandle(handle);
 
-	if (objHandle.type != VulkImageView || !objHandle.memoryLocation)
+	if (!view)
 		return;
-
-	VkImageView view = reinterpret_cast<VkImageView>(objHandle.memoryLocation);
 
 	vkDestroyImageView(device, view, nullptr);
 
@@ -2547,7 +2508,8 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 {
 	PipelineCacheObject* obj = GetPipelineCacheObject(handle);
 
-	if (!obj) return;
+	if (!obj) 
+		return;
 
 	vkDestroyPipeline(device, obj->pipeline, nullptr);
 
@@ -2558,12 +2520,10 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 
 void VKDevice::DestroySampler(EntryHandle handle)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+	VkSampler sampler = GetSamplerByHandle(handle);
 
-	if (objHandle.type != VulkImageSampler || !objHandle.memoryLocation)
+	if (!sampler)
 		return;
-
-	VkSampler sampler = reinterpret_cast<VkSampler>(objHandle.memoryLocation);
 
 	vkDestroySampler(device, sampler, nullptr);
 
@@ -2574,7 +2534,8 @@ void VKDevice::DestroySemaphore(EntryHandle handle)
 {
 	VkSemaphore sema = GetSemaphore(handle);
 
-	if (!sema) return;
+	if (!sema) 
+		return;
 
 	vkDestroySemaphore(device, sema, nullptr);
 
@@ -2585,7 +2546,8 @@ void VKDevice::DestroyShader(EntryHandle handle)
 {
 	ShaderHandle* shader = GetShader(handle);
 
-	if (!shader) return;
+	if (!shader) 
+		return;
 
 	vkDestroyShaderModule(device, shader->sMod, nullptr);
 
@@ -2619,74 +2581,132 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 
 //GETTERS
 
+BufferAlloc* VKDevice::GetBufferAlloc(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_ALLOC_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	return alloc;
+}
+
+VkBuffer VKDevice::GetBufferHandle(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
+
+	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+
+	return alloc->buffer;
+}
+
 VkBufferView VKDevice::GetBufferView(EntryHandle handle, uint32_t index)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_VIEW_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
 
 	return viewHandles->views[index];
 }
 
+BufferView* VKDevice::GetBufferViewContainer(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_VIEW_CONTAINER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
+
+	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
+
+	return viewHandles;
+}
+
 VKCommandBuffer* VKDevice::GetCommandBuffer(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkVKCommandBuffer || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VKCommandBuffer*>(objHandle.memoryLocation);
 }
 
 VkCommandBuffer VKDevice::GetCommandBufferHandle(EntryHandle handle)
 {
-	auto ref = GetCommandBuffer(handle);
-	if (!ref) return VK_NULL_HANDLE;
-	return ref->buffer;
+	VKCommandBuffer* cbContainer = GetCommandBuffer(handle);
+	
+	if (!cbContainer)
+		return VK_NULL_HANDLE;
+	
+	return cbContainer->buffer;
 }
 
 VkCommandPool VKDevice::GetCommandPool(EntryHandle handle)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkCommandPool || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_COMMAND_POOL_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkCommandPool>(objHandle.memoryLocation);
 }
 
 VkDescriptorPool VKDevice::GetDescriptorPool(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorPool || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkDescriptorPool>(objHandle.memoryLocation);
 }
 
 VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorSet || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(objHandle.memoryLocation);
 
-	if (!set) return VK_NULL_HANDLE;
-	if (set->numberOfSets <= index) return VK_NULL_HANDLE;
+	if (set->numberOfSets <= index) 
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED) | DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
 
 	return set->sets[index];
 
@@ -2694,11 +2714,13 @@ VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 
 VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorSet || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(objHandle.memoryLocation);
 
@@ -2707,12 +2729,13 @@ VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
 
 VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkDescriptorLayout || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_LAYOUT_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkDescriptorSetLayout>(objHandle.memoryLocation);
 }
@@ -2720,22 +2743,28 @@ VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle handle)
 
 uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t *size, uint32_t capabilities)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
 
 	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return 0;
+	}
 
-	auto iter = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
+	QueueManager* qm = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
 
 	uint32_t* out = *queueFamilies;
+	
 	uint32_t index = 0;
+	
 	for (size_t i = 0; i < queueManagersSize && capabilities; i++)
 	{
 		uint32_t comp = capabilities;
-		capabilities &= ~(iter[i].queueCapabilities & capabilities);
-		if (comp != capabilities) out[index++] = iter[i].queueFamilyIndex;
+		
+		capabilities &= ~(qm[i].queueCapabilities & capabilities);
+		
+		if (comp != capabilities) 
+			out[index++] = qm[i].queueFamilyIndex;
 	}
 
 	*size = index;
@@ -2745,39 +2774,43 @@ uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t
 
 VkFence VKDevice::GetFence(EntryHandle handle)
 {
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkFence || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_FENCE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkFence>(objHandle.memoryLocation);
 }
 
 VkFramebuffer VKDevice::GetFrameBuffer(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkFrameBuffer || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_FRAMEBUFFER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkFramebuffer>(objHandle.memoryLocation);
 }
 
-VkBuffer VKDevice::GetBufferHandle(EntryHandle handle)
+ImageAllocation* VKDevice::GetImageAllocation(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (objHandle.type != VulkImageHandle || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+	ImageAllocation* image = reinterpret_cast<ImageAllocation*>(objHandle.memoryLocation);
 
-	return alloc->buffer;
+	return image;
 }
 
 VkImage VKDevice::GetImageByHandle(EntryHandle handle)
@@ -2785,9 +2818,12 @@ VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageHandle || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
-	auto imageAllocation = reinterpret_cast<ImageAllocation*>(objHandle.memoryLocation);
+	ImageAllocation* imageAllocation = reinterpret_cast<ImageAllocation*>(objHandle.memoryLocation);
 
 	return imageAllocation->imageHandle;
 }
@@ -2795,7 +2831,10 @@ VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 {
 	VKTexture* tex = GetTexture(handle);
-	if (!tex) return VK_NULL_HANDLE;
+	
+	if (!tex) 
+		return VK_NULL_HANDLE;
+
 	return GetImageByHandle(tex->imageIndex);
 }
 
@@ -2804,7 +2843,10 @@ ImageMemoryPool* VKDevice::GetImageMemoryPool(EntryHandle handle)
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_MEMORY_POOL_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return nullptr;
+	}
 
 	ImageMemoryPool* pool = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
 
@@ -2813,32 +2855,36 @@ ImageMemoryPool* VKDevice::GetImageMemoryPool(EntryHandle handle)
 
 VkImageView VKDevice::GetImageViewByHandle(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageView || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_VIEW_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkImageView>(objHandle.memoryLocation);
 }
 
 VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewIndex)
 {
-	
 	VKTexture* tex = GetTexture(handle);
-	if (!tex) return VK_NULL_HANDLE;
+
+	if (!tex) 
+		return VK_NULL_HANDLE;
+
 	return GetImageViewByHandle(tex->viewIndex[imageViewIndex]);
 }
 
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkPipelineCacheObject || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_PIPELINE_CACHE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return nullptr;
+	}
 
 	return reinterpret_cast<PipelineCacheObject*>(objHandle.memoryLocation);
 }
@@ -2890,7 +2936,10 @@ VkQueryPool VKDevice::GetQueryPool(EntryHandle poolHandle)
 	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
 
 	if (objHandle.type != VulkQueryPool || !objHandle.memoryLocation)
-		 return VK_NULL_HANDLE;
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUERY_POOL_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
 
 	VkQueryPool queryPool = reinterpret_cast<VkQueryPool>(objHandle.memoryLocation);
 
@@ -2920,27 +2969,16 @@ RecordingBufferObject VKDevice::GetRecordingBufferObject(EntryHandle handle)
 	return { this, *GetCommandBuffer(handle) };
 }
 
-VKRenderGraph* VKDevice::GetRenderGraph(EntryHandle handle)
-{
-	
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkRenderTargetData || !objHandle.memoryLocation)
-		return nullptr;
-
-	RenderPassData* renderPassData = reinterpret_cast<RenderPassData*>(objHandle.memoryLocation);
-
-	return &renderPassData->graph;
-}
 
 VkRenderPass VKDevice::GetRenderPass(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkRenderPassHandle || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_RENDER_PASS_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	auto renderPass = reinterpret_cast<VkRenderPass>(objHandle.memoryLocation);
 
@@ -2949,8 +2987,6 @@ VkRenderPass VKDevice::GetRenderPass(EntryHandle handle)
 
 RenderTarget* VKDevice::GetRenderTarget(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkRenderTarget || !objHandle.memoryLocation)
@@ -2961,83 +2997,92 @@ RenderTarget* VKDevice::GetRenderTarget(EntryHandle handle)
 	return data;
 }
 
-
-RenderTarget* VKDevice::GetRenderTargetByGraph(EntryHandle handle)
-{
-	
-	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
-
-	if (objHandle.type != VulkRenderTargetData || !objHandle.memoryLocation)
-		return nullptr;
-
-	RenderPassData* renderPassData = reinterpret_cast<RenderPassData*>(objHandle.memoryLocation);
-
-	return GetRenderTarget(renderPassData->target);
-}
-
-
 VkSampler VKDevice::GetSamplerByHandle(EntryHandle handle)
 {
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkImageSampler || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SAMPLER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkSampler>(objHandle.memoryLocation);
 }
 
 VkSampler VKDevice::GetSamplerByTexture(EntryHandle handle, int samplerIndex)
 {
-	
 	VKTexture* tex = GetTexture(handle);
-	if (!tex) return VK_NULL_HANDLE;
+
+	if (!tex) 
+		return VK_NULL_HANDLE;
+
 	return GetSamplerByHandle(tex->samplerIndex[samplerIndex]);
 }
 
 VkSemaphore VKDevice::GetSemaphore(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkSemaphores || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SEMAPHORE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VkSemaphore>(objHandle.memoryLocation);
 }
 
 ShaderHandle* VKDevice::GetShader(EntryHandle handle)
 {
-	
-	
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkShaderHandle || !objHandle.memoryLocation)
-		return nullptr;
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SHADER_MODULE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
 	
 	return reinterpret_cast<ShaderHandle*>(objHandle.memoryLocation);
 }
 
 VKSwapChain* VKDevice::GetSwapChain(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkSwapChain || !objHandle.memoryLocation)
-		return nullptr;
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
 
 	return reinterpret_cast<VKSwapChain*>(objHandle.memoryLocation);
 }
 
+TexelBufferView* VKDevice::GetTexelBufferView(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkImageBufferView || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_TEXEL_BUFFER_VIEW_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
+	TexelBufferView* alloc = reinterpret_cast<TexelBufferView*>(objHandle.memoryLocation);
+
+	return alloc;
+}
+
 VKTexture* VKDevice::GetTexture(EntryHandle handle)
 {
-	
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
 
 	if (objHandle.type != VulkTextureHandle || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_TEXTURE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
 		return nullptr;
+	}
 
 	return reinterpret_cast<VKTexture*>(objHandle.memoryLocation);
 }
@@ -3048,13 +3093,15 @@ VKTexture* VKDevice::GetTexture(EntryHandle handle)
 void VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex)
 {
 	VKTexture* tex = GetTexture(textureIndex);
-	if (!tex) return;
+
+	if (!tex) 
+		return;
+
 	tex->samplerIndex[0] = samplerIndex;
 }
 
 uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t currentFrame)
 {
-	
 	VKSwapChain* swapChain = GetSwapChain(swapChainIndex);
 
 	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, currentFrame);
@@ -3082,6 +3129,10 @@ VkShaderStageFlagBits VKDevice::ConvertShaderFlags(const char* filename, int nam
 	else if (strncmp(&filename[nameLength - offset - 4], "comp", 4) == 0)
 	{
 		return VK_SHADER_STAGE_COMPUTE_BIT;
+	}
+	else
+	{
+		AddDeviceErrorCode(DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED, VK_RESULT_MAX_ENUM);
 	}
 
 	return VK_SHADER_STAGE_ALL;
@@ -3131,22 +3182,16 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 
 size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment)
 {
-	
+	BufferAlloc* alloc = GetBufferAlloc(hostIndex);
 
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
-		return ~0ui64;
-
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+	if (!alloc)
+		return ~0ull;
 
 	return alloc->alloc.GetMemory(size, alignment);
 }
 
-uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
+int VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
-	
 	VkQueue queue;
 	uint32_t managerIndex = ~0, queueIndex = ~0, queueFamilyIndex = ~0;
 	if (commandBufferIndex == ~0ui64)
@@ -3176,7 +3221,6 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageInde
 		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[imageIndex]);
 	}
 
-	
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -3203,18 +3247,16 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageInde
 		vkResetFences(device, 1, &fence);
 
 		presentInfo.pNext = &info;
-
 	}
 
 	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
 
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) 
+	int retCode = 0;
+
+	if (result != VK_SUCCESS) 
 	{
-		return 0;
-	}
-	else if (result != VK_SUCCESS) 
-	{
-		throw std::runtime_error("failed to present swap chain image!");
+		AddDeviceErrorCode(DEVICE_VK_TYPE_SWC_PRESENT_FAILED, result);
+		retCode = -1;
 	}
 
 	if (commandBufferIndex == ~0ui64)
@@ -3222,7 +3264,7 @@ uint32_t VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageInde
 		ReturnQueueToManager(managerIndex, queueIndex);
 	}
 
-	return 1;
+	return retCode;
 }
 
 VkQueueFamilyProperties* VKDevice::QueueFamilyDetails(uint32_t *size)
@@ -3236,11 +3278,8 @@ VkQueueFamilyProperties* VKDevice::QueueFamilyDetails(uint32_t *size)
 	return ret;
 }
 
-
-
 void VKDevice::ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex)
 {
-
 	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
 
 	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
@@ -3251,7 +3290,7 @@ void VKDevice::ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex)
 	ptr[queueManagerIndex].ReturnQueue(queueIndex);
 }
 
-uint32_t VKDevice::SubmitCommandBuffer(
+int VKDevice::SubmitCommandBuffer(
 	EntryHandle* wait,
 	VkPipelineStageFlags* waitStages,
 	EntryHandle* signal,
@@ -3293,24 +3332,28 @@ uint32_t VKDevice::SubmitCommandBuffer(
 
 	VkFence fence = GetFence(vkcb->fenceIdx);
 
-	if (vkQueueSubmit(queue, 1, &submitInfo, fence) != VK_SUCCESS) 
+	VkResult vkRes = VK_SUCCESS;
+
+	int retCode = 0;
+
+	if ((vkRes = vkQueueSubmit(queue, 1, &submitInfo, fence)) != VK_SUCCESS) 
 	{
-		throw std::runtime_error("failed to submit draw command buffer!");
+		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED, vkRes);
+		retCode = -1;
 	}
 
-	return 1;
+	return retCode;
 }
 
-uint32_t VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex)
+int VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex)
 {
-	
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
 
 	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags)));
 
 	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
-	uint32_t ret =  SubmitCommandBuffer(&swc->waitSemaphores[frameIndex], waitStages, &swc->signalSemaphores[imageIndex], 1, 1, cbIndex);
+	int ret =  SubmitCommandBuffer(&swc->waitSemaphores[frameIndex], waitStages, &swc->signalSemaphores[imageIndex], 1, 1, cbIndex);
 
 	return ret;
 }
@@ -3342,27 +3385,8 @@ void VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
 }
 
-
-void VKDevice::UpdateRenderGraph(EntryHandle renderPass, uint32_t* dynamicOffsets, uint32_t dos, EntryHandle *perGraphDescriptor, uint32_t descriptorCount, uint32_t* dynamicPerSet)
-{
-	auto graph = GetRenderGraph(renderPass);
-	for (uint32_t i = 0; i < descriptorCount; i++)
-	{
-		graph->descriptorId[i] = perGraphDescriptor[i];
-		if (dynamicPerSet)
-			graph->dynamicsPerSet[i] = dynamicPerSet[i];
-	}
-
-	for (uint32_t i = 0; i<dos; i++)
-	{
-		graph->AddDynamicOffset(dynamicOffsets[i]);
-	}
-}
-
-
 int32_t VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 {
-	
 	auto vkcb = GetCommandBuffer(bufferIndex);
 
 	if (vkcb->fenceIdx == ~0ui64)
@@ -3380,7 +3404,6 @@ int32_t VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 
 void VKDevice::CommandBufferResetFence(EntryHandle bufferIndex)
 {
-	
 	auto vkcb = GetCommandBuffer(bufferIndex);
 
 	if (vkcb->fenceIdx == ~0ui64)
@@ -3401,13 +3424,10 @@ void VKDevice::WaitOnDevice()
 
 void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
-	
-	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
+	BufferAlloc* deviceMem = GetBufferAlloc(hostIndex);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
-
-	BufferAlloc* deviceMem = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
 
 	void* datalocal;
 	vkMapMemory(device, deviceMem->memory, offset, size, 0, reinterpret_cast<void**>(&datalocal));
@@ -3423,12 +3443,10 @@ void VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size,
 
 void VKDevice::WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
+	BufferAlloc* deviceMem = GetBufferAlloc(hostIndex);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
-
-	BufferAlloc* deviceMem = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
 
 	void* datalocal;
 	vkMapMemory(device, deviceMem->memory, minOffset, range, 0, reinterpret_cast<void**>(&datalocal));
@@ -3442,46 +3460,34 @@ void VKDevice::WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, 
 
 void VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(hostIndex);
+	BufferAlloc* deviceMem = GetBufferAlloc(hostIndex);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
-
-	BufferAlloc* deviceMem = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
 
 	void* datalocal;
 	vkMapMemory(device, deviceMem->memory, offset, size, 0, &datalocal);
-	
 
 	std::memcpy(dest, datalocal, size);
-	
 	
 	vkUnmapMemory(device, deviceMem->memory);
 }
 
 void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
 {
-	
+	BufferAlloc* deviceMem = GetBufferAlloc(deviceIndex);
+
+	if (!deviceMem)
+		return;
+
 	VKDevice::QueueDetails queueDetails = GetQueueHandle(TRANSFERQUEUE);
 
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
 
-
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
-
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
-		return;
-
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	stagingBuffer = alloc->buffer;
-	stagingMemory = alloc->memory;
-	VkDeviceSize allocOffset = alloc->alloc.GetMemory(size, 64);
+	VkBuffer stagingBuffer = deviceMem->buffer;
+	VkDeviceMemory stagingMemory = deviceMem->memory;
+	VkDeviceSize allocOffset = deviceMem->alloc.GetMemory(size, 64);
 
 	void* ldata;
 	
@@ -3503,7 +3509,7 @@ void VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingB
 
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
 
-	alloc->alloc.FreeMemory(allocOffset);
+	deviceMem->alloc.FreeMemory(allocOffset);
 
 }
 
@@ -3512,21 +3518,15 @@ void VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle sta
 {
 	VkBufferCopy* stagingoffset = (VkBufferCopy*)AllocFromDeviceCache(sizeof(VkBufferCopy) * entries);
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
+	BufferAlloc* deviceMem = GetBufferAlloc(stagingBufferIndex);
 
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
 
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
+	VkBuffer stagingBuffer = deviceMem->buffer;
+	VkDeviceMemory stagingMemory = deviceMem->memory;
 
-	stagingBuffer = alloc->buffer;
-	stagingMemory = alloc->memory;
-
-	VkDeviceSize allocOffset = alloc->alloc.GetMemory(cumulativesize + (entries * 256), 256);
+	VkDeviceSize allocOffset = deviceMem->alloc.GetMemory(cumulativesize + (entries * 256), 256);
 
 	char* ldata;
 
@@ -3536,7 +3536,6 @@ void VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle sta
 
 	for (int i = 0; i < entries; i++)
 	{
-		
 		std::memcpy(ldata + localOffset, data[i], sizes[i]);
 		
 		stagingoffset[i].srcOffset = allocOffset + localOffset;
@@ -3561,27 +3560,21 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 	int mipLevels, VkFormat format
 )
 {
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
+	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
 
+	BufferAlloc* deviceMem = GetBufferAlloc(stagingBufferIndex);
+
+	if (!deviceMem)
+		return;
+
+	VkBuffer stagingBuffer = deviceMem->buffer;
+	VkDeviceMemory stagingMemory = deviceMem->memory;
+	VkDeviceSize offsetAlloc = deviceMem->alloc.GetMemory(imagesSize, 4);
+
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
 
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
-
-	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
-
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
-
-	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
-		return;
-
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	stagingBuffer = alloc->buffer;
-	stagingMemory = alloc->memory;
-	VkDeviceSize offsetAlloc = alloc->alloc.GetMemory(imagesSize, 4);
 
 	char* data;
 	auto& pixels = imageData;
@@ -3616,7 +3609,7 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
 
-	alloc->alloc.FreeMemory(offsetAlloc);
+	deviceMem->alloc.FreeMemory(offsetAlloc);
 
 }
 
@@ -3629,19 +3622,14 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 {
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
 
-	VkBuffer stagingBuffer;
-	VkDeviceMemory stagingMemory;
+	BufferAlloc* deviceMem = GetBufferAlloc(stagingBufferIndex);
 
-	HandlePoolObject objHandle = GetVkTypeFromEntry(stagingBufferIndex);
-
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
 
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	stagingBuffer = alloc->buffer;
-	stagingMemory = alloc->memory;
-	VkDeviceSize offsetAlloc = alloc->alloc.GetMemory(imagesSize, 16);
+	VkBuffer stagingBuffer = deviceMem->buffer;
+	VkDeviceMemory stagingMemory = deviceMem->memory;
+	VkDeviceSize offsetAlloc = deviceMem->alloc.GetMemory(imagesSize, 16);
 
 	char* data;
 	auto& pixels = imageData;
@@ -3659,7 +3647,6 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	for (auto i = 0U; i < mipLevels; i++) 
 	{
-
 		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
 
 		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
@@ -3672,48 +3659,37 @@ void VKDevice::UploadImageData(EntryHandle textureIndex,
 
 void VKDevice::ResetBufferAllocator(EntryHandle bufferIndex)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(bufferIndex);
+	BufferAlloc* deviceMem = GetBufferAlloc(bufferIndex);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
+	if (!deviceMem)
 		return;
 
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	alloc->alloc.Reset();
+	deviceMem->alloc.Reset();
 }
 
 VKMemoryAllocatorDetails VKDevice::GetMemoryAllocDetailsForBuffer(EntryHandle bufferHandle)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(bufferHandle);
+	BufferAlloc* deviceMem = GetBufferAlloc(bufferHandle);
 
-	if (objHandle.type != VulkBuffer || !objHandle.memoryLocation)
-		return { ~0ui64, ~0ui64 };
+	if (!deviceMem)
+		return {};
 
-	BufferAlloc* alloc = reinterpret_cast<BufferAlloc*>(objHandle.memoryLocation);
-
-	return alloc->alloc.GetMemoryAllocDetails();
+	return deviceMem->alloc.GetMemoryAllocDetails();
 }
 
 VKMemoryAllocatorDetails VKDevice::GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
+	ImageMemoryPool* pool = GetImageMemoryPool(poolHandle);
 
-	if (objHandle.type != VulkImageMemoryPool || !objHandle.memoryLocation)
-		return { ~0ui64, ~0ui64 };
+	if (!pool)
+		return {};
 
-	ImageMemoryPool* iter = reinterpret_cast<ImageMemoryPool*>(objHandle.memoryLocation);
-
-	return iter->alloc.GetMemoryAllocDetails();
+	return pool->alloc.GetMemoryAllocDetails();
 }
 
 void VKDevice::ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(poolHandle);
-
-	if (objHandle.type != VulkQueryPool || !objHandle.memoryLocation)
-		return;
-
-	VkQueryPool queryPool = reinterpret_cast<VkQueryPool>(objHandle.memoryLocation);
+	VkQueryPool queryPool = GetQueryPool(poolHandle);
 
 	vkResetQueryPool(
 		device,
