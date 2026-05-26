@@ -16,7 +16,6 @@
 #include "VKDescriptorSetBuilder.h"
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
-#include "VKGraph.h"
 #include "VKPipelineBuilder.h"
 #include "WindowManager.h"
 
@@ -1600,7 +1599,6 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 
 	for (int i = 0; i < stateInfo->vertexBufferDescCount; i++)
 	{
-
 		bindingDescriptions[i] =  VK::Utils::CreateVertexInputBindingDescription(i, stateInfo->vertexBufferDesc[i].perInputSize);
 
 		descCount += stateInfo->vertexBufferDesc[i].descCount;
@@ -1612,7 +1610,6 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 	
 	for (int i = 0; i < stateInfo->vertexBufferDescCount; i++)
 	{
-	
 		API::ConvertVertexInputToVKVertexAttrDescription(stateInfo->vertexBufferDesc->descriptions, stateInfo->vertexBufferDesc[i].descCount, i, &vertexBufferInput[iter]);
 
 		iter += stateInfo->vertexBufferDesc[i].descCount;
@@ -3163,7 +3160,7 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 
 						for (uint32_t ii = 0; ii < handle->resourceSetCount; ii++)
 						{
-							rcb.BindDescriptorSets(descriptorManager.vkDescriptorSets[handle->resourceSets[ii]], currentFrame, 1, ii, 0, nullptr);
+							rcb.BindGraphicsDescriptorSets(descriptorManager.vkDescriptorSets[handle->resourceSets[ii]], currentFrame, 1, ii, 0, nullptr);
 						}
 
 						if (handle->vertexBufferIndex != -1)

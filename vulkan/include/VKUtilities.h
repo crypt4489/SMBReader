@@ -2,15 +2,9 @@
 
 #include "vulkan/vulkan.h"
 #include <iostream>
-#include <vector>
-
 
 namespace VK {
-
 	namespace Utils {
-
-
-
 
 		struct SwapChainSupportDetails {
 				VkSurfaceFormatKHR* formats;
@@ -26,13 +20,9 @@ namespace VK {
 
 		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props);
 
-
 		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceMemoryProperties& props);
 
 		std::ostream& operator<<(std::ostream& os, const VkQueueFamilyProperties& props);
-
-
-		void CopyBufferBatch(VkCommandBuffer& commandBuffer, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkBufferCopy* copyRegions, int numberOfCopies);
 
 		VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -40,18 +30,17 @@ namespace VK {
 				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 				void* pUserData);
 
-
 		extern VkDebugUtilsMessengerEXT debugMessenger;
 
 		VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
 
 		void DestroyDebugUtilsMessengerEXT(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 
-		uint32_t findMemoryType(VkPhysicalDevice& physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+		uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-		VkFormat findSupportedFormat(VkPhysicalDevice& gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features);
+		VkFormat findSupportedFormat(VkPhysicalDevice gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features);
 
-		int CreateShaderModule(VkDevice& device, char* code, size_t size, VkShaderModule* outModule, VkResult* outResult);
+		int CreateShaderModule(VkDevice device, char* code, size_t size, VkShaderModule* outModule, VkResult* outResult);
 
 		int CreateBuffer(
 			VkDevice device, VkPhysicalDevice physicalDevice,
@@ -62,52 +51,39 @@ namespace VK {
 			VkResult* outResult
 		);
 
-		VkCommandBuffer BeginOneTimeCommands(VkDevice& device, VkCommandPool& pool);
-
-		void EndOneTimeCommands(VkDevice& device, VkQueue& queue, VkCommandPool& pool, VkCommandBuffer commandBuffer);
-
-		void EndOneTimeCommandsSemaphores(VkDevice& device, VkQueue& queue,
-			VkCommandPool& pool, VkCommandBuffer commandBuffer, VkSemaphore* semas, VkPipelineStageFlags* flags,
-			uint32_t semasCount);
-
-		void CopyBuffer(VkCommandBuffer& cmdBuffer, VkBuffer& srcBuffer, VkBuffer& dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, size_t stride);
-
-		std::pair<VkImage, VkDeviceMemory> CreateImage(VkDevice& device, VkPhysicalDevice& gpu, VkImageCreateInfo& imageInfo, VkMemoryPropertyFlags properties);
-
-		VkImageView CreateImageView(VkDevice& device, VkImageViewCreateInfo& viewInfo);
-
-		void CopyBufferToImage(VkDevice& device, VkCommandPool& pool, VkQueue& queue, VkBuffer& buffer, VkImage& image,
-				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
-				VkOffset3D offset);
-
-		void TransitionImageLayout(VkDevice& device, VkCommandPool& pool, VkQueue& queue,
-				VkImage& image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mips, uint32_t layers);
-
 		VkVertexInputBindingDescription CreateVertexInputBindingDescription(uint32_t vertexBufferLocation, size_t stride);
+
+		VkCommandBuffer BeginOneTimeCommands(VkDevice device, VkCommandPool pool);
+
+		void EndOneTimeCommands(VkDevice device, VkQueue queue, VkCommandPool pool, VkCommandBuffer commandBuffer);
+
+		void EndOneTimeCommandsSemaphores(VkDevice device, VkQueue queue,
+			VkCommandPool pool, VkCommandBuffer commandBuffer, VkSemaphore* semas, VkPipelineStageFlags* flags,
+			uint32_t semasCount);
 
 		namespace MultiCommands
 		{
+			void CopyBuffer(VkCommandBuffer cmdBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset, VkDeviceSize dstOffset, int copies, size_t stride);
 
-			void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
+			void CopyBufferBatch(VkCommandBuffer commandBuffer, VkBuffer srcBuffer, VkBuffer dstBuffer, VkBufferCopy* copyRegions, int numberOfCopies);
+
+			void CopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image,
 				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
 				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount);
 
-			void CopyBufferToImage(VkCommandBuffer& commandBuffer, VkBuffer& buffer, VkImage& image,
+			void CopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image,
 				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset, VkDeviceSize bufferSize,
 				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount, VkBufferImageCopy* regions);
 
 
-			void TransitionImageLayout(VkCommandBuffer& commandBuffer,
-					VkImage& image, VkFormat format, VkImageLayout oldLayout,
+			int TransitionImageLayout(VkCommandBuffer commandBuffer,
+					VkImage image, VkFormat format, VkImageLayout oldLayout,
 					VkImageLayout newLayout, uint32_t mips, uint32_t layers);
 		}
 
-		inline bool operator==(const VkExtent2D &extent1, const VkExtent2D &extent2)
+		inline bool operator==(const VkExtent2D extent1, const VkExtent2D extent2)
 		{
 			return (extent1.width == extent2.width) && (extent1.height == extent2.height);
 		}
-						
-
 	}
-	
 }

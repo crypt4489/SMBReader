@@ -105,7 +105,7 @@ struct RecordingBufferObject
 
 	int BindPipelineInternal(EntryHandle id, VkPipelineBindPoint bindPoint);
 
-	int BindDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
+	int BindGraphicsDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
 		uint32_t dynamicOffsetCount, uint32_t* offsets);
 
 	int BindComputeDescriptorSets(EntryHandle descriptorname, uint32_t descriptorNumber, uint32_t descriptorCount, uint32_t firstDescriptorSet,
@@ -338,6 +338,7 @@ enum DeviceErrorCodeMajor
 	DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED = 9,
 	DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE = 10,
 	DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS = 11,
+	DEVICE_VK_TYPE_TIMED_RESULT_FAILED = 12
 };
 
 #define MINOR_CODE_PACK(x) ((int)x << 6)
@@ -479,8 +480,6 @@ struct VKDevice
 	int CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	EntryHandle CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries);
-
-	EntryHandle CreateRenderTargetData(EntryHandle renderTarget, uint32_t descriptorCount);
 
 	EntryHandle CreateRenderPasses(VKRenderPassBuilder& builder);
 
@@ -663,11 +662,11 @@ struct VKDevice
 
 	//ACTIONS/HELPERS
 
-	void AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex);
+	int AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex);
 
 	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
 
-	void CommandBufferResetFence(EntryHandle bufferIndex);
+	int CommandBufferResetFence(EntryHandle bufferIndex);
 
 	VkShaderStageFlagBits ConvertShaderFlags(const char* filename, int nameLength);
 
@@ -683,9 +682,9 @@ struct VKDevice
 
 	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
 
-	void ResetRenderTarget(EntryHandle handle);
+	int ResetRenderTarget(EntryHandle handle);
 
-	void ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
+	int ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
 
 	int SubmitCommandBuffer(
 		EntryHandle* wait,
@@ -697,25 +696,25 @@ struct VKDevice
 
 	int SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex);
 
-	void TransitionImageLayout(EntryHandle imageIndex,
+	int TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers);
 
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
-	int32_t CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex);
+	int CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex);
 	
 	void WaitOnDevice();
 
-	void WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
+	int WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
 
-	void WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies);
+	int WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies);
 
-	void WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
+	int WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
 
-	void ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
+	int ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
 
-	void UploadImageData(EntryHandle textureIndex,
+	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, 
 		size_t totalImageDataSize, 
 		EntryHandle stagingBufferIndex,
@@ -723,24 +722,24 @@ struct VKDevice
 		int mipLevels, VkFormat format
 	);
 
-	void UploadImageData(EntryHandle textureIndex,
+	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
 		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
 		int mipLevels, VkFormat format, RecordingBufferObject* rbo
 	);
 
-	void WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo);
+	int WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo);
 
-	void ResetBufferAllocator(EntryHandle bufferIndex);
+	int ResetBufferAllocator(EntryHandle bufferIndex);
 
 	VKMemoryAllocatorDetails GetMemoryAllocDetailsForBuffer(EntryHandle bufferHandle);
 
 	VKMemoryAllocatorDetails GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle);
 	
-	void ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount);
+	int ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount);
 
-	void ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount, void* dataOut, size_t sizeOfDataOut, VkDeviceSize dataStride, VkQueryResultFlags flags);
+	int ReadbackResultsFromQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount, void* dataOut, size_t sizeOfDataOut, VkDeviceSize dataStride, VkQueryResultFlags flags);
 
 	VkDevice device;
 	VkPhysicalDevice gpu;

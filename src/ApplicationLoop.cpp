@@ -3599,10 +3599,6 @@ void ApplicationLoop::InitializeRuntime()
 
 	std::array mainDrawBindGroups = { globalBufferDescriptor, globalTexturesDescriptor };
 
-	//GlobalRenderer::gRenderInstance.CreateRenderGraphData(MSAAPost, mainDrawBindGroups.data(), 2);
-	//GlobalRenderer::gRenderInstance.CreateRenderGraphData(MSAAShadowMapping, mainDrawBindGroups.data(), 2);
-	//GlobalRenderer::gRenderInstance.CreateRenderGraphData(BasicShadow, nullptr, 0);
-
 	int creationRetSB = CreateSkyBox();
 	int creationRetDB = CreateDebugCommandBuffers(globalDebugStructMaxCount);
 	int creationRetLW = CreateLightAssignments(globalLightMax);
