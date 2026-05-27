@@ -2,11 +2,7 @@
 #include "IndexTypes.h"
 #include "VKUtilities.h"
 #include "VKTypes.h"
-#include <optional>
-#include <unordered_map>
-#include <vector>
-
-
+#include <cstdint>
 
 struct PipelineCacheObject
 {
@@ -17,11 +13,11 @@ struct PipelineCacheObject
 
 struct VKPipelineBuilder
 {
-
 	VKDevice* majorDev;
 	PipelineCacheObject co;
-	uint32_t pushConstantsCount;
 	VkPushConstantRange* ranges;
+	uint32_t pushConstantsCount;
+	uint32_t pad;
 
 	VkPipelineLayout CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count);
 
@@ -32,7 +28,6 @@ struct VKPipelineBuilder
 
 struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 {
-
 	VKGraphicsPipelineBuilder() = delete;
 	VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorBlendImageCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount);
 
@@ -64,29 +59,24 @@ struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 	void CreateDepthStencil(VkCompareOp depthOp, bool depthenable, bool depthwriteenable, bool stencilEnable, VkStencilOpState* front, VkStencilOpState* back);
 
 	VkRenderPass renderPass;
-	
-	uint32_t colorBlendAttachmentsCount;
-
 	VkDynamicState* dynamicStates;
-	uint32_t dynamicStateCount;
-
+	VkPipelineColorBlendAttachmentState* colorBlendAttachments;
 	VkPipelineDynamicStateCreateInfo dynamicStateInfo;
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo;
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly;
 	VkPipelineViewportStateCreateInfo viewportState;
 	VkPipelineRasterizationStateCreateInfo rasterizer;
 	VkPipelineMultisampleStateCreateInfo multisampling;
-	VkPipelineColorBlendAttachmentState* colorBlendAttachments;
-	
 	VkPipelineColorBlendStateCreateInfo colorBlending;
 	VkPipelineDepthStencilStateCreateInfo depthStencil;
 	VkGraphicsPipelineCreateInfo pipelineInfo;
+	uint32_t dynamicStateCount;
+	uint32_t colorBlendAttachmentsCount;
 	
 };
 
 struct VKComputePipelineBuilder : public VKPipelineBuilder
 {
-
 	VKComputePipelineBuilder(VKDevice* d, size_t descriptorCount, uint32_t pushConstantCount);
 	VkComputePipelineCreateInfo pipelineInfo;
 

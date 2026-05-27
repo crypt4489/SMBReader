@@ -930,7 +930,7 @@ uint32_t RenderInstance::BeginFrame(EntryHandle swapChainIndex)
 
 	int32_t res = dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 
-	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, currentFrame);
+	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, rendererWaitSemaphores[currentFrame], currentFrame);
 
 	if (imageIndex == ~0ui32)
 	{
@@ -948,7 +948,9 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
-	int res = dev->SubmitCommandsForSwapChain(swapChainIndex, currentFrame, imageIndex, currentCBIndex[currentFrame]);
+	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+	int res = dev->SubmitCommandBuffer(&rendererWaitSemaphores[currentFrame], &waitStages, &rendererFinishedSemaphores[imageIndex], 1, 1, currentCBIndex[currentFrame]);
 
 	if (res)
 	{
@@ -957,11 +959,11 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 
 	if (presentQueue != graphicsComputeTransfer)
 	{
-		res = dev->PresentSwapChainSeparatePresentQueue(swapChainIndex, imageIndex, currentFrame, presentQueue);
+		res = dev->PresentSwapChainSeparatePresentQueue(swapChainIndex, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, presentQueue);
 	}
 	else
 	{
-		res = dev->PresentSwapChainCommandBufferInline(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
+		res = dev->PresentSwapChainCommandBufferInline(swapChainIndex, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 	}
 
 	if (res) 
@@ -2608,6 +2610,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	queryPool = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * 5 * 2);
 
 	deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
+
+	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		rendererWaitSemaphores[i] = *majorDevice->CreateSemaphores(1);
+		rendererFinishedSemaphores[i] = *majorDevice->CreateSemaphores(1);
+	}
 }
 
 

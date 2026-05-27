@@ -3,6 +3,7 @@
 #include "VKPipelineBuilder.h"
 #include "VKDevice.h"
 #include <array>
+
 VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount)
 {
 	renderPass = _rp; 
@@ -27,7 +28,6 @@ void VKGraphicsPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, u
 	dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 	dynamicStateInfo.dynamicStateCount = dynamicStateCount;
 	dynamicStateInfo.pDynamicStates = dynamicStates;
-
 }
 
 void VKGraphicsPipelineBuilder::CreateVertexInput(VkVertexInputBindingDescription* bindDescription,
@@ -35,8 +35,6 @@ void VKGraphicsPipelineBuilder::CreateVertexInput(VkVertexInputBindingDescriptio
 		VkVertexInputAttributeDescription* vertAttributes,
 		uint32_t vertAttributecount)
 {
-
-
 	VkVertexInputBindingDescription* innerBind = reinterpret_cast<VkVertexInputBindingDescription*>(majorDev->AllocFromDeviceCache(sizeof(VkVertexInputBindingDescription) * bindingCount));
 	VkVertexInputAttributeDescription* innerVertAttributes = reinterpret_cast<VkVertexInputAttributeDescription*>(majorDev->AllocFromDeviceCache(sizeof(VkVertexInputAttributeDescription) * vertAttributecount));
 
@@ -69,6 +67,7 @@ void VKGraphicsPipelineBuilder::CreateViewportState(uint32_t viewportCount, uint
 	viewportState.viewportCount = viewportCount;
 	viewportState.scissorCount = scissorCount;
 }
+
 void VKGraphicsPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFrontFace frontFace, float lineWidth)
 {
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -83,6 +82,7 @@ void VKGraphicsPipelineBuilder::CreateRasterizer(VkCullModeFlags cullFlags, VkFr
 	rasterizer.depthBiasClamp = 0.0f;
 	rasterizer.depthBiasSlopeFactor = 0.0f;
 }
+
 void VKGraphicsPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
 {
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -93,6 +93,7 @@ void VKGraphicsPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
 	multisampling.alphaToCoverageEnable = VK_FALSE;
 	multisampling.alphaToOneEnable = VK_FALSE;
 }
+
 void VKGraphicsPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags)
 {
 	auto colorBlendAttachment = &colorBlendAttachments[attachmentNumber];
@@ -106,6 +107,7 @@ void VKGraphicsPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNu
 	colorBlendAttachment->alphaBlendOp = VK_BLEND_OP_ADD;
 
 }
+
 void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 {
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -119,7 +121,6 @@ void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
 	colorBlending.blendConstants[3] = 0.0f;
 }
 void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool depthenable, bool depthwriteenable, bool stencilEnable, VkStencilOpState* front, VkStencilOpState* back)
-
 {
 	depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depthStencil.depthTestEnable =  depthenable;
@@ -137,31 +138,6 @@ void VKGraphicsPipelineBuilder::CreateDepthStencil(VkCompareOp depthOp, bool dep
 		memcpy(&depthStencil.back, back, sizeof(VkStencilOpState));
 		memcpy(&depthStencil.front, front, sizeof(VkStencilOpState));
 	}
-
-	/*
-		depthStencil.stencilTestEnable = stencilEnable;
-		depthStencil.front.failOp = VK_STENCIL_OP_KEEP;
-		depthStencil.front.passOp = VK_STENCIL_OP_REPLACE;
-		depthStencil.front.depthFailOp = VK_STENCIL_OP_KEEP;
-		depthStencil.front.compareOp = VK_COMPARE_OP_ALWAYS;
-		depthStencil.front.compareMask = 0xFF;
-		depthStencil.front.writeMask = 0xFF;
-		depthStencil.front.reference = 1;
-		depthStencil.back = {}; // Optional
-		*/
-
-		/*
-		depthStencil.stencilTestEnable = stencilEnable;
-		depthStencil.front.failOp = VK_STENCIL_OP_KEEP;
-		depthStencil.front.passOp = VK_STENCIL_OP_KEEP;
-		depthStencil.front.depthFailOp = VK_STENCIL_OP_KEEP;
-		depthStencil.front.compareOp = VK_COMPARE_OP_EQUAL;
-		depthStencil.front.compareMask = 0xFF;
-		depthStencil.front.writeMask = 0xFF;
-		depthStencil.front.reference = 0;
-		depthStencil.back = {}; // Optional
-		*/
-	
 }
 
 EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descriptorlaysids,
@@ -214,10 +190,13 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;
 
-	if (vkCreateGraphicsPipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create graphics pipeline!");
-	}
+	VkResult vkRes = VK_SUCCESS;
 
+	if ((vkRes = vkCreateGraphicsPipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline)) != VK_SUCCESS) 
+	{
+		majorDev->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_GRAPHICS_PIPELINE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
+		return EntryHandle();
+	}
 
 	co.pipeline = graphicsPipeline;
 	co.pipelineLayout = pipelineLayout;
@@ -244,8 +223,7 @@ EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descrip
 
 	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(majorDev->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * descriptorSetCount));
 
-
-	for (std::size_t i = 0; i < descriptorSetCount; i++)
+	for (size_t i = 0; i < descriptorSetCount; i++)
 	{
 		co.descLayout[i] = descriptorlaysids[i];
 		layouts[i] = majorDev->GetDescriptorSetLayout(descriptorlaysids[i]);
@@ -261,9 +239,12 @@ EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descrip
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	pipelineInfo.layout = pipelineLayout;
 
+	VkResult vkRes = VK_SUCCESS;
 
-	if (vkCreateComputePipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create compute pipeline!");
+	if ((vkRes = vkCreateComputePipelines(majorDev->device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline)) != VK_SUCCESS) 
+	{
+		majorDev->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_COMPUTE_PIPELINE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
+		return EntryHandle();
 	}
 
 	co.pipeline = computePipeline;
@@ -275,12 +256,12 @@ EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descrip
 }
 
 
-VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count) {
-	VkPipelineLayout pipelineLayout;
+VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* descriptorSetLayout, uint32_t count) 
+{
+	VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-
 
 	pipelineLayoutInfo.setLayoutCount = count;
 	pipelineLayoutInfo.pSetLayouts = descriptorSetLayout;
@@ -288,14 +269,18 @@ VkPipelineLayout VKPipelineBuilder::CreatePipelineLayout(VkDescriptorSetLayout* 
 	pipelineLayoutInfo.pushConstantRangeCount = pushConstantsCount;
 	pipelineLayoutInfo.pPushConstantRanges = ranges;
 
-	if (vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create pipeline layout!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreatePipelineLayout(majorDev->device, &pipelineLayoutInfo, nullptr, &pipelineLayout)) != VK_SUCCESS) 
+	{
+		majorDev->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_PIPELINE_LAYOUT_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
 	}
 
 	return pipelineLayout;
 }
 
-VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlags flags) {
+VkPipelineShaderStageCreateInfo VKPipelineBuilder::AddShader(VkShaderModule& mod, VkShaderStageFlags flags) 
+{
 	VkPipelineShaderStageCreateInfo shaderStageInfo{};
 	shaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shaderStageInfo.stage = (VkShaderStageFlagBits)flags;
@@ -310,5 +295,4 @@ void VKPipelineBuilder::AddPushConstantRange(uint32_t offset, uint32_t size, VkS
 	range->offset = offset;
 	range->size = size;
 	range->stageFlags = stage;
-
 }

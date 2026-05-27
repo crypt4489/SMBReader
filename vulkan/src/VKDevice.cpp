@@ -13,7 +13,7 @@
 #include "VKTexture.h"
 #include "VKUtilities.h"
 
-
+#include <cassert>
 
 DescriptorPoolBuilder::DescriptorPoolBuilder(DeviceOwnedAllocator* alloc, size_t _numPoolSizes, VkDescriptorPoolCreateFlags _flags)
 	:
@@ -3008,11 +3008,16 @@ int VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle sampl
 	return 0;
 }
 
-uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t currentFrame)
+uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, EntryHandle acquireSemaphoreHandle, uint32_t currentFrame)
 {
 	VKSwapChain* swapChain = GetSwapChain(swapChainIndex);
 
-	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, currentFrame);
+	VkSemaphore acquireSemaphore = GetSemaphore(acquireSemaphoreHandle);
+
+	if (!swapChain || !acquireSemaphore)
+		return ~0ui32;
+
+	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, acquireSemaphore, currentFrame);
 
 	return imageIndex;
 }
@@ -3098,7 +3103,7 @@ size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_
 	return alloc->alloc.GetMemory(size, alignment);
 }
 
-int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
+int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
 	VkQueue queue;
 	uint32_t  queueIndex = ~0, queueFamilyIndex = ~0;
@@ -3110,21 +3115,18 @@ int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
-
-	uint32_t waitCount = 1;
 	
-	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * presentWaitSemaphoreCount));
 
-	for (uint32_t i = 0; i < waitCount; i++)
+	for (uint32_t i = 0; i < presentWaitSemaphoreCount; i++)
 	{
-		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[imageIndex]);
+		waitSemaphores[i] = GetSemaphore(presentWaitSemaphores[i]);
 	}
-
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-	presentInfo.waitSemaphoreCount = waitCount;
+	presentInfo.waitSemaphoreCount = presentWaitSemaphoreCount;
 	presentInfo.pWaitSemaphores = waitSemaphores;
 
 	VkResult results[2];
@@ -3161,7 +3163,7 @@ int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint
 	return retCode;
 }
 
-int VKDevice::PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle queueManagerIndex)
+int VKDevice::PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle queueManagerIndex)
 {
 	VkQueue queue;
 	uint32_t queueIndex = ~0, queueFamilyIndex = ~0;
@@ -3174,20 +3176,17 @@ int VKDevice::PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uin
 
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
 
-	uint32_t waitCount = 1;
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * presentWaitSemaphoreCount));
 
-	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
-
-	for (uint32_t i = 0; i < waitCount; i++)
+	for (uint32_t i = 0; i < presentWaitSemaphoreCount; i++)
 	{
-		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[imageIndex]);
+		waitSemaphores[i] = GetSemaphore(presentWaitSemaphores[i]);
 	}
-
 
 	VkPresentInfoKHR presentInfo{};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
-	presentInfo.waitSemaphoreCount = waitCount;
+	presentInfo.waitSemaphoreCount = presentWaitSemaphoreCount;
 	presentInfo.pWaitSemaphores = waitSemaphores;
 
 	VkResult results[2];
@@ -3196,7 +3195,6 @@ int VKDevice::PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uin
 	presentInfo.pSwapchains = &swc->swapChain;
 	presentInfo.pImageIndices = &imageIndex;
 	presentInfo.pResults = results;
-
 
 	if (swc->presentationFences)
 	{
@@ -3309,19 +3307,6 @@ int VKDevice::SubmitCommandBuffer(
 	}
 
 	return retCode;
-}
-
-int VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex)
-{
-	VKSwapChain* swc = GetSwapChain(swapChainIdx);
-
-	VkPipelineStageFlags* waitStages = reinterpret_cast<VkPipelineStageFlags*>(AllocFromDeviceCache(sizeof(VkPipelineStageFlags)));
-
-	waitStages[0] = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-	int ret =  SubmitCommandBuffer(&swc->waitSemaphores[frameIndex], waitStages, &swc->signalSemaphores[imageIndex], 1, 1, cbIndex);
-
-	return ret;
 }
 
 

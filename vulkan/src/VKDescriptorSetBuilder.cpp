@@ -361,9 +361,8 @@ void DescriptorSetBuilder::AddBufferTypeDirect(VkBuffer buffer, VkDeviceSize siz
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount, uint32_t variableCount)
+int DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount, uint32_t variableCount)
 {
-
 	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(device->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * setCount));
 
 	for (uint32_t i = 0; i < setCount; i++)
@@ -395,10 +394,17 @@ void DescriptorSetBuilder::AllocDescriptorSets(VkDescriptorPool pool, VkDescript
 
 		allocInfo.pNext = &varAllocInfo;
 	}
-	
-	if (vkAllocateDescriptorSets(device->device, &allocInfo, descriptorSets) != VK_SUCCESS) {
-		throw std::runtime_error("failed to allocate descriptor sets!");
+
+
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkAllocateDescriptorSets(device->device, &allocInfo, descriptorSets)) != VK_SUCCESS)
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED) | DEVICE_VK_TYPE_ALLOCATION_FAILED), vkRes);
+		return -1;
 	}
+
+	return 0;
 }
 
 EntryHandle DescriptorSetBuilder::AddDescriptorsToCache()

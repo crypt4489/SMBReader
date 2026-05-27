@@ -201,6 +201,8 @@ struct RenderInstance
 	EntryHandle graphicsComputeTransfer = EntryHandle();
 	EntryHandle presentQueue = EntryHandle();
 
+	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererWaitSemaphores{}, rendererFinishedSemaphores{};
+
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 
 	uint32_t maxMSAALevels = 0;

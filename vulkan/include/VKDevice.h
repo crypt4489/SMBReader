@@ -1,12 +1,7 @@
 #pragma once
 
-#include <algorithm>
 #include <bitset>
-#include <cassert>
-#include <cmath>
 #include <forward_list>
-#include <numeric>
-#include <set>
 #include <mutex>
 #include <shared_mutex>
 
@@ -335,12 +330,14 @@ enum DeviceErrorCodeMajor
 	DEVICE_CACHE_ALLOC_TOO_LARGE = 4,
 	DEVICE_VK_TYPE_CREATION_FAILED = 5,
 	DEVICE_VK_TYPE_HANDLE_INPUT_INVALID = 6,
-	DEVICE_VK_TYPE_SWC_PRESENT_FAILED= 7,
+	DEVICE_VK_TYPE_SWC_PRESENT_FAILED = 7,
 	DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED = 8,
 	DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED = 9,
 	DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE = 10,
 	DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS = 11,
-	DEVICE_VK_TYPE_TIMED_RESULT_FAILED = 12
+	DEVICE_VK_TYPE_TIMED_RESULT_FAILED = 12,
+	DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED = 13,
+	DEVICE_VK_TYPE_ALLOCATION_FAILED = 14,
 };
 
 #define MINOR_CODE_PACK(x) ((int)x << 6)
@@ -375,6 +372,10 @@ enum DeviceErrorCodeMinor
 	DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED = 26,
 	DEVICE_VK_TYPE_TEXEL_BUFFER_VIEW_FAILED = 27,
 	DEVICE_VK_TYPE_TEXTURE_FAILED = 28,
+	DEVICE_VK_TYPE_SWAPCHAIN_FAILED = 29,
+	DEVICE_VK_TYPE_GRAPHICS_PIPELINE_FAILED = 30,
+	DEVICE_VK_TYPE_COMPUTE_PIPELINE_FAILED = 31,
+	DEVICE_VK_TYPE_PIPELINE_LAYOUT_FAILED = 32,
 };
 
 struct HandlePoolObject
@@ -667,7 +668,7 @@ struct VKDevice
 
 	int AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex);
 
-	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, uint32_t requestedImage);
+	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, EntryHandle acquireSemaphoreHandle, uint32_t currentFrame);
 
 	int CommandBufferResetFence(EntryHandle bufferIndex);
 
@@ -681,9 +682,9 @@ struct VKDevice
 
 	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	int PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
+	int PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
-	int PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle queueManagerIndex);
+	int PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
 	void QueueFamilyDetails(VkQueueFamilyProperties* famProps, uint32_t *size);
 
@@ -700,8 +701,6 @@ struct VKDevice
 		uint32_t waitCount,
 		uint32_t signalCount,
 		EntryHandle cbIndex);
-
-	int SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t frameIndex, uint32_t imageIndex, EntryHandle cbIndex);
 
 	int TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,

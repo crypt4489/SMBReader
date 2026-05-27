@@ -4,7 +4,6 @@
 
 struct VKRenderPassBuilder
 {
-
 	VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachments, uint32_t numberofsubpassdependency, uint32_t numberofsubpassdescriptions);
 
 	void CreateAttachment(VkImageLayout imageReferenceLayout, VkFormat format,
@@ -23,21 +22,17 @@ struct VKRenderPassBuilder
 
 	void SetSampleCount(uint32_t attachmentIndex, VkSampleCountFlagBits sampleFlags);
 
-	uint32_t subpassdesccount, subpassdesccounter;
-
-	uint32_t subpassdepcount, subpassdepcounter;
-
-	uint32_t totalAttachmentCount, attachmentCounter;
-
 	VkAttachmentDescription* attachments;
-
 	VkAttachmentReference* references;
-
 	VkSubpassDescription* subpassDescription;
-
 	VkSubpassDependency* subpassDependencies;
-
-	VkRenderPassCreateInfo createInfo{};
 	VKDevice* device;
+	VkRenderPassCreateInfo createInfo{};
+	uint32_t subpassdesccount;
+	uint32_t subpassdesccounter;
+	uint32_t subpassdepcount;
+	uint32_t subpassdepcounter;
+	uint32_t totalAttachmentCount;
+	uint32_t attachmentCounter;
 };
 

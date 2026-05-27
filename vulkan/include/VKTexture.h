@@ -21,7 +21,7 @@ struct VKTexture
 		vkGetPhysicalDeviceFormatProperties(gpu, format, &formatProperties);
 
 		if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
-			throw std::runtime_error("texture image format does not support linear blitting!");
+		
 		}
 
 		VkCommandBuffer commandBuffer = ::VK::Utils::BeginOneTimeCommands(device, pool);

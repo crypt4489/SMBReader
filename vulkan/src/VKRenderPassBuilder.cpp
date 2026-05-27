@@ -51,7 +51,6 @@ void VKRenderPassBuilder::CreateSubPassDependency(uint32_t srcSubpass, uint32_t 
 	VkPipelineStageFlags srcStageMask, VkAccessFlags srcAccessFlags,
 	VkPipelineStageFlags dstStageMask, VkAccessFlags dstAccessFlags)
 {
-
 	VkSubpassDependency dependency{};
 	dependency.srcSubpass = srcSubpass;
 	dependency.dstSubpass = dstSubpass;
@@ -74,7 +73,6 @@ void VKRenderPassBuilder::CreateSubPassDescription(VkPipelineBindPoint bindPoint
 		subpass.pColorAttachments = &references[0];
 	}
 	
-
 	uint32_t offset = numberOfColorAttachments;
 
 	if (numberDepthStencilAttachments)

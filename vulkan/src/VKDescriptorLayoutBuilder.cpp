@@ -22,7 +22,6 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 {
 	VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
 
-
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	layoutInfo.bindingCount = bindingCounts;
@@ -36,9 +35,12 @@ VkDescriptorSetLayout DescriptorSetLayoutBuilder::CreateDescriptorSetLayout()
 	binding_flags.pBindingFlags = flags;
 	layoutInfo.pNext = &binding_flags;
 	
+	VkResult vkRes = VK_SUCCESS;
 
-	if (vkCreateDescriptorSetLayout(device->device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create descriptor set layout!");
+	if ((vkRes = vkCreateDescriptorSetLayout(device->device, &layoutInfo, nullptr, &descriptorSetLayout)) != VK_SUCCESS) 
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_DESCRIPTOR_LAYOUT_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
+		return VK_NULL_HANDLE;
 	}
 
 	return descriptorSetLayout;

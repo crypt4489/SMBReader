@@ -3,14 +3,16 @@
 #include "VKSwapChain.h"
 #include "VKDevice.h"
 #include "VKInstance.h"
-#include "VKUtilities.h"
 
+#include <algorithm>
 
-static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount, VkFormat requestedFormat) {
+static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount, VkFormat requestedFormat) 
+{
 	for (uint32_t i = 0; i < formatCount; i++)
 	{
 		VkSurfaceFormatKHR availableFormat = availableFormats[i];
-		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
+		{
 			return availableFormat;
 		}
 	}
@@ -18,13 +20,13 @@ static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableF
 	return { VK_FORMAT_UNDEFINED, VK_COLOR_SPACE_MAX_ENUM_KHR };
 }
 
-static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, size_t presentCount) {
-
-
+static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresentModes, size_t presentCount) 
+{
 	for (uint32_t i = 0; i < presentCount; i++)
 	{ 
 		VkPresentModeKHR availablePresentMode = availablePresentModes[i];
-		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
+		if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) 
+		{
 			return availablePresentMode;
 		}
 	}
@@ -33,12 +35,14 @@ static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresent
 }
 
 
-static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) {
-	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) {
+static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) 
+{	
+	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+	{
 		return capabilities.currentExtent;
 	}
-	else {
-
+	else 
+	{
 		VkExtent2D actualExtent = {
 			width,
 			height
@@ -79,8 +83,6 @@ VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocat
 	SetSwapChainProperties(swapChainSupport, requestImages, requestedFormat);
 
 
-	waitSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
-	signalSemaphores = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
 	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
 	imageViews = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount));
@@ -102,13 +104,14 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 			imageCount = swapChainSupport.capabilities.maxImageCount;
 		}
 	}
-	else {
+	else 
+	{
 		imageCount = std::min(std::max(_imageCount, swapChainSupport.capabilities.minImageCount), swapChainSupport.capabilities.maxImageCount);
 	}
 }
 
 
-void VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle graphicsTransferQueue, EntryHandle presentQueue)
+int VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle graphicsTransferQueue, EntryHandle presentQueue)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
 	
@@ -125,7 +128,7 @@ void VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle g
 	QueueManager* graphicsTransferManager = device->GetQueueManager(graphicsTransferQueue);
 
 	if (!graphicsTransferManager)
-		return;
+		return -1;
 
 	queueFamiliesCache[queueFamiliesCacheCount++] = graphicsTransferManager->queueFamilyIndex;
 
@@ -143,11 +146,12 @@ void VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle g
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-	VkResult result = VK_SUCCESS;
+	VkResult vkRes = VK_SUCCESS;
 
-	if ((result = vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain)) != VK_SUCCESS) {
-		std::cerr <<  result << std::endl;
-		throw std::runtime_error("failed to create swap chain!");
+	if ((vkRes = vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain)) != VK_SUCCESS) 
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
+		return -1;
 	}
 	
 	VkImage* swcImages = images;
@@ -155,24 +159,22 @@ void VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle g
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
 
 	CreateSyncObject();
+
+	return 0;
 }
 
 void VKSwapChain::CreateSyncObject()
 {
-	EntryHandle* imageAvailablesIndices = device->CreateSemaphores(imageCount);
-	EntryHandle* renderFinishedIndices = device->CreateSemaphores(imageCount);
 	EntryHandle* fences = device->CreateFences(imageCount, VK_FENCE_CREATE_SIGNALED_BIT);
 
 	for (uint32_t i = 0; i < imageCount; i++)
 	{
-		waitSemaphores[i] = imageAvailablesIndices[i];
-		signalSemaphores[i] = renderFinishedIndices[i];
 		presentationFences[i] = fences[i];
 	}
 }
 
 
-void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
+int VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 {
 	VkSurfaceCapabilitiesKHR caps;
 
@@ -193,28 +195,33 @@ void VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 
 	createInfo.imageSharingMode = queueSharing;
 
-	uint32_t* qfc = queueFamiliesCache;
-
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
-	createInfo.pQueueFamilyIndices = qfc;
+	createInfo.pQueueFamilyIndices = queueFamiliesCache;
 
 	createInfo.preTransform = preTransform;
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createInfo.presentMode = presentMode;
 	createInfo.clipped = VK_TRUE;
 
-	if (vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain) != VK_SUCCESS) {
-		throw std::runtime_error("failed to create swap chain!");
+	VkResult vkRes = VK_SUCCESS;
+
+	if ((vkRes = vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain)) != VK_SUCCESS) 
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED), vkRes);
+		return -1;
 	}
 
 	VkImage* swcImages = images;
 
 	vkGetSwapchainImagesKHR(device->device, swapChain, &imageCount, swcImages);
+
+	return 0;
 }
 
 EntryHandle* VKSwapChain::CreateSwapchainViews()
 {
-	for (uint32_t i = 0; i < imageCount; i++) {
+	for (uint32_t i = 0; i < imageCount; i++) 
+	{
 		imageViews[i] = device->CreateImageView(images[i], 1, 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 	}
 
@@ -234,7 +241,8 @@ void VKSwapChain::ResetSwapChain()
 {
 	Wait();
 
-	if (swapChain) {
+	if (swapChain) 
+	{
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
 		swapChain = VK_NULL_HANDLE;
 	}
@@ -258,7 +266,8 @@ void VKSwapChain::ReleaseImageMaintenance(uint32_t imageIndex)
 
 void VKSwapChain::DestroySwapChain()
 {
-	if (swapChain) {
+	if (swapChain) 
+	{
 		vkDestroySwapchainKHR(device->device, swapChain, nullptr);
 		swapChain = VK_NULL_HANDLE;
 	}
@@ -275,51 +284,46 @@ void VKSwapChain::DestroySyncObject()
 {
 	for (uint32_t i = 0; i < maxFrameInFlight; i++)
 	{
-		device->DestroySemaphore(waitSemaphores[i]);
-		device->DestroySemaphore(signalSemaphores[i]);
 		device->DestroyFence(presentationFences[i]);
 	}
 }
 
-uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, uint32_t acquireSemaphore)
+uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore acquireSemaphore)
 {
 	uint32_t imageIndex;
 
-	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, device->GetSemaphore(waitSemaphores[acquireSemaphore]), VK_NULL_HANDLE, &imageIndex);
+	VkResult result = vkAcquireNextImageKHR(device->device, swapChain, _timeout, acquireSemaphore, VK_NULL_HANDLE, &imageIndex);
 
-	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+	if (result != VK_SUCCESS) 
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED), result);
 		return 0xFFFFFFFF;
-	}
-	else if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
 	return imageIndex;
 }
 
-uint32_t VKSwapChain::AcquireNextSwapChainImage2(uint64_t _timeout, uint32_t acquireSemaphore)
+uint32_t VKSwapChain::AcquireNextSwapChainImage2(uint64_t _timeout, VkSemaphore acquireSemaphore, uint32_t currentFrameInFlight)
 {
-
 	uint32_t imageIndex;
 
-	VkFence fence = device->GetFence(presentationFences[acquireSemaphore]);
+	VkFence fence = device->GetFence(presentationFences[currentFrameInFlight]);
 
 	vkWaitForFences(device->device, 1, &fence, VK_TRUE, UINT64_MAX);
 
 	VkAcquireNextImageInfoKHR info{};
 	info.sType = VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR;
-	info.semaphore = device->GetSemaphore(waitSemaphores[acquireSemaphore]);
+	info.semaphore = acquireSemaphore;
 	info.swapchain = swapChain;
 	info.timeout = _timeout;
 	info.deviceMask = 1;
 	
 	VkResult result = vkAcquireNextImage2KHR(device->device, &info, &imageIndex);
 
-	if (result == VK_ERROR_OUT_OF_DATE_KHR ) {
+	if (result != VK_SUCCESS)
+	{
+		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED), result);
 		return 0xFFFFFFFF;
-	}
-	else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
 	return imageIndex;
