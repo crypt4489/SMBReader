@@ -712,3 +712,4 @@ int VKInstance::GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex)
 
 	return static_cast<int>(deviceProperties.limits.minUniformBufferOffsetAlignment);
 }
+

@@ -208,6 +208,8 @@ struct QueueManager
 
 	uint32_t ConvertQueueProps(uint32_t flags, bool present);
 
+	void DestroyManager();
+
 	std::bitset<16> bitmap;
 	const int32_t maxQueueCount;
 	const uint32_t queueFamilyIndex;
@@ -459,9 +461,11 @@ struct VKDevice
 		uint32_t layerCount,
 		const char** deviceExtensions,
 		uint32_t deviceExtCount,
-		uint32_t queueFlags,
 		VkPhysicalDeviceFeatures2* features,
-		VkSurfaceKHR renderSurface,
+		QueueIndex* queueIndices,
+		uint32_t* queueMaxCounts,
+		float* queuePrios,
+		uint32_t queueCount,
 		size_t perDeviceDataSize,
 		size_t perEntriesSize,
 		size_t perCacheSize,
@@ -477,7 +481,7 @@ struct VKDevice
 
 	EntryHandle CreatePipelineCacheObject(PipelineCacheObject* obj);
 
-	int CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
+	EntryHandle CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport);
 
 	EntryHandle CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries);
 
@@ -488,9 +492,9 @@ struct VKDevice
 	EntryHandle CreateRenderTarget(EntryHandle renderPassIndex, uint32_t framebufferCount, uint32_t width, uint32_t height, uint32_t wOffset, uint32_t hOffset);
 
 	EntryHandle* CreateReusableCommandBuffers(
+		EntryHandle managerIndex,
 		uint32_t numberOfCommandBuffers,
 		bool createFences, 
-		uint32_t capabilites,
 		VkCommandBufferLevel level
 	);
 
@@ -533,8 +537,6 @@ struct VKDevice
 
 	VkDescriptorSetLayout GetDescriptorSetLayout(EntryHandle handle);
 
-	uint32_t GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t* size, uint32_t capabilities);
-
 	VkFence GetFence(EntryHandle handle);
 
 	VkFramebuffer GetFrameBuffer(EntryHandle handle);
@@ -553,29 +555,30 @@ struct VKDevice
 
 	PipelineCacheObject* GetPipelineCacheObject(EntryHandle handle);
 
-	int32_t GetPresentQueue(QueueIndex* queueIdx,
-		QueueIndex* maxQueueCount,
-		VkQueueFamilyProperties* famProps,
-		uint32_t famPropsCount,
-		VkSurfaceKHR renderSurface);
+	int GetPresentQueue(
+		QueueIndex* queueIdx,
+		uint32_t* maxQueueCount,
+		VkSurfaceKHR renderSurface,
+		VkQueueFamilyProperties* famProps);
 
-	int32_t GetQueueByMask(QueueIndex* queueIdx,
-		QueueIndex* maxQueueCount,
-		VkQueueFamilyProperties* famProps,
-		uint32_t famPropsCount,
-		uint32_t queueMask);
+	int GetQueueByMask(
+		QueueIndex* queueIdx,
+		uint32_t* maxQueueCount,
+		uint32_t queueMask,
+		VkQueueFamilyProperties* famProps);
 
 	VkQueryPool GetQueryPool(EntryHandle poolHandle);
 
 	struct QueueDetails
 	{
-		uint32_t managerIndex;
 		uint32_t queueIndex;
 		uint32_t queueFamilyIndex;
 		EntryHandle poolIndex;
 	};
 
-	QueueDetails GetQueueHandle(uint32_t capabilites);
+	QueueDetails GetQueueHandle(EntryHandle queueManagerIndex);
+		
+	QueueManager* GetQueueManager(EntryHandle queueManagerIndex);
 
 	RecordingBufferObject GetRecordingBufferObject(EntryHandle handle);
 
@@ -678,13 +681,17 @@ struct VKDevice
 
 	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
 
-	int PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
+	int PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
-	VkQueueFamilyProperties* QueueFamilyDetails(uint32_t *size);
+	int PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle queueManagerIndex);
+
+	void QueueFamilyDetails(VkQueueFamilyProperties* famProps, uint32_t *size);
+
+	uint32_t QueueFamilyDetailsCount();
 
 	int ResetRenderTarget(EntryHandle handle);
 
-	int ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex);
+	int ReturnQueueToManager(EntryHandle queueManagerIndex, uint32_t queueIndex);
 
 	int SubmitCommandBuffer(
 		EntryHandle* wait,
@@ -698,7 +705,7 @@ struct VKDevice
 
 	int TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
-		uint32_t mips, uint32_t layers);
+		uint32_t mips, uint32_t layers, EntryHandle queueManagerIndex);
 
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
@@ -710,16 +717,21 @@ struct VKDevice
 
 	int WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, size_t* sizes, size_t* offsets, size_t range, size_t minOffset, size_t numCopies);
 
-	int WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride);
+	int WriteToDeviceBuffer(
+		EntryHandle deviceIndex,
+		EntryHandle stagingBufferIndex,
+		void* data,
+		size_t size, size_t offset,
+		int copies, size_t stride,
+		EntryHandle queueManagerIndex
+	);
 
 	int ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
 
 	int UploadImageData(EntryHandle textureIndex,
-		char* imageData, 
-		size_t totalImageDataSize, 
-		EntryHandle stagingBufferIndex,
+		char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format
+		int mipLevels, VkFormat format, EntryHandle queueManagerIndex
 	);
 
 	int UploadImageData(EntryHandle textureIndex,
@@ -744,9 +756,6 @@ struct VKDevice
 	VkDevice device;
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
-
-	EntryHandle queueManagers;
-	size_t queueManagersSize;
 
 	uint32_t deviceMask = 0;
 

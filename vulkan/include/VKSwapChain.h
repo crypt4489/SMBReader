@@ -23,8 +23,7 @@ struct VKSwapChain
 
 	void RecreateSwapChain(uint32_t width, uint32_t height);
 
-	void CreateSwapChain(
-		uint32_t width, uint32_t height);
+	void CreateSwapChain(uint32_t width, uint32_t height, EntryHandle graphicsTransferQueue, EntryHandle presentQueue);
 
 	void CreateSyncObject();
 

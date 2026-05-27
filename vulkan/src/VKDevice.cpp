@@ -582,8 +582,6 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 	device(VK_NULL_HANDLE),
 	gpu(_gpu),
 	parentInstance(_inst),
-	queueManagers(),
-	queueManagersSize(0),
 	entries(nullptr),
 	indexForEntries(0),
 	numberOfEntries(0),
@@ -1479,9 +1477,11 @@ int VKDevice::CreateLogicalDevice(
 	uint32_t layerCount,
 	const char** deviceExtensions,
 	uint32_t deviceExtCount,
-	uint32_t queueFlags,
 	VkPhysicalDeviceFeatures2* features,
-	VkSurfaceKHR renderSurface,
+	QueueIndex* queueIndices,
+	uint32_t* queueMaxCounts,
+	float* queuePrios,
+	uint32_t queueCount,
 	size_t perDeviceDataSize,
 	size_t perEntriesSize,
 	size_t perCacheSize,
@@ -1491,7 +1491,6 @@ int VKDevice::CreateLogicalDevice(
 	void* devicePoolHead
 )
 {
-
 	uintptr_t tempDriverHead = (uintptr_t)driverPoolHead;
 	uintptr_t tempDeviceHead = (uintptr_t)devicePoolHead;
 
@@ -1508,12 +1507,10 @@ int VKDevice::CreateLogicalDevice(
 
 	tempDriverHead += driverPerSize;
 
-
 	deviceCacheAlloc.size = perCacheSize;
 	deviceCacheAlloc.memHead = tempDeviceHead;
 
 	tempDeviceHead += perCacheSize;
-	
 
 	deviceDataAlloc.size = perDeviceDataSize - perEntriesSize;
 	deviceDataAlloc.memHead = tempDeviceHead;
@@ -1534,54 +1531,22 @@ int VKDevice::CreateLogicalDevice(
 
 	tempDeviceHead += freeListEntrySize;
 	
-	std::unordered_map<uint32_t, std::tuple<uint32_t, bool>> queueIndices;
-	uint32_t familyCount;
-	VkQueueFamilyProperties* famProps;
-	QueueIndex index, maxCount;
+	VkDeviceQueueCreateInfo* queueCreateInfos = reinterpret_cast<VkDeviceQueueCreateInfo*>(AllocFromDeviceCache(sizeof(VkDeviceQueueCreateInfo) * queueCount));
 
-	famProps = QueueFamilyDetails(&familyCount);
-
-	GetQueueByMask(&index, &maxCount, famProps, familyCount, queueFlags);
-
-	queueIndices[index] = { maxCount, false };
-
-	if (renderSurface)
-	{
-		GetPresentQueue(&index, &maxCount, famProps, familyCount, renderSurface);
-		queueIndices[index] = { maxCount, true };
-	}
-
-	VkDeviceQueueCreateInfo* queueCreateInfos = reinterpret_cast<VkDeviceQueueCreateInfo*>(AllocFromDeviceCache(sizeof(VkDeviceQueueCreateInfo) * familyCount));
-
-	auto result = std::max_element(queueIndices.begin(), queueIndices.end(), [](auto& ref, auto& ref2) {
-		return std::get<uint32_t>(ref.second) < std::get<uint32_t>(ref2.second);
-		});
-
-
-	uint32_t prioSize = std::get<uint32_t>((*result).second);
-
-	float* queuePriorites = reinterpret_cast<float*>(AllocFromDeviceCache(sizeof(float) * prioSize));
-
-	for (uint32_t i = 0; i < prioSize; i++)
-	{
-		queuePriorites[i] = 1.0f;
-	}
-
-	uint32_t i = 0;
-
-	for (const auto& queueFamily : queueIndices) 
+	for (uint32_t i = 0; i<queueCount; i++)
 	{
 		VkDeviceQueueCreateInfo queueCreateInfo{};
 		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = queueFamily.first;
-		queueCreateInfo.queueCount = std::get<uint32_t>(queueFamily.second);
-		queueCreateInfo.pQueuePriorities = queuePriorites;
-		queueCreateInfos[i++] = queueCreateInfo;
+		queueCreateInfo.queueFamilyIndex = queueIndices[i];
+		queueCreateInfo.queueCount = queueMaxCounts[i];
+		queueCreateInfo.pQueuePriorities = queuePrios;
+		queueCreateInfos[i] = queueCreateInfo;
+		queuePrios += queueMaxCounts[i];
 	}
 
 	VkDeviceCreateInfo logDeviceInfo{};
 	logDeviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	logDeviceInfo.queueCreateInfoCount = i;
+	logDeviceInfo.queueCreateInfoCount = queueCount;
 	logDeviceInfo.pQueueCreateInfos = queueCreateInfos;
 	logDeviceInfo.enabledExtensionCount = deviceExtCount;
 	logDeviceInfo.enabledLayerCount = layerCount;
@@ -1597,22 +1562,6 @@ int VKDevice::CreateLogicalDevice(
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_LOGICAL_DEVICE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, res);
 		return -1;
-	}
-
-	QueueManager* ptr = (QueueManager*)AllocFromPerDeviceData(sizeof(QueueManager) * queueIndices.size());
-
-	queueManagersSize = queueIndices.size();
-
-	queueManagers = AddVkTypeToEntry(ptr, VulkQueueManager);
-
-	for (const auto queueFamily : queueIndices) 
-	{
-
-		uint32_t queueIndex = queueFamily.first;
-		uint32_t maxCount = std::get<uint32_t>(queueFamily.second);
-		bool present = std::get<bool>(queueFamily.second);
-		CreateQueueManager(ptr, queueIndex, maxCount, queueFlags, present);
-		ptr = std::next(ptr);
 	}
 
 	return 0;
@@ -1634,23 +1583,33 @@ VKComputePipelineBuilder* VKDevice::CreateComputePipelineBuilder(size_t numberOf
 	return std::construct_at(computePB, this, numberOfDescriptors, pushConstantRangeCount);
 }
 
-int VKDevice::CreateQueueManager(QueueManager* manager, uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
+EntryHandle VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount, uint32_t queueFlags, bool presentsupport)
 {
-	void* queueManagerData = reinterpret_cast<void*>(AllocFromPerDeviceData(sizeof(size_t) * maxCount));
+	void* queueManagerData = reinterpret_cast<void*>(AllocFromPerDeviceData(sizeof(EntryHandle) * maxCount));
 
-	if (!queueManagerData)
+	QueueManager* queueManagerItself = reinterpret_cast<QueueManager*>(AllocFromPerDeviceData(sizeof(QueueManager)));
+
+	if (!queueManagerData || !queueManagerItself)
 	{
 		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
-		return -1;
+		return EntryHandle();
 	}
 
-	std::construct_at(manager,
+	std::construct_at(queueManagerItself,
 		nullptr, 0,
 		maxCount, queueIndex,
 		queueFlags, presentsupport,
 		this, queueManagerData);
 
-	return 0;
+	EntryHandle queueManagerHandle = AddVkTypeToEntry(queueManagerItself, VulkQueueManager);
+
+	if (queueManagerHandle == EntryHandle())
+	{
+		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		queueManagerItself->DestroyManager();
+	}
+
+	return queueManagerHandle;
 }
 
 EntryHandle VKDevice::CreateQueryPool(VkQueryType queryType, uint32_t numberOfQueries)
@@ -1766,9 +1725,9 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 }
 
 EntryHandle* VKDevice::CreateReusableCommandBuffers(
+	EntryHandle managerIndex, 
 	uint32_t numberOfCommandBuffers, 
 	bool createFences, 
-	uint32_t capabilites, 
 	VkCommandBufferLevel level
 )
 {
@@ -1794,7 +1753,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 		return nullptr;
 	}
 
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(capabilites);
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(managerIndex);
 
 	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
 
@@ -2699,38 +2658,6 @@ VkDescriptorSetLayout VKDevice::GetDescriptorSetLayout(EntryHandle handle)
 	return reinterpret_cast<VkDescriptorSetLayout>(objHandle.memoryLocation);
 }
 
-
-uint32_t VKDevice::GetFamiliesOfCapableQueues(uint32_t** queueFamilies, uint32_t *size, uint32_t capabilities)
-{
-	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
-
-	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
-	{
-		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
-		return 0;
-	}
-
-	QueueManager* qm = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
-
-	uint32_t* out = *queueFamilies;
-	
-	uint32_t index = 0;
-	
-	for (size_t i = 0; i < queueManagersSize && capabilities; i++)
-	{
-		uint32_t comp = capabilities;
-		
-		capabilities &= ~(qm[i].queueCapabilities & capabilities);
-		
-		if (comp != capabilities) 
-			out[index++] = qm[i].queueFamilyIndex;
-	}
-
-	*size = index;
-
-	return capabilities;
-}
-
 VkFence VKDevice::GetFence(EntryHandle handle)
 {
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
@@ -2848,12 +2775,15 @@ PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 	return reinterpret_cast<PipelineCacheObject*>(objHandle.memoryLocation);
 }
 
-int32_t VKDevice::GetPresentQueue(QueueIndex* queueIdx,
-	QueueIndex* maxQueueCount,
-	VkQueueFamilyProperties* famProps,
-	uint32_t famPropsCount,
-	VkSurfaceKHR renderSurface)
+int VKDevice::GetPresentQueue(
+	QueueIndex* queueIdx,
+	uint32_t* maxQueueCount,
+	VkSurfaceKHR renderSurface,
+	VkQueueFamilyProperties* famProps)
 {
+	uint32_t famPropsCount = 0;
+	QueueFamilyDetails(famProps, &famPropsCount);
+
 	for (uint32_t i = 0; i<famPropsCount; i++)
 	{
 		VkQueueFamilyProperties *props = &famProps[i];
@@ -2862,31 +2792,35 @@ int32_t VKDevice::GetPresentQueue(QueueIndex* queueIdx,
 
 		if (presentSupport)
 		{
-			*maxQueueCount = QueueIndex(props->queueCount);
+			*maxQueueCount = props->queueCount;
 			*queueIdx = QueueIndex(i);
 			return 0;
 		}
 	}
+
 	return -1;
 }
 
-int32_t VKDevice::GetQueueByMask(QueueIndex* queueIdx,
-	QueueIndex* maxQueueCount,
-	VkQueueFamilyProperties* famProps,
-	uint32_t famPropsCount,
-	uint32_t queueMask)
+int VKDevice::GetQueueByMask(
+	QueueIndex* queueIdx,
+	uint32_t* maxQueueCount,
+	uint32_t queueMask,
+	VkQueueFamilyProperties* famProps)
 {
-	uint32_t i = 0;
+	uint32_t famPropsCount = 0;
+	QueueFamilyDetails(famProps, &famPropsCount);
+
 	for (uint32_t i = 0; i < famPropsCount; i++)
 	{
 		VkQueueFamilyProperties* props = &famProps[i];
 		if ((props->queueFlags & queueMask) == queueMask) 
 		{
 			*queueIdx = QueueIndex(i);
-			*maxQueueCount = QueueIndex(props->queueCount);
+			*maxQueueCount = props->queueCount;
 			return 0;
 		}
 	}
+
 	return -1;
 }
 
@@ -2905,21 +2839,33 @@ VkQueryPool VKDevice::GetQueryPool(EntryHandle poolHandle)
 	return queryPool;
 }
 
-VKDevice::QueueDetails VKDevice::GetQueueHandle(uint32_t capabilites)
+VKDevice::QueueDetails VKDevice::GetQueueHandle(EntryHandle queueManagerIndex)
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
+	QueueManager* manager = GetQueueManager(queueManagerIndex);
+
+	if (!manager)
+	{
+		return { ~0ui32, ~0ui32, EntryHandle() };
+	}
+
+	uint32_t queueIdx = manager->GetQueue();
+
+	return { queueIdx,  manager->queueFamilyIndex,  manager->poolIndices[queueIdx] };
+}
+
+QueueManager* VKDevice::GetQueueManager(EntryHandle queueManagerIndex)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagerIndex);
 
 	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
-		return {~0ui32, ~0ui32, ~0ui32, EntryHandle()};
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
 
-	QueueManager* ptr = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
+	QueueManager* queueManager = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
 
-
-	auto ret = FindQueueManagerByCapapbilites(ptr, queueManagersSize, capabilites);
-	uint32_t queueIdx = ptr[ret].GetQueue();
-	EntryHandle managerIndex = queueManagers;
-	managerIndex = managerIndex + ret;
-	return { managerIndex, queueIdx, ptr[ret].queueFamilyIndex, ptr[ret].poolIndices[queueIdx] };
+	return queueManager;
 }
 
 RecordingBufferObject VKDevice::GetRecordingBufferObject(EntryHandle handle)
@@ -3152,24 +3098,15 @@ size_t VKDevice::GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_
 	return alloc->alloc.GetMemory(size, alignment);
 }
 
-int VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
+int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
 	VkQueue queue;
-	uint32_t managerIndex = ~0, queueIndex = ~0, queueFamilyIndex = ~0;
-	if (commandBufferIndex == ~0ui64)
-	{
-		VKDevice::QueueDetails queueDetails = GetQueueHandle(PRESENTQUEUE);
-		managerIndex = queueDetails.managerIndex;
-		queueIndex = queueDetails.queueIndex;
-		queueFamilyIndex = queueDetails.queueFamilyIndex;
-	}
-	else 
-	{
-		auto rbo = GetCommandBuffer(commandBufferIndex);
-		queueIndex = rbo->queueIndex;
-		queueFamilyIndex = rbo->queueFamilyIndex;
-	}
-
+	uint32_t  queueIndex = ~0, queueFamilyIndex = ~0;
+	
+	VKCommandBuffer* rbo = GetCommandBuffer(commandBufferIndex);
+	queueIndex = rbo->queueIndex;
+	queueFamilyIndex = rbo->queueFamilyIndex;
+	
 	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
 
 	VKSwapChain* swc = GetSwapChain(swapChainIdx);
@@ -3221,35 +3158,100 @@ int VKDevice::PresentSwapChain(EntryHandle swapChainIdx, uint32_t imageIndex, ui
 		retCode = -1;
 	}
 
-	if (commandBufferIndex == ~0ui64)
+	return retCode;
+}
+
+int VKDevice::PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle queueManagerIndex)
+{
+	VkQueue queue;
+	uint32_t queueIndex = ~0, queueFamilyIndex = ~0;
+	
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(queueManagerIndex);
+	queueIndex = queueDetails.queueIndex;
+	queueFamilyIndex = queueDetails.queueFamilyIndex;
+
+	vkGetDeviceQueue(device, queueFamilyIndex, queueIndex, &queue);
+
+	VKSwapChain* swc = GetSwapChain(swapChainIdx);
+
+	uint32_t waitCount = 1;
+
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * waitCount));
+
+	for (uint32_t i = 0; i < waitCount; i++)
 	{
-		ReturnQueueToManager(managerIndex, queueIndex);
+		waitSemaphores[i] = GetSemaphore(swc->signalSemaphores[imageIndex]);
 	}
+
+
+	VkPresentInfoKHR presentInfo{};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+	presentInfo.waitSemaphoreCount = waitCount;
+	presentInfo.pWaitSemaphores = waitSemaphores;
+
+	VkResult results[2];
+
+	presentInfo.swapchainCount = 1;
+	presentInfo.pSwapchains = &swc->swapChain;
+	presentInfo.pImageIndices = &imageIndex;
+	presentInfo.pResults = results;
+
+
+	if (swc->presentationFences)
+	{
+		VkFence fence = GetFence(swc->presentationFences[frameInFlight]);
+		VkSwapchainPresentFenceInfoEXT info{};
+		info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT;
+		info.swapchainCount = 1;
+		info.pFences = &fence;
+
+		vkResetFences(device, 1, &fence);
+
+		presentInfo.pNext = &info;
+	}
+
+	VkResult result = vkQueuePresentKHR(queue, &presentInfo);
+
+	int retCode = 0;
+
+	if (result != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(DEVICE_VK_TYPE_SWC_PRESENT_FAILED, result);
+		retCode = -1;
+	}
+
+	ReturnQueueToManager(queueManagerIndex, queueIndex);
 
 	return retCode;
 }
 
-VkQueueFamilyProperties* VKDevice::QueueFamilyDetails(uint32_t *size)
+void VKDevice::QueueFamilyDetails(VkQueueFamilyProperties* famProps, uint32_t* size)
 {
 	vkGetPhysicalDeviceQueueFamilyProperties(gpu, size, nullptr);
 
-	VkQueueFamilyProperties* ret = reinterpret_cast<VkQueueFamilyProperties*>(AllocFromDeviceCache(sizeof(VkQueueFamilyProperties) * *size));
+	vkGetPhysicalDeviceQueueFamilyProperties(gpu, size, famProps);
 
-	vkGetPhysicalDeviceQueueFamilyProperties(gpu, size, ret);
-
-	return ret;
+	return;
 }
 
-int VKDevice::ReturnQueueToManager(size_t queueManagerIndex, size_t queueIndex)
+uint32_t VKDevice::QueueFamilyDetailsCount()
 {
-	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagers);
+	uint32_t totalCount = 0;
 
-	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
+	vkGetPhysicalDeviceQueueFamilyProperties(gpu, &totalCount, nullptr);
+
+	return totalCount;
+}
+
+int VKDevice::ReturnQueueToManager(EntryHandle queueManagerIndex, uint32_t queueIndex)
+{
+	QueueManager* manager = GetQueueManager(queueManagerIndex);
+
+	if (!manager)
 		return -1;
 
-	QueueManager* ptr = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
-
-	ptr[queueManagerIndex].ReturnQueue(queueIndex);
+	manager->ReturnQueue(queueIndex);
 
 	return 0;
 }
@@ -3325,7 +3327,7 @@ int VKDevice::SubmitCommandsForSwapChain(EntryHandle swapChainIdx, uint32_t fram
 
 int VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
-	uint32_t mips, uint32_t layers)
+	uint32_t mips, uint32_t layers, EntryHandle queueManagerIndex)
 {
 	
 	VkImage image = GetImageByHandle(imageIndex);
@@ -3333,7 +3335,7 @@ int VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	if (!image)
 		return -1;
 
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(TRANSFERQUEUE);
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(queueManagerIndex);
 
 	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
 	
@@ -3352,7 +3354,7 @@ int VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, commandBuffer);
 
-	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
+	ReturnQueueToManager(queueManagerIndex, queueDetails.queueIndex);
 
 	return 0;
 }
@@ -3466,14 +3468,21 @@ int VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, siz
 	return 0;
 }
 
-int VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void* data, size_t size, size_t offset, int copies, size_t stride)
+int VKDevice::WriteToDeviceBuffer(
+	EntryHandle deviceIndex, 
+	EntryHandle stagingBufferIndex, 
+	void* data, 
+	size_t size, size_t offset, 
+	int copies, size_t stride,
+	EntryHandle queueManagerIndex
+)
 {
 	BufferAlloc* stagingBufferAlloc = GetBufferAlloc(deviceIndex);
 
 	if (!stagingBufferAlloc)
 		return -1;
 
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(TRANSFERQUEUE);
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(queueManagerIndex);
 
 	VkQueue queue;
 	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
@@ -3500,7 +3509,7 @@ int VKDevice::WriteToDeviceBuffer(EntryHandle deviceIndex, EntryHandle stagingBu
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
-	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
+	ReturnQueueToManager(queueManagerIndex, queueDetails.queueIndex);
 
 	stagingBufferAlloc->alloc.FreeMemory(allocOffset);
 
@@ -3556,7 +3565,7 @@ int VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stag
 int VKDevice::UploadImageData(EntryHandle textureIndex, 
 	char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex, 
 	int width, int height, int layers,
-	int mipLevels, VkFormat format
+	int mipLevels, VkFormat format, EntryHandle queueManagerIndex
 )
 {
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
@@ -3571,13 +3580,11 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 	if (!image)
 		return -1;
 		
-
-
 	VkBuffer stagingBuffer = stagingBufferAlloc->buffer;
 	VkDeviceMemory stagingMemory = stagingBufferAlloc->memory;
 	VkDeviceSize offsetAlloc = stagingBufferAlloc->alloc.GetMemory(imagesSize, 4);
 
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
+	VKDevice::QueueDetails queueDetails = GetQueueHandle(queueManagerIndex);
 
 	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
 
@@ -3611,7 +3618,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
 
-	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
+	ReturnQueueToManager(queueManagerIndex, queueDetails.queueIndex);
 
 	stagingBufferAlloc->alloc.FreeMemory(offsetAlloc);
 
@@ -3806,4 +3813,12 @@ uint32_t QueueManager::ConvertQueueProps(uint32_t flags, bool present)
 	flag |= ((flags & VK_QUEUE_TRANSFER_BIT) != 0) * TRANSFERQUEUE;
 	flag |= (present * PRESENTQUEUE);
 	return flag;
+}
+
+void QueueManager::DestroyManager()
+{
+	for (int32_t i = 0; i < maxQueueCount; i++)
+	{
+		device->DestroyCommandPool(poolIndices[i]);
+	}
 }

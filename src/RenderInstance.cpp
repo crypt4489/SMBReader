@@ -955,9 +955,17 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 		return -1;
 	}
 
-	res = dev->PresentSwapChain(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
+	if (presentQueue != graphicsComputeTransfer)
+	{
+		res = dev->PresentSwapChainSeparatePresentQueue(swapChainIndex, imageIndex, currentFrame, presentQueue);
+	}
+	else
+	{
+		res = dev->PresentSwapChainCommandBufferInline(swapChainIndex, imageIndex, currentFrame, currentCBIndex[currentFrame]);
+	}
 
-	if (res) {
+	if (res) 
+	{
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 		int ret = RecreateSwapChain(swapChainIndex);
 		return -1;
@@ -1241,7 +1249,7 @@ void RenderInstance::CreateSwapChainData(EntryHandle swapChainIndex, uint32_t wi
 	}
 	else
 	{
-		swapChain->CreateSwapChain(width, height);
+		swapChain->CreateSwapChain(width, height, graphicsComputeTransfer, presentQueue);
 	}
 
 	swapChain->CreateSwapchainViews();
@@ -2479,6 +2487,48 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	maxMSAALevels = std::max(std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex))-1, 1);
 
+	uint32_t totalQueueFamilyCount = majorDevice->QueueFamilyDetailsCount();
+
+	VkQueueFamilyProperties* famPropsContainer = (VkQueueFamilyProperties*)cacheAllocator->CAllocate(totalQueueFamilyCount * sizeof(VkQueueFamilyProperties));
+
+	std::array<QueueIndex, 2> queueIndices{};
+	std::array<uint32_t, 2> queueCounts{};
+
+	uint32_t queueCount = 0, totalQueuePrios = 0;
+
+	int queueSuccessful = majorDevice->GetQueueByMask(&queueIndices[0], &queueCounts[0], VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, famPropsContainer);
+
+	if (queueSuccessful)
+	{
+		//TO-DO implement fallback
+	}
+
+	queueSuccessful = majorDevice->GetPresentQueue(&queueIndices[1], &queueCounts[1], vkInstance->renderSurface, famPropsContainer);
+
+	if (queueSuccessful)
+	{
+		//TO-DO implement error handling
+	}
+
+	if (queueIndices[0] == queueIndices[1])
+	{
+		queueCount = 1;
+		totalQueuePrios = queueCounts[0];
+	}
+	else
+	{
+		queueCount = 2;
+		totalQueuePrios = queueCounts[0] + queueCounts[1];
+	}
+
+	float* queuePriorites = reinterpret_cast<float*>(cacheAllocator->Allocate(sizeof(float) * totalQueuePrios));
+
+	for (int i = 0; i < totalQueuePrios; i++)
+	{
+		queuePriorites[i] = 1.0f;
+	}
+
+
 	VkPhysicalDeviceVulkan12Features feature12{};
 	feature12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 	feature12.descriptorBindingPartiallyBound = VK_TRUE;
@@ -2489,7 +2539,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	feature12.storageBuffer8BitAccess = VK_TRUE;
 	feature12.drawIndirectCount = VK_TRUE;
 	feature12.runtimeDescriptorArray = VK_TRUE;
-	//feature12.d
 
 	VkPhysicalDeviceFeatures2 features2{};
 	features2.pNext = &feature12;
@@ -2508,8 +2557,11 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 		vkInstance->instanceLayerCount,
 		vkInstance->deviceExtensions,
 		vkInstance->deviceExtCount,
-		VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT,
-		&features2, vkInstance->renderSurface,
+		&features2,
+		queueIndices.data(),
+		queueCounts.data(),
+		queuePriorites,
+		queueCount, 
 		64 * KiB,
 		16 * KiB,
 		96 * KiB,
@@ -2518,6 +2570,17 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 		driverDeviceDataHead,
 		deviceDataHead
 	);
+
+	graphicsComputeTransfer = majorDevice->CreateQueueManager(queueIndices[0], queueCounts[0], VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, (queueCount == 1) ? true : false);
+
+	if (queueCount > 1)
+	{
+		presentQueue = majorDevice->CreateQueueManager(queueIndices[1], queueCounts[1], 0, true);
+	}
+	else
+	{
+		presentQueue = graphicsComputeTransfer;
+	}
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -2534,7 +2597,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(1, true, COMPUTEQUEUE | TRANSFERQUEUE | GRAPHICSQUEUE, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(graphicsComputeTransfer, 1, true, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		currentCBIndex[i] = *lprimaryCommandBuffers;
 	}
 

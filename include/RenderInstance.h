@@ -197,6 +197,10 @@ struct RenderInstance
 	VKInstance *vkInstance = nullptr;
 	DeviceIndex deviceIndex;
 	DeviceIndex physicalIndex;
+	
+	EntryHandle graphicsComputeTransfer = EntryHandle();
+	EntryHandle presentQueue = EntryHandle();
+
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 
 	uint32_t maxMSAALevels = 0;

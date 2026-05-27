@@ -108,12 +108,10 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 }
 
 
-void VKSwapChain::CreateSwapChain( 
-	uint32_t width, uint32_t height)
+void VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle graphicsTransferQueue, EntryHandle presentQueue)
 {
 	swapChainExtent = chooseSwapExtent(width, height);
 	
-
 	VkSwapchainCreateInfoKHR createInfo{};
 	createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	createInfo.surface = surface;
@@ -124,14 +122,22 @@ void VKSwapChain::CreateSwapChain(
 	createInfo.imageArrayLayers = 1;
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	
-	
-	uint32_t* qfc = queueFamiliesCache;
-	uint32_t ret = device->GetFamiliesOfCapableQueues(&qfc, &queueFamiliesCacheCount, GRAPHICSQUEUE | TRANSFERQUEUE | PRESENTQUEUE);
+	QueueManager* graphicsTransferManager = device->GetQueueManager(graphicsTransferQueue);
+
+	if (!graphicsTransferManager)
+		return;
+
+	queueFamiliesCache[queueFamiliesCacheCount++] = graphicsTransferManager->queueFamilyIndex;
+
+	if (graphicsTransferQueue != presentQueue)
+	{
+		QueueManager* presentManager = device->GetQueueManager(presentQueue);
+		queueFamiliesCache[queueFamiliesCacheCount++] = presentManager->queueFamilyIndex;
+	}
+
 	queueSharing = createInfo.imageSharingMode = (queueFamiliesCacheCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 	createInfo.queueFamilyIndexCount = queueFamiliesCacheCount;
-	createInfo.pQueueFamilyIndices = qfc;
-
-
+	createInfo.pQueueFamilyIndices = queueFamiliesCache;
 	createInfo.preTransform = preTransform;
 	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createInfo.presentMode = presentMode;
