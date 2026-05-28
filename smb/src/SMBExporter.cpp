@@ -150,11 +150,6 @@ void ExportToOBJFormat(void* vertices, int vertexCount, StringView outputFile)
 
 	auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out, handle);
 
-	if (!fileRet)
-	{
-		throw std::runtime_error("Cannot open file for OBJ export " + outputFile);
-	}
-
 	/*
 	auto& fileStream = handle->streamHandle;
 

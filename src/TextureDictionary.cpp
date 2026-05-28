@@ -7,7 +7,6 @@ void* TextureDictionary::AllocateImageCache(size_t size)
 	return (void*)(textureCache + out);
 }
 
-
 int TextureDictionary::AllocateNTextureHandles(int n, TextureDetails** details)
 {
 	int outIndex = allocationIndex.fetch_add(n);
@@ -43,7 +42,6 @@ void TextureDictionary::CreatePools(ImageFormat* formats, size_t* sizes, EntryHa
 
 	for (int i = 0; i < num; i++)
 	{
-
 		texturePoolsSize[i] = sizes[i];
 		texturePoolsAllocatedSize[i] = 0;
 		texturePoolsFormat[i] = formats[i];

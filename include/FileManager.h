@@ -20,20 +20,11 @@ public:
 
 	static void SetFileCurrentDirectory(std::filesystem::path& path);
 
-	static void ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer);
+	static int ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer);
 
 	static std::filesystem::path GetCurrentDirectoryFM();
 
 	static bool FileExists(StringView* nameView);
-
-	static constexpr uint32_t NOHANDLE = 0x7FFFFFFF;
-	static constexpr uint32_t MAXFILES = 10;
-
-	static int HandleOpening(StringView* nameView, OSFileFlags flags, OSFileHandle* outHandle);
-
-	static int CreateFileIterator(StringView* nameView, OSFileIterator* file);
-
-	static int NextFileIterator(OSFileIterator* file);
 
 	static std::filesystem::path currDir;
 	static std::regex filenamePattern;

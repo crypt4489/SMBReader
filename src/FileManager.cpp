@@ -1,12 +1,9 @@
 #include "FileManager.h"
 
-
-
 // Initialize static members
 std::filesystem::path FileManager::currDir = std::filesystem::current_path();
 
 std::regex FileManager::filenamePattern{"([0-9A-Za-z_]+)\\."};
-
 
 std::filesystem::path FileManager::SetupDirectory(StringView* nameView)
 {
@@ -28,7 +25,7 @@ void FileManager::SetFileCurrentDirectory(std::filesystem::path& path)
 	currDir = path;
 }
 
-void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer)
+int FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outView, char* inputBuffer)
 {
 	std::smatch match;
 
@@ -42,7 +39,7 @@ void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outV
 	}
 	else
 	{
-		//std::cerr << "Couldn't find the filename in " << nameView->stringData << "\n";
+		return -1;
 	}
 
 	outView->charCount = returnName.size();
@@ -50,6 +47,8 @@ void FileManager::ExtractFileNameFromPath(StringView* nameView, StringView* outV
 	memcpy(inputBuffer, returnName.c_str(), outView->charCount);
 
 	outView->stringData = inputBuffer;
+
+	return 0;
 }
 
 std::filesystem::path FileManager::GetCurrentDirectoryFM()
@@ -60,33 +59,4 @@ std::filesystem::path FileManager::GetCurrentDirectoryFM()
 bool FileManager::FileExists(StringView* nameView)
 {
 	return std::filesystem::exists(std::string(nameView->stringData, nameView->charCount));
-}
-
-
-int FileManager::HandleOpening(StringView* nameView, OSFileFlags flags, OSFileHandle* outHandle)
-{
-	
-
-	OSFileFlags openingFlags = flags;
-
-	int nRet = OSOpenFile(nameView->stringData, nameView->charCount, openingFlags, outHandle);
-
-	/*if (nRet != OS_SUCCESS)
-	{
-		return std::nullopt;
-	} */
-
-	return nRet;
-}
-
-int FileManager::CreateFileIterator(StringView* nameView, OSFileIterator* file)
-{
-	int ret = OSCreateFileIterator(nameView->stringData, nameView->charCount, file);
-	return ret;
-}
-
-int FileManager::NextFileIterator(OSFileIterator* file)
-{
-	int ret = OSNextFile(file);
-	return ret;
 }

@@ -1,7 +1,40 @@
 #include "ShaderResourceSet.h"
+#include <stdexcept>
+#include <cctype>
 
-static char* readerMemBuffer;
-static int readerMemBufferAllocate;
+#define MAX_ATTRIBUTE_LEN 50
+#define MAX_VALUE_LEN 50
+#define MAX_ATTRIBUTE_LINE_LEN 200
+#define MAX_SHADER_NAME 50
+
+static constexpr unsigned long hash(const char* str);
+static constexpr int ASCIIToInt(char* str);
+
+static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening, Logger* scratchLogger);
+static int SkipLine(char* fileData, int size, int currentLocation);
+static int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len, int maxStringLength, Logger* scratchLogger);
+static int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash, Logger* scratchLogger);
+static int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash, Logger* scratchLogger);
+static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val, Logger* scratchLogger);
+
+static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger);
+static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
+static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
+static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
+
+static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
+static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
+static int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
+static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face, Logger* scratchLogger);
+static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
+static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation, Logger* scratchLogger);
+static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, Logger* scratchLogger);
+
+static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger);
+static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description, Logger* scratchLogger);
+static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder, Logger* scratchLogger);
+static int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource, Logger* scratchLogger);
+
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
 {
@@ -27,9 +60,7 @@ void* ShaderDetails::GetShaderData()
 	return (void*)((uintptr_t)this + sizeof(ShaderDetails) + shaderNameSize);
 }
 
-
-constexpr unsigned long
-hash(const char* str)
+constexpr unsigned long hash(const char* str)
 {
 	unsigned long hash = 5381;
 	int c;
@@ -42,8 +73,20 @@ hash(const char* str)
 	return hash;
 }
 
+constexpr int ASCIIToInt(char* str)
+{
+	int c;
+	int out = 0;
 
-ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount)
+	while (c = *str++) {
+		if ((c - '0') >= 0 && (c - '9') <= 0)
+			out = (out * 10) + (c - '0');
+	}
+
+	return out;
+}
+
+ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount, Logger* outputLogger)
 {
 	uintptr_t* TreeNodes = (uintptr_t*)readerMemory->Allocate(sizeof(uintptr_t) * 50);
 	
@@ -75,40 +118,43 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 	int curr = 0;
 
 	int stride = 0;
-	int readerSizeMultiply = (dataSize / KiB) + 1;
+	int readerSizeMultiply = (dataSize / 512) + 1;
 
-	readerMemBufferAllocate = 0;
-	readerMemBuffer = (char*)readerMemory->Allocate(readerSizeMultiply * (KiB >> 1));
+	int readerMemBufferAllocate = 0;
+	char* readerMemBuffer = (char*)readerMemory->Allocate(readerSizeMultiply * (512));
 
-	while (curr + stride < dataSize)
+	int retCode = 0;
+
+	while (curr < dataSize)
 	{
-
 		unsigned long hashl = 0;
 		bool opening = true; 
-		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening, outputLogger);
 		curr += stride;
 
 		stride = SkipLine(dataStart, dataSize, curr);
 
-		if (opening)
+		if (stride < 0)
 		{
-			tagCount++;
+			retCode = -1;
+			break;
 		}
+
+		if (opening)
+			tagCount++;
 
 		switch (hashl)
 		{
 		case hash("ShaderGraph"):
-			//std::cout << "ShaderGraph" << std::endl;
 			if (!opening)
 				curr = dataSize;
 			break;
 		case hash("GLSLShader"):
-			//std::cout << "GLSLShader" << std::endl;
-			if (opening) {
-
+			if (opening)
+			{
 				ShaderDetails* ldetails = (ShaderDetails*)shaderAllocator->Head();
 
-				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], shaderAllocator);
+				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], shaderAllocator, readerMemBuffer, &readerMemBufferAllocate, outputLogger);
 				
 				ShaderRefs[shaderCount] = tagCount;
 
@@ -118,32 +164,40 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 			}
 			break;
 		case hash("ShaderResourceSet"):
-			//std::cout << "ShaderResourceSet" << std::endl;
-			if (opening) {
+			if (opening) 
+			{
 				SetNodes[setCount] = tagCount;
 				setCount++;
 			}
 			break;
 		case hash("ShaderResourceItem"):
-			//std::cout << "ShaderResourceItem" << std::endl;
-			if (opening) {
-				stride = HandleShaderResourceItem(dataStart, dataSize, curr, &TreeNodes[tagCount]);
+			if (opening) 
+			{
+				stride = HandleShaderResourceItem(dataStart, dataSize, curr, &TreeNodes[tagCount], readerMemBuffer, &readerMemBufferAllocate, outputLogger);
 				shaderResourceCount++;
 			}
 			break;
 		case hash("ComputeLayout"):
-			//std::cout << "ComputeLayout" << std::endl;
-			if (opening) {
-				stride = HandleComputeLayout(dataStart, dataSize, curr, &TreeNodes[tagCount]);
-			}
+			if (opening)
+				stride = HandleComputeLayout(dataStart, dataSize, curr, &TreeNodes[tagCount], readerMemBuffer, &readerMemBufferAllocate, outputLogger);
+			break;
+		default:
+			outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid shader graph tag"));
+			stride = -1;
+			break;
+		}
 
+		if (stride < 0)
+		{
+			retCode = -1;
 			break;
 		}
 
 		curr += stride;
-
-		
 	}
+
+	if (retCode)
+		return nullptr;
 
 	int graphSizesize = sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)) + (shaderCount * sizeof(ShaderMap)) + (shaderResourceCount * sizeof(ShaderResource));
 
@@ -176,15 +230,12 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 		}
 
 		map->type = type;
-		
-		
 	}
 
 	int resourceIter = 0;
 
 	for (int i = 0; i < setCount; i++)
 	{
-
 		ShaderResourceSetTemplate* setLay = (ShaderResourceSetTemplate*)graph->GetSet(i);
 		int resIter = SetNodes[i] + 1;
 		ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
@@ -248,242 +299,327 @@ ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory,
 	return graph;
 }
 
-int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *hash, bool *opening)
+int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *hash, bool *opening, Logger* scratchLogger)
 {
-	int count = 0;
+	int charCount = 0;
+
 	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
-	while (currentLocation + count < size)
+	while (true)
 	{
-		if (std::isspace(data[count]) && hashl == 5381)
+		if ((currentLocation + charCount) >= size)
 		{
-			count++;
-			continue;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Tag exceed file size"));
+			return -1;
 		}
 
-		if (data[count] != '<' && hashl == 5381)
-			throw std::runtime_error("malformed xml tag");
+		char readChar = data[charCount];
 
-		if (data[count] == '\n' || data[count] == ' ' || data[count] == '>') 
+		if (std::isspace(readChar))
 		{
-			count++;
+			if (hashl == 5381)
+			{	
+				charCount++;
+				continue;
+			}
 			break;
 		}
 
-		if (data[count] == '<')
+		if (readChar != '<' && hashl == 5381)
 		{
-			count++;
-			if (data[count] == '/')
-			{
-				*opening = false;
-				count++;
-			}
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("malformed tag"));
+			return -1;
 		}
 
-		hashl = ((hashl << 5) + hashl) + data[count];
+		if (readChar == '<')
+		{
+			charCount++;
+			if (data[charCount] == '/')
+			{
+				*opening = false;
+				charCount++;
+			}
+			readChar = data[charCount];
+		}
 
-		count++;
+		if (readChar == '>')
+			break;
+
+		charCount++;
+
+		hashl = ((hashl << 5) + hashl) + readChar;
 	}
 
 	*hash = hashl;
 
-	return count;
+	return charCount;
 }
 
 int SkipLine(char* fileData, int size, int currentLocation)
 {
-	int count = 0;
+	int charCount = 0;
+	
 	char* data = fileData + currentLocation;
 
-	while (currentLocation + count < size && data[count++] != '\n');
-	data = fileData + currentLocation + count;
-	return count;
+	while ((currentLocation + charCount) < size && data[charCount++] != '\n');
+
+	return charCount;
 }
 
-int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len)
+int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len, int maxStringLength, Logger* scratchLogger)
 {
 	int memCounter = 0;
-	int count = 0;
+	int charCount = 0;
+
 	char* data = fileData + currentLocation;
+
 	while (true)
 	{
-		int test = count++;
-
-		int c = data[test];
-
-		if (c == '\n')
+		if ((currentLocation + charCount) >= size)
 		{
-			count = count - 1;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("String exceed file size"));
+			return -1;
+		}
+		
+		if (maxStringLength == memCounter+1)
+		{
+			scratchLogger->AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Too long of string for Read Value"));
 			break;
 		}
 
-		if (std::isspace(c))
+		char readChar = data[charCount];
+
+		if (readChar == '\n')
+			break;
+
+		charCount++;
+
+		if (std::isspace(readChar))
 			continue;
 
-		str[memCounter++] = c;
-
+		str[memCounter++] = readChar;
 	}
 
 	str[memCounter++] = 0;
 
-	*len = (memCounter);
+	*len = memCounter;
 
-	return count;
+	return charCount;
 }
-#define MAX_ATTRIBUTE_LEN 50
-int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash)
+
+int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash, Logger* scratchLogger)
 {
-	int count = 0;
+	int charCount = 0;
+	
 	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
-
 	while (true)
 	{
-		int test = count++;
-
-		int c = data[test];
-
-		if (c == '>')
+		if ((currentLocation + charCount) >= size)
 		{
-			count = count - 1;
-			break;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Hash exceed file size"));
+			return -1;
 		}
 
-		if (c == '=')
+		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation))
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("malformed attribute"));
+			return -1;
+		}
+
+		char readChar = data[charCount];
+
+		if (readChar == '>')
 			break;
 
-		if (std::isspace(c))
+		charCount++;
+
+		if (readChar == '=')
+			break;
+
+		if (std::isspace(readChar))
 			continue;
 
-		if (count  == MAX_ATTRIBUTE_LEN + currentLocation)
-			throw std::runtime_error("malformed xml attribute");
-
-		hashl = ((hashl << 5) + hashl) + c;
-
+		hashl = ((hashl << 5) + hashl) + readChar;
 	}
 	
 	*hash = hashl;
 
-	return count;
+	return charCount;
 }
 
-int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash)
+int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash, Logger* scratchLogger)
 {
-	int count = 0;
+	int charCount = 0;
+
 	char* data = fileData + currentLocation;
 
 	unsigned long hashl = 5381;
 
 	while (true)
 	{
-		int test = count++;
-
-		int c = data[test];
-
-		if (c == '>')
+		if ((currentLocation + charCount) >= size)
 		{
-			count = count - 1;
-			break;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Hash exceed file size"));
+			return -1;
 		}
 
-		if (std::isspace(c))
+		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation)) 
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute value length too long"));
+			return -1;
+		}
+
+		char readChar = data[charCount];
+
+		if (readChar == '>')
+			break;
+
+		charCount++;
+
+		if (std::isspace(readChar))
 		{
 			if (hashl == 5381)
 				continue;
-			else
-				break;
+
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Space inside attribute value hash"));
+			return -1;
 		}
 
-		if (c == '\"' || c == '\'')
-			continue;
-
-		if (count == MAX_ATTRIBUTE_LEN+currentLocation) {
-			throw std::runtime_error("malformed xml attribute");
+		if (readChar == '\"' || readChar == '\'')
+		{
+			if (hashl == 5381)
+				continue;
+			break;
 		}
-
-		hashl = ((hashl << 5) + hashl) + c;
-
+		
+		hashl = ((hashl << 5) + hashl) + readChar;
 	}
 
 	*hash = hashl;
 
-	return count;
+	return charCount;
 }
 
-int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val)
+int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val, Logger* scratchLogger)
 {
-	int count = 0;
+	int charCount = 0;
+
 	char* data = fileData + currentLocation;
 
-	unsigned long out = 0;
+	unsigned long outVal = 0;
+
 	bool readingVal = false;
 
 	while (true)
 	{
-		int test = count++;
-
-		int c = data[test];
-
-		if (c == '>')
+		if ((currentLocation + charCount) >= size)
 		{
-			count = count - 1;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Value length exceed file size"));
+			return -1;
+		}
+
+		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation)) 
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute value length too long"));
+			return -1;
+		}
+
+		char readChar = data[charCount];
+
+		if (readChar == '>')
 			break;
+
+		charCount++;
+
+		if (std::isspace(readChar))
+		{
+			if (readingVal)
+			{
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Space inside intergal value read"));
+				return -1;
+			}
+
+			continue;
 		}
 
-		if (std::isspace(c))
+		if (readChar == '\"' || readChar == '\'')
 		{
 			if (readingVal)
 				break;
 			continue;
 		}
 
-		if (c == '\"' || c == '\'')
+		if ((readChar - '0') < 0 || (readChar - '9') > 0)
 		{
-			if (readingVal)
-				break;
-			continue;
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Non digit inside intergal value read"));
+			return -1;
 		}
 
-		if (count == (MAX_ATTRIBUTE_LEN+currentLocation) || ((c - '0') < 0 || (c - '9') > 0)) {
-			throw std::runtime_error("malformed xml attribute");
-		}
-
-		out = (out * 10) + (c - '0');
+	
+		outVal = (outVal * 10) + (readChar - '0');
+		
 		readingVal = true;
-
 	}
 
-	*val = out;
+	*val = outVal;
 
-	return count;
+	return charCount;
 }
 
-#define MAX_ATTRIBUTE_LINE_LEN 200
-
-int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
+int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger)
 {
-	int count = 0;
+	int hashableCount = 0;
 	char* data = fileData + currentLocation;
 
-	int ret = 0;
-	char c = data[ret];
+	int charCount = 0;
+	char readChar = data[charCount];
 
-	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation+ret) < size)
+	int attrValRetCode = 0, attrNameRetCode = 0;
+
+	while (true)
 	{
-		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
+		if (readChar == '>')
+			break;
 	
-		switch (hashes[count])
+		if (charCount >= MAX_ATTRIBUTE_LINE_LEN)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line length too long"));
+			return -1;
+		}
+
+		if ((currentLocation + charCount) >= size)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line exceed file size"));
+			return -1;
+		}
+
+		attrNameRetCode = ReadAttributeName(fileData, size, currentLocation + charCount, &hashes[hashableCount], scratchLogger);
+		
+		if (attrNameRetCode < 0)
+			return -1;
+	
+		
+		charCount += attrNameRetCode;
+	
+		switch (hashes[hashableCount])
 		{
 		case hash("unbounded"):
 		case hash("type"):
 		case hash("used"):
 		case hash("rw"):
 		{
-			ret += ReadAttributeValueHash(fileData, size,  currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueHash(fileData, size,  currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return -1;
+
+			charCount += attrValRetCode;
+
 			break;
 		}
 		case hash("pushstage"):
@@ -494,47 +630,62 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 		case hash("y"):
 		case hash("z"):
 		{
-			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueVal(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return -1;
+
+			charCount += attrValRetCode;
 			break;
 		}
+		default:
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled shader graph attribute name"));
+			return -1;
 		}
-		c = data[ret];
-		count += 2;
+
+		readChar = data[charCount];
+
+		hashableCount += 2;
 	}
 
-	*stackSize = count;
+	*stackSize = hashableCount;
 
-	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	while (readChar != '\n' && charCount < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + charCount) < size)
 	{
-		c = data[ret++];
+		readChar = data[charCount++];
 	}
 
-	return ret;
+	return charCount;
 }
 
-#define MAX_SHADER_NAME 50
 
-int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator)
+
+int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 	char nameScratch[MAX_SHADER_NAME];
 
 	int glslSize = 0;
 
-	int ret = ReadAttributes(fileData, size, currentLocation, hashes, &glslSize);
+	int charStride = ReadAttributes(fileData, size, currentLocation, hashes, &glslSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	ShaderDetails* details = (ShaderDetails*)shaderAllocator->Allocate(sizeof(ShaderDetails));
 
 	details->shaderDataSize = 0;
 	details->shaderNameSize = 0;
 
-	ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
+	ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)&readerMemBuffer[*readerMemBufferAllocate];
 
 	*offset = (uintptr_t)tag;
 
 	tag->hashCode = hash("GLSLShader");
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (glslSize > stackIter)
 	{
@@ -557,38 +708,53 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 			case hash("fragment"):
 				tag->type = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed GLSL Type of Shader"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed GLSL Type of Shader");
-			break;
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
+	*readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
 
-	ret += ReadValue(fileData, size, currentLocation + ret, nameScratch, &details->shaderNameSize);
+	int shaderNameCode = ReadValue(fileData, size, currentLocation + charStride, nameScratch, &details->shaderNameSize, MAX_SHADER_NAME, scratchLogger);
 
-	char* nameCopy = (char*)shaderAllocator->Allocate(details->shaderNameSize + details->shaderDataSize);
+	if (shaderNameCode > 0)
+	{
+		char* nameCopy = (char*)shaderAllocator->Allocate(details->shaderNameSize + details->shaderDataSize);
 
-	memcpy(nameCopy, nameScratch, details->shaderNameSize);
+		memcpy(nameCopy, nameScratch, details->shaderNameSize);
 
-	return ret;
+		charStride += shaderNameCode;
+	}
+	else
+	{
+		return -1;
+	}
+
+	return charStride;
 }
 
-int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset)
+int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate,  Logger* scratchLogger)
 {
 	unsigned long hashes[14];
 
 	int dataSize = 0;
 
-	int ret = ReadAttributes(fileData, size, currentLocation, hashes, &dataSize);
+	int charStride = ReadAttributes(fileData, size, currentLocation, hashes, &dataSize, scratchLogger);
 
-	ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
+	if (charStride < 0)
+		return charStride;
+
+	ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)&readerMemBuffer[*readerMemBufferAllocate];
 
 	*offset = (uintptr_t)tag;
 
@@ -597,6 +763,8 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 	tag->arrayCount = 1;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (dataSize > stackIter)
 	{
@@ -645,7 +813,8 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->resourceType = ShaderResourceType::BUFFER_VIEW;
 				break;
 			default:
-				throw std::runtime_error("Failed Resource Type");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Resource Type"));
+				retCode = -1;
 			}
 
 			break;
@@ -667,9 +836,9 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->shaderstage = ShaderStageTypeBits::VERTEXSHADERSTAGE | ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			default:
-				throw std::runtime_error("Failed Used Type");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Used Type"));
+				retCode = -1;
 			}
-
 			break;
 		}
 		case hash("rw"):
@@ -686,12 +855,11 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->resourceAction = ShaderResourceAction::SHADERREADWRITE;
 				break;
 			default:
-				throw std::runtime_error("Failed Action Type");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Action Type"));
+				retCode = -1;
 			}
-
 			break;
 		}
-		
 		case hash("unbounded"):
 		{
 			if (codeV == hash("true"))
@@ -700,7 +868,7 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 		}
 		case hash("count"):
 		{
-			tag->arrayCount = (tag->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY) | (codeV & DESCRIPTOR_COUNT_MASK);
+			tag->arrayCount |= (codeV & DESCRIPTOR_COUNT_MASK);
 			break;
 		}
 		case hash("size"):
@@ -720,37 +888,29 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 		}
 		}
 
+		if (retCode)
+			return retCode;
+
 		stackIter += 2;
 	}
 
-	readerMemBufferAllocate += sizeof(ShaderResourceItemXMLTag);
+	*readerMemBufferAllocate += sizeof(ShaderResourceItemXMLTag);
 
-	return ret;
+	return charStride;
 }
 
-
-constexpr int ASCIIToInt(char* str)
-{
-	int c;
-	int out = 0;
-
-	while (c = *str++) {
-		if ((c - '0') >= 0 && (c - '9') <= 0)
-			out = (out * 10) + (c - '0');
-	}
-
-	return out;
-}
-
-int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset)
+int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger)
 {
 	unsigned long hashesAndVals[6];
 
 	int dataSize = 0;
 
-	int ret = ReadAttributes(fileData, size, currentLocation, hashesAndVals, &dataSize);
+	int charStride = ReadAttributes(fileData, size, currentLocation, hashesAndVals, &dataSize, scratchLogger);
 
-	ShaderComputeLayoutXMLTag* tag = (ShaderComputeLayoutXMLTag*)&readerMemBuffer[readerMemBufferAllocate];
+	if (charStride < 0)
+		return charStride;
+
+	ShaderComputeLayoutXMLTag* tag = (ShaderComputeLayoutXMLTag*)&readerMemBuffer[*readerMemBufferAllocate];
 
 	*offset = (uintptr_t)tag;
 
@@ -768,7 +928,6 @@ int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t
 		case hash("x"):
 		{
 			tag->comps.x = comp;
-
 			break;
 		}
 		case hash("y"):
@@ -779,7 +938,6 @@ int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t
 		case hash("z"):
 		{
 			tag->comps.z = comp;
-
 			break;
 		}
 		}
@@ -787,13 +945,15 @@ int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t
 		stackIter += 2;
 	}
 
-	readerMemBufferAllocate += sizeof(ShaderComputeLayoutXMLTag);
+	*readerMemBufferAllocate += sizeof(ShaderComputeLayoutXMLTag);
 
-	return ret;
+	return charStride;
 }
 
-void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator)
+int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, Allocator* tempAllocator, Logger* outputLogger)
 {
+	int retCode = 0;
+
 	memset(stateInfo, 0, sizeof(GenericPipelineStateInfo));
 
 	OSFileHandle fileHandle;
@@ -822,48 +982,52 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 	stateInfo->depthWrite = false;
 	stateInfo->StencilEnable = false;
 
-	while (curr + stride < dataSize)
+	while (curr < dataSize)
 	{
-
 		unsigned long hashl = 0;
+		
 		bool opening = true;
-		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
+
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening, outputLogger);
+
+		if (stride < 0)
+		{
+			retCode = -1;
+			break;
+		}
+
 		curr += stride;
 
 		stride = SkipLine(dataStart, dataSize, curr);
 
 		if (opening)
-		{
 			tagCount++;
-		}
-
-
 
 		switch (hashl)
 		{
 		case hash("PipelineDescription"):
 			if (opening)
 			{
-				stride = HandlePipelineDescription(dataStart, dataSize, curr, stateInfo);
+				stride = HandlePipelineDescription(dataStart, dataSize, curr, stateInfo, outputLogger);
 			}
 			break;
 		case hash("DepthTest"):
 			if (opening)
 			{
-				stride = HandleDepthTest(dataStart, dataSize, curr, stateInfo);
+				stride = HandleDepthTest(dataStart, dataSize, curr, stateInfo, outputLogger);
 			}
 			break;
 		case hash("PrimitiveType"):
 			if (opening)
 			{
-				stride = HandlePrimitiveType(dataStart, dataSize, curr, stateInfo);
+				stride = HandlePrimitiveType(dataStart, dataSize, curr, stateInfo, outputLogger);
 			}
 			break;
 	
 		case hash("CullMode"):
 			if (opening)
 			{
-				stride = HandleCullMode(dataStart, dataSize, curr, stateInfo);
+				stride = HandleCullMode(dataStart, dataSize, curr, stateInfo, outputLogger);
 			}
 			break;
 		case hash("VertexInput"):
@@ -871,7 +1035,7 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 			if (opening)
 			{
 				stateInfo->vertexBufferDescCount++;
-				stride = HandleVertexInput(dataStart, dataSize, curr, stateInfo, currentVertexInput);
+				stride = HandleVertexInput(dataStart, dataSize, curr, stateInfo, currentVertexInput, outputLogger);
 			}
 			else
 			{
@@ -884,7 +1048,7 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 			if (opening)
 			{
 				stateInfo->vertexBufferDesc[currentVertexInput].descCount++;
-				stride = HandleVertexComponentInput(dataStart, dataSize, curr, stateInfo, currentVertexInput, currentVertexInputDescription);
+				stride = HandleVertexComponentInput(dataStart, dataSize, curr, stateInfo, currentVertexInput, currentVertexInputDescription, outputLogger);
 			}
 			else
 			{
@@ -897,7 +1061,7 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 			if (opening)
 			{
 				stateInfo->StencilEnable = true;
-				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->frontFace);
+				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->frontFace, outputLogger);
 			}
 			break;
 		}
@@ -906,31 +1070,63 @@ void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* st
 			if (opening)
 			{
 				stateInfo->StencilEnable = true;
-				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->backFace);
+				stride = HandleStencilTest(dataStart, dataSize, curr, &stateInfo->backFace, outputLogger);
 			}
 			break;
 		}
+		default:
+			outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid pipeline state tag"));
+			stride = -1;
+		}
+
+		if (stride < 0)
+		{
+			retCode = -1;
+			break;
 		}
 
 		curr += stride;
-
-
 	}
+
+	return retCode;
 }
 
-int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
+int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger)
 {
-	int count = 0;
+	int hashableCount = 0;
 	char* data = fileData + currentLocation;
 
-	int ret = 0;
-	char c = data[ret];
+	int charCount = 0;
+	char readChar = data[charCount];
 
-	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	int attrValRetCode = 0, attrNameRetCode = 0;
+
+	while (true)
 	{
-		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
+		if (readChar == '>')
+			break;
 
-		switch (hashes[count])
+		if (charCount >= MAX_ATTRIBUTE_LINE_LEN)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line length too long"));
+			return -1;
+		}
+
+		if ((currentLocation + charCount) >= size)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line exceed file size"));
+			return -1;
+		}
+
+		attrNameRetCode = ReadAttributeName(fileData, size, currentLocation + charCount, &hashes[hashableCount], scratchLogger);
+
+		if (attrNameRetCode < 0)
+			return attrNameRetCode;
+
+
+		charCount += attrNameRetCode;
+
+		switch (hashes[hashableCount])
 		{
 		case hash("op"):
 		case hash("type"):
@@ -945,7 +1141,13 @@ int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsign
 		case hash("depthfailop"):
 		case hash("compareop"):
 		{
-			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueHash(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return attrValRetCode;
+
+			charCount += attrValRetCode;
+
 			break;
 		}
 		case hash("writemask"):
@@ -956,31 +1158,45 @@ int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsign
 		case hash("sampHi"):
 		case hash("size"):
 		{
-			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueVal(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return attrValRetCode;
+
+			charCount += attrValRetCode;
+
 			break;
 		}
+		default:
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled pipeline attribute name"));
+			return -1;
 		}
-		c = data[ret];
-		count += 2;
+
+		readChar = data[charCount];
+		
+		hashableCount += 2;
 	}
 
-	*stackSize = count;
+	*stackSize = hashableCount;
 
-	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	while (readChar != '\n' && charCount < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + charCount) < size)
 	{
-		c = data[ret++];
+		readChar = data[charCount++];
 	}
 
-	return ret;
+	return charCount;
 }
 
-static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
 
@@ -1001,27 +1217,28 @@ static int HandlePipelineDescription(char* fileData, int size, int currentLocati
 			stateInfo->sampleCountHigh = codeV;
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Pipeline Description");
-			break;
 		}
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1037,17 +1254,16 @@ int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelin
 			case hash("none"):
 				stateInfo->cullMode = CullMode::CULL_NONE;
 				break;
-
 			case hash("back"):
 				stateInfo->cullMode = CullMode::CULL_BACK;
 				break;
-
 			case hash("front"):
 				stateInfo->cullMode = CullMode::CULL_FRONT;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid Cull Mode");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Cull Mode"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1062,32 +1278,38 @@ int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelin
 			case hash("ccw"):
 				stateInfo->windingOrder = TriangleWinding::CCW;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid Winding");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Winding"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Cull");
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	stateInfo->depthEnable = true;
 
@@ -1110,6 +1332,12 @@ int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipeli
 			case hash("false"):
 			{
 				stateInfo->depthWrite = false;
+				break;
+			}
+			default:
+			{
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid depth write boolean"));
+				retCode = -1;
 				break;
 			}
 			}
@@ -1151,24 +1379,25 @@ int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipeli
 			case hash("always"):
 				stateInfo->depthTest = ALLPASS;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid Depth Compare Op");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Depth Compare Op"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Depth Mode");
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-StencilOp ParseStencilOp(uint32_t codeV)
+static StencilOp ParseStencilOp(uint32_t codeV)
 {
 	switch (codeV)
 	{
@@ -1179,15 +1408,20 @@ StencilOp ParseStencilOp(uint32_t codeV)
 	}
 }
 
-static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face)
+int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face, Logger* scratchLogger)
 {
 	unsigned long hashes[14];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1196,21 +1430,15 @@ static int HandleStencilTest(char* fileData, int size, int currentLocation, Face
 
 		switch (code)
 		{
-
 		case hash("failop"):
 			face->failOp = ParseStencilOp(codeV);
 			break;
-		
 		case hash("passop"):
 			face->passOp = ParseStencilOp(codeV);
 			break;
-
-
 		case hash("depthfailop"):
 			face->depthFailOp = ParseStencilOp(codeV);
 			break;
-
-
 		case hash("compareop"):
 		{
 			switch (codeV)
@@ -1218,78 +1446,71 @@ static int HandleStencilTest(char* fileData, int size, int currentLocation, Face
 			case hash("never"):
 				face->stencilCompare = NEVER;
 				break;
-
 			case hash("less"):
 				face->stencilCompare = LESS;
 				break;
-
 			case hash("equal"):
 				face->stencilCompare = EQUAL;
 				break;
-
 			case hash("lessequal"):
 				face->stencilCompare = LESSEQUAL;
 				break;
-
 			case hash("greater"):
 				face->stencilCompare = GREATER;
 				break;
-
 			case hash("notequal"):
 				face->stencilCompare = NOTEQUAL;
 				break;
-
 			case hash("greaterequal"):
 				face->stencilCompare = GREATEREQUAL;
 				break;
-
 			case hash("always"):
 				face->stencilCompare = ALLPASS;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid Stencil Compare Op");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Stencil Compare Op"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
-
 		case hash("writemask"):
 		{
 			face->writeMask = codeV;
 			break;
 		}
-
 		case hash("comparemask"):
 		{
 			face->compareMask = codeV;
 			break;
 		}
-
 		case hash("ref"):
 		{
 			face->reference = codeV;
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Depth Mode");
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo)
+int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1305,29 +1526,25 @@ int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPi
 			case hash("trilists"):
 				stateInfo->primType = TRIANGLES;
 				break;
-
 			case hash("tristrips"):
 				stateInfo->primType = TRISTRIPS;
 				break;
-
 			case hash("trifans"):
 				stateInfo->primType = TRIFAN;
 				break;
-
 			case hash("points"):
 				stateInfo->primType = POINTSLIST;
 				break;
-
 			case hash("linelists"):
 				stateInfo->primType = LINELIST;
 				break;
-
 			case hash("linestrips"):
 				stateInfo->primType = LINESTRIPS;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid Primitive Type");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Primitive Type"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1336,10 +1553,10 @@ int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPi
 			stateInfo->lineWidth = (float)codeV;
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Prim Mode");
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
@@ -1347,15 +1564,20 @@ int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPi
 	return ret;
 }
 
-int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation)
+int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation, Logger* scratchLogger)
 {
 	unsigned long hashes[8];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1371,41 +1593,34 @@ int HandleVertexComponentInput(char* fileData, int size, int currentLocation, Ge
 			case hash("POS0"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::POSITION;
 				break;
-
 			case hash("TEX0"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX0;
 				break;
-
 			case hash("TEX1"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX1;
 				break;
-
 			case hash("TEX2"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX2;
 				break;
-
 			case hash("TEX3"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::TEX3;
 				break;
-
 			case hash("NORMAL"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::NORMAL;
 				break;
-
 			case hash("BONES"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::BONES;
 				break;
-
 			case hash("WEIGHTS"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::WEIGHTS;
 				break;
-
 			case hash("COLOR0"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].vertexusage = VertexUsage::COLOR0;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid vertex usage");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid vertex usage"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1417,74 +1632,70 @@ int HandleVertexComponentInput(char* fileData, int size, int currentLocation, Ge
 			case hash("uint"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_UINT;
 				break;
-
 			case hash("int"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_SINT;
 				break;
-
 			case hash("vec4"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32B32A32_SFLOAT;
 				break;
-
 			case hash("vec3"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32B32_SFLOAT;
 				break;
-
 			case hash("vec2"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32_SFLOAT;
 				break;
-
 			case hash("float"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32_SFLOAT;
 				break;
-
 			case hash("ivec2"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R32G32_SINT;
 				break;
-
 			case hash("u8vec2"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R8G8_UINT;
 				break;
-
 			case hash("i16vec2"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R16G16_SINT;
 				break;
-
 			case hash("i16vec3"):
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].format = ComponentFormatType::R16G16B16_SINT;
 				break;
-
 			default:
-				throw std::runtime_error("Invalid vertex format");
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid vertex format"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
-
 		case hash("offset"):
 		{
 			stateInfo->vertexBufferDesc[vertexBufferInputLocation].descriptions[perVertexSlotLocation].byteoffset = codeV;
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed Vertex Component");
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation)
+int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+	
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1507,6 +1718,10 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 				stateInfo->vertexBufferDesc[vertexBufferInputLocation].rate = VertexBufferRate::PERINSTANCE;
 				break;
 			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid vertex rate"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1515,20 +1730,21 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 			stateInfo->vertexBufferDesc[vertexBufferInputLocation].perInputSize = codeV;
 			break;
 		}
-		
-		default:
-			throw std::runtime_error("Failed Vertex Input");
-			break;
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator)
+int CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, Allocator* inputScratchAllocator, Logger* outputLogger)
 {
+	int retCode = 0;
+
 	OSFileHandle fileHandle;
 
 	OSOpenFile(filename.stringData, filename.charCount, READ, &fileHandle);
@@ -1556,65 +1772,68 @@ void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, 
 
 	int stride = 0;
 
-	AttachmentRenderPass* currentHolder = nullptr;
+	AttachmentRenderPass* currentHolder = &graph->holders[0];
 
 	while (curr < dataSize)
 	{
-
 		unsigned long hashl = 0;
 		bool opening = true;
-		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening);
+		stride = ProcessTag(dataStart, dataSize, curr, &hashl, &opening, outputLogger);
+
+		if (stride < 0) 
+		{
+			retCode = -1;
+			break;
+		}
+
 		curr += stride;
 
 		stride = SkipLine(dataStart, dataSize, curr);
 
 		if (opening)
-		{
 			tagCount++;
-		}
-
-
+		
 		if (opening)
 		{
-
 			switch (hashl)
 			{
 			case hash("Attachments"):
 				currentHolder = &graph->holders[holderCounter++];
-				//stride = HandleAttachmentDesc(dataStart, dataSize, curr, currentHolder);
-
 				break;
 			case hash("ColorAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::COLORATTACH, &currentHolder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::COLORATTACH, &currentHolder->descs[attachmentCounter], outputLogger);
 				attachmentCounter++;
 				colorCount++;
 				break;
 			case hash("DepthAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHATTACH, &currentHolder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHATTACH, &currentHolder->descs[attachmentCounter], outputLogger);
 				attachmentCounter++;
 				depthStencilCount++;
 				break;
 			case hash("ResolveAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::RESOLVEATTACH, &currentHolder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::RESOLVEATTACH, &currentHolder->descs[attachmentCounter], outputLogger);
 				attachmentCounter++;
 				resolveCount++;
 				break;
 			case hash("StencilAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::STENCILATTACH, &currentHolder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::STENCILATTACH, &currentHolder->descs[attachmentCounter], outputLogger);
 				attachmentCounter++;
 				depthStencilCount++;
 				break;
 			case hash("DepthStencilAttachment"):
-				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHSTENCILATTACH, &currentHolder->descs[attachmentCounter]);
+				stride = HandleAttachment(dataStart, dataSize, curr, AttachmentDescriptionType::DEPTHSTENCILATTACH, &currentHolder->descs[attachmentCounter], outputLogger);
 				attachmentCounter++;
 				depthStencilCount++;
 				break;
 			case hash("AttachmentResource"):
-				stride = HandleAttachmentResource(dataStart, dataSize, curr, &graph->resources[resourceCounter]);
+				stride = HandleAttachmentResource(dataStart, dataSize, curr, &graph->resources[resourceCounter], outputLogger);
 				resourceCounter++;
 				break;
+			default:
+				outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment tag type"));
+				stride = -1;
+				break;
 			}
-			curr += stride;
 		}
 		else
 		{
@@ -1637,26 +1856,40 @@ void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, 
 				break;
 			}
 		}
+
+		if (stride < 0)
+		{
+			retCode = -1;
+			break;
+		}
+
+		curr += stride;
 	}
 
 	graph->resourceCount = resourceCounter;
 
 	graph->passesCount = holderCounter;
+
+	return retCode;
 }
 
-int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description)
+int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description, Logger* scratchLogger)
 {
 	unsigned long hashes[16];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
 
+	int retCode = 0;
+
 	description->attachType = descType;
 	
-
 	while (attrSize > stackIter)
 	{
 		unsigned long code = hashes[stackIter];
@@ -1664,7 +1897,6 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 		 //loadOp = "clear" storeOp = "discard" layout = "dsv"
 		switch (code)
 		{
-	
 		case hash("loadOp"):
 		{
 			switch (codeV)
@@ -1674,6 +1906,10 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 				break;
 			case hash("nocare"):
 				description->loadOp = AttachmentLoadUsage::ATTACHNOCARE;
+				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment load op"));
+				retCode = -1;
 				break;
 			}
 			break;
@@ -1687,6 +1923,10 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 				break;
 			case hash("store"):
 				description->storeOp = AttachmentStoreUsage::ATTACHSTORE;
+				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment store op"));
+				retCode = -1;
 				break;
 			}
 			break;
@@ -1716,6 +1956,10 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			case hash("undefined"):
 				description->srcLayout = ImageLayout::UNDEFINED;
 				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment source layout"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1744,6 +1988,10 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			case hash("undefined"):
 				description->dstLayout = ImageLayout::UNDEFINED;
 				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment dest layout"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1752,28 +2000,31 @@ int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDe
 			description->resourceIndex = codeV;
 			break;
 		}
-
-		default:
-			throw std::runtime_error("Failed attahcment tag");
-			break;
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-
-int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder)
+int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
+
+	int retCode = 0;
 
 	while (attrSize > stackIter)
 	{
@@ -1801,22 +2052,25 @@ int HandleAttachmentDesc(char* fileData, int size, int currentLocation, Attachme
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-static int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource)
+int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
 
 	int attrSize = 0;
 
-	int ret = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize);
+	int charStride = ReadAttributesAttachments(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
 
 	int stackIter = 0;
 
+	int retCode = 0;
+
 	resource->msaa = 0;
-	//resource->width = -1;
-	//resource->height = -1;
 
 	while (attrSize > stackIter)
 	{
@@ -1835,6 +2089,10 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 			case hash("swc"):
 				resource->viewType = AttachmentViewType::SWAPCHAIN;
 				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment image type"));
+				retCode = -1;
+				break;
 			}
 			break;
 		}
@@ -1850,6 +2108,10 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 				break;
 			case hash("d32f"):
 				resource->format = ImageFormat::D32FLOAT;
+				break;
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment image format"));
+				retCode = -1;
 				break;
 			}
 			break;
@@ -1871,30 +2133,53 @@ static int HandleAttachmentResource(char* fileData, int size, int currentLocatio
 			break;
 		}
 		*/
-		default:
-			throw std::runtime_error("Failed Attachments Resource");
-			break;
 		}
+
+		if (retCode)
+			return retCode;
 
 		stackIter += 2;
 	}
 
-	return ret;
+	return charStride;
 }
 
-static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize)
+int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger)
 {
-	int count = 0;
+	int hashableCount = 0;
 	char* data = fileData + currentLocation;
 
-	int ret = 0;
-	char c = data[ret];
+	int charCount = 0;
+	char readChar = data[charCount];
 
-	while (c != '>' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	int attrValRetCode = 0, attrNameRetCode = 0;
+
+	while (true)
 	{
-		ret += ReadAttributeName(fileData, size, currentLocation + ret, &hashes[count]);
+		if (readChar == '>')
+			break;
 
-		switch (hashes[count])
+		if (charCount >= MAX_ATTRIBUTE_LINE_LEN)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line length too long"));
+			return -1;
+		}
+
+		if ((currentLocation + charCount) >= size)
+		{
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute line exceed file size"));
+			return -1;
+		}
+
+		attrNameRetCode = ReadAttributeName(fileData, size, currentLocation + charCount, &hashes[hashableCount], scratchLogger);
+
+		if (attrNameRetCode < 0)
+			return attrNameRetCode;
+
+
+		charCount += attrNameRetCode;
+
+		switch (hashes[hashableCount])
 		{
 		case hash("imageType"):
 		case hash("loadOp"):
@@ -1904,27 +2189,44 @@ static int ReadAttributesAttachments(char* fileData, int size, int currentLocati
 		case hash("format"):
 		case hash("msaa"):
 		{
-			ret += ReadAttributeValueHash(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueHash(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return attrValRetCode;
+
+			charCount += attrValRetCode;
+
 			break;
 		}
 		case hash("resource"):
 		//case hash("height"):
 		//case hash("width"):
 		{
-			ret += ReadAttributeValueVal(fileData, size, currentLocation + ret, &hashes[count + 1]);
+			attrValRetCode = ReadAttributeValueVal(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
+
+			if (attrValRetCode < 0)
+				return attrValRetCode;
+
+			charCount += attrValRetCode;
+
 			break;
 		}
+		default:
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled Attachment attribute name"));
+			return -1;
 		}
-		c = data[ret];
-		count += 2;
+
+		readChar = data[charCount];
+
+		hashableCount += 2;
 	}
 
-	*stackSize = count;
+	*stackSize = hashableCount;
 
-	while (c != '\n' && ret < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + ret) < size)
+	while (readChar != '\n' && charCount < MAX_ATTRIBUTE_LINE_LEN && (currentLocation + charCount) < size)
 	{
-		c = data[ret++];
+		readChar = data[charCount++];
 	}
 
-	return ret;
+	return charCount;
 }

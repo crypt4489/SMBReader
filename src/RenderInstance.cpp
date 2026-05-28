@@ -1379,7 +1379,7 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 			CreateShaderGraph(shaderGraphLayouts[i],
 				cacheAllocator,
 				&vulkanShaderGraphs.graphAllocator,
-				&vulkanShaderGraphs.shaderDetailsAllocator, &detailsSize);
+				&vulkanShaderGraphs.shaderDetailsAllocator, &detailsSize, internalRendererLogger);
 
 		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
 
@@ -1535,7 +1535,7 @@ void RenderInstance::CreatePipelines(StringView* pipelineDescriptions, int pipel
 {
 	for (int i = 0; i < pipelineDescriptionsCount; i++)
 	{
-		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoCounter+i], cacheAllocator);
+		CreatePipelineDescription(pipelineDescriptions[i], &pipelineInfos[pipelineInfoCounter+i], cacheAllocator, internalRendererLogger);
 	}
 
 	pipelineInfoCounter += pipelineDescriptionsCount;
@@ -2448,7 +2448,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 
 int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount)
 {
-	CreateAttachmentGraphFromFile(*attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator);
+	CreateAttachmentGraphFromFile(*attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator, internalRendererLogger);
 
 	int currentGraphInstance = CreateFrameGraphInstance(&attachmentGraphs[graphTemplateAlloc]);
 	

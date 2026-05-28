@@ -3,7 +3,6 @@
 #include "allocator/AppAllocator.h"
 #include "CommonRenderTypes.h"
 #include "logger/Logger.h"
-#include "FileManager.h"
 #include "ShaderManagement.h"
 
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
@@ -186,8 +185,6 @@ struct ShaderResourceManager
 			break;
 		}
 		}
-
-
 	}
 
 	void BindImageBarrier(ShaderResourceSetContext* context, int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
@@ -285,7 +282,6 @@ struct ShaderResourceManager
 	}
 };
 
-
 struct ShaderXMLTag
 {
 	unsigned long hashCode;
@@ -317,21 +313,7 @@ struct ShaderResourceSetXMLTag : ShaderXMLTag
 	int resourceCount;
 };
 
-static constexpr unsigned long hash(const char* str);
-static constexpr int ASCIIToInt(char* str);
-static int ProcessTag(char* fileData, int size, int currentLocation, unsigned long* hash, bool* opening);
-static int SkipLine(char* fileData, int size, int currentLocation);
-static int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len);
-static int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned long* hash);
-static int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsigned long* hash);
-static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val);
-
-ShaderGraph* CreateShaderGraph(StringView filename, RingAllocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount);
-
-static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
-static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator);
-static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset);
-static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset);
+ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount, Logger* outputLogger);
 
 struct PipelineXMLTag
 {
@@ -360,20 +342,5 @@ struct CullModeXMLTag : PipelineXMLTag
 	CullMode mode;
 };
 
-
-void CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, RingAllocator* tempAllocator);
-
-static int HandlePipelineDescription(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
-static int HandleCullMode(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
-static int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
-static int HandleStencilTest(char* fileData, int size, int currentLocation, FaceStencilData* face);
-static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo);
-static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation);
-static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation);
-
-
-void CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, RingAllocator* inputScratchAllocator);
-static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize);
-static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description);
-static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder);
-static int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource);
+int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* stateInfo, Allocator* tempAllocator, Logger* outputLogger);
+int CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, Allocator* inputScratchAllocator, Logger* outputLogger);

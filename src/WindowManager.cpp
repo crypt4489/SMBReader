@@ -1,7 +1,4 @@
-
 #include "WindowManager.h"
-#include <stdexcept>
-
 
 bool WindowManager::ShouldCloseWindow()
 {
@@ -25,7 +22,6 @@ int WindowManager::PollEvents()
 {
     return PollOSWindowEvents(&windowData);;
 }
-
 
 void WindowManager::GetInternalData(OSWindowInternalData* data)
 {

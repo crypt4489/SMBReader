@@ -27,7 +27,6 @@ Semaphore::~Semaphore()
     DeleteOSSemaphore(&semaphore);
 }
 
-
 void SharedExclusiveFlag::lock() noexcept
 {
     ExclusiveAcquireOSSharedExclusive(&osse);
