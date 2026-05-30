@@ -311,7 +311,7 @@ int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *has
 	{
 		if ((currentLocation + charCount) >= size)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Tag exceed file size"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Tag exceed file size"));
 			return -1;
 		}
 
@@ -329,7 +329,7 @@ int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *has
 
 		if (readChar != '<' && hashl == 5381)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("malformed tag"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid tag construction"));
 			return -1;
 		}
 
@@ -379,13 +379,13 @@ int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len
 	{
 		if ((currentLocation + charCount) >= size)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("String exceed file size"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid String exceed file size"));
 			return -1;
 		}
 		
 		if (maxStringLength == memCounter+1)
 		{
-			scratchLogger->AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Too long of string for Read Value"));
+			scratchLogger->AddLogMessage(LOGWARNING, STRING_VIEW_FROM_LITERAL("Invalid string size"));
 			break;
 		}
 
@@ -421,13 +421,13 @@ int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned lo
 	{
 		if ((currentLocation + charCount) >= size)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Hash exceed file size"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute name exceed file size"));
 			return -1;
 		}
 
 		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation))
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("malformed attribute"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute name exceed max length"));
 			return -1;
 		}
 
@@ -464,13 +464,13 @@ int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsign
 	{
 		if ((currentLocation + charCount) >= size)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Hash exceed file size"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute hash exceed file size"));
 			return -1;
 		}
 
 		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation)) 
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute value length too long"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute hash exceed maximum length"));
 			return -1;
 		}
 
@@ -486,7 +486,7 @@ int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsign
 			if (hashl == 5381)
 				continue;
 
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Space inside attribute value hash"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid space char inside attribute hash"));
 			return -1;
 		}
 
@@ -519,13 +519,13 @@ int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigne
 	{
 		if ((currentLocation + charCount) >= size)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Value length exceed file size"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute value exceed file size"));
 			return -1;
 		}
 
 		if (charCount == (MAX_ATTRIBUTE_LEN + currentLocation)) 
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("attribute value length too long"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attribute value exceed maximum length"));
 			return -1;
 		}
 
@@ -540,7 +540,7 @@ int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigne
 		{
 			if (readingVal)
 			{
-				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Space inside intergal value read"));
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid space char inside attribute value"));
 				return -1;
 			}
 
@@ -556,7 +556,7 @@ int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigne
 
 		if ((readChar - '0') < 0 || (readChar - '9') > 0)
 		{
-			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Non digit inside intergal value read"));
+			scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid non-digit char inside attribute value"));
 			return -1;
 		}
 
@@ -709,7 +709,7 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 				tag->type = ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			default:
-				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed GLSL Type of Shader"));
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid GLSL Shader Type"));
 				retCode = -1;
 				break;
 			}
@@ -813,7 +813,7 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->resourceType = ShaderResourceType::BUFFER_VIEW;
 				break;
 			default:
-				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Resource Type"));
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Resource Type"));
 				retCode = -1;
 			}
 
@@ -836,7 +836,7 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->shaderstage = ShaderStageTypeBits::VERTEXSHADERSTAGE | ShaderStageTypeBits::FRAGMENTSHADERSTAGE;
 				break;
 			default:
-				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Used Type"));
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Used Type"));
 				retCode = -1;
 			}
 			break;
@@ -855,7 +855,7 @@ int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uint
 				tag->resourceAction = ShaderResourceAction::SHADERREADWRITE;
 				break;
 			default:
-				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed Action Type"));
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Action Type"));
 				retCode = -1;
 			}
 			break;

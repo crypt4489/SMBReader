@@ -14,8 +14,8 @@
 #include "WindowManager.h"
 
 
-namespace API {
-
+namespace API 
+{
 	VkFormat ConvertComponentFormatTypeToVulkanFormat(ComponentFormatType type);
 
 	VkCompareOp ConvertRasterizerTestToVulkanCompareOp(RasterizerTest testApp);
@@ -305,6 +305,7 @@ struct RenderInstance
 	int samplersResourceHandlesCtr = 0;
 };
 
-namespace GlobalRenderer {
+namespace GlobalRenderer 
+{
 	extern RenderInstance gRenderInstance;
 }

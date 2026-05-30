@@ -5,6 +5,7 @@
 #include "imageutils/DXTCompression.h"
 #include "SMBTexture.h"
 
+#include <iostream>
 
 //IndexedRenderable or Renderable, not sure
 
@@ -30,13 +31,10 @@
 //25-27 Binormals
 //28-32 sprites
 
-
-
-
 void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 {
 	auto& chunk = smb->chunks;
-	for (size_t j = 0; j<smb->numResources; j++)
+	for (uint32_t j = 0; j<smb->numResources; j++)
 	{
 		switch (smb->chunks[j].chunkType)
 		{
@@ -122,6 +120,7 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 			break;
 		default:
 			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
+			OSCloseFile(&handle);
 			return;
 		}
 
@@ -139,33 +138,4 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 		OSCloseFile(&handle);
 	}
-}
-
-void ExportToOBJFormat(void* vertices, int vertexCount, StringView outputFile)
-{
-	/*
-	using ExportHelper::operator<<;
-
-	//FileHandle* handle;
-
-	auto fileRet = FileManager::OpenFile(outputFile, std::ios_base::out, handle);
-
-	/*
-	auto& fileStream = handle->streamHandle;
-
-	for (const auto& vert : vertices) {
-		fileStream << "v " << vert.POSITION;
-	}
-
-	for (const auto& vert : vertices) {
-		fileStream << "vt " << vert.TEXTURE;
-	}
-
-	for (const auto& vert : vertices) {
-		fileStream << "vn " << vert.NORMAL;
-	}
-	
-
-	FileManager::RemoveOpenFile(fileRet.value());
-	*/
 }

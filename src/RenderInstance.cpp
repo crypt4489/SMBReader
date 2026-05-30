@@ -1,13 +1,11 @@
 #include "RenderInstance.h"
 
 #include <algorithm>
-#include <array>
 #include <bit>
-#include <cassert>
-#include <iostream>
 #include <limits>
 
 #include "FileManager.h"
+#include "ShaderResourceSet.h"
 #include "ThreadManager.h"
 
 #include "VKInstance.h"
@@ -17,19 +15,14 @@
 #include "VKRenderPassBuilder.h"
 #include "VKSwapChain.h"
 #include "VKPipelineBuilder.h"
-#include "WindowManager.h"
 
-
-#include "ShaderResourceSet.h"
-
-namespace GlobalRenderer {
+namespace GlobalRenderer 
+{
 	RenderInstance gRenderInstance;
 }
 
-
-namespace API {
-
-
+namespace API 
+{
 	VkImageUsageFlags ConvertAttachmentResourceUsageToVkImageUsage(AttachmentResourceInstanceUsage usage)
 	{
 		VkImageUsageFlags flags = 0;
@@ -448,9 +441,7 @@ namespace API {
 
 		return state;
 	}
-
 }
-
 
 void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
@@ -1625,7 +1616,6 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 		iter += stateInfo->vertexBufferDesc[i].descCount;
 	}
 
-	
 	pipelineBuilder->CreateVertexInput(bindingDescriptions, stateInfo->vertexBufferDescCount, vertexBufferInput, descCount);
 	
 	pipelineBuilder->CreateInputAssembly(API::ConvertTopology(stateInfo->primType), false);
@@ -2139,9 +2129,6 @@ int RenderInstance::CreateImageHandle(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
 {
-
-	assert(poolIndex != 0);
-
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(physicalIndex, deviceIndex);
 
 	EntryHandle textureHandle = majorDevice->CreateImageHandle(

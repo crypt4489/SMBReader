@@ -64,8 +64,6 @@ void Frustum::CreateFrustumPlanes(const Vector4f& forward, const Vector4f&up, co
 	Vector4f farCenter = forward * _far;
 	Vector4f nearCenter = forward * near;
 
-	
-
 	planes[0].ComputePlane(nearCenter, forward * -1.0);
 	planes[1].ComputePlane(farCenter, forward * -1.0);
 

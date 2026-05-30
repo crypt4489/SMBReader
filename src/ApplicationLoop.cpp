@@ -3494,7 +3494,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	currentFrameGraphIndex = MSAAShadowMapping;
 
-	frameGraphsCount = 3;
+	frameGraphsCount = mainLayoutAttachments.size();
 
 	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainColorFormat, 800, 600);
 
