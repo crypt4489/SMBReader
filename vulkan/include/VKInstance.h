@@ -3,13 +3,55 @@
 #include "VKTypes.h"
 #include "VKUtilities.h"
 
+#include <atomic>
+
 #ifdef _MSC_VER
 #include <Windows.h>
 #endif
+
 #undef min
 #undef max
 
-#include <mutex>
+#define MAX_TYPED_HANDLES 15
+
+#define MAX_LOGICAL_DEVICES_PER_PHYSICAL_DEVICE 8
+
+enum VKInstanceHandleType : uint64_t
+{
+	RENDER_SURFACE = 1,
+	PHYSICAL_DEVICE = 2,
+	LOGICAL_DEVICE = 3,
+	DEBUG_MESSENGER = 4,
+	MAX_INST_HANDLE
+};
+
+struct InstanceHandlePoolObject
+{
+	VKInstanceHandleType handleType;
+	uintptr_t handlePtr;
+};
+
+struct PhysicalDeviceAllocation
+{
+	VkPhysicalDevice gpuDeviceHandle;
+	EntryHandle logicalDevicesIndex[MAX_LOGICAL_DEVICES_PER_PHYSICAL_DEVICE];
+	uint32_t logicalDeviceCount;
+	uint32_t pad;
+};
+
+#define MAX_VALID_FEATURES_ENABLE 8
+
+struct VKInstanceDebugData
+{
+	PFN_vkDebugUtilsMessengerCallbackEXT userCallback;
+	void* userData;
+	VkValidationFeatureEnableEXT enables[MAX_VALID_FEATURES_ENABLE];
+	uint32_t enablesFeaturesCount;
+	VkDebugUtilsMessengerCreateFlagsEXT flags;
+	VkDebugUtilsMessageSeverityFlagsEXT messageSeverity;
+	VkDebugUtilsMessageTypeFlagsEXT messageType;
+};
+
 
 struct VKAllocationCB
 {
@@ -77,10 +119,6 @@ struct VKAllocationCB
 
 	void* RealRealloc(void* original, size_t size,
 		size_t alignment, bool cache);
-
-	//void RealFree(void* memory);
-
-
 };
 
 enum OperatingSystem
@@ -92,34 +130,36 @@ enum OperatingSystem
 
 struct VKInstance
 {
-
-
 	VKInstance();
 	~VKInstance();
 
-	VkPhysicalDevice GetPhysicalDevice(DeviceIndex gpuIndex);
+	VkPhysicalDevice GetPhysicalDevice(EntryHandle gpuIndex);
 
-	uintptr_t* GetDeviceArray(DeviceIndex gpuIndex);
+	PhysicalDeviceAllocation* GetPhysicalDeviceAlloc(EntryHandle gpuIndex);
 
-	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(uint32_t gpuIndex);
+	VkSurfaceKHR GetRenderSurface(EntryHandle renderSurfaceIndex);
 
-	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu);
+	VkDebugUtilsMessengerEXT GetDebugMessenger(EntryHandle debugMessengerHandle);
 
-	bool ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requestedFormat);
+	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(EntryHandle gpuIndex, EntryHandle renderSurfaceIndex);
 
-	void CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize);
+	VK::Utils::SwapChainSupportDetails GetSwapChainSupport(VkPhysicalDevice gpu, EntryHandle renderSurfaceIndex);
 
-	DeviceIndex CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices);
+	bool ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat requestedFormat, EntryHandle renderSurfaceIndex);
 
-	VkSampleCountFlagBits GetMaxMSAALevels(DeviceIndex gpuIndex);
+	int CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData);
+
+	EntryHandle CreatePhysicalDevice(EntryHandle renderSurfaceIndex);
+
+	VkSampleCountFlagBits GetMaxMSAALevels(EntryHandle gpuIndex);
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures);
 
 	bool isDeviceSuitable(VkPhysicalDevice device);
 
-	VKDevice* CreateLogicalDevice(DeviceIndex gpuIndex, DeviceIndex* deviceIndex);
+	EntryHandle CreateLogicalDevice(EntryHandle gpuIndex);
 
-	VKDevice* GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceIndex);
+	VKDevice* GetLogicalDevice(EntryHandle deviceIndex);
 
 	void SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, size_t cacheSize);
 
@@ -127,16 +167,26 @@ struct VKInstance
 
 	void* AllocFromInstanceData(size_t size);
 
-	int GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex);
+	int GetMinimumStorageBufferAlignment(EntryHandle gpuIndex);
 
-	int GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex);
+	int GetMinimumUniformBufferAlignment(EntryHandle gpuIndex);
 
-	void CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
+	EntryHandle CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
 
-	double GetTimeStampPeriod(DeviceIndex gpuIndex);
+	double GetTimeStampPeriod(EntryHandle gpuIndex);
+
+	EntryHandle AddTypedHandleToPool(VKInstanceHandleType handleType, void* handlePtr);
+
+	InstanceHandlePoolObject* GetHandle(EntryHandle index);
+
+	void DestroyRenderSurface(EntryHandle index);
+	void DestroyLogicalDevice(EntryHandle index);
+
+	EntryHandle CreateDebugUtilsMessengerEXT(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
+
+	void DestroyDebugUtilsMessengerEXT(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator);
 
 	VkInstance instance = VK_NULL_HANDLE;
-	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
 	
 	const char** instanceLayers;
 	const char** instanceExtensions;
@@ -153,13 +203,9 @@ struct VKInstance
 	size_t instancePerSize;
 	size_t instanceTempSize;
 
-	uintptr_t *gpusAndLogicalDevices;
-
-	uint32_t physicalDeviceCount = 0;
-	uint32_t physicalDeviceCounter = 0;
-
-	
-	
 	VKAllocationCB *allocator;
+
+	InstanceHandlePoolObject handles[MAX_TYPED_HANDLES];
+	uint32_t handleBumpCounter;
 };
 

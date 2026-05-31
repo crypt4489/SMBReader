@@ -195,8 +195,9 @@ struct RenderInstance
 	void PrintOutTexturePoolAllocations(Logger* outputLogger);
 
 	VKInstance *vkInstance = nullptr;
-	DeviceIndex deviceIndex;
-	DeviceIndex physicalIndex;
+	EntryHandle deviceIndex;
+	EntryHandle physicalIndex;
+	EntryHandle renderSurfaceIndex;
 	
 	EntryHandle graphicsComputeTransfer = EntryHandle();
 	EntryHandle presentQueue = EntryHandle();

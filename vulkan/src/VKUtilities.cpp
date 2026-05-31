@@ -156,50 +156,6 @@ namespace VK {
 			return os;
 		}
 
-
-
-		VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-			VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-			VkDebugUtilsMessageTypeFlagsEXT messageType,
-			const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-			void* pUserData) {
-
-			if (messageSeverity < VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) 
-			{
-				return VK_FALSE;
-			}
-
-			std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-
-			return VK_FALSE;
-		}
-
-
-		VkDebugUtilsMessengerEXT debugMessenger;
-
-		VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator) {
-			auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
-			if (func) 
-			{
-				return func(instance, pCreateInfo, pAllocator, &debugMessenger);
-			}
-			else 
-			{
-				return VK_ERROR_EXTENSION_NOT_PRESENT;
-			}
-		}
-
-		void DestroyDebugUtilsMessengerEXT(VkInstance instance, const VkAllocationCallbacks* pAllocator) {
-
-			if (!debugMessenger) return;
-
-			auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
-
-			if (func) {
-				func(instance, debugMessenger, pAllocator);
-			}
-		}
-
 		uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
 			VkPhysicalDeviceMemoryProperties memProperties;
 			vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);

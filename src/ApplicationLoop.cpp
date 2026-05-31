@@ -1888,6 +1888,9 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 			else
 				vertexSize = sizeof(CVertex_PosPack6_C16Tex1_Bone2);
 			break;
+		default:
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled vertex type"));
+			break;
 		}
 
 		vertexData = (void*)vertexAndIndicesAlloc.Allocate(vertexSize * vertexCount);

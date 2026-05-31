@@ -7,30 +7,6 @@
 
 #include <iostream>
 
-//IndexedRenderable or Renderable, not sure
-
-//0x24 is primitive type (internal)
-
-//0x28 is indicies count
-
-
-
-//VPTR TABLE
-//3-4 4) 3 float 5) packed
-//5-8 5-6) 3float 7-8) packed Setter Getter for Position -pospack6 6 bytes, pospack4 4 bytes, regular position is 4 bytes per componenet, 3 in total
-//9-10-11 Normals - 4 bytes compressed-same format as position for compressed 4
-// uncompressed normals are 4 bytes per component(3, 12 in total)
-//12-13-14 Diffuse -- diffuse is 4 bytes, 3 bytes for RGB only
-//15-17 Textures - Tex1 uncompressed 4 bytes each coord, 2 bytes compressed (8 total, 4 total)
-// Tex2 8 uncompressed 4 bytes compressed (16 total, 8 total)
-// Tex3 16 uncompressed 8 bytes compressed per cord (32 total, 16 total)
-// Compressed textures are stored in 4:12
-
-//18-19 Bone and weight indicator
-//20-24 Bone and Weights -Bone2 is 4 bytes
-//25-27 Binormals
-//28-32 sprites
-
 void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 {
 	auto& chunk = smb->chunks;

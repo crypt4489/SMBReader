@@ -3,15 +3,17 @@
 #include "vulkan/vulkan.h"
 #include <iostream>
 
-namespace VK {
-	namespace Utils {
-
-		struct SwapChainSupportDetails {
-				VkSurfaceFormatKHR* formats;
-				VkPresentModeKHR* presentModes;
-				uint32_t formatCount;
-				uint32_t presentModeCount;
-				VkSurfaceCapabilitiesKHR capabilities{};
+namespace VK 
+{
+	namespace Utils 
+	{
+		struct SwapChainSupportDetails 
+		{
+			VkSurfaceFormatKHR* formats;
+			VkPresentModeKHR* presentModes;
+			uint32_t formatCount;
+			uint32_t presentModeCount;
+			VkSurfaceCapabilitiesKHR capabilities{};
 		};
 
 		VkDeviceSize GetRawImageSizeFromFormat(VkFormat format, uint32_t width, uint32_t height);
@@ -23,18 +25,6 @@ namespace VK {
 		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceMemoryProperties& props);
 
 		std::ostream& operator<<(std::ostream& os, const VkQueueFamilyProperties& props);
-
-		VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-				VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-				VkDebugUtilsMessageTypeFlagsEXT messageType,
-				const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-				void* pUserData);
-
-		extern VkDebugUtilsMessengerEXT debugMessenger;
-
-		VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
-
-		void DestroyDebugUtilsMessengerEXT(VkInstance instance, const VkAllocationCallbacks* pAllocator);
 
 		uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 

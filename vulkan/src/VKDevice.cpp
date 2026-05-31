@@ -2056,7 +2056,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	return shaderModHandle;
 }
 
-EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat)
+EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat, EntryHandle renderSurfaceIndex)
 {
 	VKSwapChain* swc = reinterpret_cast<VKSwapChain*>(AllocFromPerDeviceData(sizeof(VKSwapChain)));
 
@@ -2066,9 +2066,9 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 		return EntryHandle();
 	}
 
-	auto swcsupport = parentInstance->GetSwapChainSupport(gpu);
+	auto swcsupport = parentInstance->GetSwapChainSupport(gpu, renderSurfaceIndex);
 
-	std::construct_at(swc, this, parentInstance->renderSurface, &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
+	std::construct_at(swc, this, parentInstance->GetRenderSurface(renderSurfaceIndex), &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
 
 	EntryHandle swcHandle = AddVkTypeToEntry(swc, VulkSwapChain);
 

@@ -1,7 +1,7 @@
-#ifndef S3TC_H
-#define S3TC_H
+#pragma once
 
-namespace DXTCompression {
+namespace DXTCompression 
+{
 	void DecompressBlockDXT1(unsigned long x, unsigned long y, unsigned long width, const unsigned char* blockStorage, unsigned long* image);
 	int BlockDecompressImageDXT1(unsigned long width, unsigned long height, const unsigned char* blockStorage, unsigned long* image);
 	void DecompressBlockDXT5(unsigned long x, unsigned long y, unsigned long width, const unsigned char* blockStorage, unsigned long* image);
@@ -12,5 +12,3 @@ namespace DXTCompression {
 	int DXT5CompressedSize(unsigned long width, unsigned long height);
 }
 
-
-#endif // S3TC_H

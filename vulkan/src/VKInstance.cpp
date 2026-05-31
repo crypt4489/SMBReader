@@ -1,7 +1,6 @@
 
 #include "pch.h"
 #include "VKInstance.h"
-
 #include "VKDevice.h"
 #include <vulkan/vulkan.h>
 
@@ -9,13 +8,7 @@
 #include <vulkan/vulkan_win32.h>
 #endif
 
-#include <iostream>
 #include <map>
-#include <set>
-#include <stdexcept>
-
-#undef min
-#undef max
 
 VKInstance::VKInstance()
 	: 
@@ -30,7 +23,7 @@ VKInstance::VKInstance()
 	instanceTempSize(0),
 	instancePerSize(0),
 	instancePerMemory(0),
-	gpusAndLogicalDevices(nullptr)
+	handleBumpCounter(0)
 {
 }
 
@@ -38,83 +31,101 @@ VKInstance::~VKInstance() {
 
 	auto callbacks = (*allocator)();
 
-	vkDestroySurfaceKHR(instance, renderSurface, nullptr);
+	for (int32_t i = handleBumpCounter; i >= 0; i--)
+	{
+		InstanceHandlePoolObject* handle = &handles[i];
 
-	VK::Utils::DestroyDebugUtilsMessengerEXT(instance, nullptr);
+		if (!handle->handlePtr)
+			continue;
+
+		switch (handle->handleType)
+		{
+		case RENDER_SURFACE:
+			DestroyRenderSurface(EntryHandle(i));
+			break;
+		case PHYSICAL_DEVICE:
+
+			break;
+		case LOGICAL_DEVICE:
+			DestroyLogicalDevice(EntryHandle(i));
+			break;
+		case DEBUG_MESSENGER:
+			DestroyDebugUtilsMessengerEXT(EntryHandle(i), nullptr);
+			break;
+		}
+	}
 
 	vkDestroyInstance(instance, &callbacks);
 }
 
-void* VKInstance::AllocFromInstanceCache(size_t size)
+void VKInstance::DestroyRenderSurface(EntryHandle index)
 {
-	size_t val, desired, out;
-	val = instanceTempOffset.load(std::memory_order_relaxed);
-	do {
-		desired = val + size;
-		out = val;
-		if ((val + size) >= instanceTempSize)
-		{
-			out = 0;
-			desired = out + size;
-		}
-	} while (!instanceTempOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+	VkSurfaceKHR renderSurface = GetRenderSurface(index);
 
+	if (!renderSurface)
+		return;
 
-	uintptr_t head = instanceTempMemory + out;
-
-	return reinterpret_cast<void*>(head);
+	vkDestroySurfaceKHR(instance, renderSurface, nullptr);
 }
 
-
-void* VKInstance::AllocFromInstanceData(size_t size)
+void VKInstance::DestroyLogicalDevice(EntryHandle index)
 {
-	size_t val, desired, out;
-	val = instancePerOffset.load(std::memory_order_relaxed);
-	do {
-		
-		desired = val + size;
-		out = val;
-	} while (!instancePerOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+	VKDevice* device = GetLogicalDevice(index);
 
-	uintptr_t head = instancePerMemory + out;
+	if (!device)
+		return;
+
+	device->DestroyDevice();
+}
+
+VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(EntryHandle gpuIndex, EntryHandle renderSurfaceIndex)
+{
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
+
+	VkSurfaceKHR renderSurface = GetRenderSurface(renderSurfaceIndex);
+
+	if (!gpu || !renderSurface)
+		return { };
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
+	return ret;
+}
+
+VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDevice gpu, EntryHandle renderSurfaceIndex)
+{
+	VkSurfaceKHR renderSurface = GetRenderSurface(renderSurfaceIndex);
+
+	if ( !renderSurface)
+		return { };
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
+	return ret;
+}
+
+bool VKInstance::ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat requestedFormat, EntryHandle renderSurfaceIndex)
+{
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
+
+	VkSurfaceKHR renderSurface = GetRenderSurface(renderSurfaceIndex);
+
+	if (!gpu || !renderSurface)
+		return false;
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
 	
-	return reinterpret_cast<void*>(head);
-}
-
-
-VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(uint32_t gpuIndex)
-{
-	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
-	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
-
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
-
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
-	return ret;
-}
-
-VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDevice gpu)
-{
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
-	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
-	return ret;
-}
-
-bool VKInstance::ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requestedFormat)
-{
-	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex]);
-	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
-
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
 	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
 
 	for (int i = 0; i < ret.formatCount; i++)
 	{
 		VkSurfaceFormatKHR availableFormat = ret.formats[i];
-		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+		if (availableFormat.format == requestedFormat && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
+		{
 			return true;
 		}
 	}
@@ -122,25 +133,31 @@ bool VKInstance::ValidateSwapChainFormatSupport(uint32_t gpuIndex, VkFormat requ
 	return false;
 }
 
-void VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
+EntryHandle VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 {
+	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
+
 	VkWin32SurfaceCreateInfoKHR infoStruct{};
 	infoStruct.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
 	infoStruct.hinstance = hInst;
 	infoStruct.hwnd = hWnd;
 
-	VkResult res = vkCreateWin32SurfaceKHR(instance, &infoStruct, nullptr, &renderSurface);
+	VkResult vkResult = VK_SUCCESS;
 
-	if (res != VK_SUCCESS) {
-		throw std::runtime_error("failed to create window surface!");
+	if ((vkResult = vkCreateWin32SurfaceKHR(instance, &infoStruct, nullptr, &renderSurface)) != VK_SUCCESS)
+	{
+		//("failed to create window surface!");
+		return EntryHandle();
 	}
+
+	EntryHandle allocIndex = AddTypedHandleToPool(RENDER_SURFACE, renderSurface);
+
+	return allocIndex;
 }
 
-double VKInstance::GetTimeStampPeriod(DeviceIndex gpuIndex)
-{
-	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
-	
-	VkPhysicalDevice gpu = (VkPhysicalDevice)devices[0];
+double VKInstance::GetTimeStampPeriod(EntryHandle gpuIndex)
+{	
+	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(gpu, &props);
@@ -150,9 +167,11 @@ double VKInstance::GetTimeStampPeriod(DeviceIndex gpuIndex)
 	return timestampPeriod;
 }
 
-
-void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize)
+int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData)
 {
+
+	VkResult vkResult = VK_SUCCESS;
+
 	instanceTempMemory = reinterpret_cast<uintptr_t>(dataHead);
 
 	instancePerMemory = instanceTempMemory + cacheSize;
@@ -173,17 +192,6 @@ void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, ui
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfoStruct;
 	
-	VkValidationFeatureEnableEXT enables[] = {
-	VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
-	};
-
-	VkValidationFeaturesEXT validationFeatures{};
-	validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-	validationFeatures.enabledValidationFeatureCount = 0;
-	validationFeatures.pEnabledValidationFeatures = enables;
-
-	createInfo.pNext = &validationFeatures;
-
 
 
 	instanceExtCount = 5;
@@ -208,30 +216,26 @@ void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, ui
 	
 	uint32_t instExtensionRequired = 0;
 
-	vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, nullptr);
+	vkResult = vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, nullptr);
 
-	if (!instExtensionRequired)
+	if (vkResult != VK_SUCCESS || !instExtensionRequired)
 	{
-		throw std::runtime_error("Need extension layers, found none");
+		return -1;
 	}
 
 	VkExtensionProperties* extensions = reinterpret_cast<VkExtensionProperties*>(AllocFromInstanceCache(sizeof(VkExtensionProperties) * instExtensionRequired));
 
-	if (vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, extensions) != VK_SUCCESS)
-	{
-		throw std::runtime_error("vkEnumerateInstanceExtensionProperties failed second time");
-	}
+	vkEnumerateInstanceExtensionProperties(nullptr, &instExtensionRequired, extensions);
 	
-
 	for (uint32_t i = 0; i < instanceExtCount; i++)
 	{
 		const char* requested = instanceExtensions[i];
 	
 		uint32_t j = 0;
+
 		for (; j < instExtensionRequired; j++)
 		{
 			VkExtensionProperties props = extensions[j];
-		//	std::cout << props.extensionName << std::endl;
 			if (strcmp(requested, props.extensionName) == 0) {
 				break;
 			}
@@ -239,26 +243,22 @@ void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, ui
 
 		if (j == instExtensionRequired)
 		{
-			std::cerr << "Extension " << requested << " not available\n";
-			throw std::runtime_error("Cannot find extension");
+			return -1;
 		}
 	}
 
 	uint32_t layersCount = 0;
 
-	vkEnumerateInstanceLayerProperties(&layersCount, nullptr);
+	vkResult = vkEnumerateInstanceLayerProperties(&layersCount, nullptr);
 
-	if (!layersCount)
+	if (vkResult != VK_SUCCESS || !layersCount)
 	{
-		throw std::runtime_error("Need validation layers, found none");
+		return -1;
 	}
 
 	VkLayerProperties* layerProps = reinterpret_cast<VkLayerProperties*>(AllocFromInstanceCache(sizeof(VkLayerProperties) * layersCount));
 
-	if (vkEnumerateInstanceLayerProperties(&layersCount, layerProps) != VK_SUCCESS)
-	{
-		throw std::runtime_error("vkEnumerateInstanceLayerProperties failed second time");
-	}
+	vkEnumerateInstanceLayerProperties(&layersCount, layerProps);
 
 	for (uint32_t i = 0; i < instanceLayerCount; i++)
 	{
@@ -275,8 +275,7 @@ void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, ui
 
 		if (j == layersCount)
 		{
-			std::cerr << "Validation layer " << requested << " not available\n";
-			throw std::runtime_error("Cannot find validation layer");
+			return -1;
 		}
 	}
 
@@ -288,54 +287,54 @@ void VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, ui
 	createInfo.enabledLayerCount = instanceLayerCount;
 
 	VkDebugUtilsMessengerCreateInfoEXT instanceDebugInfo{};
-	instanceDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	instanceDebugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-	instanceDebugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	instanceDebugInfo.pfnUserCallback = VK::Utils::debugCallback;
-	instanceDebugInfo.pUserData = nullptr;
 
-	
-
-
-	validationFeatures.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
-
-	auto ret = (*allocator)();
-
-	VkResult result = vkCreateInstance(&createInfo, &ret, &instance);
-
-	if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to create instance!");
-	}
-
-	VkDebugUtilsMessengerCreateInfoEXT debugInfo{};
-	debugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	debugInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-	debugInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	debugInfo.pfnUserCallback = VK::Utils::debugCallback;
-	debugInfo.pUserData = nullptr;
-
-	result = VK::Utils::CreateDebugUtilsMessengerEXT(instance, &debugInfo, nullptr);
-
-	if (result != VK_SUCCESS)
+	if (debugData)
 	{
-		throw std::runtime_error("Cannot establish debug callback");
+		VkValidationFeaturesEXT validationFeatures{};
+		validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+		validationFeatures.enabledValidationFeatureCount = debugData->enablesFeaturesCount;
+		validationFeatures.pEnabledValidationFeatures = debugData->enables;
+
+		createInfo.pNext = &validationFeatures;
+
+		instanceDebugInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+		instanceDebugInfo.messageSeverity = debugData->messageSeverity;
+		instanceDebugInfo.messageType = debugData->messageType;
+		instanceDebugInfo.flags = debugData->flags;
+		instanceDebugInfo.pfnUserCallback = debugData->userCallback;
+		instanceDebugInfo.pUserData = debugData->userData;
+
+		validationFeatures.pNext = (VkDebugUtilsMessengerCreateInfoEXT*)&instanceDebugInfo;
 	}
 
-	result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+	VkAllocationCallbacks allocationCBs = (*allocator)();
 
-	if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to get device pointers");
+	vkResult = vkCreateInstance(&createInfo, &allocationCBs, &instance);
+
+	if (vkResult != VK_SUCCESS) 
+	{
+		//("failed to create instance!");
+
+		return -1;
 	}
 
-	gpusAndLogicalDevices = reinterpret_cast<uintptr_t*>(AllocFromInstanceData(sizeof(uintptr_t) * physicalDeviceCount));
+	if (debugData)
+	{
+		EntryHandle debugMessengerHandle = CreateDebugUtilsMessengerEXT(&instanceDebugInfo, nullptr);
+
+		if (debugMessengerHandle == EntryHandle())
+		{
+			vkDestroyInstance(instance, &allocationCBs);
+			//("Cannot establish debug callback");
+			return -1;
+		}
+	}
+
+	return 0;
 }
 
-DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
+EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface) 
 {
-	uintptr_t* devices = reinterpret_cast<uintptr_t*>(AllocFromInstanceData(sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1)));
-
-	memset(devices, 0, sizeof(uintptr_t) * (maxNumberOfLogiclDevices + 1));
-
 	deviceExtCount = 4;
 
 	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
@@ -348,14 +347,19 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 	deviceExtensions[3] = VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME;
 
-	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
+	uint32_t physicalDeviceCount = 0;
 
-	VkResult result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
-
-	if (result != VK_SUCCESS) {
-		throw std::runtime_error("failed to get device pointers");
+	VkResult result = VK_SUCCESS; 
+	
+	if (((result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, VK_NULL_HANDLE)) != VK_SUCCESS) || !physicalDeviceCount)
+	{
+		//("failed to get device pointers");
+		return EntryHandle();
 	}
 
+	VkPhysicalDevice* physicalDevices = reinterpret_cast<VkPhysicalDevice*>(AllocFromInstanceCache(sizeof(VkPhysicalDevice) * physicalDeviceCount));
+
+	vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
 
 	VkPhysicalDeviceProperties deviceProperties;
 	VkPhysicalDeviceFeatures deviceFeatures;
@@ -369,6 +373,14 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 		GetPhysicalDevicePropertiesandFeatures(potentGPU, deviceProperties, deviceFeatures);
 
 		if (!isDeviceSuitable(potentGPU)) continue;
+
+		if (renderSurface != EntryHandle())
+		{
+			VK::Utils::SwapChainSupportDetails supportDetails = GetSwapChainSupport(potentGPU, renderSurface);
+
+			if (!supportDetails.formatCount || !supportDetails.presentModeCount)
+				continue;
+		}
 
 		gpuScores.insert(std::pair<int, VkPhysicalDevice>([&deviceProperties, &deviceFeatures]() {
 			int score = 0;
@@ -397,23 +409,23 @@ DeviceIndex VKInstance::CreatePhysicalDevice(uint32_t maxNumberOfLogiclDevices)
 
 	if (gpuScores.empty() || bestCase->first <= 0)
 	{
-		throw std::runtime_error("No suitable gpu found for this");
+		//("No suitable gpu found for this");
+		return EntryHandle();
 	}
 
 	VkPhysicalDevice gpu = bestCase->second;
 
+	PhysicalDeviceAllocation* gpuAlloc = (PhysicalDeviceAllocation*)AllocFromInstanceData(sizeof(PhysicalDeviceAllocation));
 
-	
-	devices[0] = reinterpret_cast<uintptr_t>(gpu);
+	gpuAlloc->gpuDeviceHandle = gpu;
+	gpuAlloc->logicalDeviceCount = 0;
 
-	gpusAndLogicalDevices[physicalDeviceCounter] = reinterpret_cast<uintptr_t>(devices);
+	EntryHandle allocIndexInStorage = AddTypedHandleToPool(PHYSICAL_DEVICE, gpuAlloc);
 
-	return DeviceIndex(physicalDeviceCounter++);
+	return allocIndexInStorage;
 }
 
-
-
-VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(DeviceIndex gpuIndex)
+VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(EntryHandle gpuIndex)
 {
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 	VkPhysicalDeviceProperties physicalDeviceProperties;
@@ -441,6 +453,7 @@ void VKInstance::GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device,
 bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 {
 	uint32_t extensionCount;
+
 	vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
 
 	VkExtensionProperties* availableExtensions = reinterpret_cast<VkExtensionProperties*>(AllocFromInstanceCache(sizeof(VkExtensionProperties) * extensionCount));
@@ -468,71 +481,99 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
 		}
 	}
 
-	if (renderSurface)
-	{
-		VK::Utils::SwapChainSupportDetails supportDetails;
-
-		VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-		VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
-
-		supportDetails = VK::Utils::querySwapChainSupport(device, renderSurface, formatsDataSpace, presentModesDataSpace);
-
-		if (supportDetails.formatCount == 0 || supportDetails.presentModeCount == 0)
-		{
-			return false;
-		}
-	}
+	
 	return true;
 }
 
-VKDevice* VKInstance::CreateLogicalDevice(DeviceIndex gpuIndex, DeviceIndex* deviceIndex)
-{
-	uintptr_t* devices = GetDeviceArray(gpuIndex);
-	
-	VkPhysicalDevice gpu = reinterpret_cast<VkPhysicalDevice>(devices[0]);
-
-	uintptr_t* iter = &devices[1];
-
-	uint32_t i = 0;
-
-	while (iter[0])
-	{
-		i++;
-		iter = &iter[1];
-	}
+EntryHandle VKInstance::CreateLogicalDevice(EntryHandle gpuIndex)
+{	
+	PhysicalDeviceAllocation* gpu = GetPhysicalDeviceAlloc(gpuIndex);
 	
 	VKDevice* device = reinterpret_cast<VKDevice*>(AllocFromInstanceData(sizeof(VKDevice)));
 
-	device = std::construct_at(device, gpu, this);
+	device = std::construct_at(device, gpu->gpuDeviceHandle, this);
 
-	iter[0] = reinterpret_cast<uintptr_t>(device);
+	uint32_t gpuOwnerIndex = gpu->logicalDeviceCount++;
 
-	*deviceIndex = DeviceIndex(i);
+	EntryHandle logicalDeviceHandle = AddTypedHandleToPool(LOGICAL_DEVICE, device);
+
+	gpu->logicalDevicesIndex[gpuOwnerIndex] = logicalDeviceHandle;
+
+	return logicalDeviceHandle;
+}
+
+VkPhysicalDevice VKInstance::GetPhysicalDevice(EntryHandle gpuIndex)
+{
+	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
+
+	if (handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
+	{
+		return VK_NULL_HANDLE;
+	}
+
+	PhysicalDeviceAllocation* alloc = (PhysicalDeviceAllocation*)handlePoolObject->handlePtr;
+
+	return alloc->gpuDeviceHandle;
+}
+
+PhysicalDeviceAllocation* VKInstance::GetPhysicalDeviceAlloc(EntryHandle gpuIndex)
+{
+	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
+
+	if (handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
+	{
+		return VK_NULL_HANDLE;
+	}
+
+	PhysicalDeviceAllocation* alloc = (PhysicalDeviceAllocation*)handlePoolObject->handlePtr;
+
+	return alloc;
+}
+
+VkSurfaceKHR VKInstance::GetRenderSurface(EntryHandle renderSurfaceIndex)
+{
+	InstanceHandlePoolObject* handlePoolObject = GetHandle(renderSurfaceIndex);
+
+	if (handlePoolObject->handleType != RENDER_SURFACE || !handlePoolObject->handlePtr)
+	{
+		return VK_NULL_HANDLE;
+	}
+
+	VkSurfaceKHR surface = (VkSurfaceKHR)handlePoolObject->handlePtr;
+
+	return surface;
+}
+
+VKDevice* VKInstance::GetLogicalDevice(EntryHandle deviceIndex)
+{
+	InstanceHandlePoolObject* handlePoolObject = GetHandle(deviceIndex);
+
+	if (handlePoolObject->handleType != LOGICAL_DEVICE || !handlePoolObject->handlePtr)
+	{
+		return nullptr;
+	}
+
+	VKDevice* device = (VKDevice*)handlePoolObject->handlePtr;
 
 	return device;
 }
 
-VKDevice* VKInstance::GetLogicalDevice(DeviceIndex gpuIndex, DeviceIndex deviceIndex)
+VkDebugUtilsMessengerEXT VKInstance::GetDebugMessenger(EntryHandle debugMessengerHandle)
 {
-	uintptr_t* devices = GetDeviceArray(gpuIndex);
-	VKDevice* dev = reinterpret_cast<VKDevice*>(devices[1]);
-	return dev;
-}
+	InstanceHandlePoolObject* handlePoolObject = GetHandle(debugMessengerHandle);
 
-VkPhysicalDevice VKInstance::GetPhysicalDevice(DeviceIndex gpuIndex)
-{
-	uintptr_t* devices = reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
-	return reinterpret_cast<VkPhysicalDevice>(devices[0]);
-}
+	if (handlePoolObject->handleType != DEBUG_MESSENGER || !handlePoolObject->handlePtr)
+	{
+		return VK_NULL_HANDLE;
+	}
 
-uintptr_t* VKInstance::GetDeviceArray(DeviceIndex gpuIndex)
-{
-	return reinterpret_cast<uintptr_t*>(gpusAndLogicalDevices[gpuIndex()]);
+	VkDebugUtilsMessengerEXT debugMessenger = (VkDebugUtilsMessengerEXT)handlePoolObject->handlePtr;
+
+	return debugMessenger;
 }
 
 void VKInstance::SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, size_t cacheSize)
 {
-
 	uintptr_t tempMemoryHead = (uintptr_t)dataHead;
 
 	allocator = (VKAllocationCB*)(tempMemoryHead);
@@ -689,7 +730,7 @@ void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	return newaddr;
 }
 
-int VKInstance::GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex)
+int VKInstance::GetMinimumStorageBufferAlignment(EntryHandle gpuIndex)
 {
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 
@@ -701,7 +742,7 @@ int VKInstance::GetMinimumStorageBufferAlignment(DeviceIndex gpuIndex)
 	return static_cast<int>(deviceProperties.limits.minStorageBufferOffsetAlignment);
 }
 
-int VKInstance::GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex)
+int VKInstance::GetMinimumUniformBufferAlignment(EntryHandle gpuIndex)
 {
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 
@@ -713,3 +754,103 @@ int VKInstance::GetMinimumUniformBufferAlignment(DeviceIndex gpuIndex)
 	return static_cast<int>(deviceProperties.limits.minUniformBufferOffsetAlignment);
 }
 
+void* VKInstance::AllocFromInstanceCache(size_t size)
+{
+	size_t val, desired, out;
+	val = instanceTempOffset.load(std::memory_order_relaxed);
+	do {
+		desired = val + size;
+		out = val;
+		if ((val + size) >= instanceTempSize)
+		{
+			out = 0;
+			desired = out + size;
+		}
+	} while (!instanceTempOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+
+
+	uintptr_t head = instanceTempMemory + out;
+
+	return reinterpret_cast<void*>(head);
+}
+
+void* VKInstance::AllocFromInstanceData(size_t size)
+{
+	size_t val, desired, out;
+	val = instancePerOffset.load(std::memory_order_relaxed);
+	do {
+
+		desired = val + size;
+		out = val;
+	} while (!instancePerOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+
+	uintptr_t head = instancePerMemory + out;
+
+	return reinterpret_cast<void*>(head);
+}
+
+EntryHandle VKInstance::AddTypedHandleToPool(VKInstanceHandleType handleType, void* handlePtr)
+{
+	if (handleBumpCounter == MAX_TYPED_HANDLES)
+		return EntryHandle();
+
+	uint32_t currHandleIndex = handleBumpCounter++;
+
+	InstanceHandlePoolObject* handlePoolObject = &handles[currHandleIndex];
+
+	handlePoolObject->handleType = handleType;
+	handlePoolObject->handlePtr = (uintptr_t)handlePtr;
+
+	return EntryHandle(currHandleIndex);
+}
+
+InstanceHandlePoolObject* VKInstance::GetHandle(EntryHandle index)
+{
+	if (index() >= handleBumpCounter)
+		return nullptr;
+
+	return &handles[index()];
+}
+
+
+
+EntryHandle VKInstance::CreateDebugUtilsMessengerEXT(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator)
+{	
+	PFN_vkCreateDebugUtilsMessengerEXT func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
+
+	VkDebugUtilsMessengerEXT debugMessenger;
+
+	EntryHandle debugHandle = EntryHandle();
+
+	if (func)
+	{
+		 VkResult vkResult = func(instance, pCreateInfo, pAllocator, &debugMessenger);
+
+		 if (vkResult == VK_SUCCESS)
+		 {
+			 debugHandle = AddTypedHandleToPool(DEBUG_MESSENGER, debugMessenger);
+		 }
+		 else
+		 {
+
+		 }
+	}
+	else
+	{
+
+	}
+	
+	return debugHandle;
+}
+
+void VKInstance::DestroyDebugUtilsMessengerEXT(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator)
+{
+	PFN_vkDestroyDebugUtilsMessengerEXT func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
+
+	VkDebugUtilsMessengerEXT debugMessenger = GetDebugMessenger(debugMessengerHandle);
+
+	if (func) 
+	{
+		func(instance, debugMessenger, pAllocator);
+	}
+}

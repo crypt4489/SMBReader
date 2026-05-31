@@ -511,7 +511,7 @@ struct VKDevice
 		EntryHandle memIndex,
 		VkImageAspectFlags flags, VkImageLayout layout);
 
-	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat);
+	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat, EntryHandle renderSurfaceIndex);
 
 	
 	//GETTERS
