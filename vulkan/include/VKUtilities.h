@@ -18,6 +18,8 @@ namespace VK
 
 		VkDeviceSize GetRawImageSizeFromFormat(VkFormat format, uint32_t width, uint32_t height);
 
+		int querySwapChainSupportCount(VkPhysicalDevice device, VkSurfaceKHR surface, uint32_t* formatsDataSpaceCount, uint32_t* presentModesDataSpaceCount, VkResult results[2]);
+
 		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace);
 
 		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props);

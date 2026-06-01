@@ -25,6 +25,36 @@ enum VKInstanceHandleType : uint64_t
 	MAX_INST_HANDLE
 };
 
+enum InstanceErrorCodeMajor
+{
+	INSTANCE_HANDLE_CREATION_FAILED = 1,
+	INSTANCE_EXTENSION_ENUMERATED_FAILED = 2,
+	INSTANCE_REQUESTED_EXTENSION_NOT_AVAILABLE = 3,
+	INSTANCE_REQUESTED_LAYER_NOT_AVAILABLE = 4,
+	INSTANCE_GPU_ENUMERATION_FAILED = 5,
+	INSTANCE_NO_SUITABLE_GPU_FOUND = 6,
+	INSTANCE_HANDLE_EXHAUSTION = 7,
+	INSTANCE_DEBUG_FUNCTION_POINTER_RETRIEVAL_FAILED = 8,
+	INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED = 9,
+};
+
+enum InstanceErrorCodeMinor
+{
+	INSTANCE_HANDLE = 1,
+	INSTANCE_RENDER_SURFACE = 2,
+	INSTANCE_GPU_ALLOCATION = 3,
+	INSTANCE_LOGICAL_DEVICE_ALLOC = 4,
+	INSTANCE_DEBUG_MESSENGER = 5,
+	INSTANCE_FORMAT_COUNT = 6,
+	INSTANCE_PRESENT_MODE_COUNT = 7
+};
+
+struct InstanceErrorCodeStruct
+{
+	int internalErrorCode;
+	VkResult vkResult;
+};
+
 struct InstanceHandlePoolObject
 {
 	VKInstanceHandleType handleType;
@@ -77,12 +107,6 @@ struct VKAllocationCB
 		res.pfnInternalFree = nullptr;
 
 		return res;
-	}
-
-	void Delete()
-	{
-		if (instanceData) delete[] instanceData;
-		if (commandData) delete[] commandData;
 	}
 
 	static void* VKAPI_CALL Allocation(
@@ -182,19 +206,17 @@ struct VKInstance
 	void DestroyRenderSurface(EntryHandle index);
 	void DestroyLogicalDevice(EntryHandle index);
 
-	EntryHandle CreateDebugUtilsMessengerEXT(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
+	EntryHandle CreateDebugUtilsMessenger(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
 
-	void DestroyDebugUtilsMessengerEXT(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator);
+	void DestroyDebugUtilsMessenger(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator);
+
+	void AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
 
 	VkInstance instance = VK_NULL_HANDLE;
 	
 	const char** instanceLayers;
 	const char** instanceExtensions;
 	const char** deviceExtensions;
-
-	uint32_t instanceExtCount;
-	uint32_t instanceLayerCount;
-	uint32_t deviceExtCount;
 
 	uintptr_t instanceTempMemory;
 	uintptr_t instancePerMemory;
@@ -206,6 +228,15 @@ struct VKInstance
 	VKAllocationCB *allocator;
 
 	InstanceHandlePoolObject handles[MAX_TYPED_HANDLES];
+	
+	static const int errorCodeWrapSize = 16;
+	InstanceErrorCodeStruct errorCodes[errorCodeWrapSize];
+	int currentErrorCodePos = 0;
+	int readErrorCodePos = 0;
+
+	uint32_t instanceExtCount;
+	uint32_t instanceLayerCount;
+	uint32_t deviceExtCount;
 	uint32_t handleBumpCounter;
 };
 

@@ -55,6 +55,25 @@ namespace VK {
 			return size;
 		}
 
+		int querySwapChainSupportCount(VkPhysicalDevice device, VkSurfaceKHR surface, uint32_t* formatsDataSpaceCount, uint32_t* presentModesDataSpaceCount, VkResult results[2])
+		{
+			results[0] = vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, formatsDataSpaceCount, nullptr);
+			
+			results[1] = vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, presentModesDataSpaceCount, nullptr);
+
+			if (results[0] != VK_SUCCESS || !*formatsDataSpaceCount)
+			{
+				return -1;
+			}
+
+			if (results[1] != VK_SUCCESS || !*presentModesDataSpaceCount)
+			{
+				return -2;
+			}
+
+			return 0;
+		}
+
 		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace) 
 		{
 			SwapChainSupportDetails details;

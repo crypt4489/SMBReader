@@ -8,7 +8,6 @@
 #include <vulkan/vulkan_win32.h>
 #endif
 
-#include <map>
 
 VKInstance::VKInstance()
 	: 
@@ -23,15 +22,16 @@ VKInstance::VKInstance()
 	instanceTempSize(0),
 	instancePerSize(0),
 	instancePerMemory(0),
-	handleBumpCounter(0)
+	handleBumpCounter(0),
+	allocator(nullptr)
 {
 }
 
 VKInstance::~VKInstance() {
 
-	auto callbacks = (*allocator)();
+	VkAllocationCallbacks callbacks = (*allocator)();
 
-	for (int32_t i = handleBumpCounter; i >= 0; i--)
+	for (int32_t i = handleBumpCounter-1; i >= 0; i--)
 	{
 		InstanceHandlePoolObject* handle = &handles[i];
 
@@ -44,13 +44,12 @@ VKInstance::~VKInstance() {
 			DestroyRenderSurface(EntryHandle(i));
 			break;
 		case PHYSICAL_DEVICE:
-
 			break;
 		case LOGICAL_DEVICE:
 			DestroyLogicalDevice(EntryHandle(i));
 			break;
 		case DEBUG_MESSENGER:
-			DestroyDebugUtilsMessengerEXT(EntryHandle(i), nullptr);
+			DestroyDebugUtilsMessenger(EntryHandle(i), nullptr);
 			break;
 		}
 	}
@@ -87,10 +86,29 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(EntryHandle g
 	if (!gpu || !renderSurface)
 		return { };
 
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+	uint32_t formatCount = 0, presentModeCount = 0;
+
+	VkResult vkResult[2]{};
+
+	int retCode = VK::Utils::querySwapChainSupportCount(gpu, renderSurface, &formatCount, &presentModeCount, vkResult);
+
+	if (retCode == -1)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_FORMAT_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[0]);
+		return {};
+	}
+
+	if (retCode == -2)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_PRESENT_MODE_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[1]);
+		return {};
+	}
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * formatCount);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * presentModeCount);
 
 	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
+
 	return ret;
 }
 
@@ -101,9 +119,30 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDev
 	if ( !renderSurface)
 		return { };
 
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
+
+	uint32_t formatCount = 0, presentModeCount = 0;
+
+	VkResult vkResult[2]{};
+
+	int retCode = VK::Utils::querySwapChainSupportCount(gpu, renderSurface, &formatCount, &presentModeCount, vkResult);
+
+	if (retCode == -1)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_FORMAT_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[0]);
+		return {};
+	}
+
+	if (retCode == -2)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_PRESENT_MODE_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[1]);
+		return {};
+	}
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * formatCount);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * presentModeCount);
+
 	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
+
 	return ret;
 }
 
@@ -116,9 +155,27 @@ bool VKInstance::ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat r
 	if (!gpu || !renderSurface)
 		return false;
 
-	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * 30);
-	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * 10);
-	
+	uint32_t formatCount = 0, presentModeCount = 0;
+
+	VkResult vkResult[2]{};
+
+	int retCode = VK::Utils::querySwapChainSupportCount(gpu, renderSurface, &formatCount, &presentModeCount, vkResult);
+
+	if (retCode == -1)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_FORMAT_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[0]);
+		return {};
+	}
+
+	if (retCode == -2)
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_PRESENT_MODE_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[1]);
+		return {};
+	}
+
+	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * formatCount);
+	VkPresentModeKHR* presentModesDataSpace = (VkPresentModeKHR*)AllocFromInstanceCache(sizeof(VkPresentModeKHR) * presentModeCount);
+
 	VK::Utils::SwapChainSupportDetails ret = VK::Utils::querySwapChainSupport(gpu, renderSurface, formatsDataSpace, presentModesDataSpace);
 
 	for (int i = 0; i < ret.formatCount; i++)
@@ -146,11 +203,17 @@ EntryHandle VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 
 	if ((vkResult = vkCreateWin32SurfaceKHR(instance, &infoStruct, nullptr, &renderSurface)) != VK_SUCCESS)
 	{
-		//("failed to create window surface!");
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_RENDER_SURFACE) | INSTANCE_HANDLE_CREATION_FAILED, vkResult);
 		return EntryHandle();
 	}
 
 	EntryHandle allocIndex = AddTypedHandleToPool(RENDER_SURFACE, renderSurface);
+
+	if (allocIndex == EntryHandle())
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_RENDER_SURFACE) | INSTANCE_HANDLE_EXHAUSTION, vkResult);
+		vkDestroySurfaceKHR(instance, renderSurface, nullptr);
+	}
 
 	return allocIndex;
 }
@@ -169,7 +232,6 @@ double VKInstance::GetTimeStampPeriod(EntryHandle gpuIndex)
 
 int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData)
 {
-
 	VkResult vkResult = VK_SUCCESS;
 
 	instanceTempMemory = reinterpret_cast<uintptr_t>(dataHead);
@@ -192,8 +254,6 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfoStruct;
 	
-
-
 	instanceExtCount = 5;
 
 	instanceLayerCount = 1;
@@ -212,7 +272,6 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 	instanceExtensions[3] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
 	instanceExtensions[4] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
 //	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
-//	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
 	
 	uint32_t instExtensionRequired = 0;
 
@@ -220,6 +279,7 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 
 	if (vkResult != VK_SUCCESS || !instExtensionRequired)
 	{
+		AddInstanceErrorCode(INSTANCE_EXTENSION_ENUMERATED_FAILED, vkResult);
 		return -1;
 	}
 
@@ -243,6 +303,7 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 
 		if (j == instExtensionRequired)
 		{
+			AddInstanceErrorCode(MINOR_CODE_PACK(i) | INSTANCE_REQUESTED_EXTENSION_NOT_AVAILABLE, VK_RESULT_MAX_ENUM);
 			return -1;
 		}
 	}
@@ -253,6 +314,7 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 
 	if (vkResult != VK_SUCCESS || !layersCount)
 	{
+		AddInstanceErrorCode(INSTANCE_EXTENSION_ENUMERATED_FAILED, vkResult);
 		return -1;
 	}
 
@@ -275,6 +337,7 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 
 		if (j == layersCount)
 		{
+			AddInstanceErrorCode(MINOR_CODE_PACK(i) | INSTANCE_REQUESTED_LAYER_NOT_AVAILABLE, VK_RESULT_MAX_ENUM);
 			return -1;
 		}
 	}
@@ -313,19 +376,17 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 
 	if (vkResult != VK_SUCCESS) 
 	{
-		//("failed to create instance!");
-
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_HANDLE) | INSTANCE_HANDLE_CREATION_FAILED, vkResult);
 		return -1;
 	}
 
 	if (debugData)
 	{
-		EntryHandle debugMessengerHandle = CreateDebugUtilsMessengerEXT(&instanceDebugInfo, nullptr);
+		EntryHandle debugMessengerHandle = CreateDebugUtilsMessenger(&instanceDebugInfo, nullptr);
 
 		if (debugMessengerHandle == EntryHandle())
 		{
 			vkDestroyInstance(instance, &allocationCBs);
-			//("Cannot establish debug callback");
 			return -1;
 		}
 	}
@@ -349,11 +410,11 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 
 	uint32_t physicalDeviceCount = 0;
 
-	VkResult result = VK_SUCCESS; 
+	VkResult vkResult = VK_SUCCESS; 
 	
-	if (((result = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, VK_NULL_HANDLE)) != VK_SUCCESS) || !physicalDeviceCount)
+	if (((vkResult = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, VK_NULL_HANDLE)) != VK_SUCCESS) || !physicalDeviceCount)
 	{
-		//("failed to get device pointers");
+		AddInstanceErrorCode(INSTANCE_GPU_ENUMERATION_FAILED, vkResult);
 		return EntryHandle();
 	}
 
@@ -364,7 +425,9 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 	VkPhysicalDeviceProperties deviceProperties;
 	VkPhysicalDeviceFeatures deviceFeatures;
 
-	std::multimap<int, VkPhysicalDevice> gpuScores;
+	int* scores = (int*)AllocFromInstanceCache(sizeof(int) * physicalDeviceCount);
+
+	memset(scores, 0, sizeof(int) * physicalDeviceCount);
 
 	for (uint32_t i = 0; i<physicalDeviceCount; i++)
 	{
@@ -382,38 +445,43 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 				continue;
 		}
 
-		gpuScores.insert(std::pair<int, VkPhysicalDevice>([&deviceProperties, &deviceFeatures]() {
-			int score = 0;
+		int score = 0;
 
-			if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
-			{
-				score = std::numeric_limits<short>::max();
-			}
+		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		{
+			score = std::numeric_limits<short>::max();
+		}
 
-			score += deviceProperties.limits.maxImageDimension2D;
+		score += deviceProperties.limits.maxImageDimension2D;
 
-			if (!deviceFeatures.geometryShader ||
-				!deviceFeatures.tessellationShader ||
-				!deviceFeatures.textureCompressionBC ||
-				!deviceFeatures.samplerAnisotropy ||
-				!deviceFeatures.multiDrawIndirect)
-			{
-				score = std::numeric_limits<int>::min();
-			}
+		if (!deviceFeatures.textureCompressionBC ||
+			!deviceFeatures.samplerAnisotropy ||
+			!deviceFeatures.multiDrawIndirect)
+		{
+			score = std::numeric_limits<int>::min();
+		}
 
-			return score;
-			}(), potentGPU));
+		scores[i] = score;
 	}
 
-	auto bestCase = gpuScores.rbegin();
+	int bestScore = 0, bestScoreIndex = -1;
 
-	if (gpuScores.empty() || bestCase->first <= 0)
+	for (uint32_t i = 0; i < physicalDeviceCount; i++)
 	{
-		//("No suitable gpu found for this");
+		if (bestScore < scores[i])
+		{
+			bestScoreIndex = i;
+			bestScore = scores[i];
+		}
+	}
+
+	if (bestScoreIndex < 0)
+	{
+		AddInstanceErrorCode(INSTANCE_NO_SUITABLE_GPU_FOUND, VK_RESULT_MAX_ENUM);
 		return EntryHandle();
 	}
 
-	VkPhysicalDevice gpu = bestCase->second;
+	VkPhysicalDevice gpu = physicalDevices[bestScoreIndex];
 
 	PhysicalDeviceAllocation* gpuAlloc = (PhysicalDeviceAllocation*)AllocFromInstanceData(sizeof(PhysicalDeviceAllocation));
 
@@ -421,6 +489,11 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 	gpuAlloc->logicalDeviceCount = 0;
 
 	EntryHandle allocIndexInStorage = AddTypedHandleToPool(PHYSICAL_DEVICE, gpuAlloc);
+
+	if (allocIndexInStorage == EntryHandle())
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_GPU_ALLOCATION) | INSTANCE_HANDLE_EXHAUSTION, VK_RESULT_MAX_ENUM);
+	}
 
 	return allocIndexInStorage;
 }
@@ -433,12 +506,12 @@ VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(EntryHandle gpuIndex)
 
 	VkSampleCountFlags counts = physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
 
-	if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
-	if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
-	if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
-	if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
-	if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
-	if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+	if (counts & VK_SAMPLE_COUNT_64_BIT)  return VK_SAMPLE_COUNT_64_BIT;
+	if (counts & VK_SAMPLE_COUNT_32_BIT)  return VK_SAMPLE_COUNT_32_BIT;
+	if (counts & VK_SAMPLE_COUNT_16_BIT)  return VK_SAMPLE_COUNT_16_BIT;
+	if (counts & VK_SAMPLE_COUNT_8_BIT)  return VK_SAMPLE_COUNT_8_BIT; 
+	if (counts & VK_SAMPLE_COUNT_4_BIT)  return VK_SAMPLE_COUNT_4_BIT; 
+	if (counts & VK_SAMPLE_COUNT_2_BIT)  return VK_SAMPLE_COUNT_2_BIT; 
 
 	return VK_SAMPLE_COUNT_1_BIT;
 }
@@ -491,11 +564,17 @@ EntryHandle VKInstance::CreateLogicalDevice(EntryHandle gpuIndex)
 	
 	VKDevice* device = reinterpret_cast<VKDevice*>(AllocFromInstanceData(sizeof(VKDevice)));
 
+	EntryHandle logicalDeviceHandle = AddTypedHandleToPool(LOGICAL_DEVICE, device);
+
+	if (logicalDeviceHandle == EntryHandle())
+	{
+		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_LOGICAL_DEVICE_ALLOC) | INSTANCE_HANDLE_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		return logicalDeviceHandle;
+	}
+
 	device = std::construct_at(device, gpu->gpuDeviceHandle, this);
 
 	uint32_t gpuOwnerIndex = gpu->logicalDeviceCount++;
-
-	EntryHandle logicalDeviceHandle = AddTypedHandleToPool(LOGICAL_DEVICE, device);
 
 	gpu->logicalDevicesIndex[gpuOwnerIndex] = logicalDeviceHandle;
 
@@ -506,7 +585,7 @@ VkPhysicalDevice VKInstance::GetPhysicalDevice(EntryHandle gpuIndex)
 {
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
 
-	if (handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
+	if (!handlePoolObject || handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
 	{
 		return VK_NULL_HANDLE;
 	}
@@ -520,7 +599,7 @@ PhysicalDeviceAllocation* VKInstance::GetPhysicalDeviceAlloc(EntryHandle gpuInde
 {
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
 
-	if (handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
+	if (!handlePoolObject || handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
 	{
 		return VK_NULL_HANDLE;
 	}
@@ -534,7 +613,7 @@ VkSurfaceKHR VKInstance::GetRenderSurface(EntryHandle renderSurfaceIndex)
 {
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(renderSurfaceIndex);
 
-	if (handlePoolObject->handleType != RENDER_SURFACE || !handlePoolObject->handlePtr)
+	if (!handlePoolObject || handlePoolObject->handleType != RENDER_SURFACE || !handlePoolObject->handlePtr)
 	{
 		return VK_NULL_HANDLE;
 	}
@@ -548,7 +627,7 @@ VKDevice* VKInstance::GetLogicalDevice(EntryHandle deviceIndex)
 {
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(deviceIndex);
 
-	if (handlePoolObject->handleType != LOGICAL_DEVICE || !handlePoolObject->handlePtr)
+	if (!handlePoolObject || handlePoolObject->handleType != LOGICAL_DEVICE || !handlePoolObject->handlePtr)
 	{
 		return nullptr;
 	}
@@ -562,7 +641,7 @@ VkDebugUtilsMessengerEXT VKInstance::GetDebugMessenger(EntryHandle debugMessenge
 {
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(debugMessengerHandle);
 
-	if (handlePoolObject->handleType != DEBUG_MESSENGER || !handlePoolObject->handlePtr)
+	if (!handlePoolObject || handlePoolObject->handleType != DEBUG_MESSENGER || !handlePoolObject->handlePtr)
 	{
 		return VK_NULL_HANDLE;
 	}
@@ -812,9 +891,7 @@ InstanceHandlePoolObject* VKInstance::GetHandle(EntryHandle index)
 	return &handles[index()];
 }
 
-
-
-EntryHandle VKInstance::CreateDebugUtilsMessengerEXT(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator)
+EntryHandle VKInstance::CreateDebugUtilsMessenger(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator)
 {	
 	PFN_vkCreateDebugUtilsMessengerEXT func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT"));
 
@@ -822,35 +899,60 @@ EntryHandle VKInstance::CreateDebugUtilsMessengerEXT(const VkDebugUtilsMessenger
 
 	EntryHandle debugHandle = EntryHandle();
 
+	VkResult vkResult = VK_SUCCESS;
+
 	if (func)
 	{
-		 VkResult vkResult = func(instance, pCreateInfo, pAllocator, &debugMessenger);
+		 vkResult = func(instance, pCreateInfo, pAllocator, &debugMessenger);
 
 		 if (vkResult == VK_SUCCESS)
 		 {
 			 debugHandle = AddTypedHandleToPool(DEBUG_MESSENGER, debugMessenger);
+			 
+			 if (debugHandle == EntryHandle())
+			 {
+				 AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_DEBUG_MESSENGER) | INSTANCE_HANDLE_EXHAUSTION, VK_RESULT_MAX_ENUM);
+			 }
 		 }
 		 else
 		 {
-
+			 AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_DEBUG_MESSENGER) | INSTANCE_HANDLE_CREATION_FAILED, vkResult);
 		 }
 	}
 	else
 	{
-
+		AddInstanceErrorCode(INSTANCE_DEBUG_FUNCTION_POINTER_RETRIEVAL_FAILED, VK_RESULT_MAX_ENUM);
 	}
 	
 	return debugHandle;
 }
 
-void VKInstance::DestroyDebugUtilsMessengerEXT(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator)
+void VKInstance::DestroyDebugUtilsMessenger(EntryHandle debugMessengerHandle, const VkAllocationCallbacks* pAllocator)
 {
 	PFN_vkDestroyDebugUtilsMessengerEXT func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT"));
 
 	VkDebugUtilsMessengerEXT debugMessenger = GetDebugMessenger(debugMessengerHandle);
 
+	if (!debugMessenger)
+		return;
+
 	if (func) 
 	{
 		func(instance, debugMessenger, pAllocator);
+		return;
 	}
+
+	AddInstanceErrorCode(INSTANCE_DEBUG_FUNCTION_POINTER_RETRIEVAL_FAILED, VK_RESULT_MAX_ENUM);
+}
+
+void VKInstance::AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecificResult)
+{
+	int instErrorCodePos = currentErrorCodePos;
+
+	currentErrorCodePos = (currentErrorCodePos + 1) & (errorCodeWrapSize - 1);
+
+	InstanceErrorCodeStruct* errorCode = &errorCodes[instErrorCodePos];
+
+	errorCode->internalErrorCode = internalErrorCode;
+	errorCode->vkResult = vulkSpecificResult;
 }

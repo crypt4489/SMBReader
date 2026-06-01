@@ -214,7 +214,6 @@ struct QueueManager
 	std::mutex queueSema;
 	std::condition_variable queueCV;
 	int queueCountCV;
-	std::mutex submitSema;
 };
 
 struct ShaderHandle
@@ -339,8 +338,6 @@ enum DeviceErrorCodeMajor
 	DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED = 13,
 	DEVICE_VK_TYPE_ALLOCATION_FAILED = 14,
 };
-
-#define MINOR_CODE_PACK(x) ((int)x << 6)
 
 enum DeviceErrorCodeMinor
 {

@@ -2482,17 +2482,17 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	vkDebugData.enables[0] = VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
 	vkDebugData.enablesFeaturesCount = 0;
 
-	vkInstance->CreateRenderInstance(WINDOWS, instanceDataHead, 16*KiB, 256*KiB, nullptr);
+	VKInstanceDebugData* vkDebugDataTemp = &vkDebugData;
+
+	vkInstance->CreateRenderInstance(WINDOWS, instanceDataHead, 16*KiB, 256*KiB, vkDebugDataTemp);
 
 	OSWindowInternalData data;
 
 	windowMan->GetInternalData(&data);
 
 	renderSurfaceIndex = vkInstance->CreateWindowedSurface(data.inst, data.wnd);
-
 	physicalIndex = vkInstance->CreatePhysicalDevice(renderSurfaceIndex);
 	deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);;
-
 
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 

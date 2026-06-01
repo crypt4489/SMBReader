@@ -3739,8 +3739,7 @@ QueueManager::QueueManager(
 	queueFamilyIndex(_qfi),
 	queueCapabilities(ConvertQueueProps(_queueCapabilities, present)),
 	device(_d),
-	queueSema(),
-	submitSema()
+	queueSema()
 {
 
 	assert(maxQueueCount <= 16);
