@@ -37,6 +37,10 @@ namespace API
 	VkCullModeFlags ConvertCullMode(CullMode mode);
 
 	VkFrontFace ConvertTriangleWinding(TriangleWinding winding);
+
+	void ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(const GPUFeatureRequest* request,
+		VkPhysicalDeviceFeatures2* features2,
+		VkPhysicalDeviceVulkan12Features* features12);
 }
 
 struct RenderInstance

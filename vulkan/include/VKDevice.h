@@ -455,8 +455,6 @@ struct VKDevice
 		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
 	int CreateLogicalDevice(
-		const char** instanceLayers,
-		uint32_t layerCount,
 		const char** deviceExtensions,
 		uint32_t deviceExtCount,
 		VkPhysicalDeviceFeatures2* features,

@@ -527,3 +527,58 @@ enum BufferAlignmentType
 	STORAGE_BUFFER_ALIGNMENT = 2,
 };
 
+enum GPUDeviceType
+{
+	INTEGRATED = 1,
+	DISCRETE = 2,
+	VIRTUAL = 4,
+	CPU = 8
+};
+
+struct GPUFeatureRequest
+{
+	uint32_t desiredMaxImageWidth;
+	uint32_t desiredMaxImageHeight;
+	uint32_t deviceType;
+
+	// Vulkan 1.2 features
+	bool requireDescriptorBindingPartiallyBound;
+	bool requireDescriptorBindingSampledImageUpdateAfterBind;
+	bool requireDescriptorBindingUpdateUnusedWhilePending;
+	bool requireDescriptorBindingVariableDescriptorCount;
+	bool requireShaderSampledImageArrayNonUniformIndexing;
+	bool requireStorageBuffer8BitAccess;
+	bool requireDrawIndirectCount;
+	bool requireRuntimeDescriptorArray;
+
+	// base features
+	bool requireGeometryShader;
+	bool requireTextureCompressionBC;
+	bool requireTessellationShader;
+	bool requireSamplerAnisotropy;
+	bool requireMultiDrawIndirect;
+	bool requireWideLines;
+};
+
+enum class WindowManagementType
+{
+	WINDOWS32 = 1,
+};
+
+struct RenderingInstanceFeatures
+{
+	WindowManagementType windowManagementType;
+	bool useValidation;
+	bool useValidationExtension; 
+	bool useSurface;
+	bool useSwapChainMaintenance;
+	bool useDebugExt;
+};
+
+struct LogicalDeviceFeatures
+{
+	bool useSwapChain;
+	bool useSwapChainMaintenance;
+	bool useSPVDrawParameters;
+	bool useSPVDebugInfo;
+};

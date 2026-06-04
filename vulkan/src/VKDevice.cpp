@@ -1473,8 +1473,6 @@ EntryHandle VKDevice::CreateImageView(
 }
 
 int VKDevice::CreateLogicalDevice(
-	const char** instanceLayers,
-	uint32_t layerCount,
 	const char** deviceExtensions,
 	uint32_t deviceExtCount,
 	VkPhysicalDeviceFeatures2* features,
@@ -1549,9 +1547,9 @@ int VKDevice::CreateLogicalDevice(
 	logDeviceInfo.queueCreateInfoCount = queueCount;
 	logDeviceInfo.pQueueCreateInfos = queueCreateInfos;
 	logDeviceInfo.enabledExtensionCount = deviceExtCount;
-	logDeviceInfo.enabledLayerCount = layerCount;
+	logDeviceInfo.enabledLayerCount = parentInstance->instanceLayerCount;
 	logDeviceInfo.ppEnabledExtensionNames = deviceExtensions;
-	logDeviceInfo.ppEnabledLayerNames = instanceLayers;
+	logDeviceInfo.ppEnabledLayerNames = parentInstance->instanceLayers;
 	logDeviceInfo.pNext = features;
 
 	auto callbacks = (*deviceDriverAllocator)();

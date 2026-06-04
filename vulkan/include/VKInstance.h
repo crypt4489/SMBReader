@@ -1,4 +1,5 @@
 #pragma once
+#include "CommonRenderTypes.h"
 #include "IndexTypes.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
@@ -145,13 +146,6 @@ struct VKAllocationCB
 		size_t alignment, bool cache);
 };
 
-enum OperatingSystem
-{
-	WINDOWS = 0,
-	LINUX = 1,
-	MAC = 2,
-};
-
 struct VKInstance
 {
 	VKInstance();
@@ -171,15 +165,15 @@ struct VKInstance
 
 	bool ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat requestedFormat, EntryHandle renderSurfaceIndex);
 
-	int CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData);
+	int CreateRenderInstance(void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData, RenderingInstanceFeatures* featuresRequest);
 
-	EntryHandle CreatePhysicalDevice(EntryHandle renderSurfaceIndex);
+	EntryHandle CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatureRequest* featureRequest, const char** deviceExtensions, uint32_t deviceExtCount);
 
 	VkSampleCountFlagBits GetMaxMSAALevels(EntryHandle gpuIndex);
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures);
 
-	bool isDeviceSuitable(VkPhysicalDevice device);
+	bool isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount);
 
 	EntryHandle CreateLogicalDevice(EntryHandle gpuIndex);
 
@@ -212,11 +206,14 @@ struct VKInstance
 
 	void AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
 
+	uint32_t GetLogicalDeviceExtensionsCount(LogicalDeviceFeatures* requestedFeatures);
+
+	void GetLogicalDeviceExtensions(LogicalDeviceFeatures* requestedFeatures, const char** actualHandles);
+
 	VkInstance instance = VK_NULL_HANDLE;
 	
 	const char** instanceLayers;
 	const char** instanceExtensions;
-	const char** deviceExtensions;
 
 	uintptr_t instanceTempMemory;
 	uintptr_t instancePerMemory;
@@ -236,7 +233,6 @@ struct VKInstance
 
 	uint32_t instanceExtCount;
 	uint32_t instanceLayerCount;
-	uint32_t deviceExtCount;
 	uint32_t handleBumpCounter;
 };
 

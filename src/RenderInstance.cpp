@@ -441,6 +441,49 @@ namespace API
 
 		return state;
 	}
+
+	void ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(
+		const GPUFeatureRequest* request,
+		VkPhysicalDeviceFeatures2* features2,
+		VkPhysicalDeviceVulkan12Features* features12)
+	{
+	
+		features12->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		features12->pNext = nullptr;
+
+		features12->descriptorBindingPartiallyBound =
+			request->requireDescriptorBindingPartiallyBound ? VK_TRUE : VK_FALSE;
+		features12->descriptorBindingSampledImageUpdateAfterBind =
+			request->requireDescriptorBindingSampledImageUpdateAfterBind ? VK_TRUE : VK_FALSE;
+		features12->descriptorBindingUpdateUnusedWhilePending =
+			request->requireDescriptorBindingUpdateUnusedWhilePending ? VK_TRUE : VK_FALSE;
+		features12->descriptorBindingVariableDescriptorCount =
+			request->requireDescriptorBindingVariableDescriptorCount ? VK_TRUE : VK_FALSE;
+		features12->shaderSampledImageArrayNonUniformIndexing =
+			request->requireShaderSampledImageArrayNonUniformIndexing ? VK_TRUE : VK_FALSE;
+		features12->storageBuffer8BitAccess =
+			request->requireStorageBuffer8BitAccess ? VK_TRUE : VK_FALSE;
+		features12->drawIndirectCount =
+			request->requireDrawIndirectCount ? VK_TRUE : VK_FALSE;
+		features12->runtimeDescriptorArray =
+			request->requireRuntimeDescriptorArray ? VK_TRUE : VK_FALSE;
+
+		features2->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+		features2->pNext = features12;
+
+		features2->features.geometryShader =
+			request->requireGeometryShader ? VK_TRUE : VK_FALSE;
+		features2->features.textureCompressionBC =
+			request->requireTextureCompressionBC ? VK_TRUE : VK_FALSE;
+		features2->features.tessellationShader =
+			request->requireTessellationShader ? VK_TRUE : VK_FALSE;
+		features2->features.samplerAnisotropy =
+			request->requireSamplerAnisotropy ? VK_TRUE : VK_FALSE;
+		features2->features.multiDrawIndirect =
+			request->requireMultiDrawIndirect ? VK_TRUE : VK_FALSE;
+		features2->features.wideLines =
+			request->requireWideLines ? VK_TRUE : VK_FALSE;
+	}
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
@@ -2462,7 +2505,6 @@ int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* sub
 	return currentGraphInstance;
 }
 
-
 void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentGraphCount)
 {
 	this->windowMan = window;
@@ -2484,15 +2526,61 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 
 	VKInstanceDebugData* vkDebugDataTemp = &vkDebugData;
 
-	vkInstance->CreateRenderInstance(WINDOWS, instanceDataHead, 16*KiB, 256*KiB, vkDebugDataTemp);
+	RenderingInstanceFeatures instanceFeaturesRequest{};
+
+	instanceFeaturesRequest.useSurface = true;
+	instanceFeaturesRequest.useSwapChainMaintenance = true;
+	instanceFeaturesRequest.useValidation = true;
+	instanceFeaturesRequest.useDebugExt = true;
+	instanceFeaturesRequest.windowManagementType = WindowManagementType::WINDOWS32;
+
+	vkInstance->CreateRenderInstance(instanceDataHead, 16*KiB, 256*KiB, vkDebugDataTemp, &instanceFeaturesRequest);
 
 	OSWindowInternalData data;
 
 	windowMan->GetInternalData(&data);
 
+	GPUFeatureRequest request{};
+
+	request.desiredMaxImageWidth = 4096;
+	request.desiredMaxImageHeight = 4096;
+	request.deviceType = DISCRETE | INTEGRATED;
+	request.requireDescriptorBindingPartiallyBound = true;
+	request.requireDescriptorBindingSampledImageUpdateAfterBind = true;
+	request.requireDescriptorBindingUpdateUnusedWhilePending = true;
+	request.requireDescriptorBindingVariableDescriptorCount = true;
+	request.requireShaderSampledImageArrayNonUniformIndexing = true;
+	request.requireStorageBuffer8BitAccess = true;
+	request.requireDrawIndirectCount = true;
+	request.requireRuntimeDescriptorArray = true;
+	request.requireGeometryShader = false;
+	request.requireTextureCompressionBC = true;
+	request.requireTessellationShader = false;
+	request.requireSamplerAnisotropy = true;
+	request.requireMultiDrawIndirect = true;
+	request.requireWideLines = true;
+
+	LogicalDeviceFeatures deviceFeatures{};
+
+	deviceFeatures.useSPVDebugInfo = true;
+	deviceFeatures.useSPVDrawParameters = true;
+	deviceFeatures.useSwapChain = true;
+	deviceFeatures.useSwapChainMaintenance = true;
+
+	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(&deviceFeatures);
+
+	const char** deviceFeatureNames = (const char**)cacheAllocator->Allocate(sizeof(char*) * deviceExtNameCount);
+
+	vkInstance->GetLogicalDeviceExtensions(&deviceFeatures, deviceFeatureNames);
+
+	VkPhysicalDeviceVulkan12Features features12{};
+	VkPhysicalDeviceFeatures2 features2{};
+
+	API::ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(&request, &features2, &features12);
+
 	renderSurfaceIndex = vkInstance->CreateWindowedSurface(data.inst, data.wnd);
-	physicalIndex = vkInstance->CreatePhysicalDevice(renderSurfaceIndex);
-	deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);;
+	physicalIndex = vkInstance->CreatePhysicalDevice(renderSurfaceIndex, &request, deviceFeatureNames, deviceExtNameCount);
+	deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);
 
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
@@ -2543,34 +2631,12 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	}
 
 
-	VkPhysicalDeviceVulkan12Features feature12{};
-	feature12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-	feature12.descriptorBindingPartiallyBound = VK_TRUE;
-	feature12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
-	feature12.descriptorBindingUpdateUnusedWhilePending = VK_TRUE;
-	feature12.descriptorBindingVariableDescriptorCount = VK_TRUE;
-	feature12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-	feature12.storageBuffer8BitAccess = VK_TRUE;
-	feature12.drawIndirectCount = VK_TRUE;
-	feature12.runtimeDescriptorArray = VK_TRUE;
-
-	VkPhysicalDeviceFeatures2 features2{};
-	features2.pNext = &feature12;
-	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-	features2.features.geometryShader = VK_TRUE;
-	features2.features.textureCompressionBC = VK_TRUE;
-	features2.features.tessellationShader = VK_TRUE;
-	features2.features.samplerAnisotropy = VK_TRUE;
-	features2.features.multiDrawIndirect = VK_TRUE;
-	features2.features.wideLines = VK_TRUE;
-
 	void* driverDeviceDataHead = storageAllocator->Allocate((12 * MiB) + (16 * KiB));
 	void* deviceDataHead = storageAllocator->Allocate(64 * KiB + (96 * KiB) + (16 * KiB) + 64);
 
-	majorDevice->CreateLogicalDevice(vkInstance->instanceLayers,
-		vkInstance->instanceLayerCount,
-		vkInstance->deviceExtensions,
-		vkInstance->deviceExtCount,
+	majorDevice->CreateLogicalDevice(
+		deviceFeatureNames, 
+		deviceExtNameCount,
 		&features2,
 		queueIndices.data(),
 		queueCounts.data(),

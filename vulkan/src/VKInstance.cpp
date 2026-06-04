@@ -9,14 +9,31 @@
 #endif
 
 
+static uint32_t ConvertGPUDeviceTypeToVkPhysicalDeviceType(uint32_t type)
+{
+	uint32_t retType = 0;
+	
+	if (type & GPUDeviceType::INTEGRATED)	
+		retType |= (1<<VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU);
+
+	if (type & GPUDeviceType::DISCRETE)
+		retType |= (1<<VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU);
+	
+	if (type & GPUDeviceType::VIRTUAL)
+		retType |= (1<<VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU);
+
+	if (type & GPUDeviceType::CPU)
+		retType |= (1<<VK_PHYSICAL_DEVICE_TYPE_CPU);
+	
+	return retType;
+}
+
 VKInstance::VKInstance()
 	: 
 	instanceLayers(nullptr),
 	instanceExtensions(nullptr),
-	deviceExtensions(nullptr),
 	instanceExtCount(0),
 	instanceLayerCount(0),
-	deviceExtCount(0),
 	instanceTempMemory(0),
 	instanceTempOffset(0),
 	instanceTempSize(0),
@@ -230,7 +247,7 @@ double VKInstance::GetTimeStampPeriod(EntryHandle gpuIndex)
 	return timestampPeriod;
 }
 
-int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData)
+int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData, RenderingInstanceFeatures* featuresRequest)
 {
 	VkResult vkResult = VK_SUCCESS;
 
@@ -254,24 +271,56 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &appInfoStruct;
 	
-	instanceExtCount = 5;
-
-	instanceLayerCount = 1;
+	instanceLayerCount = (featuresRequest->useValidation ? 1 : 0);
 
 	instanceLayers = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*)*instanceLayerCount));
 
-	instanceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * instanceExtCount));
-
 	instanceLayers[0] = "VK_LAYER_KHRONOS_validation";
 
+	instanceExtCount = 0;
 
-	instanceExtensions[0] = VK_KHR_SURFACE_EXTENSION_NAME;
-	instanceExtensions[1] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+	if (featuresRequest->useSurface)
+	{
+		instanceExtCount += 2;
+	}
 
-	instanceExtensions[2] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-	instanceExtensions[3] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
-	instanceExtensions[4] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
-//	instanceExtensions[5] = VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME;
+	if (featuresRequest->useSwapChainMaintenance)
+	{
+		instanceExtCount += 2;
+	}
+
+	if (featuresRequest->useDebugExt)
+	{
+		instanceExtCount += 1;
+	}
+
+	instanceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * instanceExtCount));
+
+	uint32_t instIndex = 0;
+
+	if (featuresRequest->useSurface)
+	{
+		instanceExtensions[instIndex++] = VK_KHR_SURFACE_EXTENSION_NAME;
+		switch (featuresRequest->windowManagementType)
+		{
+		case WindowManagementType::WINDOWS32:
+			instanceExtensions[instIndex++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+			break;
+		default:
+			return -1;
+		}
+	}
+
+	if (featuresRequest->useSwapChainMaintenance)
+	{
+		instanceExtensions[instIndex++] = VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME;
+		instanceExtensions[instIndex++] = VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME;
+	}
+
+	if (featuresRequest->useDebugExt)
+	{
+		instanceExtensions[instIndex++] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+	}
 	
 	uint32_t instExtensionRequired = 0;
 
@@ -342,7 +391,6 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 		}
 	}
 
-
 	createInfo.enabledExtensionCount = instanceExtCount;
 	createInfo.ppEnabledExtensionNames = instanceExtensions;
 
@@ -394,20 +442,8 @@ int VKInstance::CreateRenderInstance(OperatingSystem system, void* dataHead, uin
 	return 0;
 }
 
-EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface) 
+EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatureRequest* featureRequest, const char** deviceExtensions, uint32_t deviceExtCount)
 {
-	deviceExtCount = 4;
-
-	deviceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * deviceExtCount));
-
-	deviceExtensions[0] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-	
-	deviceExtensions[1] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
-
-	deviceExtensions[2] = VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME;
-
-	deviceExtensions[3] = VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME;
-
 	uint32_t physicalDeviceCount = 0;
 
 	VkResult vkResult = VK_SUCCESS; 
@@ -422,8 +458,14 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 
 	vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices);
 
-	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceFeatures deviceFeatures;
+	VkPhysicalDeviceProperties deviceProperties{};
+
+	VkPhysicalDeviceVulkan12Features features12{};
+	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
+	VkPhysicalDeviceFeatures2 features2{};
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.pNext = &features12;
 
 	int* scores = (int*)AllocFromInstanceCache(sizeof(int) * physicalDeviceCount);
 
@@ -433,9 +475,10 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 	{
 		VkPhysicalDevice potentGPU = physicalDevices[i];
 
-		GetPhysicalDevicePropertiesandFeatures(potentGPU, deviceProperties, deviceFeatures);
+		vkGetPhysicalDeviceFeatures2(potentGPU, &features2);
+		vkGetPhysicalDeviceProperties(potentGPU, &deviceProperties);
 
-		if (!isDeviceSuitable(potentGPU)) continue;
+		if (!isDeviceSuitable(potentGPU, deviceExtensions, deviceExtCount)) continue;
 
 		if (renderSurface != EntryHandle())
 		{
@@ -447,16 +490,78 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface)
 
 		int score = 0;
 
-		if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		if ((1<<deviceProperties.deviceType) & ConvertGPUDeviceTypeToVkPhysicalDeviceType(featureRequest->deviceType))
 		{
 			score = std::numeric_limits<short>::max();
 		}
 
 		score += deviceProperties.limits.maxImageDimension2D;
 
-		if (!deviceFeatures.textureCompressionBC ||
-			!deviceFeatures.samplerAnisotropy ||
-			!deviceFeatures.multiDrawIndirect)
+		if (deviceProperties.limits.maxImageDimension2D >= featureRequest->desiredMaxImageWidth ||
+			deviceProperties.limits.maxImageDimension2D >= featureRequest->desiredMaxImageHeight)
+		{
+			score += 1000;
+		}
+
+		bool meetsRequirements = true;
+
+		if (featureRequest->requireDescriptorBindingPartiallyBound &&
+			!features12.descriptorBindingPartiallyBound)
+			meetsRequirements = false;
+
+		if (featureRequest->requireDescriptorBindingSampledImageUpdateAfterBind &&
+			!features12.descriptorBindingSampledImageUpdateAfterBind)
+			meetsRequirements = false;
+
+		if (featureRequest->requireDescriptorBindingUpdateUnusedWhilePending &&
+			!features12.descriptorBindingUpdateUnusedWhilePending)
+			meetsRequirements = false;
+
+		if (featureRequest->requireDescriptorBindingVariableDescriptorCount &&
+			!features12.descriptorBindingVariableDescriptorCount)
+			meetsRequirements = false;
+
+		if (featureRequest->requireShaderSampledImageArrayNonUniformIndexing &&
+			!features12.shaderSampledImageArrayNonUniformIndexing)
+			meetsRequirements = false;
+
+		if (featureRequest->requireStorageBuffer8BitAccess &&
+			!features12.storageBuffer8BitAccess)
+			meetsRequirements = false;
+
+		if (featureRequest->requireDrawIndirectCount &&
+			!features12.drawIndirectCount)
+			meetsRequirements = false;
+
+		if (featureRequest->requireRuntimeDescriptorArray &&
+			!features12.runtimeDescriptorArray)
+			meetsRequirements = false;
+
+		if (featureRequest->requireGeometryShader &&
+			!features2.features.geometryShader)
+			meetsRequirements = false;
+
+		if (featureRequest->requireTextureCompressionBC &&
+			!features2.features.textureCompressionBC)
+			meetsRequirements = false;
+
+		if (featureRequest->requireTessellationShader &&
+			!features2.features.tessellationShader)
+			meetsRequirements = false;
+
+		if (featureRequest->requireSamplerAnisotropy &&
+			!features2.features.samplerAnisotropy)
+			meetsRequirements = false;
+
+		if (featureRequest->requireMultiDrawIndirect &&
+			!features2.features.multiDrawIndirect)
+			meetsRequirements = false;
+
+		if (featureRequest->requireWideLines &&
+			!features2.features.wideLines)
+			meetsRequirements = false;
+
+		if (!meetsRequirements)
 		{
 			score = std::numeric_limits<int>::min();
 		}
@@ -523,7 +628,7 @@ void VKInstance::GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device,
 	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
 }
 
-bool VKInstance::isDeviceSuitable(VkPhysicalDevice device)
+bool VKInstance::isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount)
 {
 	uint32_t extensionCount;
 
@@ -840,7 +945,7 @@ void* VKInstance::AllocFromInstanceCache(size_t size)
 	do {
 		desired = val + size;
 		out = val;
-		if ((val + size) >= instanceTempSize)
+		if (desired >= instanceTempSize)
 		{
 			out = 0;
 			desired = out + size;
@@ -955,4 +1060,56 @@ void VKInstance::AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecif
 
 	errorCode->internalErrorCode = internalErrorCode;
 	errorCode->vkResult = vulkSpecificResult;
+}
+
+uint32_t VKInstance::GetLogicalDeviceExtensionsCount(LogicalDeviceFeatures* requestedFeatures)
+{
+	uint32_t ldeviceExtCount = 0;
+
+	if (requestedFeatures->useSwapChain)
+	{
+		ldeviceExtCount++;
+	}
+
+	if (requestedFeatures->useSwapChainMaintenance)
+	{
+		ldeviceExtCount++;
+	}
+
+	if (requestedFeatures->useSPVDrawParameters)
+	{
+		ldeviceExtCount++;
+	}
+
+	if (requestedFeatures->useSPVDebugInfo)
+	{
+		ldeviceExtCount++;
+	}
+
+	return ldeviceExtCount;
+}
+
+void VKInstance::GetLogicalDeviceExtensions(LogicalDeviceFeatures* requestedFeatures, const char** actualHandles)
+{
+	uint32_t lDeviceIndex = 0;
+
+	if (requestedFeatures->useSwapChain)
+	{
+		actualHandles[lDeviceIndex++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+	}
+
+	if (requestedFeatures->useSwapChainMaintenance)
+	{
+		actualHandles[lDeviceIndex++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
+	}
+
+	if (requestedFeatures->useSPVDrawParameters)
+	{
+		actualHandles[lDeviceIndex++] = VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME;
+	}
+
+	if (requestedFeatures->useSPVDebugInfo)
+	{
+		actualHandles[lDeviceIndex++] = VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME;
+	}
 }
