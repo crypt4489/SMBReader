@@ -235,22 +235,18 @@ DeviceOwnedAllocator::DeviceOwnedAllocator() {
 
 void* DeviceOwnedAllocator::Alloc(size_t inSize)
 {
-	size_t val, desired, out;
-	val = writeHead.load(std::memory_order_acquire);
-	do 
+	size_t newHead;
+
+	newHead = writeHead + inSize;
+
+	if (newHead >= size)
 	{
-		desired = val + inSize;
+		return nullptr;
+	}
 
-		if (desired >= size)
-		{
-			return nullptr;
-		}
+	uintptr_t dest = memHead + writeHead;
 
-		out = val;
-
-	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_release, std::memory_order_relaxed));
-
-	uintptr_t dest = memHead + out;
+	writeHead = newHead;
 
 	memset((void*)dest, 0, inSize);
 
@@ -259,28 +255,19 @@ void* DeviceOwnedAllocator::Alloc(size_t inSize)
 
 void* DeviceOwnedAllocator::AllocWrapAround(size_t inSize)
 {
-	size_t val, desired, out;
-	val = writeHead.load(std::memory_order_acquire);
-	do 
+	size_t newHead, out = writeHead;
+
+	newHead = writeHead + inSize;
+
+	if (newHead >= size)
 	{
-		desired = val + inSize;
-		
-		out = val;
-
-		if (desired >= size)
-		{
-			out = 0;
-			desired = inSize;
-		}
-
-		if (desired > size)
-		{
-			return nullptr;
-		}
-
-	} while (!writeHead.compare_exchange_weak(val, desired, std::memory_order_release, std::memory_order_relaxed));
+		newHead = inSize;
+		out = 0;
+	}
 
 	uintptr_t dest = memHead + out;
+
+	writeHead = newHead;
 
 	memset((void*)dest, 0, inSize);
 
@@ -2007,10 +1994,14 @@ EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 		if (semaphoreHandles[i] == EntryHandle())
 		{
 			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
-			for (uint32_t j = 0; j <= i; j++)
-			{
-				vkDestroySemaphore(device, vkSemaHandle, nullptr);
+
+			for (uint32_t j = 0; j < i; j++)
+			{	
+				DestroySemaphore(semaphoreHandles[i]);
 			}
+
+			vkDestroySemaphore(device, vkSemaHandle, nullptr);
+
 			return nullptr;
 		}
 	}
@@ -2331,7 +2322,7 @@ void VKDevice::DestroyDevice()
 			break;
 
 		case VulkQueryPool:
-			DestoryQueryPool(handle);
+			DestroyQueryPool(handle);
 			break;
 		case VulkMaxEnum:
 		default:
@@ -2396,7 +2387,7 @@ void VKDevice::DestroyRenderTarget(EntryHandle handle)
 	ReturnHandleObject(handle);
 }
 
-void VKDevice::DestoryQueryPool(EntryHandle handle)
+void VKDevice::DestroyQueryPool(EntryHandle handle)
 {
 	VkQueryPool pool = GetQueryPool(handle);
 
@@ -2549,7 +2540,7 @@ BufferView* VKDevice::GetBufferViewContainer(EntryHandle handle)
 	if (objHandle.type != VulkBufferView || !objHandle.memoryLocation)
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BUFFER_VIEW_CONTAINER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
-		return VK_NULL_HANDLE;
+		return nullptr;
 	}
 
 	BufferView* viewHandles = reinterpret_cast<BufferView*>(objHandle.memoryLocation);
@@ -3460,7 +3451,7 @@ int VKDevice::WriteToDeviceBuffer(
 	EntryHandle queueManagerIndex
 )
 {
-	BufferAlloc* stagingBufferAlloc = GetBufferAlloc(deviceIndex);
+	BufferAlloc* stagingBufferAlloc = GetBufferAlloc(stagingBufferIndex);
 
 	if (!stagingBufferAlloc)
 		return -1;

@@ -171,7 +171,7 @@ struct VKInstance
 
 	VkSampleCountFlagBits GetMaxMSAALevels(EntryHandle gpuIndex);
 
-	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures);
+	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties* deviceProperties, VkPhysicalDeviceFeatures* deviceFeatures);
 
 	bool isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount);
 
@@ -217,8 +217,8 @@ struct VKInstance
 
 	uintptr_t instanceTempMemory;
 	uintptr_t instancePerMemory;
-	std::atomic<size_t> instanceTempOffset = 0;
-	std::atomic<size_t> instancePerOffset = 0;
+	size_t instanceTempOffset = 0;
+	size_t instancePerOffset = 0;
 	size_t instancePerSize;
 	size_t instanceTempSize;
 

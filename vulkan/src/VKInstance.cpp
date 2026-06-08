@@ -181,13 +181,13 @@ bool VKInstance::ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat r
 	if (retCode == -1)
 	{
 		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_FORMAT_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[0]);
-		return {};
+		return false;
 	}
 
 	if (retCode == -2)
 	{
 		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_PRESENT_MODE_COUNT) | INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED, vkResult[1]);
-		return {};
+		return false;
 	}
 
 	VkSurfaceFormatKHR* formatsDataSpace = (VkSurfaceFormatKHR*)AllocFromInstanceCache(sizeof(VkSurfaceFormatKHR) * formatCount);
@@ -478,7 +478,8 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatu
 		vkGetPhysicalDeviceFeatures2(potentGPU, &features2);
 		vkGetPhysicalDeviceProperties(potentGPU, &deviceProperties);
 
-		if (!isDeviceSuitable(potentGPU, deviceExtensions, deviceExtCount)) continue;
+		if (!isDeviceSuitable(potentGPU, deviceExtensions, deviceExtCount)) 
+			continue;
 
 		if (renderSurface != EntryHandle())
 		{
@@ -491,17 +492,13 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatu
 		int score = 0;
 
 		if ((1<<deviceProperties.deviceType) & ConvertGPUDeviceTypeToVkPhysicalDeviceType(featureRequest->deviceType))
-		{
 			score = std::numeric_limits<short>::max();
-		}
 
 		score += deviceProperties.limits.maxImageDimension2D;
 
 		if (deviceProperties.limits.maxImageDimension2D >= featureRequest->desiredMaxImageWidth ||
 			deviceProperties.limits.maxImageDimension2D >= featureRequest->desiredMaxImageHeight)
-		{
 			score += 1000;
-		}
 
 		bool meetsRequirements = true;
 
@@ -562,9 +559,7 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatu
 			meetsRequirements = false;
 
 		if (!meetsRequirements)
-		{
 			score = std::numeric_limits<int>::min();
-		}
 
 		scores[i] = score;
 	}
@@ -596,9 +591,7 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatu
 	EntryHandle allocIndexInStorage = AddTypedHandleToPool(PHYSICAL_DEVICE, gpuAlloc);
 
 	if (allocIndexInStorage == EntryHandle())
-	{
 		AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_GPU_ALLOCATION) | INSTANCE_HANDLE_EXHAUSTION, VK_RESULT_MAX_ENUM);
-	}
 
 	return allocIndexInStorage;
 }
@@ -621,11 +614,13 @@ VkSampleCountFlagBits VKInstance::GetMaxMSAALevels(EntryHandle gpuIndex)
 	return VK_SAMPLE_COUNT_1_BIT;
 }
 
-void VKInstance::GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties& deviceProperties, VkPhysicalDeviceFeatures& deviceFeatures)
+void VKInstance::GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties* deviceProperties, VkPhysicalDeviceFeatures* deviceFeatures)
 {
-	vkGetPhysicalDeviceProperties(device, &deviceProperties);
+	if (deviceProperties)
+		vkGetPhysicalDeviceProperties(device, deviceProperties);
 
-	vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+	if (deviceFeatures)
+		vkGetPhysicalDeviceFeatures(device, deviceFeatures);
 }
 
 bool VKInstance::isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount)
@@ -648,15 +643,11 @@ bool VKInstance::isDeviceSuitable(VkPhysicalDevice device, const char** deviceEx
 			VkExtensionProperties prop2 = availableExtensions[j];
 	
 			if (strcmp(ext, prop2.extensionName) == 0)
-			{
 				break;
-			}
 		}
 
 		if (j == extensionCount)
-		{
 			return false;
-		}
 	}
 
 	
@@ -677,7 +668,7 @@ EntryHandle VKInstance::CreateLogicalDevice(EntryHandle gpuIndex)
 		return logicalDeviceHandle;
 	}
 
-	device = std::construct_at(device, gpu->gpuDeviceHandle, this);
+	std::construct_at(device, gpu->gpuDeviceHandle, this);
 
 	uint32_t gpuOwnerIndex = gpu->logicalDeviceCount++;
 
@@ -691,9 +682,7 @@ VkPhysicalDevice VKInstance::GetPhysicalDevice(EntryHandle gpuIndex)
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
 
 	if (!handlePoolObject || handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
-	{
 		return VK_NULL_HANDLE;
-	}
 
 	PhysicalDeviceAllocation* alloc = (PhysicalDeviceAllocation*)handlePoolObject->handlePtr;
 
@@ -705,9 +694,7 @@ PhysicalDeviceAllocation* VKInstance::GetPhysicalDeviceAlloc(EntryHandle gpuInde
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(gpuIndex);
 
 	if (!handlePoolObject || handlePoolObject->handleType != PHYSICAL_DEVICE || !handlePoolObject->handlePtr)
-	{
 		return VK_NULL_HANDLE;
-	}
 
 	PhysicalDeviceAllocation* alloc = (PhysicalDeviceAllocation*)handlePoolObject->handlePtr;
 
@@ -719,9 +706,7 @@ VkSurfaceKHR VKInstance::GetRenderSurface(EntryHandle renderSurfaceIndex)
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(renderSurfaceIndex);
 
 	if (!handlePoolObject || handlePoolObject->handleType != RENDER_SURFACE || !handlePoolObject->handlePtr)
-	{
 		return VK_NULL_HANDLE;
-	}
 
 	VkSurfaceKHR surface = (VkSurfaceKHR)handlePoolObject->handlePtr;
 
@@ -733,9 +718,7 @@ VKDevice* VKInstance::GetLogicalDevice(EntryHandle deviceIndex)
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(deviceIndex);
 
 	if (!handlePoolObject || handlePoolObject->handleType != LOGICAL_DEVICE || !handlePoolObject->handlePtr)
-	{
 		return nullptr;
-	}
 
 	VKDevice* device = (VKDevice*)handlePoolObject->handlePtr;
 
@@ -919,9 +902,8 @@ int VKInstance::GetMinimumStorageBufferAlignment(EntryHandle gpuIndex)
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 
 	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceFeatures deviceFeatures;
 
-	GetPhysicalDevicePropertiesandFeatures(gpu, deviceProperties, deviceFeatures);
+	GetPhysicalDevicePropertiesandFeatures(gpu, &deviceProperties, nullptr);
 
 	return static_cast<int>(deviceProperties.limits.minStorageBufferOffsetAlignment);
 }
@@ -931,44 +913,39 @@ int VKInstance::GetMinimumUniformBufferAlignment(EntryHandle gpuIndex)
 	VkPhysicalDevice gpu = GetPhysicalDevice(gpuIndex);
 
 	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceFeatures deviceFeatures;
 
-	GetPhysicalDevicePropertiesandFeatures(gpu, deviceProperties, deviceFeatures);
+	GetPhysicalDevicePropertiesandFeatures(gpu, &deviceProperties, nullptr);
 
 	return static_cast<int>(deviceProperties.limits.minUniformBufferOffsetAlignment);
 }
 
 void* VKInstance::AllocFromInstanceCache(size_t size)
 {
-	size_t val, desired, out;
-	val = instanceTempOffset.load(std::memory_order_relaxed);
-	do {
-		desired = val + size;
-		out = val;
-		if (desired >= instanceTempSize)
-		{
-			out = 0;
-			desired = out + size;
-		}
-	} while (!instanceTempOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+	size_t newHead = instanceTempOffset + size, out = instanceTempOffset;
 
+	if (newHead >= instanceTempSize)
+	{
+		out = 0;
+		newHead = size;
+	}
 
 	uintptr_t head = instanceTempMemory + out;
+
+	instanceTempOffset = newHead;
 
 	return reinterpret_cast<void*>(head);
 }
 
 void* VKInstance::AllocFromInstanceData(size_t size)
 {
-	size_t val, desired, out;
-	val = instancePerOffset.load(std::memory_order_relaxed);
-	do {
+	size_t newHead = instancePerOffset+size, out = instancePerOffset;
 
-		desired = val + size;
-		out = val;
-	} while (!instancePerOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
+	if (newHead >= instancePerSize)
+		return nullptr;
 
 	uintptr_t head = instancePerMemory + out;
+
+	instancePerOffset = newHead;
 
 	return reinterpret_cast<void*>(head);
 }

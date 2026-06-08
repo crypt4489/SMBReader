@@ -225,7 +225,7 @@ struct ShaderHandle
 struct DeviceOwnedAllocator
 {
 	uintptr_t memHead;
-	std::atomic<size_t> writeHead;
+	size_t writeHead;
 	size_t size;
 
 	DeviceOwnedAllocator();
@@ -628,7 +628,7 @@ struct VKDevice
 
 	void DestroyRenderTarget(EntryHandle handle);
 
-	void DestoryQueryPool(EntryHandle handle);
+	void DestroyQueryPool(EntryHandle handle);
 
 	void DestroySampler(EntryHandle handle);
 
