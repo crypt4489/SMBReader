@@ -25,6 +25,8 @@
 #define MIN_TLSF_BLOCK_SIZE_IN_BYTES 32
 #define MIN_TLSF_BLOCK_SIZE_MSB 5
 
+static_assert(sizeof(BlockHeader) == MIN_TLSF_BLOCK_SIZE_IN_BYTES);
+
 static void SegregateList(TLSFMain* tlsf_struct, unsigned int size, unsigned int* fli, unsigned int* sli);
 static void Insert(TLSFMain* tlsf_struct, BlockHeader* block, unsigned int fli, unsigned int sli);
 static int findLSB(unsigned int input);
@@ -61,7 +63,7 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 
 	unsigned int totalSLIBitMapSize = sizeof(unsigned int) * tlsf_struct->numberofFLILevelBitmaps;
 
-	unsigned int freeListsAlignmentMakeup = (unsigned int)((((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) + (alignof(BlockHeader) - 1)) & ~(alignof(BlockHeader) - 1)) - ((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup)));
+	unsigned int freeListsAlignmentMakeup = (unsigned int)((((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) + (alignof(BlockHeader*) - 1)) & ~(alignof(BlockHeader*) - 1)) - ((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup)));
 
 	unsigned int totalSizeOfFreeLists = sizeof(BlockHeader*) * tlsf_struct->numberofBlockPerFLILevel * tlsf_struct->numberofFLILevelBitmaps;
 
@@ -76,6 +78,8 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 	memset(tlsf_struct->freeListPerBucket, 0, totalSizeOfFreeLists);
 
 	memHead += (totalSizeOfFreeLists + freeListsAlignmentMakeup);
+
+	memHead = (memHead + MIN_TLSF_BLOCK_SIZE_IN_BYTES - 1) & ~(MIN_TLSF_BLOCK_SIZE_IN_BYTES - 1);
 
 	unsigned int dataUsedSize = (unsigned int)(memHead - memStart);
 
@@ -156,7 +160,7 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 {
 	unsigned int fli = 0, sli = 0, fli2 = 0, sli2 = 0;
 
-	unsigned int possibleAlignment = 0, strideSize = 0;
+	unsigned int possibleAlignment = 0, strideSize = 0, originalSizeRequest = requestedSize;
 
 	BlockHeader* header = ((BlockHeader*)memaddress) - 1;
 
@@ -177,7 +181,7 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 	if (!ValidateCheckSum(header))
 		return nullptr;
 
-	if (GET_BLOCK_HEADER_SIZE_ENCODING(header->size) >= requestedSize)
+	if (GET_BLOCK_HEADER_SIZE_ENCODING(header->size) == requestedSize)
 		return memaddress;
 
 	uintptr_t addrPtrT = (uintptr_t)header;
@@ -202,6 +206,65 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 			blockAfterNext = (BlockHeader*)((uintptr_t)nextBlock + GET_BLOCK_HEADER_SIZE_ENCODING(nextBlock->size));
 	}
 
+	if (GET_BLOCK_HEADER_SIZE_ENCODING(header->size) > requestedSize)
+	{
+		int smallBlockSize = GET_BLOCK_HEADER_SIZE_ENCODING(header->size);
+
+		BlockHeader* remaining = nullptr;
+
+		if (nextBlock)
+		{
+			if (GET_BLOCK_HEADER_FREE_FLAG(nextBlock->size))
+			{
+				smallBlockSize += GET_BLOCK_HEADER_SIZE_ENCODING(nextBlock->size);
+
+				RemoveNodeFromFreeList(tlsf_struct, nextBlock);
+
+				remaining = Split(header, smallBlockSize, requestedSize);
+
+				if (blockAfterNext)
+				{
+					blockAfterNext->prevPhysBlock = remaining;
+					ComputeBlockChecksum(blockAfterNext);
+				}
+
+				if (nextIsLastSetBlock)
+					SET_BLOCK_HEADER_LAST_BLOCK_FLAG(remaining->size);
+			}
+			else
+			{
+				remaining = Split(header, smallBlockSize, requestedSize);
+
+				nextBlock->prevPhysBlock = remaining;
+
+				ComputeBlockChecksum(nextBlock);
+			}
+		}
+		else
+		{
+			remaining = Split(header, smallBlockSize, requestedSize);
+
+			SET_BLOCK_HEADER_LAST_BLOCK_FLAG(remaining->size);
+		}
+
+		SET_BLOCK_HEADER_FREE_FLAG(remaining->size);
+
+		remaining->prevPhysBlock = header;
+		SegregateList(tlsf_struct, GET_BLOCK_HEADER_SIZE_ENCODING(remaining->size), &fli2, &sli2);
+		Insert(tlsf_struct, remaining, fli2, sli2);
+
+		ComputeBlockChecksum(remaining);
+
+		CLEAR_BLOCK_HEADER_SIZE_ENCODING(header->size);
+		CLEAR_BLOCK_HEADER_LAST_BLOCK_FLAG(header->size);
+
+		SET_BLOCK_HEADER_SIZE_ENCODING(header->size, requestedSize);
+
+		ComputeBlockChecksum(header);
+
+		return memaddress;
+	}
+
 	if (nextBlock)
 	{
 		if (GET_BLOCK_HEADER_FREE_FLAG(nextBlock->size))
@@ -210,13 +273,17 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 
 			int nextBlockSize = GET_BLOCK_HEADER_SIZE_ENCODING(nextBlockOriginalEncoding);
 
-			if ((nextBlockSize + currentBlockSize) >= requestedSize)
+			unsigned int potentialNextCurrBlockSize = (nextBlockSize + currentBlockSize);
+
+			if (potentialNextCurrBlockSize >= requestedSize)
 			{
 				BlockHeader* forBlockAfterNext = header;
 
-				if ((nextBlockSize + currentBlockSize) > requestedSize)
+				RemoveNodeFromFreeList(tlsf_struct, nextBlock);
+
+				if (potentialNextCurrBlockSize > requestedSize)
 				{
-					BlockHeader* remaining = Split(header, (nextBlockSize + currentBlockSize), requestedSize);
+					BlockHeader* remaining = Split(header, potentialNextCurrBlockSize, requestedSize);
 
 					forBlockAfterNext = remaining;
 
@@ -226,23 +293,20 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 					Insert(tlsf_struct, remaining, fli2, sli2);
 
 					if (nextIsLastSetBlock)
-					{
 						SET_BLOCK_HEADER_LAST_BLOCK_FLAG(remaining->size);
-					}
 
 					ComputeBlockChecksum(remaining);
 				}
-
-				RemoveNodeFromFreeList(tlsf_struct, nextBlock);
+				else
+				{
+					if (nextIsLastSetBlock)
+						SET_BLOCK_HEADER_LAST_BLOCK_FLAG(header->size);
+				}
 
 				if (blockAfterNext)
 				{
 					blockAfterNext->prevPhysBlock = forBlockAfterNext;
 					ComputeBlockChecksum(blockAfterNext);
-				}
-				else
-				{
-					SET_BLOCK_HEADER_LAST_BLOCK_FLAG(header->size);
 				}
 
 				CLEAR_BLOCK_HEADER_SIZE_ENCODING(header->size);
@@ -259,9 +323,9 @@ static void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int reque
 	Free(tlsf_struct, memaddress);
 
 	if (possibleAlignment)
-		return Allocate(tlsf_struct, requestedSize, possibleAlignment);
+		return Allocate(tlsf_struct, originalSizeRequest, possibleAlignment);
 	else
-		return Allocate(tlsf_struct, requestedSize);
+		return Allocate(tlsf_struct, originalSizeRequest);
 }
 
 void* Allocate(TLSFMain* tlsf_struct, unsigned int size, unsigned int alignment)
@@ -357,6 +421,8 @@ void Free(TLSFMain* tlsf_struct, void* address)
 
 	unsigned int nextIsLastSetBlock = 0;
 
+	SET_BLOCK_HEADER_FREE_FLAG(header->size);
+
 	if (!isCurrentBlockLastBlock)
 	{
 		nextBlock = (BlockHeader*)(addrPtrT + freeBlockSize);
@@ -372,7 +438,6 @@ void Free(TLSFMain* tlsf_struct, void* address)
 		if (GET_BLOCK_HEADER_FREE_FLAG(prevBlock->size))
 		{
 			RemoveNodeFromFreeList(tlsf_struct, prevBlock);
-			CLEAR_BLOCK_HEADER_FREE_FLAG(prevBlock->size);
 			freeBlockSize += GET_BLOCK_HEADER_SIZE_ENCODING(prevBlock->size);
 			header = prevBlock;
 		}
@@ -383,7 +448,7 @@ void Free(TLSFMain* tlsf_struct, void* address)
 		if (GET_BLOCK_HEADER_FREE_FLAG(nextBlock->size))
 		{
 			RemoveNodeFromFreeList(tlsf_struct, nextBlock);
-			CLEAR_BLOCK_HEADER_FREE_FLAG(nextBlock->size);
+
 			freeBlockSize += GET_BLOCK_HEADER_SIZE_ENCODING(nextBlock->size);
 
 			if (nextIsLastSetBlock)
@@ -402,7 +467,7 @@ void Free(TLSFMain* tlsf_struct, void* address)
 
 	SET_BLOCK_HEADER_SIZE_ENCODING(header->size, freeBlockSize);
 
-	SET_BLOCK_HEADER_FREE_FLAG(header->size);
+	ComputeBlockChecksum(header);
 
 	unsigned int fli = 0, sli = 0;
 
@@ -476,13 +541,13 @@ BlockHeader* FindSuitableBlock(TLSFMain* tlsf_struct, unsigned int fli, unsigned
 	if (tlsf_struct->freeListPerBucket[fli_normalized * tlsf_struct->numberofBlockPerFLILevel + sli])
 		return tlsf_struct->freeListPerBucket[fli_normalized * tlsf_struct->numberofBlockPerFLILevel + sli];
 
-	unsigned int sl_map = tlsf_struct->sliBitMaps[fli_normalized] & (~0 << (sli + 1));
+	unsigned int sl_map = tlsf_struct->sliBitMaps[fli_normalized] & (~0u << (sli + 1));
 
 	int next_fli = fli_normalized;
 	int next_sli = findLSB(sl_map);
 
 	if (next_sli < 0) {
-		unsigned int fl_map = (tlsf_struct->fliBitmap & (~0 << (fli_normalized + 1)));
+		unsigned int fl_map = (tlsf_struct->fliBitmap & (~0u << (fli_normalized + 1)));
 		next_fli = findLSB(fl_map);
 		if (next_fli >= 0)
 			next_sli = findLSB(tlsf_struct->sliBitMaps[next_fli]);

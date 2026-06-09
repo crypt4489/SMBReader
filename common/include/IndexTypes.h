@@ -2,42 +2,8 @@
 #include <cstdint>
 
 #define KiB 1024
-#define MiB 1024 * KiB
-#define GiB 1024 * MiB
-
-struct DeviceIndex
-{
-
-	DeviceIndex() = default;
-	explicit DeviceIndex(uint8_t _id) : ID(_id) {};
-	explicit DeviceIndex(uint32_t _id) : ID(static_cast<uint8_t>(_id)) {};
-	explicit DeviceIndex(size_t _id) : ID(static_cast<uint8_t>(_id)) {};
-
-	constexpr DeviceIndex& operator=(const DeviceIndex&) = default;
-	DeviceIndex(const DeviceIndex& other) = default;
-
-	//keep moves
-	DeviceIndex(DeviceIndex&&) = default;
-	constexpr DeviceIndex& operator=(DeviceIndex&&) = default;
-
-	constexpr auto operator()() const {
-		return ID;
-	}
-
-	constexpr operator size_t() const {
-		return ID;
-	}
-
-	constexpr operator uint32_t() const {
-		return ID;
-	}
-
-	constexpr bool operator==(const DeviceIndex& other) const {
-		return this->ID == other.ID;
-	}
-
-	uint8_t ID = ~0ui8;
-};
+#define MiB (1024 * KiB)
+#define GiB (1024 * MiB)
 
 struct QueueIndex
 {
@@ -78,7 +44,6 @@ struct QueueIndex
 
 	uint8_t ID = ~0ui8;
 };
-
 
 struct EntryHandle
 {

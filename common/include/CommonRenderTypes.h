@@ -1,8 +1,8 @@
 #pragma once
 #include "IndexTypes.h"
 
-#define UNBOUNDED_DESCRIPTOR_ARRAY ((uint32_t)1 << 31)
-#define DESCRIPTOR_COUNT_MASK 0x7FFFFFFF
+#define UNBOUNDED_DESCRIPTOR_ARRAY (1u << 31)
+#define DESCRIPTOR_COUNT_MASK (0x7FFFFFFF)
 
 enum RasterizerTest
 {
