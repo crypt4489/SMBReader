@@ -32,4 +32,4 @@ void Destroy(TLSFMain* tlsf_struct);
 void* Allocate(TLSFMain* tlsf_struct, unsigned int size);
 void* Allocate(TLSFMain* tlsf_struct, unsigned int size, unsigned int alignment);
 void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int requestedSize);
-void Free(TLSFMain* tlsf_struct, void* address);
+void TLSFFree(TLSFMain* tlsf_struct, void* address);

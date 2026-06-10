@@ -742,17 +742,13 @@ VkDebugUtilsMessengerEXT VKInstance::GetDebugMessenger(EntryHandle debugMessenge
 void VKInstance::SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, size_t cacheSize)
 {
 	uintptr_t tempMemoryHead = (uintptr_t)dataHead;
+	uintptr_t memStart = tempMemoryHead;
 
 	allocator = (VKAllocationCB*)(tempMemoryHead);
 
 	tempMemoryHead += sizeof(VKAllocationCB);
 
-	allocator->instanceDataSize = totalDataSize-cacheSize;
-	allocator->commandDataSize = cacheSize;
-	allocator->instanceDataOffset = 0;
-	allocator->commandDataOffset = 0;
-	allocator->instanceData = (uint8_t*)tempMemoryHead;
-	allocator->commandData = allocator->instanceData + allocator->instanceDataSize;
+	Initialize(&allocator->tlsfMain, (void*)tempMemoryHead, totalDataSize - (tempMemoryHead - memStart), 5);
 }
 
 
@@ -793,108 +789,21 @@ void* VKAllocationCB::RealAlloc(size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
-	uintptr_t head = 0;
-	size_t val, desired, out;
-	size = (size + alignment - 1) & ~(alignment - 1);
-	if (allocationScope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)
-	{
-		head = (uintptr_t)commandData;
-
-		val = commandDataOffset.load(std::memory_order_relaxed);
-
-		do {
-
-			desired = val + size;
-			out = val;
-			if (desired >= commandDataSize)
-			{
-				out = 0;
-				desired = out + size;
-			}
-		} while (!commandDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
-		
-		head += out;
-	}
-	else 
-	{
-		head = (uintptr_t)instanceData;
-		
-		val = instanceDataOffset.load(std::memory_order_relaxed);
-
-		do {
-			desired = val + size;
-			out = val;
-		} while (!instanceDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
-
-		head += out;
-	}
-	
-	return (void*)head;
+	void* addr = Allocate(&tlsfMain, size, alignment);
+	return addr;
 }
 
 void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
-	void* newaddr = RealAlloc(size, alignment, allocationScope);
-	memcpy(newaddr, original, size);
+	void* newaddr = Realloc(&tlsfMain, original, size);
 	return newaddr;
 }
 
 void VKAllocationCB::RealFree(void* memory)
 {
-
-}
-
-void* VKAllocationCB::RealAlloc(size_t size,
-	size_t alignment,
-	bool cache)
-{
-	uintptr_t head = 0;
-	size_t val, desired, out;
-	size = (size + alignment - 1) & ~(alignment - 1);
-	if (cache)
-	{
-		head = (uintptr_t)commandData;
-
-		val = commandDataOffset.load(std::memory_order_relaxed);
-
-		do {
-			desired = val + size;
-			out = val;
-			if (desired >= commandDataSize)
-			{
-				out = 0;
-				desired = out + size;
-			}
-		} while (!commandDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
-
-		head += out;
-	}
-	else
-	{
-		head = (uintptr_t)instanceData;
-
-		val = instanceDataOffset.load(std::memory_order_relaxed);
-
-		do {
-			desired = val + size;
-			out = val;
-		} while (!instanceDataOffset.compare_exchange_weak(val, desired, std::memory_order_relaxed, std::memory_order_relaxed));
-
-		head += out;
-	}
-
-	return (void*)head;
-}
-
-void* VKAllocationCB::RealRealloc(void* original, size_t size,
-	size_t alignment,
-	bool cache)
-{
-	void* newaddr = RealAlloc(size, alignment, cache);
-	memcpy(newaddr, original, size);
-	return newaddr;
+	TLSFFree(&tlsfMain, memory);
 }
 
 int VKInstance::GetMinimumStorageBufferAlignment(EntryHandle gpuIndex)

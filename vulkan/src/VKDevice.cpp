@@ -1482,15 +1482,7 @@ int VKDevice::CreateLogicalDevice(
 	deviceDriverAllocator = (VKAllocationCB*)(tempDeviceHead);
 	tempDeviceHead += sizeof(VKAllocationCB);
 
-	deviceDriverAllocator->commandDataSize = driverPerCache;
-	deviceDriverAllocator->commandData = (uint8_t*)tempDriverHead;
-
-	tempDriverHead += driverPerCache;
-
-	deviceDriverAllocator->instanceDataSize = driverPerSize;
-	deviceDriverAllocator->instanceData = (uint8_t*)tempDriverHead;
-
-	tempDriverHead += driverPerSize;
+	Initialize(&deviceDriverAllocator->tlsfMain, driverPoolHead, (driverPerCache + driverPerSize), 5);
 
 	deviceCacheAlloc.size = perCacheSize;
 	deviceCacheAlloc.memHead = tempDeviceHead;

@@ -1,6 +1,7 @@
 #pragma once
 #include "CommonRenderTypes.h"
 #include "IndexTypes.h"
+#include "TLSFAllocator.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
 
@@ -88,12 +89,7 @@ struct VKAllocationCB
 {
 	VKAllocationCB() = default;
 
-	uint8_t* instanceData = nullptr;
-	size_t instanceDataSize = 0;
-	std::atomic<size_t> instanceDataOffset = 0;
-	uint8_t* commandData = nullptr;
-	size_t commandDataSize = 0;
-	std::atomic<size_t> commandDataOffset = 0;
+	TLSFMain tlsfMain;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;
@@ -138,12 +134,6 @@ struct VKAllocationCB
 		size_t alignment, VkSystemAllocationScope allocationScope);
 
 	void RealFree(void* memory);
-
-	void* RealAlloc(size_t size,
-		size_t alignment, bool cache);
-
-	void* RealRealloc(void* original, size_t size,
-		size_t alignment, bool cache);
 };
 
 struct VKInstance
