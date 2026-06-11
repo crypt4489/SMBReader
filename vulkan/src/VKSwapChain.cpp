@@ -69,23 +69,20 @@ static VkExtent2D chooseSwapExtent(uint32_t width, uint32_t height) {
 static PFN_vkReleaseSwapchainImagesEXT vRelease = nullptr;
 
 
-VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator, uint32_t requestImages, uint32_t maxFrameInFlight,
+VKSwapChain::VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, uint32_t requestImages, uint32_t maxFrameInFlight,
 	VK::Utils::SwapChainSupportDetails& swapChainSupport, VkFormat requestedFormat)
 	:
 	device(_d), surface(_surface), maxFrameInFlight(maxFrameInFlight) {
 
 	if (!vRelease)
-	{
-		vRelease =
-			(PFN_vkReleaseSwapchainImagesEXT)
-			vkGetDeviceProcAddr(device->device, "vkReleaseSwapchainImagesEXT");
-	}
+		vRelease = (PFN_vkReleaseSwapchainImagesEXT)vkGetDeviceProcAddr(device->device, "vkReleaseSwapchainImagesEXT");
+	
 	SetSwapChainProperties(swapChainSupport, requestImages, requestedFormat);
 
 
-	images = reinterpret_cast<VkImage*>(allocator->Alloc(sizeof(VkImage) * imageCount));
-	presentationFences = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * maxFrameInFlight));
-	imageViews = reinterpret_cast<EntryHandle*>(allocator->Alloc(sizeof(EntryHandle) * imageCount));
+	images = reinterpret_cast<VkImage*>(device->AllocFromPerDeviceData(sizeof(VkImage) * imageCount));
+	presentationFences = reinterpret_cast<EntryHandle*>(device->AllocFromPerDeviceData(sizeof(EntryHandle) * maxFrameInFlight));
+	imageViews = reinterpret_cast<EntryHandle*>(device->AllocFromPerDeviceData(sizeof(EntryHandle) * imageCount));
 }
 
 
@@ -277,7 +274,13 @@ void VKSwapChain::DestroySwapChain()
 		device->DestroyImageView(imageViews[i]);
 	}
 
+	
+
 	DestroySyncObject();
+
+	device->FreeFromPerDeviceData(imageViews);
+	device->FreeFromPerDeviceData(presentationFences);
+	device->FreeFromPerDeviceData(images);
 }
 
 void VKSwapChain::DestroySyncObject()

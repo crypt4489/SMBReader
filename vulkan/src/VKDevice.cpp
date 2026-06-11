@@ -572,8 +572,8 @@ VKDevice::VKDevice(VkPhysicalDevice _gpu, VKInstance* _inst)
 	entries(nullptr),
 	indexForEntries(0),
 	numberOfEntries(0),
-	deviceDataAlloc(),
-	deviceCacheAlloc()
+	deviceCacheAlloc(),
+	permanentDeviceAlloc()
 {
 
 }
@@ -607,7 +607,12 @@ EntryHandle VKDevice::AddVkTypeToEntry(void* handle, HandleType type)
 
 void* VKDevice::AllocFromPerDeviceData(size_t size)
 {
-	return deviceDataAlloc.Alloc(size);
+	return TLSFAllocate(permanentDeviceAlloc, size);
+}
+
+void VKDevice::FreeFromPerDeviceData(void* memoryAddress)
+{
+	return TLSFFree(permanentDeviceAlloc, memoryAddress);
 }
 
 HandlePoolObject VKDevice::GetVkTypeFromEntry(EntryHandle index)
@@ -663,14 +668,6 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 
 	GLSLShaderProgram shaderProgramHold;
 
-	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
-
-	if (!modHandle)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
-		return EntryHandle();
-	}
-
 	int retCode = GLSLANG::CompileShader(device, data, flags, &shaderProgramHold);
 
 	if (retCode < 0)
@@ -688,6 +685,14 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 		return EntryHandle();
 	}
 
+	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
+
+	if (!modHandle)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
 	modHandle->sMod = mod;
 	modHandle->flags = flags;
 
@@ -696,6 +701,7 @@ EntryHandle VKDevice::CompileShader(char* data, VkShaderStageFlags flags)
 	if (ret == EntryHandle())
 	{
 		vkDestroyShaderModule(device, mod, nullptr);
+		FreeFromPerDeviceData(modHandle);
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 	}
 
@@ -719,6 +725,7 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 
 	if (!buffer)
 	{
+		FreeFromPerDeviceData(viewsHandles);
 		return EntryHandle();
 	}
 	
@@ -744,8 +751,9 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 				vkDestroyBufferView(device, viewsHandles->views[j], nullptr);
 			}
 
+			FreeFromPerDeviceData(viewsHandles);
+			
 			return EntryHandle();
-
 		}
 
 		info.offset += rangeSize;
@@ -761,6 +769,8 @@ EntryHandle VKDevice::CreateBufferView(EntryHandle bufferHandle, VkFormat format
 		{
 			vkDestroyBufferView(device, viewsHandles->views[j], nullptr);
 		}
+
+		FreeFromPerDeviceData(viewsHandles);
 	}
 
 	return poolIndex;
@@ -772,14 +782,6 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 
 	if (!pool)
 	{
-		return EntryHandle();
-	}
-
-	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
-
-	if (!viewData)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
 		return EntryHandle();
 	}
 
@@ -823,6 +825,16 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 		return EntryHandle();
 	}
 
+	TexelBufferView* viewData = reinterpret_cast<TexelBufferView*>(AllocFromPerDeviceData(sizeof(TexelBufferView)));
+
+	if (!viewData)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		vkDestroyBuffer(device, buffer, nullptr);
+		DestroyBufferView(viewHandle);
+		return EntryHandle();
+	}
+
 	viewData->bufferHandle = buffHandle;
 	viewData->viewHandle = viewHandle;
 
@@ -833,6 +845,7 @@ EntryHandle VKDevice::CreateBufferViewFromImagePool(EntryHandle poolIndex, VkFor
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		vkDestroyBuffer(device, buffer, nullptr);
 		DestroyBufferView(viewHandle);
+		FreeFromPerDeviceData(viewData);
 	}
 
 	return finalBufferViewHandle;
@@ -962,6 +975,7 @@ EntryHandle VKDevice::CreateDescriptorSet(VkDescriptorSet* set, uint32_t numberO
 	if (setHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(alloc);
 	}
 	
 	return setHandle;
@@ -1126,7 +1140,7 @@ EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, Vk
 		default:
 			break;
 		}
-
+		FreeFromPerDeviceData(alloc);
 		AddDeviceErrorCode(MINOR_CODE_PACK(minorCode) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 		return EntryHandle();
 	}
@@ -1143,6 +1157,7 @@ EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, Vk
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		vkFreeMemory(device, memory, nullptr);
 		vkDestroyBuffer(device, buffer, nullptr);
+		FreeFromPerDeviceData(alloc);
 	}
 
 	return buffIndex;
@@ -1188,7 +1203,7 @@ EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFl
 		default:
 			break;
 		}
-
+		FreeFromPerDeviceData(alloc);
 		AddDeviceErrorCode(MINOR_CODE_PACK(minorCode) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 		return EntryHandle();
 	}
@@ -1205,6 +1220,7 @@ EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFl
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		vkFreeMemory(device, memory, nullptr);
 		vkDestroyBuffer(device, buffer, nullptr);
+		FreeFromPerDeviceData(alloc);
 	}
 
 	return buffIndex;
@@ -1256,6 +1272,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	if ((vkRes = vkCreateImage(device, &imageInfo, nullptr, &image)) != VK_SUCCESS) 
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		FreeFromPerDeviceData(alloc);
 		return EntryHandle();
 	}
 
@@ -1273,6 +1290,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_BIND_MEMORY_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
 		vkDestroyImage(device, image, nullptr);
 		imageMemoryPool->alloc.FreeMemory(addr);
+		FreeFromPerDeviceData(alloc);
 		return EntryHandle();
 	}
 
@@ -1283,6 +1301,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		vkDestroyImage(device, image, nullptr);
 		imageMemoryPool->alloc.FreeMemory(addr);
+		FreeFromPerDeviceData(alloc);
 	}
 	
 	return imageHandle;
@@ -1360,6 +1379,7 @@ EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memo
 	if ((vkRes = vkAllocateMemory(device, &allocInfo, nullptr, &deviceMemory)) != VK_SUCCESS) 
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		FreeFromPerDeviceData(alloc);
 		return EntryHandle();
 	}
 
@@ -1373,6 +1393,7 @@ EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memo
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		vkFreeMemory(device, deviceMemory, nullptr);
+		FreeFromPerDeviceData(alloc);
 	}
 	
 	return imageMemoryPoolHandle;
@@ -1391,9 +1412,7 @@ EntryHandle VKDevice::CreateImageView(
 	VkImageView imageView = VK_NULL_HANDLE;
 
 	if (image == VK_NULL_HANDLE)
-	{
 		return EntryHandle();
-	}
 
 	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewInfo.image = image;
@@ -1482,17 +1501,28 @@ int VKDevice::CreateLogicalDevice(
 	deviceDriverAllocator = (VKAllocationCB*)(tempDeviceHead);
 	tempDeviceHead += sizeof(VKAllocationCB);
 
-	Initialize(&deviceDriverAllocator->tlsfMain, driverPoolHead, (driverPerCache + driverPerSize), 5);
+	deviceDriverAllocator->cacheMemRingBuffer = (void*)tempDriverHead;
+	deviceDriverAllocator->cacheMemRingBufferWrite = 0;
+	deviceDriverAllocator->cacheMemRingBufferSize = driverPerCache;
+
+	tempDriverHead += driverPerCache;
+
+	TLSFInitialize(&deviceDriverAllocator->tlsfMain, (void*)tempDriverHead, (driverPerSize), 5);
 
 	deviceCacheAlloc.size = perCacheSize;
 	deviceCacheAlloc.memHead = tempDeviceHead;
 
 	tempDeviceHead += perCacheSize;
 
-	deviceDataAlloc.size = perDeviceDataSize - perEntriesSize;
-	deviceDataAlloc.memHead = tempDeviceHead;
+	size_t devicePermAllocSize = perDeviceDataSize - (perEntriesSize+sizeof(TLSFMain));
 
-	tempDeviceHead += deviceDataAlloc.size;
+	permanentDeviceAlloc = (TLSFMain*)tempDeviceHead;
+
+	tempDeviceHead += sizeof(TLSFMain);
+
+	TLSFInitialize(permanentDeviceAlloc, (void*)tempDeviceHead, devicePermAllocSize, 5);
+
+	tempDeviceHead += devicePermAllocSize;
 
 	size_t handleEntrySize = perEntriesSize >> 1;
 	size_t freeListEntrySize = perEntriesSize >> 1;
@@ -1564,13 +1594,21 @@ EntryHandle VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount,
 {
 	void* queueManagerData = reinterpret_cast<void*>(AllocFromPerDeviceData(sizeof(EntryHandle) * maxCount));
 
-	QueueManager* queueManagerItself = reinterpret_cast<QueueManager*>(AllocFromPerDeviceData(sizeof(QueueManager)));
-
-	if (!queueManagerData || !queueManagerItself)
+	if (!queueManagerData)
 	{
 		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
 		return EntryHandle();
 	}
+
+	QueueManager* queueManagerItself = reinterpret_cast<QueueManager*>(AllocFromPerDeviceData(sizeof(QueueManager)));
+
+	if (!queueManagerItself)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(queueManagerData);
+		return EntryHandle();
+	}
+	
 
 	std::construct_at(queueManagerItself,
 		nullptr, 0,
@@ -1584,6 +1622,8 @@ EntryHandle VKDevice::CreateQueueManager(uint32_t queueIndex, uint32_t maxCount,
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		queueManagerItself->DestroyManager();
+		FreeFromPerDeviceData(queueManagerData);
+		FreeFromPerDeviceData(queueManagerItself);
 	}
 
 	return queueManagerHandle;
@@ -1644,6 +1684,7 @@ EntryHandle VKDevice::CreatePipelineCacheObject(PipelineCacheObject* obj)
 	if (pipeObjHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(perObj);
 	}
 	
 	return pipeObjHandle;
@@ -1681,11 +1722,18 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 {
 	auto renderTarget = reinterpret_cast<RenderTarget*>(AllocFromPerDeviceData(sizeof(RenderTarget)));
 
-	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount);
-
-	if (!renderTarget || !data)
+	if (!renderTarget)
 	{
 		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		return EntryHandle();
+	}
+
+	void* data = AllocFromPerDeviceData(sizeof(EntryHandle) * framebufferCount);
+
+	if (!data)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(renderTarget);
 		return EntryHandle();
 	}
 
@@ -1696,6 +1744,8 @@ EntryHandle VKDevice::CreateRenderTarget(EntryHandle renderPassIndex, uint32_t f
 	if (renderTargetHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(renderTarget);
+		FreeFromPerDeviceData(data);
 	}
 	
 	return renderTargetHandle;
@@ -1714,11 +1764,9 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 
 	VKCommandBuffer** temp = reinterpret_cast<VKCommandBuffer**>(AllocFromDeviceCache(sizeof(VKCommandBuffer*) * numberOfCommandBuffers));
 
-	VKCommandBuffer* cbObjects = reinterpret_cast<VKCommandBuffer*>(AllocFromPerDeviceData(sizeof(VKCommandBuffer) * numberOfCommandBuffers));
-
-	if (!intHandles || !temp || !cbObjects)
+	if (!intHandles || !temp)
 	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
 		return nullptr;
 	}
 
@@ -1749,22 +1797,38 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 
 	for (uint32_t i = 0; i < numberOfCommandBuffers; i++) 
 	{	
-		cbObjects[i].buffer = l[i];
-		cbObjects[i].queueFamilyIndex = queueDetails.queueFamilyIndex;
-		cbObjects[i].queueIndex = queueDetails.queueIndex;
-		cbObjects[i].poolIndex = queueDetails.poolIndex;
-		cbObjects[i].fenceIdx = EntryHandle();
+		VKCommandBuffer* cbObjects = reinterpret_cast<VKCommandBuffer*>(AllocFromPerDeviceData(sizeof(VKCommandBuffer)));
 
-		intHandles[i] = AddVkTypeToEntry(&cbObjects[i], VulkVKCommandBuffer);
+		if (cbObjects)
+		{
+			cbObjects[i].buffer = l[i];
+			cbObjects[i].queueFamilyIndex = queueDetails.queueFamilyIndex;
+			cbObjects[i].queueIndex = queueDetails.queueIndex;
+			cbObjects[i].poolIndex = queueDetails.poolIndex;
+			cbObjects[i].fenceIdx = EntryHandle();
+			intHandles[i] = AddVkTypeToEntry(&cbObjects[i], VulkVKCommandBuffer);
+		}
+		else
+		{
+			AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
+
+			for (uint32_t j = 0; j < i; j++)
+				DestroyCommandBuffer(intHandles[j]);
+
+			return nullptr;
+		}
 
 		if (intHandles[i] == EntryHandle())
 		{
+			for (uint32_t j = 0; j < i; j++)
+				DestroyCommandBuffer(intHandles[j]);
+
 			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
-			vkFreeCommandBuffers(device, pool, numberOfCommandBuffers, l);
+
 			return nullptr;
 		}
 		
-		temp[i] = &cbObjects[i];
+		temp[i] = cbObjects;
 	}
 	
 
@@ -1774,7 +1838,9 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 
 		if (!fencesidx)
 		{
-			vkFreeCommandBuffers(device, pool, numberOfCommandBuffers, l);
+			for (uint32_t j = 0; j < numberOfCommandBuffers; j++)
+				DestroyCommandBuffer(intHandles[j]);
+
 			return nullptr;
 		}
 
@@ -1815,6 +1881,7 @@ EntryHandle VKDevice::CreateImageHandle(
 
 	if (imageIndex == EntryHandle())
 	{
+		FreeFromPerDeviceData(tex);
 		return imageIndex;
 	}
 	
@@ -1834,6 +1901,7 @@ EntryHandle VKDevice::CreateImageHandle(
 	if (viewIndex == EntryHandle())
 	{
 		DestroyImage(imageIndex);
+		FreeFromPerDeviceData(tex);
 		return viewIndex;
 	}
 
@@ -1846,6 +1914,7 @@ EntryHandle VKDevice::CreateImageHandle(
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		DestroyImageView(viewIndex);
 		DestroyImage(imageIndex);
+		FreeFromPerDeviceData(tex);
 	}
 
 	return texImageHandle;
@@ -1878,6 +1947,7 @@ EntryHandle VKDevice::CreateCubeMapedImageHandle(
 
 	if (imageIndex == EntryHandle())
 	{
+		FreeFromPerDeviceData(tex);
 		return imageIndex;
 	}
 
@@ -1888,6 +1958,7 @@ EntryHandle VKDevice::CreateCubeMapedImageHandle(
 	if (viewIndex == EntryHandle())
 	{
 		DestroyImage(imageIndex);
+		FreeFromPerDeviceData(tex);
 		return viewIndex;
 	}
 
@@ -1900,6 +1971,7 @@ EntryHandle VKDevice::CreateCubeMapedImageHandle(
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 		DestroyImageView(viewIndex);
 		DestroyImage(imageIndex);
+		FreeFromPerDeviceData(tex);
 	}
 
 	return texImageHandle;
@@ -1989,7 +2061,7 @@ EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 
 			for (uint32_t j = 0; j < i; j++)
 			{	
-				DestroySemaphore(semaphoreHandles[i]);
+				DestroySemaphore(semaphoreHandles[j]);
 			}
 
 			vkDestroySemaphore(device, vkSemaHandle, nullptr);
@@ -2007,19 +2079,21 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 	
 	VkResult vkRes = VK_SUCCESS;
 
-	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
-
-	if (!modHandle)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
-		return EntryHandle();
-	}
+	
 
 	int retCode = VK::Utils::CreateShaderModule(device, data, dataSize, &mod, &vkRes);
 
 	if (retCode < 0)
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SHADER_MODULE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+		return EntryHandle();
+	}
+
+	ShaderHandle* modHandle = reinterpret_cast<ShaderHandle*>(AllocFromPerDeviceData(sizeof(ShaderHandle)));
+
+	if (!modHandle)
+	{
+		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
 		return EntryHandle();
 	}
 
@@ -2031,6 +2105,7 @@ EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFla
 
 	if (shaderModHandle == EntryHandle())
 	{
+		FreeFromPerDeviceData(modHandle);
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
 	}
 
@@ -2049,13 +2124,14 @@ EntryHandle VKDevice::CreateSwapChain(uint32_t requestedImageCount, uint32_t max
 
 	auto swcsupport = parentInstance->GetSwapChainSupport(gpu, renderSurfaceIndex);
 
-	std::construct_at(swc, this, parentInstance->GetRenderSurface(renderSurfaceIndex), &deviceDataAlloc, requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
+	std::construct_at(swc, this, parentInstance->GetRenderSurface(renderSurfaceIndex), requestedImageCount, maxFramesInFlight, swcsupport, requestedFormat);
 
 	EntryHandle swcHandle = AddVkTypeToEntry(swc, VulkSwapChain);
 
 	if (swcHandle == EntryHandle())
 	{
 		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+		FreeFromPerDeviceData(swc);
 	}
 
 	return swcHandle;
@@ -2077,6 +2153,8 @@ void VKDevice::DestroyBuffer(EntryHandle handle)
 	vkDestroyBuffer(device, deviceBuffer, nullptr);
 	vkFreeMemory(device, deviceMem, nullptr);
 
+	FreeFromPerDeviceData(alloc);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2092,6 +2170,8 @@ void VKDevice::DestroyBufferView(EntryHandle handle)
 		vkDestroyBufferView(device, viewHandles->views[i], nullptr);
 	}
 
+	FreeFromPerDeviceData(viewHandles);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2104,6 +2184,7 @@ void VKDevice::DestroyTexelBufferView(EntryHandle handle)
 
 	DestroyBuffer(tbv->bufferHandle);
 	DestroyBufferView(tbv->viewHandle);
+	FreeFromPerDeviceData(tbv);
 
 	ReturnHandleObject(handle);
 }
@@ -2116,9 +2197,14 @@ void VKDevice::DestroyCommandBuffer(EntryHandle handle)
 		return;
 	
 	if (buff->fenceIdx != EntryHandle()) 
-	{
 		DestroyFence(buff->fenceIdx);
-	}
+
+	VkCommandPool pool = GetCommandPool(buff->poolIndex);
+
+	if (pool)
+		vkFreeCommandBuffers(device, pool, 1, &buff->buffer);
+
+	FreeFromPerDeviceData(buff);
 	
 	ReturnHandleObject(handle);
 }
@@ -2183,6 +2269,24 @@ void VKDevice::DestroyDescriptorLayout(EntryHandle handle)
 	ReturnHandleObject(handle);
 }
 
+void VKDevice::DestroyDescriptorSet(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkDescriptorSet || !objHandle.memoryLocation)
+	{
+		return;
+	}
+
+	DescriptorSetAlloc* set = reinterpret_cast<DescriptorSetAlloc*>(objHandle.memoryLocation);
+
+	FreeFromPerDeviceData(set->sets);
+
+	FreeFromPerDeviceData(set);
+}
+
+#include <cassert>
+
 void VKDevice::DestroyDevice()
 {
 	vkDeviceWaitIdle(device);
@@ -2239,6 +2343,7 @@ void VKDevice::DestroyDevice()
 			break;
 
 		case VulkDescriptorSet:
+			DestroyDescriptorSet(handle);
 			break;
 
 		case VulkDescriptorLayout:
@@ -2302,15 +2407,15 @@ void VKDevice::DestroyDevice()
 			break;
 
 		case VulkShaderHandle:
-			 DestroyShader(handle);
+			DestroyShader(handle);
 			break;
 
 		case VulkSwapChain:
-			 DestroySwapChain(handle);
+			DestroySwapChain(handle);
 			break;
 
 		case VulkQueueManager:
-			// DestroyQueueManager(handle);
+			DestroyQueueManager(handle);
 			break;
 
 		case VulkQueryPool:
@@ -2324,6 +2429,9 @@ void VKDevice::DestroyDevice()
 	}
 
 	vkDestroyDevice(device, nullptr);
+
+	assert((permanentDeviceAlloc->fliBitmap & permanentDeviceAlloc->fliBitmap - 1) == 0);
+	assert((deviceDriverAllocator->tlsfMain.fliBitmap & deviceDriverAllocator->tlsfMain.fliBitmap - 1) == 0);
 }
 
 void VKDevice::DestroyImage(EntryHandle handle)
@@ -2340,6 +2448,8 @@ void VKDevice::DestroyImage(EntryHandle handle)
 	if (memPool)
 		memPool->alloc.FreeMemory(image->deviceMemoryAddress);
 
+	FreeFromPerDeviceData(image);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2351,6 +2461,8 @@ void VKDevice::DestroyImagePool(EntryHandle handle)
 		return;
 
 	vkFreeMemory(device, pool->memory, nullptr);
+
+	FreeFromPerDeviceData(pool);
 
 	ReturnHandleObject(handle);
 }
@@ -2370,13 +2482,32 @@ void VKDevice::DestroyRenderPass(EntryHandle handle)
 void VKDevice::DestroyRenderTarget(EntryHandle handle)
 {
 	RenderTarget* target = GetRenderTarget(handle);
+	
+	if (!target)
+		return;
 
 	for (uint32_t j = 0; j < target->count; j++)
 	{
 		DestroyFrameBuffer(target->framebufferIndices[j]);
 	}
+	
+	FreeFromPerDeviceData(target->framebufferIndices);
+
+	FreeFromPerDeviceData(target);
 
 	ReturnHandleObject(handle);
+}
+
+void VKDevice::DestroyQueueManager(EntryHandle handle)
+{
+	QueueManager* manager = GetQueueManager(handle);
+
+	if (!manager)
+		return;
+
+	manager->DestroyManager();
+
+	FreeFromPerDeviceData(manager);
 }
 
 void VKDevice::DestroyQueryPool(EntryHandle handle)
@@ -2414,6 +2545,10 @@ void VKDevice::DestroyPipelineCacheObject(EntryHandle handle)
 
 	vkDestroyPipelineLayout(device, obj->pipelineLayout, nullptr);
 
+	FreeFromPerDeviceData(obj->descLayout);
+	
+	FreeFromPerDeviceData(obj);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2450,6 +2585,8 @@ void VKDevice::DestroyShader(EntryHandle handle)
 
 	vkDestroyShaderModule(device, shader->sMod, nullptr);
 
+	FreeFromPerDeviceData(shader);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2459,6 +2596,8 @@ void VKDevice::DestroySwapChain(EntryHandle handle)
 
 	swc->DestroySwapChain();
 
+	FreeFromPerDeviceData(swc);
+
 	ReturnHandleObject(handle);
 }
 
@@ -2466,13 +2605,15 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 {
 	VKTexture* tex = GetTexture(handle);
 
-	for (int i = 0; tex->samplerIndex[i] != EntryHandle(); i++)
+	for (int i = 0; tex->samplerIndex[i] != EntryHandle() && i < MAX_VIEWS_PER_TEXTURE; i++)
 		DestroySampler(tex->samplerIndex[i]);
 
-	for (int i = 0; tex->viewIndex[i] != EntryHandle(); i++)
+	for (int i = 0; tex->viewIndex[i] != EntryHandle() && i < MAX_SAMPLERS_PER_TEXTURE; i++)
 		DestroyImageView(tex->viewIndex[i]);
 
 	DestroyImage(tex->imageIndex);
+
+	FreeFromPerDeviceData(tex);
 	
 	ReturnHandleObject(handle);
 }
@@ -2608,7 +2749,6 @@ VkDescriptorSet VKDevice::GetDescriptorSet(EntryHandle handle, uint32_t index)
 	}
 
 	return set->sets[index];
-
 }
 
 VkDescriptorSet* VKDevice::GetDescriptorSets(EntryHandle handle)
@@ -3786,4 +3926,6 @@ void QueueManager::DestroyManager()
 	{
 		device->DestroyCommandPool(poolIndices[i]);
 	}
+
+	device->FreeFromPerDeviceData(poolIndices);
 }

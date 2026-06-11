@@ -2509,10 +2509,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 {
 	this->windowMan = window;
 
-	void* driverInstanceDataHead = storageAllocator->Allocate(64+(800 * KiB));
+	void* driverInstanceDataHead = storageAllocator->Allocate((2 * MiB));
 	void* instanceDataHead = storageAllocator->Allocate((256 * KiB + 16 * KiB));
 
-	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, 64+(800 * KiB), 256 * KiB);
+	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, (2 * MiB), 256 * KiB);
 
 	VKInstanceDebugData vkDebugData{};
 

@@ -610,6 +610,8 @@ struct VKDevice
 
 	void DestroyDescriptorLayout(EntryHandle handle);
 
+	void DestroyDescriptorSet(EntryHandle handle);
+
 	void DestroyDevice();
 
 	void DestroyFence(EntryHandle handle);
@@ -627,6 +629,8 @@ struct VKDevice
 	void DestroyRenderPass(EntryHandle handle);
 
 	void DestroyRenderTarget(EntryHandle handle);
+
+	void DestroyQueueManager(EntryHandle handle);
 
 	void DestroyQueryPool(EntryHandle handle);
 
@@ -657,6 +661,8 @@ struct VKDevice
 	void ReturnHandleObject(EntryHandle index);
 
 	void AddDeviceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
+
+	void FreeFromPerDeviceData(void* memoryAddress);
 
 
 	//ACTIONS/HELPERS
@@ -751,9 +757,6 @@ struct VKDevice
 	VkPhysicalDevice gpu;
 	VKInstance* parentInstance;
 
-	uint32_t deviceMask = 0;
-
-	DeviceOwnedAllocator deviceDataAlloc;
 	DeviceOwnedAllocator deviceCacheAlloc;
 
 	HandlePoolObject* entries;
@@ -761,7 +764,6 @@ struct VKDevice
 	size_t numberOfEntries = 0;
 
 	size_t* handlesFreeList;
-	int freeListTop = -1;
 	size_t numberOfFreeListEntries = 0;
 
 	VKAllocationCB *deviceDriverAllocator;
@@ -770,5 +772,9 @@ struct VKDevice
 	DeviceErrorCodeStruct errorCodes[errorCodeWrapSize];
 	int currentErrorCodePos = 0;
 	int readErrorCodePos = 0;
+	uint32_t deviceMask = 0;
+	int freeListTop = -1;
+
+	tlsf_main_t* permanentDeviceAlloc;
 };
 

@@ -8,6 +8,7 @@
 #include <vulkan/vulkan_win32.h>
 #endif
 
+#include <cassert>
 
 static uint32_t ConvertGPUDeviceTypeToVkPhysicalDeviceType(uint32_t type)
 {
@@ -37,10 +38,9 @@ VKInstance::VKInstance()
 	instanceTempMemory(0),
 	instanceTempOffset(0),
 	instanceTempSize(0),
-	instancePerSize(0),
-	instancePerMemory(0),
 	handleBumpCounter(0),
-	allocator(nullptr)
+	allocator(nullptr),
+	permanentInstanceMemory()
 {
 }
 
@@ -61,6 +61,7 @@ VKInstance::~VKInstance() {
 			DestroyRenderSurface(EntryHandle(i));
 			break;
 		case PHYSICAL_DEVICE:
+			DestroyPhysicalDevice(EntryHandle(i));
 			break;
 		case LOGICAL_DEVICE:
 			DestroyLogicalDevice(EntryHandle(i));
@@ -71,7 +72,13 @@ VKInstance::~VKInstance() {
 		}
 	}
 
+	FreeFromInstanceData(instanceLayers);
+	FreeFromInstanceData(instanceExtensions);
+
 	vkDestroyInstance(instance, &callbacks);
+
+	assert((allocator->tlsfMain.fliBitmap & allocator->tlsfMain.fliBitmap - 1) == 0);
+	assert((permanentInstanceMemory.fliBitmap & permanentInstanceMemory.fliBitmap - 1) == 0);
 }
 
 void VKInstance::DestroyRenderSurface(EntryHandle index)
@@ -92,7 +99,20 @@ void VKInstance::DestroyLogicalDevice(EntryHandle index)
 		return;
 
 	device->DestroyDevice();
+
+	FreeFromInstanceData(device);
 }
+
+void VKInstance::DestroyPhysicalDevice(EntryHandle index)
+{
+	PhysicalDeviceAllocation* pda = GetPhysicalDeviceAlloc(index);
+
+	if (!pda)
+		return;
+
+	FreeFromInstanceData(pda);
+}
+
 
 VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(EntryHandle gpuIndex, EntryHandle renderSurfaceIndex)
 {
@@ -133,7 +153,7 @@ VK::Utils::SwapChainSupportDetails VKInstance::GetSwapChainSupport(VkPhysicalDev
 {
 	VkSurfaceKHR renderSurface = GetRenderSurface(renderSurfaceIndex);
 
-	if ( !renderSurface)
+	if (!renderSurface)
 		return { };
 
 
@@ -252,14 +272,10 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 	VkResult vkResult = VK_SUCCESS;
 
 	instanceTempMemory = reinterpret_cast<uintptr_t>(dataHead);
-
-	instancePerMemory = instanceTempMemory + cacheSize;
-
 	instanceTempSize = cacheSize;
-	instancePerSize = storageSize;
-	
-	instancePerOffset = 0;
 	instanceTempOffset = 0;
+
+	TLSFInitialize(&permanentInstanceMemory, (void*)(instanceTempMemory + cacheSize), storageSize, 5);
 
 	VkApplicationInfo appInfoStruct{};
 
@@ -273,7 +289,7 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 	
 	instanceLayerCount = (featuresRequest->useValidation ? 1 : 0);
 
-	instanceLayers = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*)*instanceLayerCount));
+	instanceLayers = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*)*instanceLayerCount, alignof(char*)));
 
 	instanceLayers[0] = "VK_LAYER_KHRONOS_validation";
 
@@ -294,7 +310,7 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 		instanceExtCount += 1;
 	}
 
-	instanceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * instanceExtCount));
+	instanceExtensions = reinterpret_cast<const char**>(AllocFromInstanceData(sizeof(char*) * instanceExtCount, alignof(char*)));
 
 	uint32_t instIndex = 0;
 
@@ -583,7 +599,7 @@ EntryHandle VKInstance::CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatu
 
 	VkPhysicalDevice gpu = physicalDevices[bestScoreIndex];
 
-	PhysicalDeviceAllocation* gpuAlloc = (PhysicalDeviceAllocation*)AllocFromInstanceData(sizeof(PhysicalDeviceAllocation));
+	PhysicalDeviceAllocation* gpuAlloc = (PhysicalDeviceAllocation*)AllocFromInstanceData(sizeof(PhysicalDeviceAllocation), alignof(PhysicalDeviceAllocation));
 
 	gpuAlloc->gpuDeviceHandle = gpu;
 	gpuAlloc->logicalDeviceCount = 0;
@@ -658,7 +674,7 @@ EntryHandle VKInstance::CreateLogicalDevice(EntryHandle gpuIndex)
 {	
 	PhysicalDeviceAllocation* gpu = GetPhysicalDeviceAlloc(gpuIndex);
 	
-	VKDevice* device = reinterpret_cast<VKDevice*>(AllocFromInstanceData(sizeof(VKDevice)));
+	VKDevice* device = reinterpret_cast<VKDevice*>(AllocFromInstanceData(sizeof(VKDevice), alignof(VKDevice)));
 
 	EntryHandle logicalDeviceHandle = AddTypedHandleToPool(LOGICAL_DEVICE, device);
 
@@ -730,9 +746,7 @@ VkDebugUtilsMessengerEXT VKInstance::GetDebugMessenger(EntryHandle debugMessenge
 	InstanceHandlePoolObject* handlePoolObject = GetHandle(debugMessengerHandle);
 
 	if (!handlePoolObject || handlePoolObject->handleType != DEBUG_MESSENGER || !handlePoolObject->handlePtr)
-	{
 		return VK_NULL_HANDLE;
-	}
 
 	VkDebugUtilsMessengerEXT debugMessenger = (VkDebugUtilsMessengerEXT)handlePoolObject->handlePtr;
 
@@ -748,7 +762,13 @@ void VKInstance::SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, si
 
 	tempMemoryHead += sizeof(VKAllocationCB);
 
-	Initialize(&allocator->tlsfMain, (void*)tempMemoryHead, totalDataSize - (tempMemoryHead - memStart), 5);
+	allocator->cacheMemRingBuffer = (void*)tempMemoryHead;
+	allocator->cacheMemRingBufferSize = cacheSize;
+	allocator->cacheMemRingBufferWrite = 0;
+
+	tempMemoryHead += cacheSize;
+
+	TLSFInitialize(&allocator->tlsfMain, (void*)tempMemoryHead, totalDataSize - (sizeof(VKAllocationCB)+cacheSize), 5);
 }
 
 
@@ -789,7 +809,16 @@ void* VKAllocationCB::RealAlloc(size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
-	void* addr = Allocate(&tlsfMain, size, alignment);
+	void* addr = nullptr;
+	if (allocationScope == VK_SYSTEM_ALLOCATION_SCOPE_COMMAND)
+	{
+		addr = RealAllocCache(size, alignment);
+	}
+	else 
+	{
+		addr = TLSFAllocate(&tlsfMain, size, alignment);
+	}
+
 	return addr;
 }
 
@@ -797,13 +826,33 @@ void* VKAllocationCB::RealRealloc(void* original, size_t size,
 	size_t alignment,
 	VkSystemAllocationScope allocationScope)
 {
-	void* newaddr = Realloc(&tlsfMain, original, size);
+	void* newaddr = TLSFRealloc(&tlsfMain, original, size);
 	return newaddr;
+}
+
+void* VKAllocationCB::RealAllocCache(size_t size, size_t alignment)
+{
+	uint32_t cacheOut = (cacheMemRingBufferWrite + alignment-1) & ~(alignment-1);
+	uint32_t cacheNext = cacheOut + size;
+
+	if (cacheNext >= cacheMemRingBufferSize)
+	{
+		cacheNext = size;
+		cacheOut = 0;
+	}
+
+	cacheMemRingBufferWrite = cacheNext;
+
+	return (void*)((uintptr_t)cacheMemRingBuffer + cacheOut);
 }
 
 void VKAllocationCB::RealFree(void* memory)
 {
-	TLSFFree(&tlsfMain, memory);
+	uintptr_t memStart = (uintptr_t)tlsfMain.memPool;
+	uintptr_t currMem = (uintptr_t)memory;
+
+	if (currMem >= memStart && currMem < (memStart + tlsfMain.totalMemPoolSize))
+		TLSFFree(&tlsfMain, memory);
 }
 
 int VKInstance::GetMinimumStorageBufferAlignment(EntryHandle gpuIndex)
@@ -845,18 +894,16 @@ void* VKInstance::AllocFromInstanceCache(size_t size)
 	return reinterpret_cast<void*>(head);
 }
 
-void* VKInstance::AllocFromInstanceData(size_t size)
+void* VKInstance::AllocFromInstanceData(size_t size, size_t alignment)
 {
-	size_t newHead = instancePerOffset+size, out = instancePerOffset;
+	void* addr = TLSFAllocate(&permanentInstanceMemory, size, alignment);
 
-	if (newHead >= instancePerSize)
-		return nullptr;
+	return addr;
+}
 
-	uintptr_t head = instancePerMemory + out;
-
-	instancePerOffset = newHead;
-
-	return reinterpret_cast<void*>(head);
+void VKInstance::FreeFromInstanceData(void* memoryAddress)
+{
+	TLSFFree(&permanentInstanceMemory, memoryAddress);
 }
 
 EntryHandle VKInstance::AddTypedHandleToPool(VKInstanceHandleType handleType, void* handlePtr)
@@ -901,9 +948,7 @@ EntryHandle VKInstance::CreateDebugUtilsMessenger(const VkDebugUtilsMessengerCre
 			 debugHandle = AddTypedHandleToPool(DEBUG_MESSENGER, debugMessenger);
 			 
 			 if (debugHandle == EntryHandle())
-			 {
 				 AddInstanceErrorCode(MINOR_CODE_PACK(INSTANCE_DEBUG_MESSENGER) | INSTANCE_HANDLE_EXHAUSTION, VK_RESULT_MAX_ENUM);
-			 }
 		 }
 		 else
 		 {
@@ -953,24 +998,16 @@ uint32_t VKInstance::GetLogicalDeviceExtensionsCount(LogicalDeviceFeatures* requ
 	uint32_t ldeviceExtCount = 0;
 
 	if (requestedFeatures->useSwapChain)
-	{
 		ldeviceExtCount++;
-	}
 
 	if (requestedFeatures->useSwapChainMaintenance)
-	{
 		ldeviceExtCount++;
-	}
 
 	if (requestedFeatures->useSPVDrawParameters)
-	{
 		ldeviceExtCount++;
-	}
 
 	if (requestedFeatures->useSPVDebugInfo)
-	{
 		ldeviceExtCount++;
-	}
 
 	return ldeviceExtCount;
 }
@@ -980,22 +1017,14 @@ void VKInstance::GetLogicalDeviceExtensions(LogicalDeviceFeatures* requestedFeat
 	uint32_t lDeviceIndex = 0;
 
 	if (requestedFeatures->useSwapChain)
-	{
 		actualHandles[lDeviceIndex++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
-	}
 
 	if (requestedFeatures->useSwapChainMaintenance)
-	{
 		actualHandles[lDeviceIndex++] = VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME;
-	}
 
 	if (requestedFeatures->useSPVDrawParameters)
-	{
 		actualHandles[lDeviceIndex++] = VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME;
-	}
 
 	if (requestedFeatures->useSPVDebugInfo)
-	{
 		actualHandles[lDeviceIndex++] = VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME;
-	}
 }

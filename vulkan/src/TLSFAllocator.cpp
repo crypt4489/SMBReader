@@ -1,6 +1,8 @@
 #include "TLSFAllocator.h"
 
 #include <string.h>
+#include <cassert>
+#include <stdio.h>
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -26,6 +28,8 @@
 #define MIN_TLSF_BLOCK_SIZE_MSB 5
 #define MIN_TLSF_ALLOCATION_SIZE (MIN_TLSF_BLOCK_SIZE_IN_BYTES << 1)
 
+#define MIN_TLSF_SUPPORT_DATA_SIZE 1024
+
 static_assert(sizeof(BlockHeader) == MIN_TLSF_BLOCK_SIZE_IN_BYTES);
 
 static void SegregateList(TLSFMain* tlsf_struct, unsigned int size, unsigned int* fli, unsigned int* sli);
@@ -38,7 +42,7 @@ static BlockHeader* Split(BlockHeader* initial, unsigned int oldSize, unsigned i
 static void ComputeBlockChecksum(BlockHeader* block);
 static int ValidateCheckSum(BlockHeader* block);
 
-int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secondLevelIndex)
+int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secondLevelIndex)
 {
 	uintptr_t memStart;
 	uintptr_t memHead = (uintptr_t)mem;
@@ -52,9 +56,9 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 
 	fli = MIN(fli, 30);
 
-	tlsf_struct->minimumBlockSize = MIN_TLSF_BLOCK_SIZE_IN_BYTES;
-	tlsf_struct->minimumBlockBits = findMSB(tlsf_struct->minimumBlockSize);
-	tlsf_struct->numberofFLILevelBitmaps = (fli - tlsf_struct->minimumBlockBits) + 1;
+	unsigned int minimumBlockSize = MIN_TLSF_BLOCK_SIZE_IN_BYTES;
+	unsigned int minimumBlockBits = findMSB(minimumBlockSize);
+	tlsf_struct->numberofFLILevelBitmaps = (fli - minimumBlockBits) + 1;
 	tlsf_struct->numberofBlockPerFLILevel = (1 << secondLevelIndex);
 	tlsf_struct->sliBits = (secondLevelIndex);
 	tlsf_struct->fliBitmap = 0;
@@ -67,6 +71,12 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 	unsigned int freeListsAlignmentMakeup = (unsigned int)((((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) + (alignof(BlockHeader*) - 1)) & ~(alignof(BlockHeader*) - 1)) - ((memHead + totalSLIBitMapSize + sliBitmapsAlignmentMakeup)));
 
 	unsigned int totalSizeOfFreeLists = sizeof(BlockHeader*) * tlsf_struct->numberofBlockPerFLILevel * tlsf_struct->numberofFLILevelBitmaps;
+
+	if ((totalSizeOfFreeLists + freeListsAlignmentMakeup + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) <= MIN_TLSF_SUPPORT_DATA_SIZE)
+		return -1;
+
+	if (memSize - (totalSizeOfFreeLists + freeListsAlignmentMakeup + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) <= MIN_TLSF_SUPPORT_DATA_SIZE)
+		return -1;
 
 	tlsf_struct->sliBitMaps = (unsigned int*)(memHead + sliBitmapsAlignmentMakeup);
 
@@ -88,6 +98,8 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 
 	BlockHeader* initial = (BlockHeader*)memHead;
 
+	tlsf_struct->firstBlock = initial;
+
 	initial->size = 0;
 	initial->prevPhysBlock = nullptr;
 
@@ -106,7 +118,7 @@ int Initialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secon
 	return insertSize;
 }
 
-void* Allocate(TLSFMain* tlsf_struct, unsigned int size)
+void* TLSFAllocate(TLSFMain* tlsf_struct, unsigned int size)
 {
 	unsigned int fli = 0, sli = 0, fli2 = 0, sli2 = 0;
 	BlockHeader* found, * remaining;
@@ -161,7 +173,7 @@ void* Allocate(TLSFMain* tlsf_struct, unsigned int size)
 	return found + 1;
 }
 
-void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int requestedSize)
+void* TLSFRealloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int requestedSize)
 {
 	unsigned int fli = 0, sli = 0, fli2 = 0, sli2 = 0;
 
@@ -330,16 +342,16 @@ void* Realloc(TLSFMain* tlsf_struct, void* memaddress, unsigned int requestedSiz
 	void* retAddr = nullptr;
 
 	if (possibleAlignment)
-		retAddr = Allocate(tlsf_struct, originalSizeRequest, possibleAlignment);
+		retAddr = TLSFAllocate(tlsf_struct, originalSizeRequest, possibleAlignment);
 	else
-		retAddr = Allocate(tlsf_struct, originalSizeRequest);
+		retAddr = TLSFAllocate(tlsf_struct, originalSizeRequest);
 
 	memcpy(retAddr, memaddress, currentBlockSize);
 
 	return retAddr;
 }
 
-void* Allocate(TLSFMain* tlsf_struct, unsigned int size, unsigned int alignment)
+void* TLSFAllocate(TLSFMain* tlsf_struct, unsigned int size, unsigned int alignment)
 {
 	unsigned int fli = 0, sli = 0, fli2 = 0, sli2 = 0;
 	BlockHeader* found, * remaining, *nextPhysBlock;
@@ -481,6 +493,7 @@ void TLSFFree(TLSFMain* tlsf_struct, void* address)
 		else
 		{
 			nextBlock->prevPhysBlock = header;
+			ComputeBlockChecksum(nextBlock);
 		}
 	}
 
@@ -660,4 +673,38 @@ static int ValidateCheckSum(BlockHeader* block)
 #else
 	return 1;
 #endif
+}
+
+void ValidatePhysicalChain(TLSFMain* tlsf)
+{
+	BlockHeader* current = tlsf->firstBlock;// first block header
+	BlockHeader* prev = nullptr;
+	unsigned int totalSize = 0;
+	int blockCount = 0;
+
+	while (current)
+	{
+		int size = GET_BLOCK_HEADER_SIZE_ENCODING(current->size);
+		int isFree = GET_BLOCK_HEADER_FREE_FLAG(current->size);
+		int isLast = GET_BLOCK_HEADER_LAST_BLOCK_FLAG(current->size);
+
+		assert(current->prevPhysBlock == prev);
+
+		assert(ValidateCheckSum(current));
+
+		if (prev && GET_BLOCK_HEADER_FREE_FLAG(prev->size) && isFree)
+		{
+			printf("COALESCE FAILURE at block %d\n", blockCount);
+		}
+
+		totalSize += size;
+		blockCount++;
+		prev = current;
+
+		if (isLast) break;
+
+		current = (BlockHeader*)((uintptr_t)current + size);
+	}
+
+	printf("Total blocks: %d, Total size: %u\n", blockCount, totalSize);
 }

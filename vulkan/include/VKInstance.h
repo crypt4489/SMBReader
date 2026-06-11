@@ -89,7 +89,10 @@ struct VKAllocationCB
 {
 	VKAllocationCB() = default;
 
+	void* cacheMemRingBuffer;
 	TLSFMain tlsfMain;
+	uint32_t cacheMemRingBufferWrite;
+	uint32_t cacheMemRingBufferSize;
 
 	VkAllocationCallbacks operator()() const {
 		VkAllocationCallbacks res;
@@ -133,6 +136,8 @@ struct VKAllocationCB
 	void* RealRealloc(void* original, size_t size,
 		size_t alignment, VkSystemAllocationScope allocationScope);
 
+	void* RealAllocCache(size_t size, size_t alignment);
+
 	void RealFree(void* memory);
 };
 
@@ -173,7 +178,9 @@ struct VKInstance
 
 	void* AllocFromInstanceCache(size_t size);
 
-	void* AllocFromInstanceData(size_t size);
+	void* AllocFromInstanceData(size_t size, size_t alignment);
+
+	void FreeFromInstanceData(void* memoryAddress);
 
 	int GetMinimumStorageBufferAlignment(EntryHandle gpuIndex);
 
@@ -189,6 +196,7 @@ struct VKInstance
 
 	void DestroyRenderSurface(EntryHandle index);
 	void DestroyLogicalDevice(EntryHandle index);
+	void DestroyPhysicalDevice(EntryHandle index);
 
 	EntryHandle CreateDebugUtilsMessenger(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator);
 
@@ -206,10 +214,7 @@ struct VKInstance
 	const char** instanceExtensions;
 
 	uintptr_t instanceTempMemory;
-	uintptr_t instancePerMemory;
 	size_t instanceTempOffset = 0;
-	size_t instancePerOffset = 0;
-	size_t instancePerSize;
 	size_t instanceTempSize;
 
 	VKAllocationCB *allocator;
@@ -224,5 +229,7 @@ struct VKInstance
 	uint32_t instanceExtCount;
 	uint32_t instanceLayerCount;
 	uint32_t handleBumpCounter;
+
+	TLSFMain permanentInstanceMemory;
 };
 

@@ -7,36 +7,23 @@ VKTexture::VKTexture(EntryHandle piIndex, EntryHandle* pvIndex, int numViews, En
 	:
 	imageIndex(piIndex)
 {
-	for (int i = 0; i < numViews; i++)
+	for (int i = 0; i < numViews && i < MAX_VIEWS_PER_TEXTURE; i++)
 	{
 		viewIndex[i] = pvIndex[i];
 	}
 
-	for (int i = numViews; i < 4; i++)
+	for (int i = numViews; i < MAX_VIEWS_PER_TEXTURE; i++)
 	{
 		viewIndex[i] = EntryHandle();
 	}
 
-	for (int i = 0; i < numSamplers; i++)
+	for (int i = 0; i < numSamplers && i < MAX_SAMPLERS_PER_TEXTURE; i++)
 	{
 		samplerIndex[i] = psIndex[i];
 	}
 
-	for (int i = numSamplers; i < 4; i++)
+	for (int i = numSamplers; i < MAX_SAMPLERS_PER_TEXTURE; i++)
 	{
 		samplerIndex[i] = EntryHandle();
 	}
-}
-
-VKTexture::VKTexture(VKTexture&& other) noexcept
-{
-	this->imageIndex = std::move(other.imageIndex);
-	//this->viewIndex = std::move(other.viewIndex);
-	//this->samplerIndex = std::move(other.samplerIndex);
-}
-
-
-VKTexture::~VKTexture()
-{
-
 }

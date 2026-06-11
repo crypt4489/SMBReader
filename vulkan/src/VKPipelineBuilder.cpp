@@ -15,7 +15,7 @@ VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice 
 	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
 	dynamicStates = reinterpret_cast<VkDynamicState*>(d->AllocFromDeviceCache(sizeof(VkDynamicState) * _dynamicStateCount));
 	pushConstantsCount = pushConstantCount;
-	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromPerDeviceData(sizeof(VkPushConstantRange) * pushConstantCount));
+	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromDeviceCache(sizeof(VkPushConstantRange) * pushConstantCount));
 }
 
 void VKGraphicsPipelineBuilder::CreateDynamicStateInfo(VkDynamicState* states, uint32_t count)
@@ -211,7 +211,7 @@ VKComputePipelineBuilder::VKComputePipelineBuilder(VKDevice* d, size_t descripto
 	majorDev = d;
 	co.descLayout = reinterpret_cast<EntryHandle*>(d->AllocFromPerDeviceData(sizeof(EntryHandle) * descriptorCount));
 	pushConstantsCount = pushConstantCount;
-	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromPerDeviceData(sizeof(VkPushConstantRange) * pushConstantCount));
+	ranges = reinterpret_cast<VkPushConstantRange*>(d->AllocFromDeviceCache(sizeof(VkPushConstantRange) * pushConstantCount));
 }
 
 EntryHandle VKComputePipelineBuilder::CreateComputePipeline(EntryHandle* descriptorlaysids,

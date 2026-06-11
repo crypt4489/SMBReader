@@ -1,18 +1,16 @@
 #pragma once
 #include "IndexTypes.h"
+
+#define MAX_VIEWS_PER_TEXTURE 4
+#define MAX_SAMPLERS_PER_TEXTURE 4
+
 struct VKTexture
 {
 	VKTexture(EntryHandle piIndex, EntryHandle *pvIndex, int numViews, EntryHandle* psIndex, int numSamplers);
 
-	VKTexture(VKTexture&& other) noexcept;
-
-	VKTexture(VKTexture& other) = delete;
-
-	~VKTexture();
-
 	EntryHandle imageIndex;
-	EntryHandle viewIndex[4];
-	EntryHandle samplerIndex[4];
+	EntryHandle viewIndex[MAX_VIEWS_PER_TEXTURE];
+	EntryHandle samplerIndex[MAX_SAMPLERS_PER_TEXTURE];
 
 #if 0
 	void TransitionMips(VkDevice& device, VkPhysicalDevice &gpu, VkCommandPool &pool, VkQueue &queue, uint32_t width, uint32_t height, uint32_t mips)

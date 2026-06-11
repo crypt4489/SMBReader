@@ -8,7 +8,7 @@ struct VKSwapChain
 {
 	VKSwapChain() = default;
 
-	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface, DeviceOwnedAllocator* allocator,
+	VKSwapChain(VKDevice* _d, VkSurfaceKHR _surface,
 		uint32_t requestImages, uint32_t maxFramesInFlight,
 		VK::Utils::SwapChainSupportDetails& swapChainSupport, VkFormat requestedFormat);
 
