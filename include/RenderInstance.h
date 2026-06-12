@@ -101,8 +101,9 @@ struct RenderInstance
 		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
 
 	int CreateStorageImage(
+		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type, int poolIndex);
+		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 

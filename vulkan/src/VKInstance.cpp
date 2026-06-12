@@ -77,8 +77,8 @@ VKInstance::~VKInstance() {
 
 	vkDestroyInstance(instance, &callbacks);
 
-	assert((allocator->tlsfMain.fliBitmap & allocator->tlsfMain.fliBitmap - 1) == 0);
-	assert((permanentInstanceMemory.fliBitmap & permanentInstanceMemory.fliBitmap - 1) == 0);
+	assert((allocator->tlsfMain.fliBitmap & (allocator->tlsfMain.fliBitmap - 1)) == 0);
+	assert((permanentInstanceMemory.fliBitmap & (permanentInstanceMemory.fliBitmap - 1)) == 0);
 }
 
 void VKInstance::DestroyRenderSurface(EntryHandle index)

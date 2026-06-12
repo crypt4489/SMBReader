@@ -2246,14 +2246,49 @@ int RenderInstance::CreateImageHandle(
 		width, height, 1,
 		mipLevels, gpuMemAddress, actualFormat,
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D);
+		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, 
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, 0);
 
-	majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+	if (samplerIndex >= 0)
+		majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
 
 	int textureIndex = textureResourceHandlesCtr++;
 
 	textureResourceHandles[textureIndex] = textureHandle;
 	textureToResourceStatus[textureIndex] = resourceStateCtr++;
+
+	return textureIndex;
+}
+
+int RenderInstance::CreateStorageImage(
+	size_t gpuMemAddress,
+	uint32_t width, uint32_t height,
+	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
+
+	EntryHandle textureHandle = majorDevice->CreateImageHandle(
+		width, height, 1,
+		mipLevels, gpuMemAddress, API::ConvertImageFormatToVulkanFormat(format),
+		imagePools[poolIndex],
+		VK_IMAGE_ASPECT_COLOR_BIT, 
+		VK_IMAGE_TYPE_2D,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT | 
+		VK_IMAGE_USAGE_STORAGE_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, 0
+	);
+
+	int textureIndex = textureResourceHandlesCtr++;
+
+	textureResourceHandles[textureIndex] = textureHandle;
+
+	if (samplerIndex >= 0)
+		majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
 
 	return textureIndex;
 }
@@ -2267,14 +2302,20 @@ int RenderInstance::CreateCubeImageHandle(
 
 	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
 
-	EntryHandle textureHandle = majorDevice->CreateCubeMappedImageHandle(
+	EntryHandle textureHandle = majorDevice->CreateImageHandle(
 		width, height, 6,
 		mipLevels, gpuMemAddress, actualFormat,
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT
+		VK_IMAGE_ASPECT_COLOR_BIT,
+		VK_IMAGE_TYPE_2D,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
 	);
 
-	majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+	if (samplerIndex >= 0)
+		majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
 
 	int textureIndex = textureResourceHandlesCtr++;
 
@@ -2301,24 +2342,7 @@ void RenderInstance::GetGPURequestedImageSizeAndAlignment(uint32_t width, uint32
 	);
 }
 
-int RenderInstance::CreateStorageImage(
-	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat type, int poolIndex)
-{
-	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
-	EntryHandle textureHandle = majorDevice->CreateStorageImage(
-		width, height,
-		mipLevels, API::ConvertImageFormatToVulkanFormat(type),
-		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-	int textureIndex = textureResourceHandlesCtr++;
-
-	textureResourceHandles[textureIndex] = textureHandle;
-
-	return textureIndex;
-}
 
 int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment)
 {

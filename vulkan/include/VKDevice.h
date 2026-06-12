@@ -115,11 +115,9 @@ struct RecordingBufferObject
 
 	void ResetQueries(EntryHandle poolIndex, uint32_t firstQuery, uint32_t queryCount);
 
-
 	VKCommandBuffer cbBufferHandler;
 	VKDevice* vkDeviceHandle;
 	VkPipelineLayout currLayout;
-	VkPipeline currPipeline;
 };
 
 struct RenderTarget
@@ -345,13 +343,6 @@ struct VKDevice
 
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
-	EntryHandle CreateCubeMappedImageHandle(
-		uint32_t width, uint32_t height, uint32_t layers,
-		uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
-		EntryHandle memIndex,
-		VkImageAspectFlags flags
-	);
-
 	EntryHandle CreateDesciptorPool(DescriptorPoolBuilder* builder, uint32_t maxSets);
 
 	DescriptorPoolBuilder CreateDescriptorPoolBuilder(size_t poolSize, VkDescriptorPoolCreateFlags flags);
@@ -383,7 +374,7 @@ struct VKDevice
 		uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
 		EntryHandle memIndex,
 		VkImageAspectFlags flags,
-		VkImageType imageType
+		VkImageType imageType, VkImageUsageFlags usageFlags, VkImageLayout imageLayout, VkImageCreateFlags createFlags
 	);
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
@@ -443,12 +434,6 @@ struct VKDevice
 	EntryHandle* CreateTimelineSemaphores(uint32_t count, uint64_t initialValue);
 
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
-
-	EntryHandle CreateStorageImage(
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, VkFormat type,
-		EntryHandle memIndex,
-		VkImageAspectFlags flags, VkImageLayout layout);
 
 	EntryHandle CreateSwapChain(uint32_t requestedImageCount, uint32_t maxFramesInFlight, VkFormat requestedFormat, EntryHandle renderSurfaceIndex);
 

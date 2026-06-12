@@ -104,7 +104,7 @@ void* DeviceOwnedAllocator::AllocWrapAround(size_t inSize)
 
 
 RecordingBufferObject::RecordingBufferObject(VKDevice* device, VKCommandBuffer buffer) :
-	cbBufferHandler(buffer), vkDeviceHandle(device), currLayout(VK_NULL_HANDLE), currPipeline(VK_NULL_HANDLE)
+	cbBufferHandler(buffer), vkDeviceHandle(device), currLayout(VK_NULL_HANDLE)
 {
 
 }
@@ -125,8 +125,7 @@ int RecordingBufferObject::BindPipelineInternal(EntryHandle id, VkPipelineBindPo
 {
 	PipelineCacheObject* pco = vkDeviceHandle->GetPipelineCacheObject(id);
 	currLayout = pco->pipelineLayout;
-	currPipeline = pco->pipeline;
-	vkCmdBindPipeline(cbBufferHandler.buffer, bindPoint, currPipeline);
+	vkCmdBindPipeline(cbBufferHandler.buffer, bindPoint, pco->pipeline);
 	return 0;
 }
 
@@ -1126,56 +1125,6 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	return imageHandle;
 }
 
-
-EntryHandle VKDevice::CreateStorageImage(
-	uint32_t width, uint32_t height,
-	uint32_t mipLevels, VkFormat type,
-	EntryHandle memIndex,
-    VkImageAspectFlags flags, VkImageLayout layout)
-{
-	
-	/*
-
-	EntryHandle imageIndex = CreateImage(
-		width, height, mipLevels, type, 1,
-		VK_IMAGE_USAGE_STORAGE_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, memIndex
-	);
-
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, 1, type, flags, VK_IMAGE_VIEW_TYPE_2D);
-
-	
-
-	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
-
-	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
-
-	EntryHandle ret = AddVkTypeToEntry(tex, VulkTextureHandle);
-
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(GRAPHICSQUEUE | TRANSFERQUEUE);
-
-	VkQueue queue;
-	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
-
-	VkImage image = GetImageByHandle(imageIndex);
-
-	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
-
-	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
-
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, type, VK_IMAGE_LAYOUT_UNDEFINED, layout, mipLevels, 1);
-
-	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
-
-	ReturnQueueToManager(queueDetails.managerIndex, queueDetails.queueIndex);
-	*/
-
-	return EntryHandle();
-}
-
-
 EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex)
 {
 	VkResult vkRes = VK_SUCCESS;
@@ -1617,12 +1566,12 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 
 		if (cbObjects)
 		{
-			cbObjects[i].buffer = l[i];
-			cbObjects[i].queueFamilyIndex = queueDetails.queueFamilyIndex;
-			cbObjects[i].queueIndex = queueDetails.queueIndex;
-			cbObjects[i].poolIndex = queueDetails.poolIndex;
-			cbObjects[i].fenceIdx = EntryHandle();
-			intHandles[i] = AddVkTypeToEntry(&cbObjects[i], VulkVKCommandBuffer);
+			cbObjects->buffer = l[i];
+			cbObjects->queueFamilyIndex = queueDetails.queueFamilyIndex;
+			cbObjects->queueIndex = queueDetails.queueIndex;
+			cbObjects->poolIndex = queueDetails.poolIndex;
+			cbObjects->fenceIdx = EntryHandle();
+			intHandles[i] = AddVkTypeToEntry(cbObjects, VulkVKCommandBuffer);
 		}
 		else
 		{
@@ -1674,7 +1623,7 @@ EntryHandle VKDevice::CreateImageHandle(
 	uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
 	EntryHandle memIndex,
 	VkImageAspectFlags flags,
-	VkImageType imageType
+	VkImageType imageType, VkImageUsageFlags usageFlags, VkImageLayout imageLayout, VkImageCreateFlags createFlags
 )
 {
 	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
@@ -1687,10 +1636,8 @@ EntryHandle VKDevice::CreateImageHandle(
 
 	EntryHandle imageIndex = CreateImage(
 		width, height, mipLevels, imageFormat, layers,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, memAddr, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, imageType, memIndex);
+		usageFlags,
+		1, memAddr, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, imageLayout, VK_IMAGE_TILING_OPTIMAL, createFlags, imageType, memIndex);
 
 	if (imageIndex == EntryHandle())
 	{
@@ -1703,65 +1650,13 @@ EntryHandle VKDevice::CreateImageHandle(
 	switch (imageType)
 	{
 	case VK_IMAGE_TYPE_2D:
+		if (createFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
+			imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
 		break;
 	case VK_IMAGE_TYPE_3D:
 		imageViewType = VK_IMAGE_VIEW_TYPE_3D;
 		break;
 	}
-
-	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
-
-	if (viewIndex == EntryHandle())
-	{
-		DestroyImage(imageIndex);
-		FreeFromPerDeviceData(tex);
-		return viewIndex;
-	}
-
-	tex = std::construct_at(tex, imageIndex, &viewIndex, 1, nullptr, 0);
-
-	EntryHandle texImageHandle = AddVkTypeToEntry(tex, VulkTextureHandle);
-
-	if (texImageHandle == EntryHandle())
-	{
-		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
-		DestroyImageView(viewIndex);
-		DestroyImage(imageIndex);
-		FreeFromPerDeviceData(tex);
-	}
-
-	return texImageHandle;
-}
-
-EntryHandle VKDevice::CreateCubeMappedImageHandle(
-	uint32_t width, uint32_t height, uint32_t layers,
-	uint32_t mipLevels, size_t memAddr,  VkFormat imageFormat,
-	EntryHandle memIndex,
-	VkImageAspectFlags flags
-)
-{
-	VKTexture* tex = reinterpret_cast<VKTexture*>(AllocFromPerDeviceData(sizeof(VKTexture)));
-
-	if (!tex)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
-		return EntryHandle();
-	}
-
-	EntryHandle imageIndex = CreateImage(
-		width, height, mipLevels, imageFormat, layers,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		1, memAddr, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT, VK_IMAGE_TYPE_2D, memIndex);
-
-	if (imageIndex == EntryHandle())
-	{
-		FreeFromPerDeviceData(tex);
-		return imageIndex;
-	}
-
-	VkImageViewType imageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
 
 	EntryHandle viewIndex = CreateImageView(imageIndex, mipLevels, layers, imageFormat, flags, imageViewType);
 
@@ -2265,8 +2160,8 @@ void VKDevice::DestroyDevice()
 
 	vkDestroyDevice(device, nullptr);
 
-	assert((permanentDeviceAlloc->fliBitmap & permanentDeviceAlloc->fliBitmap - 1) == 0);
-	assert((deviceDriverAllocator->tlsfMain.fliBitmap & deviceDriverAllocator->tlsfMain.fliBitmap - 1) == 0);
+	assert((permanentDeviceAlloc->fliBitmap & (permanentDeviceAlloc->fliBitmap - 1)) == 0);
+	assert((deviceDriverAllocator->tlsfMain.fliBitmap & (deviceDriverAllocator->tlsfMain.fliBitmap - 1)) == 0);
 }
 
 void VKDevice::DestroyImage(EntryHandle handle)
