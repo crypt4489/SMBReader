@@ -116,8 +116,6 @@ struct RenderInstance
 
 	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
 
-	void CreateRenderGraphData(int frameGraph, int* descsSets, int descCount);
-
 	void DrawScene(uint32_t imageIndex);
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
@@ -209,7 +207,9 @@ struct RenderInstance
 	EntryHandle graphicsComputeTransfer = EntryHandle();
 	EntryHandle presentQueue = EntryHandle();
 
-	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererWaitSemaphores{}, rendererFinishedSemaphores{};
+	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererWaitSemaphores{};
+	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererFinishedSemaphores{};
+	RenderTimelineSync rendererTimelineSyncObject{};
 
 	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
 

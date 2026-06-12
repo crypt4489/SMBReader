@@ -5,8 +5,6 @@
 #include "VKTypes.h"
 #include "VKUtilities.h"
 
-#include <atomic>
-
 #ifdef _MSC_VER
 #include <Windows.h>
 #endif

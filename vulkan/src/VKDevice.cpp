@@ -1882,13 +1882,64 @@ EntryHandle* VKDevice::CreateSemaphores(uint32_t count)
 	return semaphoreHandles;
 }
 
+EntryHandle* VKDevice::CreateTimelineSemaphores(uint32_t count, uint64_t initialValue)
+{
+	VkResult vkRes = VK_SUCCESS;
+
+	EntryHandle* semaphoreHandles = reinterpret_cast<EntryHandle*>(AllocFromDeviceCache(sizeof(EntryHandle) * count));
+
+	if (!semaphoreHandles)
+	{
+		AddDeviceErrorCode(DEVICE_CACHE_ALLOC_TOO_LARGE, VK_RESULT_MAX_ENUM);
+		return nullptr;
+	}
+
+	VkSemaphore vkSemaHandle = VK_NULL_HANDLE;
+
+	VkSemaphoreTypeCreateInfo timelineSemaphoreCreateInfo{};
+
+	timelineSemaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	timelineSemaphoreCreateInfo.pNext = nullptr;
+	timelineSemaphoreCreateInfo.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+	timelineSemaphoreCreateInfo.initialValue = initialValue;
+
+	VkSemaphoreCreateInfo semaphoreInfo{};
+	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	semaphoreInfo.pNext = &timelineSemaphoreCreateInfo;
+
+	for (uint32_t i = 0; i < count; i++)
+	{
+		if ((vkRes = vkCreateSemaphore(device, &semaphoreInfo, nullptr, &vkSemaHandle)) != VK_SUCCESS)
+		{
+			AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SEMAPHORE_FAILED) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
+			return nullptr;
+		}
+
+		semaphoreHandles[i] = AddVkTypeToEntry(vkSemaHandle, VulkTimelineSemaphore);
+
+		if (semaphoreHandles[i] == EntryHandle())
+		{
+			AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
+
+			for (uint32_t j = 0; j < i; j++)
+			{
+				DestroySemaphore(semaphoreHandles[j]);
+			}
+
+			vkDestroySemaphore(device, vkSemaHandle, nullptr);
+
+			return nullptr;
+		}
+	}
+
+	return semaphoreHandles;
+}
+
 EntryHandle VKDevice::CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags)
 {
 	VkShaderModule mod = VK_NULL_HANDLE;
 	
 	VkResult vkRes = VK_SUCCESS;
-
-	
 
 	int retCode = VK::Utils::CreateShaderModule(device, data, dataSize, &mod, &vkRes);
 
@@ -2141,9 +2192,6 @@ void VKDevice::DestroyDevice()
 			DestroyCommandPool(handle);
 			break;
 
-		case VulkComputeGraph:
-			//DestroyComputeGraph(handle);
-			break;
 
 		case VulkDescriptorPool:
 		     DestroyDescriptorPool(handle);
@@ -2173,30 +2221,6 @@ void VKDevice::DestroyDevice()
 			DestroyPipelineCacheObject(handle);
 			break;
 
-		case VulkComputePipeline:
-			// DestroyComputePipeline(handle);
-			break;
-
-		case VulkGraphicsPipeline:
-			// DestroyGraphicsPipeline(handle);
-			break;
-
-		case VulkMemoryBarrier:
-			// DestroyMemoryBarrier(handle);
-			break;
-
-		case VulkBufferMemoryBarrier:
-			// DestroyBufferMemoryBarrier(handle);
-			break;
-
-		case VulkImageMemoryBarrier:
-			// DestroyImageMemoryBarrier(handle);
-			break;
-
-		case VulkRenderTargetData:
-			// DestroyRenderTargetData(handle);
-			break;
-
 		case VulkRenderPassHandle:
 			 DestroyRenderPass(handle);
 			break;
@@ -2211,6 +2235,10 @@ void VKDevice::DestroyDevice()
 
 		case VulkSemaphores:
 			DestroySemaphore(handle);
+			break;
+
+		case VulkTimelineSemaphore:
+			DestroyTimelineSemaphore(handle);
 			break;
 
 		case VulkShaderHandle:
@@ -2401,6 +2429,18 @@ void VKDevice::DestroySwapChain(EntryHandle handle)
 	swc->DestroySwapChain();
 
 	FreeFromPerDeviceData(swc);
+
+	ReturnHandleObject(handle);
+}
+
+void VKDevice::DestroyTimelineSemaphore(EntryHandle handle)
+{
+	VkSemaphore sema = GetTimelineSemaphore(handle);
+
+	if (!sema)
+		return;
+
+	vkDestroySemaphore(device, sema, nullptr);
 
 	ReturnHandleObject(handle);
 }
@@ -2864,6 +2904,19 @@ VkSemaphore VKDevice::GetSemaphore(EntryHandle handle)
 	return reinterpret_cast<VkSemaphore>(objHandle.memoryLocation);
 }
 
+VkSemaphore VKDevice::GetTimelineSemaphore(EntryHandle handle)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
+
+	if (objHandle.type != VulkTimelineSemaphore || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_SEMAPHORE_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return VK_NULL_HANDLE;
+	}
+
+	return reinterpret_cast<VkSemaphore>(objHandle.memoryLocation);
+}
+
 ShaderHandle* VKDevice::GetShader(EntryHandle handle)
 {
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
@@ -3071,7 +3124,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)
 {
 	VkQueue queue;
-	uint32_t  queueIndex = ~0, queueFamilyIndex = ~0;
+	uint32_t queueIndex = ~0, queueFamilyIndex = ~0;
 	
 	VKCommandBuffer* rbo = GetCommandBuffer(commandBufferIndex);
 	queueIndex = rbo->queueIndex;
@@ -3274,6 +3327,89 @@ int VKDevice::SubmitCommandBuffer(
 	return retCode;
 }
 
+int VKDevice::SubmitCommandBuffer(
+	EntryHandle* waitBinary,
+	VkPipelineStageFlags* waitStages,
+	uint32_t waitBinaryCount,
+	EntryHandle* waitTimeline,
+	uint32_t waitTimelineCount,
+	uint64_t* waitSignalCount,
+	EntryHandle* signalBinary,
+	uint32_t signalBinaryCount,
+	EntryHandle* signalTimeline,
+	uint32_t signalTimelineCount,
+	uint64_t* timelineSignalCount,
+	EntryHandle cbIndex
+)
+{
+
+	VKCommandBuffer* vkcb = GetCommandBuffer(cbIndex);
+	VkQueue queue;
+	vkGetDeviceQueue(device, vkcb->queueFamilyIndex, vkcb->queueIndex, &queue);
+
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+	uint32_t totalWaitSemaCount = (waitTimelineCount + waitBinaryCount);
+	uint32_t totalSignalSemaCount = (signalBinaryCount + signalTimelineCount);
+
+	VkSemaphore* waitSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * totalWaitSemaCount));
+	VkSemaphore* signalSemaphores = reinterpret_cast<VkSemaphore*>(AllocFromDeviceCache(sizeof(VkSemaphore) * totalSignalSemaCount));
+	
+	uint32_t i;
+
+	for (i = 0; i < waitBinaryCount; i++)
+	{
+		waitSemaphores[i] = GetSemaphore(waitBinary[i]);
+	}
+
+	for (i = 0; i < signalBinaryCount; i++)
+	{
+		signalSemaphores[i] = GetSemaphore(signalBinary[i]);
+	}
+
+	for (i = 0; i < waitTimelineCount; i++)
+	{
+		waitSemaphores[waitBinaryCount + i] = GetTimelineSemaphore(waitTimeline[i]);
+	}
+
+	for (i = 0; i < signalTimelineCount; i++)
+	{
+		signalSemaphores[signalBinaryCount + i] = GetTimelineSemaphore(signalTimeline[i]);
+	}
+	
+
+	VkTimelineSemaphoreSubmitInfo timelineInfo{};
+	timelineInfo.sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO;
+	timelineInfo.pNext = NULL;
+	timelineInfo.signalSemaphoreValueCount = totalSignalSemaCount;
+	timelineInfo.pSignalSemaphoreValues = timelineSignalCount;
+	timelineInfo.waitSemaphoreValueCount = totalWaitSemaCount;
+	timelineInfo.pWaitSemaphoreValues = waitSignalCount;
+
+	submitInfo.pNext = &timelineInfo;
+	submitInfo.waitSemaphoreCount = totalWaitSemaCount;
+	submitInfo.pWaitSemaphores = waitSemaphores;
+	submitInfo.pWaitDstStageMask = waitStages;
+	submitInfo.signalSemaphoreCount = totalSignalSemaCount;
+	submitInfo.pSignalSemaphores = signalSemaphores;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &vkcb->buffer;
+
+	VkFence fence = GetFence(vkcb->fenceIdx);
+
+	VkResult vkRes = VK_SUCCESS;
+
+	int retCode = 0;
+
+	if ((vkRes = vkQueueSubmit(queue, 1, &submitInfo, fence)) != VK_SUCCESS)
+	{
+		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED, vkRes);
+		retCode = -1;
+	}
+
+	return retCode;
+}
 
 int VKDevice::TransitionImageLayout(EntryHandle imageIndex,
 	VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,

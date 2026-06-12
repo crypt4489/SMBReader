@@ -550,6 +550,7 @@ struct GPUFeatureRequest
 	bool requireStorageBuffer8BitAccess;
 	bool requireDrawIndirectCount;
 	bool requireRuntimeDescriptorArray;
+	bool requireTimelineSemaphores;
 
 	// base features
 	bool requireGeometryShader;

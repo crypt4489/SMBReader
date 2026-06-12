@@ -190,7 +190,6 @@ struct DeviceOwnedAllocator
 	void* AllocWrapAround(size_t inSize);
 };
 
-
 struct DescriptorPoolBuilder
 {
 	DescriptorPoolBuilder(DeviceOwnedAllocator* alloc, size_t _numPoolSizes, VkDescriptorPoolCreateFlags _flags);
@@ -238,39 +237,31 @@ struct ImageAllocation
 
 enum HandleType : uint64_t
 {
-	VulkBuffer = 0,
-	VulkImageHandle = 1,
-	VulkImageView = 2,
-	VulkImageSampler = 3,
-	VulkTextureHandle = 4,
-	VulkBufferView = 5,
-	VulkImageBufferView = 6,
-	VulkCommandPool = 7,
-	VulkComputeGraph = 8,
-	VulkDescriptorPool = 9,
-	VulkDescriptorSet = 10,
-	VulkDescriptorLayout = 11,
-	VulkFence = 12,
-	VulkFrameBuffer = 13,
-	VulkImageMemoryPool = 14,
-	VulkPipelineCacheObject = 15,
-	VulkComputePipeline = 16,
-	VulkGraphicsPipeline = 17,
-	VulkMemoryBarrier = 18,
-	VulkBufferMemoryBarrier = 19,
-	VulkImageMemoryBarrier = 20,
-	VulkRenderTargetData = 21,
-	VulkRenderPassHandle = 22,
-	VulkRenderTarget = 23,
-	VulkVKCommandBuffer = 24,
-	VulkSemaphores = 25,
-	VulkShaderHandle = 26,
-	VulkSwapChain = 27,
-	VulkQueueManager = 28,
-	VulkGraphicsOTQ = 29,
-	VulkComputeOTQ = 30,
-	VulkIndirectPipeline = 31,
-	VulkQueryPool = 32,
+	VulkBuffer,
+	VulkImageHandle,
+	VulkImageView,
+	VulkImageSampler,
+	VulkTextureHandle,
+	VulkBufferView,
+	VulkImageBufferView,
+	VulkCommandPool,
+	VulkComputeGraph,
+	VulkDescriptorPool,
+	VulkDescriptorSet,
+	VulkDescriptorLayout,
+	VulkFence,
+	VulkFrameBuffer,
+	VulkImageMemoryPool,
+	VulkPipelineCacheObject,
+	VulkRenderPassHandle,
+	VulkRenderTarget,
+	VulkVKCommandBuffer,
+	VulkSemaphores,
+	VulkShaderHandle,
+	VulkSwapChain,
+	VulkQueueManager,
+	VulkQueryPool,
+	VulkTimelineSemaphore,
 	VulkMaxEnum
 };
 
@@ -449,6 +440,8 @@ struct VKDevice
 
 	EntryHandle* CreateSemaphores(uint32_t count);
 
+	EntryHandle* CreateTimelineSemaphores(uint32_t count, uint64_t initialValue);
+
 	EntryHandle CreateShader(char* data, size_t dataSize, VkShaderStageFlags flags);
 
 	EntryHandle CreateStorageImage(
@@ -543,6 +536,8 @@ struct VKDevice
 
 	VKSwapChain* GetSwapChain(EntryHandle handle);
 
+	VkSemaphore GetTimelineSemaphore(EntryHandle handle);
+
 	TexelBufferView* GetTexelBufferView(EntryHandle handle);
 
 	VKTexture* GetTexture(EntryHandle handle);
@@ -592,6 +587,8 @@ struct VKDevice
 	void DestroyShader(EntryHandle handle);
 
 	void DestroySwapChain(EntryHandle handle);
+
+	void DestroyTimelineSemaphore(EntryHandle handle);
 
 	void DestroyTexture(EntryHandle handle);
 
@@ -644,7 +641,7 @@ struct VKDevice
 
 	int PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
-	int PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
+	int PresentSwapChainSeparatePresentQueue(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle presentQueue);
 
 	void QueueFamilyDetails(VkQueueFamilyProperties* famProps, uint32_t *size);
 
@@ -661,6 +658,21 @@ struct VKDevice
 		uint32_t waitCount,
 		uint32_t signalCount,
 		EntryHandle cbIndex);
+
+	int SubmitCommandBuffer(
+		EntryHandle* waitBinary,
+		VkPipelineStageFlags* waitStages,
+		uint32_t waitBinaryCount,
+		EntryHandle* waitTimeline,
+		uint32_t waitTimelineCount,
+		uint64_t* waitSignalCount,
+		EntryHandle* signalBinary,
+		uint32_t signalBinaryCount,
+		EntryHandle* signalTimeline,
+		uint32_t signalTimelineCount,
+		uint64_t* timelineSignalCount,
+		EntryHandle cbIndex
+	);
 
 	int TransitionImageLayout(EntryHandle imageIndex,
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,

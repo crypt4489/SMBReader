@@ -753,14 +753,18 @@ struct ResourceStatus
 
 struct ComputeQueue
 {
-	int pipelines[12];
+	int pipelines[15];
 	uint32_t queueCount;
-	int32_t pad[3];
 };
 
 struct RenderQueue
 {
-	int pipelines[12];
+	int pipelines[15];
 	uint32_t queueCount;
-	int32_t pad[3];
+};
+
+struct RenderTimelineSync
+{
+	EntryHandle driverTimelineObject;
+	uint64_t currentValue;
 };

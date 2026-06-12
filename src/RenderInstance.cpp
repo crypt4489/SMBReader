@@ -467,6 +467,7 @@ namespace API
 			request->requireDrawIndirectCount ? VK_TRUE : VK_FALSE;
 		features12->runtimeDescriptorArray =
 			request->requireRuntimeDescriptorArray ? VK_TRUE : VK_FALSE;
+		features12->timelineSemaphore = request->requireTimelineSemaphores ? VK_TRUE : VK_FALSE;
 
 		features2->sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 		features2->pNext = features12;
@@ -505,8 +506,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 
 void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
-
-
 	new (&vulkanShaderGraphs) decltype(vulkanShaderGraphs)
 	{
 		instanceStorageAllocator->Allocate(10 * KiB), 10 * KiB,
@@ -559,52 +558,7 @@ void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocato
 
 RenderInstance::~RenderInstance()
 {
-	if (vkInstance)
-		vkInstance->~VKInstance();
-	/*
-	for (size_t i = 0; i < currentCBIndex.size(); i++)
-	{
-		dev->DestroyCommandBuffer(currentCBIndex[i]);
-	}
-
-	for (size_t i = 0; i < vulkanShaderGraphs.shaders.size(); i++)
-	{
-		dev->DestroyShader(vulkanShaderGraphs.shaders[i]);
-	}
-
-	for (auto& i : vulkanDescriptorLayouts)
-	{
-		if (i != EntryHandle())
-			dev->DestroyDescriptorLayout(i);
-	}
-
-	dev->DestroyDescriptorPool(descriptorManager.deviceResourceHeap);
-
-	for (auto& i : pipelinesIdentifier)
-	{
-		for (auto &j : i)
-			dev->DestroyPipelineCacheObject(j);
-	}
-
-	for (uint32_t i = 0; i<maxMSAALevels; i++)
-		dev->DestroyRenderPass(renderPasses[i]);
-
-	DestroySwapChainAttachments();
-	
-	for (int i = 0; i<imagePoolCounter; i++)
-		dev->DestroyImagePool(imagePools[i]);
-	
-	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
-
-	swapChain->DestroySwapChain();
-	
-	dev->DestroyBuffer(stagingBufferIndex);
-
-	dev->DestroyBuffer(globalIndex);
-
-	dev->DestroyBuffer(globalDeviceBufIndex);
-	*/
-
+	if (vkInstance) vkInstance->~VKInstance();
 };
 
 void RenderInstance::DestoryTexture(EntryHandle handle)
@@ -989,14 +943,35 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
-	VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	std::array<VkPipelineStageFlags, 2> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
 
-	int res = dev->SubmitCommandBuffer(&rendererWaitSemaphores[currentFrame], &waitStages, &rendererFinishedSemaphores[imageIndex], 1, 1, currentCBIndex[currentFrame]);
+	int res = -1;
+	
+	if (rendererTimelineSyncObject.driverTimelineObject == EntryHandle())
+	{
+		res = dev->SubmitCommandBuffer(&rendererWaitSemaphores[currentFrame], &waitStages[0], &rendererFinishedSemaphores[imageIndex], 1, 1, currentCBIndex[currentFrame]);
+	}
+	else
+	{
+		std::array<uint64_t, 2> waitCount = { 0, rendererTimelineSyncObject.currentValue };
+
+		std::array<uint64_t, 2> signalCount = {0, rendererTimelineSyncObject.currentValue + 1 };
+
+		res = dev->SubmitCommandBuffer(
+			&rendererWaitSemaphores[currentFrame], waitStages.data(), 1,
+			&rendererTimelineSyncObject.driverTimelineObject, 1, waitCount.data(),
+			&rendererFinishedSemaphores[imageIndex], 1,
+			&rendererTimelineSyncObject.driverTimelineObject, 
+			1,
+			signalCount.data(),
+			currentCBIndex[currentFrame]
+		);
+		
+		rendererTimelineSyncObject.currentValue++;
+	}
 
 	if (res)
-	{
 		return -1;
-	}
 
 	if (presentQueue != graphicsComputeTransfer)
 	{
@@ -2111,7 +2086,6 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 
 	size_t batchCounter = 0;
 	size_t cumulativeSize = 0;
-	size_t stagingOffsetArenaStart = ~0ull;
 
 	EntryHandle previousBuffer = EntryHandle();
 
@@ -2134,7 +2108,6 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 			previousBuffer = index;
 			batchCounter = 0;
 			cumulativeSize = 0;
-			stagingOffsetArenaStart = ~0ull;
 		}
 
 		uploadArenaOffset[batchCounter] = stagingAlloc->Allocate(region.size, 64);
@@ -2260,7 +2233,6 @@ int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, s
 	return index;
 }
 
-
 int RenderInstance::CreateImageHandle(
 	size_t gpuMemAddress,
 	uint32_t width, uint32_t height,
@@ -2347,7 +2319,6 @@ int RenderInstance::CreateStorageImage(
 
 	return textureIndex;
 }
-
 
 int RenderInstance::CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment)
 {
@@ -2589,7 +2560,6 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 	return descriptorManager.AddShaderToSets((uintptr_t)set);
 }
 
-
 int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount)
 {
 	CreateAttachmentGraphFromFile(*attachmentLayout, &attachmentGraphs[graphTemplateAlloc], cacheAllocator, internalRendererLogger);
@@ -2662,6 +2632,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	request.requireSamplerAnisotropy = true;
 	request.requireMultiDrawIndirect = true;
 	request.requireWideLines = true;
+	request.requireTimelineSemaphores = true;
 
 	LogicalDeviceFeatures deviceFeatures{};
 
@@ -2733,7 +2704,6 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 		queuePriorites[i] = 1.0f;
 	}
 
-
 	void* driverDeviceDataHead = storageAllocator->Allocate((12 * MiB) + (16 * KiB));
 	void* deviceDataHead = storageAllocator->Allocate(64 * KiB + (96 * KiB) + (16 * KiB) + 64);
 
@@ -2799,8 +2769,10 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 		rendererWaitSemaphores[i] = *majorDevice->CreateSemaphores(1);
 		rendererFinishedSemaphores[i] = *majorDevice->CreateSemaphores(1);
 	}
-}
 
+	rendererTimelineSyncObject.currentValue = 0;
+	rendererTimelineSyncObject.driverTimelineObject = *majorDevice->CreateTimelineSemaphores(1, rendererTimelineSyncObject.currentValue);
+}
 
 EntryHandle RenderInstance::CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
 {
@@ -2832,7 +2804,7 @@ ImageFormat RenderInstance::FindSupportedDepthFormat(ImageFormat* requestedForma
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
-	VkFormat format;  //{ VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D32_SFLOAT, };
+	VkFormat format;
 
 	for (uint32_t i = 0; i < requestSize; i++)
 	{
@@ -2854,7 +2826,6 @@ ImageFormat RenderInstance::FindSupportedDepthFormat(ImageFormat* requestedForma
 	return ImageFormat::IMAGE_UNKNOWN;
 }
 
-
 int RenderInstance::CreateSampler(uint32_t maxMipsLevel)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
@@ -2867,41 +2838,6 @@ int RenderInstance::CreateSampler(uint32_t maxMipsLevel)
 
 	return samplerIndex;
 }
-
-
-#define MAX_DYNAMIC_VK_OFFSETS 100
-
-void RenderInstance::CreateRenderGraphData(int frameGraph, int* descsSets, int descCount)
-{
-	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
-
-	EntryHandle* descIDs = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * descCount);
-
-	for (int i = 0; i < descCount; i++)
-	{
-		descIDs[i] = CreateShaderResourceSet(descsSets[i]);
-	}
-
-	AttachmentGraphInstance* graphInstance = &attachmentGraphsInstances[frameGraph];
-
-	int passesCount = graphInstance->graphLayout->passesCount;
-
-	int renderTargetBase = graphInstance->consecutiveRenderTargetsBase;
-
-	for (uint32_t i = 0; i < passesCount; i++)
-	{
-		uint32_t samplesCount = (uint32_t)graphInstance->passes[i].maxSampleCount;
-		for (uint32_t j = 0; j < samplesCount; j++)
-		{
-			int index = renderTargetBase + j;
-			//renderTargets[index] = majorDevice->CreateRenderTargetData(mainRenderTargets[index], descCount);
-			//majorDevice->UpdateRenderGraph(renderTargets[index], nullptr, 0, descIDs, descCount, nullptr);
-		}
-
-		renderTargetBase += samplesCount;
-	}
-}
-
 
 uint32_t RenderInstance::GetSwapChainHeight(EntryHandle swapChainIndex)
 {
