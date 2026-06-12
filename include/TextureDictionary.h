@@ -29,15 +29,12 @@ struct TextureDictionary
 	std::atomic<int> allocationIndex = 0;
 	std::atomic<size_t> textureAllocator = 0;
 	
-
 	std::array<TextureDetails, 50> textureAllocations{};
 	std::array<int, 50> textureHandles{};
 
-	std::array<EntryHandle, 10> deviceImageBuffers{};
 	std::array<int, 10> texturePoolHandle{};
 	std::array<ImageFormat, 10> texturePoolsFormat{};
-	std::array<size_t, 10> texturePoolsSize{};
-	std::array<size_t, 10> texturePoolsAllocatedSize{};
+	std::array<DeviceSlabAllocator, 10> texturePoolAllocators{};
 
 	void* AllocateImageCache(size_t size);
 
@@ -45,7 +42,9 @@ struct TextureDictionary
 
 	int FindPoolByFormat(ImageFormat format);
 
-	void CreatePools(ImageFormat* formats, size_t* sizes, EntryHandle* poolHandles, EntryHandle* bufferHandles, int num);
+	size_t AllocFromPoolAllocator(int poolIndex, size_t requestedImageSize, size_t alignment);
+
+	void CreatePoolAllocator(int poolIndex, size_t totalBlobSize);
 
 	std::pair<int, int> GetCacheUsageAndCapacity() const;
 

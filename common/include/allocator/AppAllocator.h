@@ -135,6 +135,7 @@ struct SlabAllocator : public Allocator
 
 struct DeviceSlabAllocator
 {
+	DeviceSlabAllocator() = default;
 	int dataSize;
 	std::atomic<int> dataAllocator;
 	constexpr DeviceSlabAllocator(int _size) :

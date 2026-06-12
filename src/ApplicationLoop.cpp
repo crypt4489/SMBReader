@@ -348,6 +348,8 @@ static EntryHandle mainPresentationSwapChain = EntryHandle();
 static int mainHostBuffer = -1;
 static int mainDeviceBuffer = -1;
 
+static DeviceSlabAllocator mainHostAllocator, mainDeviceAllocator;
+
 static IndirectDrawData mainIndirectDrawData;
 static IndirectDrawData debugIndirectDrawData;
 
@@ -503,6 +505,11 @@ static int mainLinearSampler = -1;
 
 static uint32_t imageIndex = 0;
 
+static int mainRTVIndex;
+static int mainDSVIndex;
+
+static DeviceSlabAllocator mainRTVSlab, mainDSVSlab;
+
 static int graphNoMSAAIndex = -1;
 static int graphMSAAIndex = -1;
 static int MSAAPost = -1;
@@ -630,7 +637,7 @@ static ImageFormat ConvertSMBImageToAppImage(SMBImageFormat fmt);
 static void LoadObjectThreaded(void* data);;
 static void PrintDebugMemoryAllocation();
 static void CreateBitTangentFromNormalTristrips(Vector4f* pos, Vector2f* uvs, uint16_t* indices, int totalIndexCount, int totalVertCount, Vector4f* tangents, Vector3f* outNormals, RingAllocator* tempAllocator);
-static int GetPoolIndexByFormat(ImageFormat format);
+static int GetPoolIndexByFormat(ImageFormat format, DeviceSlabAllocator** allocator);
 static int FindSMBArenaForUse(int requestedSize);
 static int ReturnSMBArena(int arenaIndex);
 static void LoadObject(const StringView& file);
@@ -1056,14 +1063,13 @@ void CreateTexturePools()
 
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
+	size_t requestedSize = 128 * MiB;
+
 	for (int i = 0; i < 4; i++)
 	{
-		mainDictionary.texturePoolsFormat[i] = formats[i];
-		mainDictionary.texturePoolsSize[i] = 128 * MiB;
-		mainDictionary.texturePoolsAllocatedSize[i] = 0;
-		
-		int texturePoolHandle = rendInst.CreateImagePool(
-			mainDictionary.texturePoolsSize[i],
+		int texturePoolHandle = 
+			rendInst.CreateImagePool(
+			requestedSize,
 			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, false
 		);
 
@@ -1071,6 +1077,10 @@ void CreateTexturePools()
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed to create a texture image pool"));
 		}
+
+		mainDictionary.texturePoolsFormat[i] = formats[i];
+
+		mainDictionary.CreatePoolAllocator(i, requestedSize);
 
 		mainDictionary.texturePoolHandle[i] = texturePoolHandle;
 	}
@@ -1144,22 +1154,26 @@ void UpdateCameraMatrix()
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&c.View, globalBufferLocation, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 0, TransferType::MEMORY);
 }
 
-int GetPoolIndexByFormat(ImageFormat format)
+int GetPoolIndexByFormat(ImageFormat format, DeviceSlabAllocator** allocator)
 {
 	int ret = -1;
 	switch (format)
 	{
 	case ImageFormat::DXT1:
 		ret = mainDictionary.texturePoolHandle[0];
+		*allocator = &mainDictionary.texturePoolAllocators[0];
 		break;
 	case ImageFormat::DXT3:
 		ret = mainDictionary.texturePoolHandle[1];
+		*allocator = &mainDictionary.texturePoolAllocators[1];
 		break;
 	case ImageFormat::B8G8R8A8:
 		ret = mainDictionary.texturePoolHandle[2];
+		*allocator = &mainDictionary.texturePoolAllocators[2];
 		break;
 	case ImageFormat::B8G8R8A8_UNORM:
 		ret = mainDictionary.texturePoolHandle[3];
+		*allocator = &mainDictionary.texturePoolAllocators[3];
 		break;
 	default:
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("unhandled texture format"));
@@ -2257,14 +2271,26 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 			texture.ReadTextureData(file);
 
+			DeviceSlabAllocator* perFormatAllocator = nullptr;
+
+			int poolIndex = GetPoolIndexByFormat(format, &perFormatAllocator);
+
+			size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
+
+			GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+				texture.width, texture.height, texture.miplevels, 1, format, &actualMemorySize, &actualMemoryAlignment
+			);
+
+			actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
+
 			mainDictionary.textureHandles[ii + globalTextureStartIndex] =
 				GlobalRenderer::gRenderInstance.CreateImageHandle(
-					texture.cumulativeSize,
+					actualMemoryAddress,
 					texture.width,
 					texture.height,
 					texture.miplevels,
 					format,
-					GetPoolIndexByFormat(format),
+					poolIndex,
 					mainLinearSampler
 				);
 
@@ -2338,11 +2364,11 @@ int CreateDebugCommandBuffers(int count)
 
 	ShaderResourceSetContext debugRSContext{ &mainAppLogger, false };
 
-	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndirectCommand),  debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndirectCommand),  debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
@@ -2449,13 +2475,13 @@ int CreateGenericMeshCommandBuffers(int count)
 
 	ShaderResourceSetContext genericMeshRSContext{ &mainAppLogger, false };
 
-	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(RENDEROBJCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 
 	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
@@ -2641,13 +2667,13 @@ int CreateMeshWorldAssignment(int count)
 
 	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	if (worldSpaceAssignment.totalSumsNeeded)
 	{
-		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 		
 		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
@@ -2770,7 +2796,7 @@ int CreateMeshWorldAssignment(int count)
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)assignmentLayout->x);
 
-	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
@@ -2866,9 +2892,9 @@ int CreateLightAssignments(int count)
 
 	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
 	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
@@ -2877,7 +2903,7 @@ int CreateLightAssignments(int count)
 
 	if (lightAssignment.totalSumsNeeded)
 	{
-		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
@@ -2990,7 +3016,7 @@ int CreateLightAssignments(int count)
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)assignmentLayout->x);
 
-	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
@@ -3084,23 +3110,23 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	
 
 	mainShadowMapManager.shadowMapCountsAllocSize =  maxObjCount;
-	mainShadowMapManager.shadowMapCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapCountsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapCountsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapOffsetsAllocSize =  maxObjCount;
-	mainShadowMapManager.shadowMapOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapOffsetsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapOffsetsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapAssignmentsAllocSize = maxShadowMapAssignment * maxObjCount;
-	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	mainShadowMapManager.shadowMapObjectIDsAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
-	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapIndirectBufferAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapIndirectBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), mainShadowMapManager.shadowMapIndirectBufferAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT); ;
+	mainShadowMapManager.shadowMapIndirectBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), mainShadowMapManager.shadowMapIndirectBufferAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator); ;
 	
 
 	mainShadowMapManager.shadowMapViewProjAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(Matrix4f) * 2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(Matrix4f) * 2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	mainShadowMapManager.shadowMapAtlasViewsAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(ShadowMapView), mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT);
+	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(ShadowMapView), mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 
 	BufferArrayUpdate shadowViewProjUp{};
@@ -3275,21 +3301,24 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 void RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 {
+	mainRTVSlab.dataAllocator = 0;
+	mainDSVSlab.dataAllocator = 0;
+
 	if (BasicShadow >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, nullptr);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	}
 
 	if (MSAAPost >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, nullptr);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	}
 	
 	if (MSAAShadowMapping >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, 3, 4096, 4096, nullptr);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, 3, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, globalTexturesDescriptor, 3, shadowMapIndex);
 	}
 }
@@ -3476,8 +3505,16 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(&mainWindow, mainLayoutAttachments.size());
 
-	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(64 * MiB, BufferType::DEVICE_MEMORY_TYPE);
-	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(128 * MiB, BufferType::HOST_MEMORY_TYPE);
+	size_t mainHostSize = 128 * MiB;
+	size_t mainDeviceSize = 64 * MiB;
+
+	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainDeviceSize, BufferType::DEVICE_MEMORY_TYPE);
+	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainHostSize, BufferType::HOST_MEMORY_TYPE);
+
+	mainHostAllocator.dataAllocator = 0;
+	mainHostAllocator.dataSize = mainHostSize;
+	mainDeviceAllocator.dataSize = mainDeviceSize;
+	mainDeviceAllocator.dataAllocator = 0;
 
 	ImageFormat requestedColorFormats = ImageFormat::B8G8R8A8;
 
@@ -3487,9 +3524,17 @@ void ApplicationLoop::InitializeRuntime()
 
 	ImageFormat mainDepthFormat = GlobalRenderer::gRenderInstance.FindSupportedDepthFormat(&requestedDSVFormats, 1);
 
-	int mainRTVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(800 * MiB, mainColorFormat, 4096, 4096);
+	size_t mainRTVSize = 800 * MiB, mainDSVSize = 1024 * MiB;
 
-	int mainDSVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(1024 * MiB, mainDepthFormat, 4096, 4096);
+	mainRTVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainRTVSize, mainColorFormat, 4096, 4096);
+
+	mainDSVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainDSVSize, mainDepthFormat, 4096, 4096);
+
+	mainRTVSlab.dataAllocator = 0;
+	mainRTVSlab.dataSize = mainRTVSize;
+
+	mainDSVSlab.dataAllocator = 0;
+	mainDSVSlab.dataSize = mainDSVSize;
 
 	MSAAPost = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(&mainLayoutAttachments[0], nullptr);
 	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(&mainLayoutAttachments[1], nullptr);
@@ -3518,12 +3563,12 @@ void ApplicationLoop::InitializeRuntime()
 		CLEARDEPTH, {1.0, 0}
 	};
 
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, ShadowMapViewerClears.data());
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, MSAAPostClears.data());
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, MSAAShadowMappingClears.data());
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, ShadowMapViewerClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	
-	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data());
-	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data());
+	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
@@ -3568,32 +3613,32 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateTexturePools();
 
-	globalBufferLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT);
-	globalIndexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
-	globalVertexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	globalBufferLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalIndexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	globalVertexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	globalBufferDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(GENERIC, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	globalTexturesDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(GENERIC, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	globalMeshLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMeshSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	globalMaterialsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialsSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	globalMeshLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMeshSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalMaterialsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialsSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalLightBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	globalLightTypesBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightTypesBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	globalLightBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalLightTypesBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightTypesBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalDebugStructAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalDebugStructAllocSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	globalDebugTypesAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), globalDebugStructMaxCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	globalDebugStructAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalDebugStructAllocSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDebugTypesAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), globalDebugStructMaxCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialIndicesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
-	globalRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialIndicesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	globalBlendRangesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT);
+	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalBlendRangesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	jointMeshWorldMatrix = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Matrix4f), 1, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
-	jointMeshParentIndices = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT);
+	jointMeshWorldMatrix = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Matrix4f), 1, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	jointMeshParentIndices = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	ShaderResourceSetContext globalDescriptorBuilder{ &mainAppLogger, false };
 
@@ -4046,7 +4091,6 @@ void ScanSTDIN(void* data)
 
 		switch (record.EventType) {
 		case KEY_EVENT:
-			// Handle KEY_EVENT
 			if (record.Event.KeyEvent.bKeyDown) {
 				if (record.Event.KeyEvent.uChar.AsciiChar == VK_RETURN)
 				{
@@ -4350,15 +4394,28 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	details.arrayLayers = textureCount;
 
+	DeviceSlabAllocator* perFormatAllocator = nullptr;
+
+	int poolIndex = GetPoolIndexByFormat(details.type, &perFormatAllocator);
+
+	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
+
+	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+		details.width, details.height, details.miplevels, details.arrayLayers, details.type, &actualMemorySize, &actualMemoryAlignment
+	);
+
+	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
+
 	int imageIndex = 
 		GlobalRenderer::gRenderInstance.CreateCubeImageHandle(
-			textureCount * details.dataSize,
+			actualMemoryAddress,
 			details.width,
 			details.height,
 			details.miplevels,
 			details.type,
-			GetPoolIndexByFormat(details.type),
-			mainLinearSampler);
+			poolIndex,
+			mainLinearSampler
+		);
 
 	if (imageIndex >= 0)
 	{
@@ -4435,14 +4492,25 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 	details->miplevels = mipCounts;
 	details->arrayLayers = 1;
 
-	imageIndex  =
-		GlobalRenderer::gRenderInstance.CreateImageHandle(
-			totalBlobSize,
+	DeviceSlabAllocator* perFormatAllocator = nullptr;
+
+	int poolIndex = GetPoolIndexByFormat(details->type, &perFormatAllocator);
+
+	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
+
+	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+		details->width, details->height, details->miplevels, details->arrayLayers, details->type, &actualMemorySize, &actualMemoryAlignment
+	);
+
+	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
+
+	imageIndex = GlobalRenderer::gRenderInstance.CreateImageHandle(
+			actualMemoryAddress,
 			details->width,
 			details->height,
 			details->miplevels,
 			details->type,
-			GetPoolIndexByFormat(details->type),
+			poolIndex,
 			mainLinearSampler
 		);
 

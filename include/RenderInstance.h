@@ -55,11 +55,12 @@ struct RenderInstance
 
 	int RecreateSwapChain(EntryHandle swapChainIndex);
 
-	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType, AttachmentClear* clears);
+	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, 
+		RenderPassType rpType, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
-	int CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears);
+	int CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
-	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears);
+	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
 	int CreateFrameGraphInstance(AttachmentGraph* graph);
 
@@ -87,15 +88,15 @@ struct RenderInstance
 
 	void UploadDeviceLocalTransfers(RecordingBufferObject* rbo);
 
-	int GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType);
+	int GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
 	int CreateImageHandle(
-		uint32_t blobSize,
+		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat type, int poolIndex, int samplerIndex);
 
 	int CreateCubeImageHandle(
-		uint32_t blobSize,
+		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
 		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
 
@@ -198,6 +199,8 @@ struct RenderInstance
 
 	void PrintOutTexturePoolAllocations(Logger* outputLogger);
 
+	void GetGPURequestedImageSizeAndAlignment(uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment);
+
 	VKInstance *vkInstance = nullptr;
 	EntryHandle deviceIndex;
 	EntryHandle physicalIndex;
@@ -264,6 +267,7 @@ struct RenderInstance
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
 
 	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
+	DeviceSlabAllocator stagingBufferAllocators[MAX_FRAMES_IN_FLIGHT];
 
 	int pipelineInfoCounter = 0;
 	std::array<GenericPipelineStateInfo, 15> pipelineInfos{};

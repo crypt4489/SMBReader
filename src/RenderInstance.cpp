@@ -650,7 +650,6 @@ void RenderInstance::DestroySwapChainAttachments(EntryHandle swapChainIndex)
 				sampIndex++;
 			}
 		}
-	
 	}
 }
 
@@ -702,7 +701,6 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 	for (int b = 0; b < graph->passesCount; b++)
 	{
-
 		AttachmentRenderPass* currentPassDesc = &graph->holders[b];
 
 		int attachmentCount = currentPassDesc->attachmentCount;
@@ -774,8 +772,6 @@ int RenderInstance::CreateFrameGraphInstance(AttachmentGraph* graph)
 
 	return retAddress;
 }
-
-
 
 int RenderInstance::CreateRenderPass(uint32_t index, AttachmentGraphInstance* graphInstance)
 {
@@ -1027,7 +1023,7 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
-int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears)
+int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
@@ -1035,15 +1031,19 @@ int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int gr
 
 	EntryHandle* backBuffers = swapChain->imageViews;
 
-	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears);
+	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
 }
 
-int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears)
+int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
-	return CreateAttachmentResources(graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT, clears);
+	return CreateAttachmentResources(graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
 }
 
-int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, RenderPassType rpType, AttachmentClear* clears)
+int RenderInstance::CreateAttachmentResources(
+	int graphIndex, int renderPassIndex, int imageCount, 
+	EntryHandle* backBufferViews, uint32_t width, uint32_t height, 
+	RenderPassType rpType, AttachmentClear* clears,
+	DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
@@ -1122,6 +1122,8 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 
 			resourceInst->imageCount = imageCount;
 
+			size_t actualImageSize = 0, actualImageAlignment = 0, actualMemAddr = 0;
+
 			switch (resourceInst->usage)
 			{
 
@@ -1131,8 +1133,8 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
-						resourceInst->attachmentImage[v][g] = dev->CreateImage(
-							imageWidth, imageHeight,
+
+						dev->GetImageMemorySizeAndAlignment(imageWidth, imageHeight,
 							1, attachmentFormat, 1,
 							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
 							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1140,7 +1142,20 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 							VK_IMAGE_LAYOUT_UNDEFINED,
 							VK_IMAGE_TILING_OPTIMAL, 0,
-							VK_IMAGE_TYPE_2D, imagePools[0]
+							VK_IMAGE_TYPE_2D, &actualImageSize, &actualImageAlignment);
+
+						actualMemAddr = rtvAllocator->Allocate(actualImageSize, actualImageAlignment);
+
+						resourceInst->attachmentImage[v][g] = dev->CreateImage(
+							imageWidth, imageHeight,
+							1, attachmentFormat, 1,
+							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
+							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+							sampLo, actualMemAddr,
+							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+							VK_IMAGE_LAYOUT_UNDEFINED,
+							VK_IMAGE_TILING_OPTIMAL, 0,
+							VK_IMAGE_TYPE_2D, imagePools[rtvPoolIndex]
 						);
 
 						resourceInst->attachmentImageView[v][g]
@@ -1156,12 +1171,25 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
+						dev->GetImageMemorySizeAndAlignment(
+							imageWidth, imageHeight,
+							1, attachmentFormat, 1,
+							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+							sampLo,
+							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, 
+							VK_IMAGE_TILING_OPTIMAL, 0, 
+							VK_IMAGE_TYPE_2D, 
+							&actualImageSize, &actualImageAlignment
+						);
+
+						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
+
 						resourceInst->attachmentImage[v][g] =
 							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
 								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-								sampLo,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+								sampLo, actualMemAddr,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
 					}
@@ -1174,12 +1202,23 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
+						dev->GetImageMemorySizeAndAlignment(
+							imageWidth, imageHeight,
+							1, attachmentFormat, 1,
+							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+							sampLo,
+							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D,
+							&actualImageSize, &actualImageAlignment
+						);
+
+						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
+
 						resourceInst->attachmentImage[v][g] =
 							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
 								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-								sampLo,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+								sampLo, actualMemAddr,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
 					}
@@ -1193,12 +1232,23 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
+						dev->GetImageMemorySizeAndAlignment(
+							imageWidth, imageHeight,
+							1, attachmentFormat, 1,
+							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+							sampLo,
+							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D,
+							&actualImageSize, &actualImageAlignment
+						);
+
+						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
+
 						resourceInst->attachmentImage[v][g] =
 							dev->CreateImage(imageWidth, imageHeight,
 								1, attachmentFormat, 1,
 								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-								sampLo,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[1]);
+								sampLo, actualMemAddr,
+								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
 					}
@@ -1210,7 +1260,8 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 			case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
 				for (int g = 0; g < imageCount; g++)
 				{
-					resourceInst->attachmentImage[0][g] = dev->CreateImage(
+
+					dev->GetImageMemorySizeAndAlignment(
 						imageWidth, imageHeight,
 						1, attachmentFormat, 1,
 						VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -1219,7 +1270,22 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 						VK_IMAGE_LAYOUT_UNDEFINED,
 						VK_IMAGE_TILING_OPTIMAL, 0,
-						VK_IMAGE_TYPE_2D, imagePools[0]
+						VK_IMAGE_TYPE_2D,
+						&actualImageSize, &actualImageAlignment
+					);
+
+					actualMemAddr = rtvAllocator->Allocate(actualImageSize, actualImageAlignment);
+
+					resourceInst->attachmentImage[0][g] = dev->CreateImage(
+						imageWidth, imageHeight,
+						1, attachmentFormat, 1,
+						VK_IMAGE_USAGE_SAMPLED_BIT |
+						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+						sampLo, actualMemAddr,
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+						VK_IMAGE_LAYOUT_UNDEFINED,
+						VK_IMAGE_TILING_OPTIMAL, 0,
+						VK_IMAGE_TYPE_2D, imagePools[rtvPoolIndex]
 					);
 
 					resourceInst->attachmentImageView[0][g]
@@ -1247,6 +1313,11 @@ int RenderInstance::CreateAttachmentResources(int graphIndex, int renderPassInde
 		int absoluteRTIndex = baseRenderTarget + basePassRenderTarget + sampleCount;
 
 		int absoluteRPIndex = baseRenderPass + basePassRenderPass + sampleCount;
+
+		if (mainRenderTargets[absoluteRTIndex] != EntryHandle())
+		{
+			dev->DestroyRenderTarget(mainRenderTargets[absoluteRTIndex]);
+		}
 
 		mainRenderTargets[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRTIndex], imageCount, rtWidth, rtHeight, 0, 0);
 
@@ -1992,11 +2063,15 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 	TextureMemoryRegion region;
 	int link = imageMemoryUpdateManager.linkHead;
 
+	DeviceSlabAllocator* stagingAlloc = &stagingBufferAllocators[currentFrame];
+
 	while (link >= 0)
 	{
 		link = imageMemoryUpdateManager.PopLink(&region, link);
 
 		EntryHandle handle = textureResourceHandles[region.textureIndex];
+
+		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
 
 		dev->UploadImageData(handle,
 			(char*)region.data,
@@ -2007,6 +2082,7 @@ void RenderInstance::UploadImageMemoryTransfers(RecordingBufferObject* rbo)
 			region.mipLevels,
 			region.layers,
 			API::ConvertImageFormatToVulkanFormat(region.format),
+			currentImageOffsetInUploadArena,
 			rbo
 		);
 	}
@@ -2031,11 +2107,15 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 	size_t* batchSizes = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
 	size_t* batchOffsets = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
 	void** batchData = (void**)cacheAllocator->Allocate(sizeof(void*) * (memCount));
+	size_t* uploadArenaOffset = (size_t*)cacheAllocator->Allocate(sizeof(size_t) * (memCount));
 
 	size_t batchCounter = 0;
 	size_t cumulativeSize = 0;
+	size_t stagingOffsetArenaStart = ~0ull;
 
 	EntryHandle previousBuffer = EntryHandle();
+
+	DeviceSlabAllocator* stagingAlloc = &stagingBufferAllocators[currentFrame];
 
 	while (link >= 0)
 	{
@@ -2047,24 +2127,27 @@ void RenderInstance::UploadDeviceLocalTransfers(RecordingBufferObject* rbo)
 		{
 			if (previousBuffer != EntryHandle())
 			{
-				dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
+				cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
+				dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 			}
 
 			previousBuffer = index;
 			batchCounter = 0;
 			cumulativeSize = 0;
+			stagingOffsetArenaStart = ~0ull;
 		}
 
+		uploadArenaOffset[batchCounter] = stagingAlloc->Allocate(region.size, 64);
 		batchSizes[batchCounter] = region.size;
 		batchData[batchCounter] = region.data;
 		batchOffsets[batchCounter] = allocations.allocations[region.allocationIndex].offset + region.allocoffset;
 
-		cumulativeSize += region.size;
-
 		batchCounter++;
 	}
 
-	dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, batchCounter, rbo);
+	cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
+
+	dev->WriteToDeviceBufferBatch(previousBuffer, stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 }
 
 void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
@@ -2128,7 +2211,7 @@ void RenderInstance::InvokeTransferCommands(RecordingBufferObject* rbo)
 	}
 }
 
-int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType)
+int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
@@ -2157,7 +2240,7 @@ int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, s
 		break;
 	}
 
-	size_t location = dev->GetMemoryFromBuffer(bufferHandles[bufferHandle], allocSize * copies, alignment);
+	size_t location = allocator->Allocate(allocSize * copies, alignment);
 
 	int index = allocations.Allocate();
 	allocations.allocations[index].memIndex = bufferHandle;
@@ -2179,16 +2262,17 @@ int RenderInstance::GetAllocFromBuffer(int bufferHandle, size_t structureSize, s
 
 
 int RenderInstance::CreateImageHandle(
-	uint32_t blobSize,
+	size_t gpuMemAddress,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
+	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
+
 	EntryHandle textureHandle = majorDevice->CreateImageHandle(
-		blobSize,
 		width, height, 1,
-		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
+		mipLevels, gpuMemAddress, actualFormat,
 		imagePools[poolIndex],
 		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D);
 
@@ -2203,18 +2287,20 @@ int RenderInstance::CreateImageHandle(
 }
 
 int RenderInstance::CreateCubeImageHandle(
-	uint32_t blobSize,
+	size_t gpuMemAddress,
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
-	EntryHandle textureHandle = majorDevice->CreateCubeMapedImageHandle(
-		blobSize,
+	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
+
+	EntryHandle textureHandle = majorDevice->CreateCubeMappedImageHandle(
 		width, height, 6,
-		mipLevels, API::ConvertImageFormatToVulkanFormat(format),
+		mipLevels, gpuMemAddress, actualFormat,
 		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT);
+		VK_IMAGE_ASPECT_COLOR_BIT
+	);
 
 	majorDevice->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
 
@@ -2225,6 +2311,23 @@ int RenderInstance::CreateCubeImageHandle(
 	return textureIndex;
 }
 
+void RenderInstance::GetGPURequestedImageSizeAndAlignment(uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
+
+	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(type);
+
+	majorDevice->GetImageMemorySizeAndAlignment(
+		width, height,
+		mipLevels, actualFormat, layers,
+		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+		VK_IMAGE_USAGE_SAMPLED_BIT,
+		1,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D,
+		actualImageSize, actualAlignment
+	);
+}
 
 int RenderInstance::CreateStorageImage(
 	uint32_t width, uint32_t height,
@@ -2665,6 +2768,8 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window, int attachmentG
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		stagingBuffers[i] = majorDevice->CreateHostBuffer(128 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		stagingBufferAllocators[i].dataSize = 128 * MiB;
+		stagingBufferAllocators[i].dataAllocator = 0;
 	}
 
 	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
@@ -3133,7 +3238,7 @@ void RenderInstance::DrawScene(uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
-	dev->ResetBufferAllocator(stagingBuffers[currentFrame]);
+	stagingBufferAllocators[currentFrame].dataAllocator = 0;
 
 	EntryHandle cbindex = currentCBIndex[currentFrame];
 	RecordingBufferObject rcb = dev->GetRecordingBufferObject(cbindex);
@@ -3983,17 +4088,18 @@ void RenderInstance::PrintOutBufferAllocations(Logger* outputLogger)
 		EntryHandle bufferIndex = bufferHandles[i];
 		BufferType bufferType = bufferTypes[i];
 
-		VKMemoryAllocatorDetails details = dev->GetMemoryAllocDetailsForBuffer(bufferIndex);
+		//VKMemoryAllocatorDetails details = dev->GetMemoryAllocDetailsForBuffer(bufferIndex);
 
-		int actualSize = snprintf(OutputScratch, 512, "Buffer Type %d with memory allocation %d/%d", bufferType, (int)details.allocSize, (int)details.totalDataSize);
+		//int actualSize = snprintf(OutputScratch, 512, "Buffer Type %d with memory allocation %d/%d", bufferType, (int)details.allocSize, (int)details.totalDataSize);
 
-		outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
+		//outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
 	}
 }
 
 
 void RenderInstance::PrintOutTexturePoolAllocations(Logger* outputLogger)
 {
+	/*
 	char OutputScratch[512];
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
@@ -4002,12 +4108,13 @@ void RenderInstance::PrintOutTexturePoolAllocations(Logger* outputLogger)
 	{
 		EntryHandle poolIndex = imagePools[i];
 
-		VKMemoryAllocatorDetails details = dev->GetMemoryAllocDetailsForImageMemory(poolIndex);
+		DeviceSlabAllocator* poolAllocator = &imagePoolAllocators[i];
 
-		int actualSize = snprintf(OutputScratch, 512, "Image Pool with memory allocation %d/%d", (int)details.allocSize, (int)details.totalDataSize);
+		int actualSize = snprintf(OutputScratch, 512, "Image Pool with memory allocation %d/%d", (int)poolAllocator->dataAllocator, (int)poolAllocator->dataSize);
 
 		outputLogger->AddLogMessage(LOGINFO, OutputScratch, actualSize);
 	}
+	*/
 }
 
 void RenderInstance::AddVulkanMemoryBarrier(RecordingBufferObject* rcb, int* descriptorid, int descriptorcount)

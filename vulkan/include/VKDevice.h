@@ -1,57 +1,12 @@
 #pragma once
 
 #include <bitset>
-#include <forward_list>
 #include <mutex>
-#include <shared_mutex>
 
 #include "vulkan/vulkan.h"
 
 #include "IndexTypes.h"
 #include "VKTypes.h"
-
-
-struct VKMemoryAllocatorDetails
-{
-	uint64_t allocSize;
-	uint64_t totalDataSize;
-};
-
-struct VKMemoryAllocator
-{
-
-	VkDeviceSize capacity;
-	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> freeList; // [staringAddr, endingAddr)
-	std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>> occupiedList; //[staringAddr, endingAddr)
-
-	VKMemoryAllocator(const VkDeviceSize _c);
-
-	VKMemoryAllocator(const VKMemoryAllocator&) = delete;
-
-	VKMemoryAllocator& operator=(const VKMemoryAllocator&) = delete;
-
-	VKMemoryAllocator(VKMemoryAllocator&&) = default;
-
-	VKMemoryAllocator& operator=(VKMemoryAllocator&&) = default;
-
-	void InsertSorted(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
-		VkDeviceSize first,
-		VkDeviceSize last);
-
-	void InsertSortedMerged(std::forward_list<std::pair<VkDeviceSize, VkDeviceSize>>& list,
-		VkDeviceSize first,
-		VkDeviceSize last);
-
-	std::pair<VkDeviceSize, VkDeviceSize> GetBestFit(VkDeviceSize size, VkDeviceSize alignment);
-
-	VkDeviceSize GetMemory(VkDeviceSize size, VkDeviceSize alignment);
-
-	void FreeMemory(VkDeviceSize addr);
-
-	void Reset();
-
-	VKMemoryAllocatorDetails GetMemoryAllocDetails();
-};
 
 struct VKCommandBuffer
 {
@@ -254,14 +209,12 @@ struct DescriptorPoolBuilder
 struct ImageMemoryPool
 {
 	VkDeviceMemory memory;
-	VKMemoryAllocator alloc;
 };
 
 struct BufferAlloc
 {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
-	VKMemoryAllocator alloc;
 };
 
 struct BufferView
@@ -401,10 +354,9 @@ struct VKDevice
 
 	EntryHandle CreateCommandPool(QueueIndex queueIndex);
 
-	EntryHandle CreateCubeMapedImageHandle(
-		uint32_t blobSize,
+	EntryHandle CreateCubeMappedImageHandle(
 		uint32_t width, uint32_t height, uint32_t layers,
-		uint32_t mipLevels, VkFormat imageFormat,
+		uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
 		EntryHandle memIndex,
 		VkImageAspectFlags flags
 	);
@@ -432,13 +384,12 @@ struct VKDevice
 	EntryHandle CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
-		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkImageUsageFlags flags, uint32_t sampleCount, size_t memoryAddr,
 		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
 
 	EntryHandle CreateImageHandle(
-		uint32_t blobSize,
 		uint32_t width, uint32_t height, uint32_t layers,
-		uint32_t mipLevels, VkFormat imageFormat,
+		uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
 		EntryHandle memIndex,
 		VkImageAspectFlags flags,
 		VkImageType imageType
@@ -681,7 +632,15 @@ struct VKDevice
 		VkImageUsageFlags flags, uint32_t sampleCount,
 		VkMemoryPropertyFlags memProps);
 
-	size_t GetMemoryFromBuffer(EntryHandle hostIndex, size_t size, uint32_t alignment);
+	void GetImageMemorySizeAndAlignment(
+		uint32_t width,
+		uint32_t height, uint32_t mipLevels,
+		VkFormat type, uint32_t layers,
+		VkImageUsageFlags flags, uint32_t sampleCount,
+		VkMemoryPropertyFlags memProps, VkImageLayout layout, 
+		VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType,
+		size_t* actualImageSize, size_t* alignment
+	);
 
 	int PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex);
 
@@ -721,8 +680,8 @@ struct VKDevice
 		EntryHandle deviceIndex,
 		EntryHandle stagingBufferIndex,
 		void* data,
-		size_t size, size_t offset,
-		int copies, size_t stride,
+		size_t size, size_t destOffset,
+		int copies, size_t stride, size_t stagingOffset,
 		EntryHandle queueManagerIndex
 	);
 
@@ -731,23 +690,17 @@ struct VKDevice
 	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format, EntryHandle queueManagerIndex
+		int mipLevels, VkFormat format, size_t stagingOffsetStart, EntryHandle queueManagerIndex
 	);
 
 	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
 		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format, RecordingBufferObject* rbo
+		int mipLevels, VkFormat format, size_t stagingOffsetStart, RecordingBufferObject* rbo
 	);
 
-	int WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* offsets, size_t cumulativesize, int entries, RecordingBufferObject* rbo);
-
-	int ResetBufferAllocator(EntryHandle bufferIndex);
-
-	VKMemoryAllocatorDetails GetMemoryAllocDetailsForBuffer(EntryHandle bufferHandle);
-
-	VKMemoryAllocatorDetails GetMemoryAllocDetailsForImageMemory(EntryHandle poolHandle);
+	int WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* destOffsets, size_t cumulativesize, size_t* stagingOffsets, int entries, RecordingBufferObject* rbo);
 	
 	int ResetQueryPool(EntryHandle poolHandle, uint32_t firstQuery, uint32_t queryCount);
 

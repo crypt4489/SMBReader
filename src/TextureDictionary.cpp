@@ -35,19 +35,15 @@ int TextureDictionary::FindPoolByFormat(ImageFormat format)
 	return -1;
 }
 
-void TextureDictionary::CreatePools(ImageFormat* formats, size_t* sizes, EntryHandle* poolHandles, EntryHandle* bufferHandles, int num)
+size_t TextureDictionary::AllocFromPoolAllocator(int poolIndex, size_t requestedImageSize, size_t alignment)
 {
-	if (num >= texturePoolHandle.size())
-		return;
+	return texturePoolAllocators[poolIndex].Allocate(requestedImageSize, alignment);
+}
 
-	for (int i = 0; i < num; i++)
-	{
-		texturePoolsSize[i] = sizes[i];
-		texturePoolsAllocatedSize[i] = 0;
-		texturePoolsFormat[i] = formats[i];
-		texturePoolHandle[i] = poolHandles[i];
-		deviceImageBuffers[i] = bufferHandles[i];
-	}
+void TextureDictionary::CreatePoolAllocator(int poolIndex, size_t totalBlobSize)
+{
+	texturePoolAllocators[poolIndex].dataSize = totalBlobSize;
+	texturePoolAllocators[poolIndex].dataAllocator = 0;
 }
 
 std::pair<int, int> TextureDictionary::GetCacheUsageAndCapacity() const
