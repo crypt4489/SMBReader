@@ -86,20 +86,26 @@ Packing multiple shadow maps into a single atlas reduces descriptor overhead and
 ## To-do list
 
 Clean-up Vulkan and add explicit error handling mechanism plus fallback when things fail.
-- Add error strings and error return codes
-- Remove all stl / unecessary bloat and bad design decisions / turn over any render interface data stored in class back to render instance
-- Implement TSLF allocator to be used by VkAllocationCallbacks
-- Support programmable requests for specific features via the agnostic render interface
-- Finish multi threaded queue support and return queue management to the render interface
-- Update vulkan to use descriptor heap extension, timeline semaphores and use coherent, explicit system to manage dependencies in command execution
+- Add error strings and error return codes (done)
+- Remove all stl / unecessary bloat and bad design decisions / turn over any render interface data stored in class back to render instance (done)
+- Implement TSLF allocator to be used by VkAllocationCallbacks (done)
+- Support programmable requests for specific features via the agnostic render interface (done)
+- Finish multi threaded queue support and return queue management to the render interface (done)
+- Update vulkan to use descriptor heap extension, timeline semaphores and use coherent, explicit system to manage dependencies in command execution (timeline and explicit sync system done)
+- Programmable GPU request and supprott multi gpu setup (done)
+- Pack structs and remove all dead code within different modules (done) 
 
 Finish render instance based on minimum specs for both Vulkan and DX12
-- Finish pipeline data updating
-- Finish resource transition and layout management
-- Create feature request system
-- Make robust all hardcoded bounds checking, add failure designation to all possible failure
-- Fix messed up memory allocations and allow user to instantiate with explicit bounds and sizes
-- Update all systems to conform with changes within Vulkan class
+- Create configuration struct for initialization of flat arrays and remove hardcoded bounds where appropriate. 
+- Finish pipeline data updating and any skelrton functions
+- Finish resource transition and layout management and create an image tracking and initialization (allow user to specify image layout, usage by function and specify depth and layers explicitly)
+- Create feature request system and make it so user can query features request (while also maintaining minimum viable feature request for this layer) 
+- Make robust all bounds checking, add failure designation to all possible failure (including integration with new vulkan failure designation and error handling)
+- Make shader graph have hardcoded bounds and cleanup initialization function for shader graph (no std::string, no separate allocators for shader graph and shader details, check shader bounds during compilation)
+- Separate window/swapchain creation from instance creation and make it explciitly controllable by app layer
+- Separate descriptor pool/heap creation and make it explicitly controllable by app layer.
+- Separate all vulkan specific functions or things that need to know it's using vulkan to separate file with compile type linking.
+- Accurately handle fallback and failure designations at all levels. 
 
 Finish app level architecture
 - Finish OS systems in windows and remove bad design decisions
