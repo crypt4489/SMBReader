@@ -16,6 +16,8 @@ namespace VK
 			VkSurfaceCapabilitiesKHR capabilities{};
 		};
 
+		const char* ConvertVkResultString(VkResult result);
+
 		VkDeviceSize GetRawImageSizeFromFormat(VkFormat format, uint32_t width, uint32_t height);
 
 		int querySwapChainSupportCount(VkPhysicalDevice device, VkSurfaceKHR surface, uint32_t* formatsDataSpaceCount, uint32_t* presentModesDataSpaceCount, VkResult results[2]);

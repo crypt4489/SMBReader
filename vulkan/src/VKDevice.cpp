@@ -14,6 +14,175 @@
 #include "VKUtilities.h"
 
 #include <cassert>
+#include <stdio.h>
+
+#define BASE_ERROR_STRING_ALLOCATION 160
+
+static const char* ConvertDeviceMajorCodeString(int deviceMajorCode)
+{
+	const char* strOutput = "";
+	switch (deviceMajorCode)
+	{
+	case 0:
+		break;
+	case DEVICE_HANDLE_RETRIEVE_OVERFLOW:
+		strOutput = "DEVICE_HANDLE_RETRIEVE_OVERFLOW";
+		break;
+	case DEVICE_HANDLE_ENTRIES_EXHAUSTION:
+		strOutput = "DEVICE_HANDLE_ENTRIES_EXHAUSTION";
+		break;
+	case DEVICE_STORAGE_EXHAUSTED:
+		strOutput = "DEVICE_STORAGE_EXHAUSTED";
+		break;
+	case DEVICE_CACHE_ALLOC_TOO_LARGE:
+		strOutput = "DEVICE_CACHE_ALLOC_TOO_LARGE";
+		break;
+	case DEVICE_VK_TYPE_CREATION_FAILED:
+		strOutput = "DEVICE_VK_TYPE_CREATION_FAILED";
+		break;
+	case DEVICE_VK_TYPE_HANDLE_INPUT_INVALID:
+		strOutput = "DEVICE_VK_TYPE_HANDLE_INPUT_INVALID";
+		break;
+	case DEVICE_VK_TYPE_SWC_PRESENT_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SWC_PRESENT_FAILED";
+		break;
+	case DEVICE_VK_TYPE_COMMAND_BUFFER_SUBMIT_FAILED:
+		strOutput = "DEVICE_VK_TYPE_COMMAND_BUFFER_SUBMIT_FAILED";
+		break;
+	case DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED";
+		break;
+	case DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE:
+		strOutput = "DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE";
+		break;
+	case DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS:
+		strOutput = "DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS";
+		break;
+	case DEVICE_VK_TYPE_TIMED_RESULT_FAILED:
+		strOutput = "DEVICE_VK_TYPE_TIMED_RESULT_FAILED";
+		break;
+	case DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_ALLOCATION_FAILED:
+		strOutput = "DEVICE_VK_TYPE_ALLOCATION_FAILED";
+		break;
+	default:
+		strOutput = "DEVICE_ERROR_UNKNOWN";
+		break;
+	}
+	return strOutput;
+}
+
+static const char* ConvertDeviceMinorCodeString(int deviceMinorCode)
+{
+	const char* strOutput = "";
+	switch (deviceMinorCode)
+	{
+	case 0:
+		break;
+	case DEVICE_VK_TYPE_BUFFER_VIEW_FAILED:
+		strOutput = "DEVICE_VK_TYPE_BUFFER_VIEW_FAILED";
+		break;
+	case DEVICE_VK_TYPE_BUFFER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_BUFFER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_COMMAND_POOL_FAILED:
+		strOutput = "DEVICE_VK_TYPE_COMMAND_POOL_FAILED";
+		break;
+	case DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED:
+		strOutput = "DEVICE_VK_TYPE_DESCRIPTOR_POOL_FAILED";
+		break;
+	case DEVICE_VK_TYPE_FENCE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_FENCE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_FRAMEBUFFER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_FRAMEBUFFER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_MEMORY_FAILED:
+		strOutput = "DEVICE_VK_TYPE_MEMORY_FAILED";
+		break;
+	case DEVICE_VK_TYPE_BIND_MEMORY_FAILED:
+		strOutput = "DEVICE_VK_TYPE_BIND_MEMORY_FAILED";
+		break;
+	case DEVICE_VK_TYPE_SHADER_MODULE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SHADER_MODULE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_IMAGE_HANDLE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED:
+		strOutput = "DEVICE_VK_TYPE_MEMORY_ALLOCATION_FAILED";
+		break;
+	case DEVICE_VK_TYPE_IMAGE_VIEW_FAILED:
+		strOutput = "DEVICE_VK_TYPE_IMAGE_VIEW_FAILED";
+		break;
+	case DEVICE_VK_TYPE_QUERY_POOL_FAILED:
+		strOutput = "DEVICE_VK_TYPE_QUERY_POOL_FAILED";
+		break;
+	case DEVICE_VK_TYPE_RENDER_PASS_FAILED:
+		strOutput = "DEVICE_VK_TYPE_RENDER_PASS_FAILED";
+		break;
+	case DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_COMMAND_BUFFER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_SAMPLER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SAMPLER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_SEMAPHORE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SEMAPHORE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_LOGICAL_DEVICE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_LOGICAL_DEVICE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_BUFFER_ALLOC_FAILED:
+		strOutput = "DEVICE_VK_TYPE_BUFFER_ALLOC_FAILED";
+		break;
+	case DEVICE_VK_TYPE_BUFFER_VIEW_CONTAINER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_BUFFER_VIEW_CONTAINER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED:
+		strOutput = "DEVICE_VK_TYPE_DESCRIPTOR_SET_FAILED";
+		break;
+	case DEVICE_VK_TYPE_DESCRIPTOR_LAYOUT_FAILED:
+		strOutput = "DEVICE_VK_TYPE_DESCRIPTOR_LAYOUT_FAILED";
+		break;
+	case DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED:
+		strOutput = "DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED";
+		break;
+	case DEVICE_VK_TYPE_IMAGE_MEMORY_POOL_FAILED:
+		strOutput = "DEVICE_VK_TYPE_IMAGE_MEMORY_POOL_FAILED";
+		break;
+	case DEVICE_VK_TYPE_IMAGE_PIPELINE_CACHE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_IMAGE_PIPELINE_CACHE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED:
+		strOutput = "DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED";
+		break;
+	case DEVICE_VK_TYPE_TEXEL_BUFFER_VIEW_FAILED:
+		strOutput = "DEVICE_VK_TYPE_TEXEL_BUFFER_VIEW_FAILED";
+		break;
+	case DEVICE_VK_TYPE_TEXTURE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_TEXTURE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_SWAPCHAIN_FAILED:
+		strOutput = "DEVICE_VK_TYPE_SWAPCHAIN_FAILED";
+		break;
+	case DEVICE_VK_TYPE_GRAPHICS_PIPELINE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_GRAPHICS_PIPELINE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_COMPUTE_PIPELINE_FAILED:
+		strOutput = "DEVICE_VK_TYPE_COMPUTE_PIPELINE_FAILED";
+		break;
+	case DEVICE_VK_TYPE_PIPELINE_LAYOUT_FAILED:
+		strOutput = "DEVICE_VK_TYPE_PIPELINE_LAYOUT_FAILED";
+		break;
+	default:
+		strOutput = "DEVICE_ERROR_UNKNOWN";
+		break;
+	}
+	return strOutput;
+}
 
 DescriptorPoolBuilder::DescriptorPoolBuilder(DeviceOwnedAllocator* alloc, size_t _numPoolSizes, VkDescriptorPoolCreateFlags _flags)
 	:
@@ -469,15 +638,45 @@ void VKDevice::ReturnHandleObject(EntryHandle index)
 
 void VKDevice::AddDeviceErrorCode(int internalErrorCode, VkResult vulkSpecificResult)
 {
-	int instErrorCodePos = currentErrorCodePos;
+	uint32_t instErrorCodePos = currentErrorCodePos & (errorCodeWrapSize - 1);
 
-	currentErrorCodePos = (currentErrorCodePos + 1) & (errorCodeWrapSize - 1);
+	currentErrorCodePos = (currentErrorCodePos + 1);
 
 	DeviceErrorCodeStruct* errorCode = &errorCodes[instErrorCodePos];
 
 	errorCode->internalErrorCode = internalErrorCode;
 	errorCode->vkResult = vulkSpecificResult;
 }
+
+char* VKDevice::PopErrorOffQueue(int* strLength)
+{
+	if (readErrorCodePos == currentErrorCodePos)
+		return nullptr;
+
+	uint32_t instErrorCodePos = readErrorCodePos & (errorCodeWrapSize - 1);
+
+	readErrorCodePos = (readErrorCodePos + 1);
+
+	DeviceErrorCodeStruct* errorCode = &errorCodes[instErrorCodePos];
+
+	const char* vkResultStr = VK::Utils::ConvertVkResultString(errorCode->vkResult);
+
+	int minorCode = GET_MINOR_CODE(errorCode->internalErrorCode);
+
+	int majorCode = GET_MAJOR_CODE(errorCode->internalErrorCode);
+
+	const char* majorCodeStr = ConvertDeviceMajorCodeString(majorCode);
+
+	const char* minorCodeStr = ConvertDeviceMinorCodeString(minorCode);
+
+	char* buffer = (char*)AllocFromDeviceCache(BASE_ERROR_STRING_ALLOCATION);
+
+	int written = snprintf(buffer, BASE_ERROR_STRING_ALLOCATION, "%s, %s, %s", majorCodeStr, minorCodeStr, vkResultStr);
+	*strLength = (written >= BASE_ERROR_STRING_ALLOCATION) ? BASE_ERROR_STRING_ALLOCATION - 1 : written;
+
+	return buffer;
+}
+
 
 void* VKDevice::AllocFromDeviceCache(size_t size)
 {
@@ -3215,7 +3414,7 @@ int VKDevice::SubmitCommandBuffer(
 
 	if ((vkRes = vkQueueSubmit(queue, 1, &submitInfo, fence)) != VK_SUCCESS) 
 	{
-		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED, vkRes);
+		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMAND_BUFFER_SUBMIT_FAILED, vkRes);
 		retCode = -1;
 	}
 
@@ -3299,7 +3498,7 @@ int VKDevice::SubmitCommandBuffer(
 
 	if ((vkRes = vkQueueSubmit(queue, 1, &submitInfo, fence)) != VK_SUCCESS)
 	{
-		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED, vkRes);
+		AddDeviceErrorCode(DEVICE_VK_TYPE_COMMAND_BUFFER_SUBMIT_FAILED, vkRes);
 		retCode = -1;
 	}
 

@@ -272,7 +272,7 @@ enum DeviceErrorCodeMajor
 	DEVICE_VK_TYPE_CREATION_FAILED = 5,
 	DEVICE_VK_TYPE_HANDLE_INPUT_INVALID = 6,
 	DEVICE_VK_TYPE_SWC_PRESENT_FAILED = 7,
-	DEVICE_VK_TYPE_COMMNAD_BUFFER_SUBMIT_FAILED = 8,
+	DEVICE_VK_TYPE_COMMAND_BUFFER_SUBMIT_FAILED = 8,
 	DEVICE_VK_TYPE_SHADER_CONVERT_FLAGS_FAILED = 9,
 	DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE = 10,
 	DEVICE_VK_TYPE_INDEX_OUT_OF_BOUNDS = 11,
@@ -595,6 +595,8 @@ struct VKDevice
 
 	void AddDeviceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
 
+	char* PopErrorOffQueue(int* strLength);
+
 	void FreeFromPerDeviceData(void* memoryAddress);
 
 
@@ -718,10 +720,10 @@ struct VKDevice
 
 	VKAllocationCB *deviceDriverAllocator;
 
-	static const int errorCodeWrapSize = 16;
+	static const uint32_t errorCodeWrapSize = 16;
 	DeviceErrorCodeStruct errorCodes[errorCodeWrapSize];
-	int currentErrorCodePos = 0;
-	int readErrorCodePos = 0;
+	uint32_t currentErrorCodePos = 0;
+	uint32_t readErrorCodePos = 0;
 	uint32_t deviceMask = 0;
 	int freeListTop = -1;
 

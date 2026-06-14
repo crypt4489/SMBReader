@@ -202,6 +202,8 @@ struct VKInstance
 
 	void AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecificResult);
 
+	char* PopErrorOffQueue(int* strLength);
+
 	uint32_t GetLogicalDeviceExtensionsCount(LogicalDeviceFeatures* requestedFeatures);
 
 	void GetLogicalDeviceExtensions(LogicalDeviceFeatures* requestedFeatures, const char** actualHandles);
@@ -219,10 +221,10 @@ struct VKInstance
 
 	InstanceHandlePoolObject handles[MAX_TYPED_HANDLES];
 	
-	static const int errorCodeWrapSize = 16;
+	static const uint32_t errorCodeWrapSize = 16;
 	InstanceErrorCodeStruct errorCodes[errorCodeWrapSize];
-	int currentErrorCodePos = 0;
-	int readErrorCodePos = 0;
+	uint32_t currentErrorCodePos = 0;
+	uint32_t readErrorCodePos = 0;
 
 	uint32_t instanceExtCount;
 	uint32_t instanceLayerCount;

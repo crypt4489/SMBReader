@@ -10,6 +10,84 @@
 
 #include <cassert>
 
+#define BASE_ERROR_STRING_ALLOCATION 150
+
+static const char* ConvertInstanceMajorCodeString(int instanceMajorCode)
+{
+	const char* strOutput = "";
+	switch (instanceMajorCode)
+	{
+	case 0:
+		break;
+	case INSTANCE_HANDLE_CREATION_FAILED:
+		strOutput = "INSTANCE_HANDLE_CREATION_FAILED";
+		break;
+	case INSTANCE_EXTENSION_ENUMERATED_FAILED:
+		strOutput = "INSTANCE_EXTENSION_ENUMERATED_FAILED";
+		break;
+	case INSTANCE_REQUESTED_EXTENSION_NOT_AVAILABLE:
+		strOutput = "INSTANCE_REQUESTED_EXTENSION_NOT_AVAILABLE";
+		break;
+	case INSTANCE_REQUESTED_LAYER_NOT_AVAILABLE:
+		strOutput = "INSTANCE_REQUESTED_LAYER_NOT_AVAILABLE";
+		break;
+	case INSTANCE_GPU_ENUMERATION_FAILED:
+		strOutput = "INSTANCE_GPU_ENUMERATION_FAILED";
+		break;
+	case INSTANCE_NO_SUITABLE_GPU_FOUND:
+		strOutput = "INSTANCE_NO_SUITABLE_GPU_FOUND";
+		break;
+	case INSTANCE_HANDLE_EXHAUSTION:
+		strOutput = "INSTANCE_HANDLE_EXHAUSTION";
+		break;
+	case INSTANCE_DEBUG_FUNCTION_POINTER_RETRIEVAL_FAILED:
+		strOutput = "INSTANCE_DEBUG_FUNCTION_POINTER_RETRIEVAL_FAILED";
+		break;
+	case INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED:
+		strOutput = "INSTANCE_QUERY_SWAPCHAIN_SUPPORT_FAILED";
+		break;
+	default:
+		strOutput = "INSTANCE_ERROR_UNKNOWN";
+		break;
+	}
+	return strOutput;
+}
+
+static const char* ConvertInstanceMinorCodeString(int instanceMinorCode)
+{
+	const char* strOutput = "";
+	switch (instanceMinorCode)
+	{
+	case 0:
+		break;
+	case INSTANCE_HANDLE:
+		strOutput = "INSTANCE_HANDLE";
+		break;
+	case INSTANCE_RENDER_SURFACE:
+		strOutput = "INSTANCE_RENDER_SURFACE";
+		break;
+	case INSTANCE_GPU_ALLOCATION:
+		strOutput = "INSTANCE_GPU_ALLOCATION";
+		break;
+	case INSTANCE_LOGICAL_DEVICE_ALLOC:
+		strOutput = "INSTANCE_LOGICAL_DEVICE_ALLOC";
+		break;
+	case INSTANCE_DEBUG_MESSENGER:
+		strOutput = "INSTANCE_DEBUG_MESSENGER";
+		break;
+	case INSTANCE_FORMAT_COUNT:
+		strOutput = "INSTANCE_FORMAT_COUNT";
+		break;
+	case INSTANCE_PRESENT_MODE_COUNT:
+		strOutput = "INSTANCE_PRESENT_MODE_COUNT";
+		break;
+	default:
+		strOutput = "INSTANCE_ERROR_UNKNOWN";
+		break;
+	}
+	return strOutput;
+}
+
 static uint32_t ConvertGPUDeviceTypeToVkPhysicalDeviceType(uint32_t type)
 {
 	uint32_t retType = 0;
@@ -991,6 +1069,36 @@ void VKInstance::AddInstanceErrorCode(int internalErrorCode, VkResult vulkSpecif
 
 	errorCode->internalErrorCode = internalErrorCode;
 	errorCode->vkResult = vulkSpecificResult;
+}
+
+char* VKInstance::PopErrorOffQueue(int* strLength)
+{
+
+	if (readErrorCodePos == currentErrorCodePos)
+		return nullptr;
+
+	uint32_t instErrorCodePos = readErrorCodePos & (errorCodeWrapSize - 1);
+
+	readErrorCodePos = (readErrorCodePos + 1);
+
+	InstanceErrorCodeStruct* errorCode = &errorCodes[instErrorCodePos];
+
+	const char* vkResultStr = VK::Utils::ConvertVkResultString(errorCode->vkResult);
+
+	int minorCode = GET_MINOR_CODE(errorCode->internalErrorCode);
+
+	int majorCode = GET_MAJOR_CODE(errorCode->internalErrorCode);
+
+	const char* majorCodeStr = ConvertInstanceMajorCodeString(majorCode);
+
+	const char* minorCodeStr = ConvertInstanceMinorCodeString(minorCode);
+
+	char* buffer = (char*)AllocFromInstanceCache(BASE_ERROR_STRING_ALLOCATION);
+
+	int written = snprintf(buffer, BASE_ERROR_STRING_ALLOCATION, "%s, %s, %s", majorCodeStr, minorCodeStr, vkResultStr);
+	*strLength = (written >= BASE_ERROR_STRING_ALLOCATION) ? BASE_ERROR_STRING_ALLOCATION - 1 : written;
+
+	return buffer;
 }
 
 uint32_t VKInstance::GetLogicalDeviceExtensionsCount(LogicalDeviceFeatures* requestedFeatures)
