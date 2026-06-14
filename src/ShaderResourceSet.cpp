@@ -6,6 +6,64 @@
 #define MAX_VALUE_LEN 50
 #define MAX_ATTRIBUTE_LINE_LEN 200
 
+struct PipelineXMLTag
+{
+	unsigned long hashCode;
+};
+
+struct PipelineDescriptionXMLTag : PipelineXMLTag //followed by shaderNameLen Bytes
+{
+	int sampLo;
+	int sampHi;
+};
+
+struct PrimitiveXMLTag : PipelineXMLTag
+{
+	PrimitiveType primType;
+};
+
+struct DepthXMLTag : PipelineXMLTag
+{
+	bool enabled;
+	RasterizerTest depthOp;
+};
+
+struct CullModeXMLTag : PipelineXMLTag
+{
+	CullMode mode;
+};
+
+struct ShaderXMLTag
+{
+	unsigned long hashCode;
+};
+
+struct ShaderGLSLShaderXMLTag : ShaderXMLTag //followed by shaderNameLen Bytes
+{
+	ShaderStageType type;
+};
+
+struct ShaderComputeLayoutXMLTag : ShaderXMLTag
+{
+	ShaderComputeLayout comps;
+};
+
+struct ShaderResourceItemXMLTag : ShaderXMLTag
+{
+	ShaderStageType shaderstage;
+	ShaderResourceType resourceType;
+	ShaderResourceAction resourceAction;
+	int arrayCount;
+	int size;
+	int offset;
+	int pushRangeStage;
+};
+
+struct ShaderResourceSetXMLTag : ShaderXMLTag
+{
+	int resourceCount;
+};
+
 static constexpr unsigned long hash(const char* str);
 static constexpr int ASCIIToInt(char* str);
 

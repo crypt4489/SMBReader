@@ -1,4 +1,5 @@
 #pragma once
+
 #include <array>
 #include <functional>
 #include <vulkan/vulkan.h>
@@ -12,7 +13,6 @@
 #include "ShaderResourceSet.h"
 #include "ThreadManager.h"
 #include "WindowManager.h"
-
 
 namespace API 
 {

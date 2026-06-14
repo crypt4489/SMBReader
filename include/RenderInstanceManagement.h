@@ -1,4 +1,5 @@
 #pragma once
+
 #include <atomic>
 #include <cstdint>
 #include "CommonRenderTypes.h"
@@ -260,7 +261,6 @@ static_assert(sizeof(RenderDriverUpdateCommandMemory) % 32 == 0);
 static_assert(sizeof(RenderDriverUpdateCommandResource) % 32 == 0);
 static_assert(sizeof(RenderDriverUpdateCommandImage) % 32 == 0);
 static_assert(sizeof(RenderDriverUpdateCommandFill) % 32 == 0);
-
 
 struct MemoryDriverTransferPool
 {

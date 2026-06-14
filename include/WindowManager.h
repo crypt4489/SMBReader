@@ -6,8 +6,6 @@
 
 struct WindowManager
 {
-public:
-
 	bool ShouldCloseWindow();
 
 	void GetWindowSize(int* width, int* height);

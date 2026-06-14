@@ -1,9 +1,9 @@
 #pragma once
+
 #include "ProgramArgs.h"
 
-class ApplicationLoop
+struct ApplicationLoop
 {
-public:
 	ApplicationLoop(ProgramArgs& _args);
 	~ApplicationLoop();
 

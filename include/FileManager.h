@@ -1,9 +1,9 @@
 #pragma once
+
 #include <cstdint>
 #include <filesystem>
 #include <regex>
 #include <utility>
-
 
 #include "StringUtils.h"
 #include "OSFile.h"
@@ -12,8 +12,6 @@
 
 struct FileManager
 {
-public:
-
 	static std::filesystem::path SetupDirectory(StringView* nameView);
 
 	static void SetFileCurrentDirectory(StringView* nameView);

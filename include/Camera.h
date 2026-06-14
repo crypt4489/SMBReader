@@ -1,7 +1,7 @@
 #pragma once
 
 #include "math/LTM.h"
-#include <cmath>
+
 struct Camera
 {
 	void CamLookAt(const Vector3f& pos, const Vector3f& target, const Vector3f& up);

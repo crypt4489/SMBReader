@@ -1,6 +1,7 @@
 #pragma once
+
 #include <cstdint>
-#include <fstream>
+#include <ostream>
 #include "allocator/AppAllocator.h"
 #include "logger/Logger.h"
 #include "math/MathTypes.h"
@@ -139,17 +140,12 @@ typedef struct cpospack6_c16tex2_bone2_type_h
 
 } CVertex_PosPack6_C16Tex2_Bone2;
 
-//First Part of SMB GEo Chunk is the BaseGeometry Definition BaseGeometryDef
-
-//Second part is I think the GeometryDef
-
 #define MaterialDefSize 136 //bytes
 #define GeometryBaseDefSize 72 //bytes
 
 #define RenderableByIndexNonPB 5292387491162064043
 #define RenderableByIndex 5792287050554945273
 #define MAX_JOINT_NAME 48
-
 
 struct SMBJoint
 {
@@ -168,9 +164,6 @@ struct SMBSkeleton
 	uint32_t jointCount;
 	SMBJoint* joints;
 };
-
-
-
 
 enum RenderableFlags
 {

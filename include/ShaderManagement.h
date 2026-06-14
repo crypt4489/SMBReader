@@ -1,9 +1,13 @@
 #pragma once
+
 #include "allocator/AppAllocator.h"
 #include "CommonRenderTypes.h"
 #include <array>
 
 #define SHADER_NAME_SIZE 64
+#define MAX_SHADER_MAPS 4
+#define MAX_SHADER_RESOURCES 32
+#define MAX_SHADER_RESOURCE_SET_TEMPLATES 16
 
 struct ShaderDetails
 {
@@ -19,11 +23,6 @@ struct ShaderMap
 	ShaderStageType type;
 	int shaderReference;
 };
-
-
-#define MAX_SHADER_MAPS 4
-#define MAX_SHADER_RESOURCES 32
-#define MAX_SHADER_RESOURCE_SET_TEMPLATES 16
 
 struct ShaderGraph
 {
@@ -45,7 +44,12 @@ struct ShaderGraphsHolder
 	std::array<ShaderGraph, T_ShaderGraphCount> shaderGraphPtrs{};
 	std::array<EntryHandle, T_ShaderCount> shaders{};
 	std::array<ShaderDetails, T_ShaderCount> shaderDetails{};
-	
-	ShaderGraphsHolder() = default;
+
+	ShaderGraphsHolder()
+		: 
+		graphCount(0), shaderCount(0)
+	{
+
+	}
 };
 

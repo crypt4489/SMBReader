@@ -1,26 +1,11 @@
 #pragma once
+
 #include <array>
 
 #include "allocator/AppAllocator.h"
 #include "imageutils/TextureIO.h"
 #include "IndexTypes.h"
 #include "ThreadManager.h"
-
-// manage central pool of image data;
-// upload to different buffers of by types
-// maintian upload handles with render instance
-
-
-
-struct TextureAllocation
-{
-	size_t size;
-	int pool;
-	int width;
-	int height;
-	int miplevels;
-	int layers;
-};
 
 struct TextureDictionary
 {
