@@ -506,12 +506,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 
 void RenderInstance::CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
-	new (&vulkanShaderGraphs) decltype(vulkanShaderGraphs)
-	{
-		instanceStorageAllocator->Allocate(10 * KiB), 10 * KiB,
-		instanceStorageAllocator->Allocate(5 * KiB), 5 * KiB
-	};
-
 	new (&descriptorManager) decltype(descriptorManager)
 	{
 		instanceStorageAllocator->Allocate(10 * KiB), 10 * KiB
@@ -1358,14 +1352,14 @@ void RenderInstance::CreateShaderResourceMap(ShaderGraph* graph)
 
 	for (int j = 0; j < ResourceSetCount; j++)
 	{
-		ShaderResourceSetTemplate* set = (ShaderResourceSetTemplate*)graph->GetSet(j);
+		ShaderResourceSetTemplate* set = &graph->shaderResourceSetTemplates[j];
 		descriptorBuilders[j] = dev->CreateDescriptorSetLayoutBuilder(set->bindingCount);
 		set->vulkanDescLayout = vulkanDescriptorLayoutCounter + j;
 	}
 
 	for (int j = 0; j < graph->resourceCount; j++)
 	{
-		ShaderResource* resource = (ShaderResource*)graph->GetResource(j);
+		ShaderResource* resource = &graph->shaderResources[j];
 
 		VkShaderStageFlags stageFlags = API::ConvertShaderStageToVulkanShaderStage(resource->stages);
 
@@ -1462,46 +1456,58 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 	int detailsSize = 0, totalDetailSize = 0;
 
-	ShaderDetails* deats = (ShaderDetails*)vulkanShaderGraphs.shaderDetailsAllocator.Head();
+	int outputShaderIndexHead = vulkanShaderGraphs.shaderCount;
+
+	int shaderGraphStart = vulkanShaderGraphs.graphCount;
+
+	ShaderDetails* detailsHead = &vulkanShaderGraphs.shaderDetails[outputShaderIndexHead];
 
 	for (int i = 0; i < shaderGraphLayoutsCount; i++)
 	{
-		vulkanShaderGraphs.shaderGraphPtrs[i] =
-			CreateShaderGraph(shaderGraphLayouts[i],
-				cacheAllocator,
-				&vulkanShaderGraphs.graphAllocator,
-				&vulkanShaderGraphs.shaderDetailsAllocator, &detailsSize, internalRendererLogger);
+		CreateShaderGraph
+		(
+			shaderGraphLayouts[i],
+			cacheAllocator,
+			&vulkanShaderGraphs.shaderGraphPtrs[i + shaderGraphStart],
+			detailsHead, 
+			&detailsSize, 
+			internalRendererLogger
+		);
 
-		CreateShaderResourceMap(vulkanShaderGraphs.shaderGraphPtrs[i]);
+		CreateShaderResourceMap(&vulkanShaderGraphs.shaderGraphPtrs[i]);
 
 		totalDetailSize += detailsSize;
+
+		detailsHead = &vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + totalDetailSize];
 	}
 
 	int shaderGraph = 0;
 
-	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
+	ShaderGraph* graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
 
 	int shaderMapCount = graph->shaderMapCount, mapIter = 0;
 
-	int outputShaderIndexHead = vulkanShaderGraphs.shaderCount;
+	vulkanShaderGraphs.shaderCount += totalDetailSize;
+
+	vulkanShaderGraphs.graphCount += shaderGraphLayoutsCount;
 
 	for (int i = 0; i < totalDetailSize; i++)
 	{
-		char* str = deats->GetString();
+		char* str = vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + i].glslShaderName;
+
+		int shaderNameLength = vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + i].glslShaderNameSize;
 
 		if (mapIter >= shaderMapCount)
 		{
 			++shaderGraph;
-			graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
+			graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraph];
 			shaderMapCount = graph->shaderMapCount;
 			mapIter = 0;
 		}
 
-		ShaderMap* map = (ShaderMap*)graph->GetMap(mapIter++);
+		ShaderMap* map = &graph->shaderMaps[mapIter++];
 
 		map->shaderReference = i;
-
-		std::string shaderNameString = std::string(str);
 
 		char* shaderData;
 
@@ -1509,9 +1515,13 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 		int shaderLength = 0;
 
-		std::string potentialCompiledName = shaderNameString + ".spv";
+		char* stringBuffer = (char*)cacheAllocator->Allocate(shaderNameLength + 4);
 
-		StringView nameView = cacheAllocator->AllocateFromNullStringCopy(potentialCompiledName.c_str());
+		memcpy(stringBuffer, str, shaderNameLength);
+
+		memcpy(stringBuffer + (shaderNameLength-1), ".spv", 5);
+
+		StringView nameView{ stringBuffer, shaderNameLength + 3 };
 
 		VkShaderStageFlagBits shaderFlags = dev->ConvertShaderFlags(nameView.stringData, nameView.charCount);
 
@@ -1544,10 +1554,6 @@ void RenderInstance::CreateShaderGraphs(StringView* shaderGraphLayouts, int shad
 
 		vulkanShaderGraphs.shaders[outputShaderIndexHead + i] = dev->CreateShader(shaderData, shaderLength, shaderFlags);
 
-		vulkanShaderGraphs.shaderDetails[outputShaderIndexHead + i] = deats;
-
-		deats = deats->GetNext();
-
 		OSCloseFile(&handle);
 	}
 }
@@ -1556,9 +1562,9 @@ int RenderInstance::CreateGraphicRenderStateObject(int shaderGraphIndex, int pip
 {
 	int retVal = pipelineIdentifierCount;
 
-	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+	ShaderGraph* graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 
-	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	ShaderMap* map = &graph->shaderMaps[0];
 
 	if (map->type != COMPUTESHADERSTAGE)
 	{
@@ -1586,7 +1592,7 @@ int RenderInstance::CreateGraphicRenderStateObject(int shaderGraphIndex, int pip
 			instData->frameGraphPipelineIndices[i] = pipelineVariationsCounter;
 
 			pipelineVariationsCounter += CreatePipelineFromGraphAndSpec(
-				&pipelineInfos[pipelineDescriptionIndex], vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex], 
+				&pipelineInfos[pipelineDescriptionIndex], &vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex], 
 				pipelineHandles, pipelineVariationsCounter, 
 				&attachmentGraphsInstances[frameGraphAttachments[i]], perFrameRenderPassSelection[i]
 			);
@@ -1604,15 +1610,15 @@ int RenderInstance::CreateComputePipelineStateObject(int shaderGraphIndex)
 {
 	int retVal = pipelineIdentifierCount;
 
-	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+	ShaderGraph* graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 	
-	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	ShaderMap* map = &graph->shaderMaps[0];
 	
 	if (map->type == COMPUTESHADERSTAGE)
 	{
 		EntryHandle* pipelineID = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle));
 
-		*pipelineID = CreateVulkanComputePipelineTemplate(vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex]);
+		*pipelineID = CreateVulkanComputePipelineTemplate(graph);
 
 		pipelinesIdentifier[shaderGraphIndex] = pipelineID;
 
@@ -1641,7 +1647,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 
 	for (int i = 0; i < graph->shaderMapCount; i++)
 	{
-		ShaderMap* map = (ShaderMap*)graph->GetMap(i);
+		ShaderMap* map = &graph->shaderMaps[i];
 		shaderHandle[i] = vulkanShaderGraphs.shaders[map->shaderReference];
 	}
 
@@ -1649,7 +1655,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{
-		ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(i);
+		ShaderResourceSetTemplate* resourceSet = &graph->shaderResourceSetTemplates[i];
 		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 		pushConstantRangeCount += resourceSet->constantStageCount;
 	}
@@ -1659,7 +1665,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(GenericPipelineStateInfo* sta
 
 	for (int i = 0; i < graph->resourceCount; i++)
 	{
-		ShaderResource* resource = (ShaderResource*)graph->GetResource(i);
+		ShaderResource* resource = &graph->shaderResources[i];
 		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
 		{
 			int rangeIndex = resource->rangeIndex;
@@ -1765,7 +1771,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 
 	EntryHandle shaderHandle;
 
-	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
+	ShaderMap* map = &graph->shaderMaps[0];
 
 	shaderHandle = vulkanShaderGraphs.shaders[map->shaderReference];
 
@@ -1773,7 +1779,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 
 	for (int a = 0; a < graph->resourceSetCount; a++)
 	{
-		ShaderResourceSetTemplate* setLayout = (ShaderResourceSetTemplate*)graph->GetSet(a);
+		ShaderResourceSetTemplate* setLayout = &graph->shaderResourceSetTemplates[a];
 
 		pushRangeSize += setLayout->constantStageCount;
 	}
@@ -1782,7 +1788,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 
 	for (int g = 0; g < graph->resourceCount; g++)
 	{
-		ShaderResource* resource = (ShaderResource*)graph->GetResource(g);
+		ShaderResource* resource = &graph->shaderResources[g];
 
 		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
 		{
@@ -1807,7 +1813,7 @@ EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(ShaderGraph* gra
 	
 	for (int i = 0; i < graph->resourceSetCount; i++)
 	{
-		ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(i);
+		ShaderResourceSetTemplate* resourceSet = &graph->shaderResourceSetTemplates[i];
 
 		layoutHandles[i] = vulkanDescriptorLayouts[resourceSet->vulkanDescLayout];
 	}
@@ -2425,9 +2431,9 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 { 
     ShaderResourceSet* set = (ShaderResourceSet*)descriptorManager.shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceSet));
    
-    ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+    ShaderGraph* graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
 
-    ShaderResourceSetTemplate* resourceSet = (ShaderResourceSetTemplate*)graph->GetSet(targetSet);
+    ShaderResourceSetTemplate* resourceSet = &graph->shaderResourceSetTemplates[targetSet];
 
     set->bindingCount = resourceSet->bindingCount;
     set->layoutHandle = resourceSet->vulkanDescLayout;
@@ -2445,7 +2451,7 @@ int RenderInstance::AllocateShaderResourceSet(uint32_t shaderGraphIndex, uint32_
 	{
 		MemoryBarrierType memBarrierType = MemoryBarrierType::MEMORY_BARRIER;
 
-		ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceSet->resourceStart+h);
+		ShaderResource* resource = &graph->shaderResources[resourceSet->resourceStart+h];
 
 		if (resource->set != targetSet) continue;
 
@@ -3131,10 +3137,10 @@ int RenderInstance::CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipel
 
 ShaderComputeLayout* RenderInstance::GetComputeLayout(int shaderGraphIndex)
 {
-	ShaderGraph* graph = vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
-	ShaderMap* map = (ShaderMap*)graph->GetMap(0);
-	ShaderDetails* deats = vulkanShaderGraphs.shaderDetails[map->shaderReference];
-	return (ShaderComputeLayout*)deats->GetShaderData();
+	ShaderGraph* graph = &vulkanShaderGraphs.shaderGraphPtrs[shaderGraphIndex];
+	ShaderMap* map = &graph->shaderMaps[0];
+	ShaderDetails* details = &vulkanShaderGraphs.shaderDetails[map->shaderReference];
+	return &details->computeLayout;
 }
 
 int RenderInstance::CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info)

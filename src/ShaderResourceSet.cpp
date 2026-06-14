@@ -5,7 +5,6 @@
 #define MAX_ATTRIBUTE_LEN 50
 #define MAX_VALUE_LEN 50
 #define MAX_ATTRIBUTE_LINE_LEN 200
-#define MAX_SHADER_NAME 50
 
 static constexpr unsigned long hash(const char* str);
 static constexpr int ASCIIToInt(char* str);
@@ -18,7 +17,7 @@ static int ReadAttributeValueHash(char* fileData, int size, int currentLocation,
 static int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigned long* val, Logger* scratchLogger);
 
 static int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger);
-static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
+static int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, ShaderDetails* details, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
 static int HandleShaderResourceItem(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
 static int HandleComputeLayout(char* fileData, int size, int currentLocation, uintptr_t* offset, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger);
 
@@ -35,7 +34,6 @@ static int HandleAttachment(char* fileData, int size, int currentLocation, Attac
 static int HandleAttachmentDesc(char* fileData, int size, int currentLocation, AttachmentRenderPass* holder, Logger* scratchLogger);
 static int HandleAttachmentResource(char* fileData, int size, int currentLocation, AttachmentResource* resource, Logger* scratchLogger);
 
-
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
 {
 	BarrierStage flags = 0;
@@ -43,21 +41,6 @@ BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
 	//flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
 	flags |= (COMPUTE_BARRIER) * ((type & COMPUTESHADERSTAGE) != 0);
 	return flags;
-}
-
-ShaderDetails* ShaderDetails::GetNext()
-{
-	return (ShaderDetails*)((uintptr_t)this + sizeof(ShaderDetails) + shaderDataSize + shaderNameSize);
-}
-
-char* ShaderDetails::GetString()
-{
-	return (char*)((uintptr_t)this + sizeof(ShaderDetails));
-}
-
-void* ShaderDetails::GetShaderData()
-{
-	return (void*)((uintptr_t)this + sizeof(ShaderDetails) + shaderNameSize);
 }
 
 constexpr unsigned long hash(const char* str)
@@ -86,15 +69,13 @@ constexpr int ASCIIToInt(char* str)
 	return out;
 }
 
-ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount, Logger* outputLogger)
+int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph* graph, ShaderDetails* details, int* shaderDetailCount, Logger* outputLogger)
 {
 	uintptr_t* TreeNodes = (uintptr_t*)readerMemory->Allocate(sizeof(uintptr_t) * 50);
 	
 	int* SetNodes = (int*)readerMemory->Allocate(sizeof(int) * 20);
 	
 	int* ShaderRefs = SetNodes + 15;
-	
-	ShaderDetails** details = (ShaderDetails**)readerMemory->Allocate(sizeof(ShaderDetails*) * 5);
 
 	OSFileHandle fileHandle;
 
@@ -152,13 +133,11 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 		case hash("GLSLShader"):
 			if (opening)
 			{
-				ShaderDetails* ldetails = (ShaderDetails*)shaderAllocator->Head();
+				ShaderDetails* ldetails = &details[shaderCount];
 
-				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], shaderAllocator, readerMemBuffer, &readerMemBufferAllocate, outputLogger);
+				stride = HandleGLSLShader(dataStart, dataSize, curr, &TreeNodes[tagCount], ldetails, readerMemBuffer, &readerMemBufferAllocate, outputLogger);
 				
 				ShaderRefs[shaderCount] = tagCount;
-
-				details[shaderCount] = ldetails;
 				
 				shaderCount++;
 			}
@@ -197,13 +176,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 	}
 
 	if (retCode)
-		return nullptr;
-
-	int graphSizesize = sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)) + (shaderCount * sizeof(ShaderMap)) + (shaderResourceCount * sizeof(ShaderResource));
-
-	ShaderGraph* graph = (ShaderGraph*)graphAllocator->Allocate(graphSizesize);
-
-	memset(graph, 0, sizeof(ShaderGraph) + (setCount * sizeof(ShaderResourceSetTemplate)));
+		return retCode;
 
 	graph->shaderMapCount = shaderCount;
 	graph->resourceSetCount = setCount;
@@ -213,7 +186,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 
 	for (int j = 0; j < shaderCount; j++)
 	{
-		ShaderMap* map = (ShaderMap*)graph->GetMap(j);
+		ShaderMap* map = &graph->shaderMaps[j];
 
 		ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)TreeNodes[ShaderRefs[j]];
 		
@@ -222,11 +195,10 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 		if (type == ShaderStageTypeBits::COMPUTESHADERSTAGE)
 		{
 			ShaderComputeLayoutXMLTag* ctag = (ShaderComputeLayoutXMLTag*)TreeNodes[ShaderRefs[j] + 1];
-			ShaderDetails* deats = details[j];
-			ShaderComputeLayout* layout = (ShaderComputeLayout*)deats->GetShaderData();
-			layout->x = ctag->comps.x;
-			layout->y = ctag->comps.y;
-			layout->z = ctag->comps.z;
+			ShaderDetails* deats = &details[j];
+			deats->computeLayout.x = ctag->comps.x;
+			deats->computeLayout.y = ctag->comps.y;
+			deats->computeLayout.z = ctag->comps.z;
 		}
 
 		map->type = type;
@@ -236,7 +208,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 
 	for (int i = 0; i < setCount; i++)
 	{
-		ShaderResourceSetTemplate* setLay = (ShaderResourceSetTemplate*)graph->GetSet(i);
+		ShaderResourceSetTemplate* setLay = &graph->shaderResourceSetTemplates[i];
 		int resIter = SetNodes[i] + 1;
 		ShaderResourceItemXMLTag* tag = (ShaderResourceItemXMLTag*)TreeNodes[resIter];
 		int bindingCount = 0;
@@ -250,7 +222,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 		while (tag && tag->hashCode == hash("ShaderResourceItem"))
 		{
 
-			ShaderResource* resource = (ShaderResource*)graph->GetResource(resourceIter++);
+			ShaderResource* resource = &graph->shaderResources[resourceIter++];
 			if (tag->resourceType == ShaderResourceType::CONSTANT_BUFFER)
 			{
 				resource->binding = ~0;
@@ -284,7 +256,6 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 			resource->offset = tag->offset;
 			setLay->bindingCount++;
 
-
 			if (!(tag->resourceType == ShaderResourceType::CONSTANT_BUFFER))
 			{
 				bindingCount++;
@@ -296,7 +267,7 @@ ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, All
 
 	*shaderDetailCount = shaderCount;
 
-	return graph;
+	return 0;
 }
 
 int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *hash, bool *opening, Logger* scratchLogger)
@@ -660,10 +631,9 @@ int ReadAttributes(char* fileData, int size, int currentLocation, unsigned long*
 
 
 
-int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, Allocator* shaderAllocator, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger)
+int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* offset, ShaderDetails* details, char* readerMemBuffer, int* readerMemBufferAllocate, Logger* scratchLogger)
 {
 	unsigned long hashes[6];
-	char nameScratch[MAX_SHADER_NAME];
 
 	int glslSize = 0;
 
@@ -672,10 +642,7 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 	if (charStride < 0)
 		return charStride;
 
-	ShaderDetails* details = (ShaderDetails*)shaderAllocator->Allocate(sizeof(ShaderDetails));
-
-	details->shaderDataSize = 0;
-	details->shaderNameSize = 0;
+	details->glslShaderNameSize = 0;
 
 	ShaderGLSLShaderXMLTag* tag = (ShaderGLSLShaderXMLTag*)&readerMemBuffer[*readerMemBufferAllocate];
 
@@ -699,7 +666,6 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 			switch (codeV)
 			{
 			case hash("compute"):
-				details->shaderDataSize = 12;
 				tag->type = ShaderStageTypeBits::COMPUTESHADERSTAGE;
 				break;
 			case hash("vert"):
@@ -725,14 +691,10 @@ int HandleGLSLShader(char* fileData, int size, int currentLocation, uintptr_t* o
 
 	*readerMemBufferAllocate += sizeof(ShaderGLSLShaderXMLTag);
 
-	int shaderNameCode = ReadValue(fileData, size, currentLocation + charStride, nameScratch, &details->shaderNameSize, MAX_SHADER_NAME, scratchLogger);
+	int shaderNameCode = ReadValue(fileData, size, currentLocation + charStride, details->glslShaderName, &details->glslShaderNameSize, sizeof(details->glslShaderName), scratchLogger);
 
 	if (shaderNameCode > 0)
 	{
-		char* nameCopy = (char*)shaderAllocator->Allocate(details->shaderNameSize + details->shaderDataSize);
-
-		memcpy(nameCopy, nameScratch, details->shaderNameSize);
-
 		charStride += shaderNameCode;
 	}
 	else

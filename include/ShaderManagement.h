@@ -3,24 +3,27 @@
 #include "CommonRenderTypes.h"
 #include <array>
 
+#define SHADER_NAME_SIZE 64
+
 struct ShaderDetails
 {
-	int shaderNameSize;
-	int shaderDataSize;
-
-	ShaderDetails* GetNext();
-
-	char* GetString();
-
-	void* GetShaderData();
+	char glslShaderName[SHADER_NAME_SIZE];
+	int glslShaderNameSize;
+	char hlslShaderName[SHADER_NAME_SIZE];
+	int hlslShaderNameSize;
+	ShaderComputeLayout computeLayout;
 };
 
 struct ShaderMap
 {
 	ShaderStageType type;
 	int shaderReference;
-	int GetMapSize() const;
 };
+
+
+#define MAX_SHADER_MAPS 4
+#define MAX_SHADER_RESOURCES 32
+#define MAX_SHADER_RESOURCE_SET_TEMPLATES 16
 
 struct ShaderGraph
 {
@@ -28,13 +31,9 @@ struct ShaderGraph
 	int resourceSetCount;
 	int resourceCount;
 
-	uintptr_t GetSet(int setIndex);
-
-	uintptr_t GetResource(int resourceIndex);
-
-	uintptr_t GetMap(int mapIndex);
-
-	int GetGraphSize() const;
+	ShaderMap shaderMaps[MAX_SHADER_MAPS];
+	ShaderResource shaderResources[MAX_SHADER_RESOURCES];
+	ShaderResourceSetTemplate shaderResourceSetTemplates[MAX_SHADER_RESOURCE_SET_TEMPLATES];
 };
 
 template <int T_ShaderGraphCount, int T_ShaderCount>
@@ -43,21 +42,10 @@ struct ShaderGraphsHolder
 	int graphCount;
 	int shaderCount;
 
-	SlabAllocator graphAllocator;
-	SlabAllocator shaderDetailsAllocator;
-	std::array<ShaderGraph*, T_ShaderGraphCount> shaderGraphPtrs{};
+	std::array<ShaderGraph, T_ShaderGraphCount> shaderGraphPtrs{};
 	std::array<EntryHandle, T_ShaderCount> shaders{};
-	std::array<ShaderDetails*, T_ShaderCount> shaderDetails{};
+	std::array<ShaderDetails, T_ShaderCount> shaderDetails{};
 	
 	ShaderGraphsHolder() = default;
-
-	ShaderGraphsHolder(void* gSlabHead, int gSlabSize, void* sSlabHead, int sSlabSize)
-		: 
-		graphCount(0), shaderCount(0),
-		graphAllocator{gSlabHead, gSlabSize},
-		shaderDetailsAllocator{sSlabHead, sSlabSize}
-	{
-
-	}
 };
 

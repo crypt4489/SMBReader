@@ -313,7 +313,7 @@ struct ShaderResourceSetXMLTag : ShaderXMLTag
 	int resourceCount;
 };
 
-ShaderGraph* CreateShaderGraph(StringView filename, Allocator* readerMemory, Allocator* graphAllocator, Allocator* shaderAllocator, int* shaderDetailCount, Logger* outputLogger);
+int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph* graph, ShaderDetails* details, int* shaderDetailCount, Logger* outputLogger);
 
 struct PipelineXMLTag
 {
