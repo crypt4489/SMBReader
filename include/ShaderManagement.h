@@ -35,21 +35,21 @@ struct ShaderGraph
 	ShaderResourceSetTemplate shaderResourceSetTemplates[MAX_SHADER_RESOURCE_SET_TEMPLATES];
 };
 
-template <int T_ShaderGraphCount, int T_ShaderCount>
 struct ShaderGraphsHolder
 {
-	int graphCount;
-	int shaderCount;
+	PoolAllocator<ShaderGraph> shaderGraphPtrs{};
+	PoolAllocator<EntryHandle> shaders{};
+	ShaderDetails* shaderDetails{};
 
-	std::array<ShaderGraph, T_ShaderGraphCount> shaderGraphPtrs{};
-	std::array<EntryHandle, T_ShaderCount> shaders{};
-	std::array<ShaderDetails, T_ShaderCount> shaderDetails{};
+	ShaderGraphsHolder() = default;
 
-	ShaderGraphsHolder()
-		: 
-		graphCount(0), shaderCount(0)
+	void Create(Allocator* shaderGraphAllocator, uint32_t maxShaderGraphs, uint32_t maxShaderHandles)
 	{
+		shaderGraphPtrs.Create(shaderGraphAllocator, maxShaderGraphs);
+		
+		shaders.Create(shaderGraphAllocator, maxShaderHandles);
 
+		shaderDetails = (ShaderDetails*)shaderGraphAllocator->Allocate(sizeof(ShaderDetails) * maxShaderHandles, alignof(ShaderDetails));
 	}
 };
 

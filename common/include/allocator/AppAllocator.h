@@ -63,7 +63,6 @@ struct Allocator
 	int dataSize;
 	std::atomic<int> dataAllocator;
 
-
 	Allocator() = default;
 
 	Allocator(void* _dataHead, int _size)
@@ -145,6 +144,59 @@ struct DeviceSlabAllocator
 	}
 	int Allocate(int _allocSize, int alignment);
 	std::pair<int, int> GetUsageAndCapacity() const;
+};
+
+template<typename T>
+struct PoolAllocator
+{
+	T* pool{};
+	int* freeList{};
+	int freeListTop = -1;
+	int count = 0;
+	int maxCount = 0;
+
+	PoolAllocator() = default;
+
+	void Create(Allocator* allocator, uint32_t maxElements)
+	{
+		pool = (T*)allocator->Allocate(sizeof(T) * maxElements, alignof(T));
+		freeList = (int*)allocator->Allocate(sizeof(int) * maxElements, alignof(int));
+		maxCount = maxElements;
+	}
+
+	int Allocate()
+	{
+		if (freeListTop >= 0)
+		{
+			return freeList[freeListTop--];
+		}
+
+		return count++;
+	}
+
+	int Allocate(int N)
+	{
+		int ret = count;
+
+		count += N;
+
+		return ret;
+	}
+
+	void Free(int index)
+	{
+		freeList[++freeListTop] = index;
+	}
+
+	T* Get(int index)
+	{
+		return &pool[index];
+	}
+
+	T operator[](int index)
+	{
+		return pool[index];
+	}
 };
 
 

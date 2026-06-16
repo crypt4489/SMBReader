@@ -43,13 +43,46 @@ namespace API
 		VkPhysicalDeviceVulkan12Features* features12);
 }
 
+struct RenderInstanceCreateInfo
+{
+	uint32_t maxAttachmentGraphTemplates;
+	uint32_t maxAttachmentGraphInstances;
+	uint32_t maxImagePoolsCount;
+	uint32_t maxBufferPoolsCount;
+	uint32_t maxRenderTargets;
+	uint32_t maxShaderGraphs;
+	uint32_t maxShaderHandles;
+	uint32_t maxShaderResourceSets;
+	uint32_t maxShaderResourceTemplates;
+	uint32_t maxShaderResourceSetSlabAllocator;
+	uint32_t maxComputeQueues;
+	uint32_t maxRenderQueues;
+	uint32_t maxPipelineTemplates;
+	uint32_t maxPipelineInstances;
+	uint32_t maxPipelineHandles;
+	uint32_t maxAllocations;
+	uint32_t maxGPUCommands;
+	uint32_t maxTextureHandles;
+	uint32_t maxSamplerHandles;
+	uint32_t maxResourceStatuses;
+	uint32_t commandBuffersSize;
+	uint32_t commandsCacheSize;
+	uint32_t internalLoggerRingSize;
+	uint32_t numberOfDriverHostAllocations;
+	uint32_t numberOfTransferCommandAllocations;
+	uint32_t numberOfResourceUpdateAllocations;
+	uint32_t numberOfDriverDeviceAllocations;
+	uint32_t numberOfImageMemoryAllocations;
+	uint32_t maxQueries;
+};
+
 struct RenderInstance
 {
 	RenderInstance() = default;
 
 	~RenderInstance();
 
-	void CreateRenderInstance(SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
+	void CreateRenderInstance(RenderInstanceCreateInfo *info, SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
 
 	void DestroySwapChainAttachments(EntryHandle swapChainIndex);
 
@@ -64,7 +97,7 @@ struct RenderInstance
 
 	int CreateFrameGraphInstance(AttachmentGraph* graph);
 
-	int CreateRenderPass(uint32_t index, AttachmentGraphInstance* graph);
+	int CreateRenderPass(AttachmentGraphInstance* graph);
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
@@ -107,19 +140,17 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(WindowManager* window,  int attachmentGraphCount);
+	void CreateVulkanRenderer(WindowManager* window);
 
 	uint32_t GetSwapChainHeight(EntryHandle swapChainIndex);
 
 	uint32_t GetSwapChainWidth(EntryHandle swapChainIndex);
 
-	int CreateGraphicsVulkanPipelineObject(GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
+	int CreateGraphicsPipelineObject(GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
 
-	int CreateComputeVulkanPipelineObject(ComputeIntermediaryPipelineInfo* info);
+	int CreateComputePipelineObject(ComputeIntermediaryPipelineInfo* info);
 
 	void DrawScene(uint32_t imageIndex);
-
-	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	void DestoryTexture(EntryHandle handle);
 
@@ -194,68 +225,74 @@ struct RenderInstance
 
 	int CreateUniversalBuffer(size_t size, BufferType bufferMemoryType);
 
-	void PrintOutBufferAllocations(Logger* outputLogger);
-
-	void PrintOutTexturePoolAllocations(Logger* outputLogger);
-
 	void GetGPURequestedImageSizeAndAlignment(uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment);
 
+	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+
 	VKInstance *vkInstance = nullptr;
-	EntryHandle deviceIndex;
-	EntryHandle physicalIndex;
-	EntryHandle renderSurfaceIndex;
+	EntryHandle deviceIndex = EntryHandle();
+	EntryHandle physicalIndex = EntryHandle();
+	EntryHandle renderSurfaceIndex = EntryHandle();
 	
 	EntryHandle graphicsComputeTransfer = EntryHandle();
 	EntryHandle presentQueue = EntryHandle();
+	EntryHandle queryPool = EntryHandle();
 
-	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererWaitSemaphores{};
-	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> rendererFinishedSemaphores{};
+	EntryHandle rendererWaitSemaphores[MAX_FRAMES_IN_FLIGHT]{};
+	EntryHandle rendererFinishedSemaphores[MAX_FRAMES_IN_FLIGHT]{};
 	RenderTimelineSync rendererTimelineSyncObject{};
 
-	std::array<EntryHandle, MAX_FRAMES_IN_FLIGHT> currentCBIndex;
+	EntryHandle currentCBIndex[MAX_FRAMES_IN_FLIGHT]{};
 
-	uint32_t maxMSAALevels = 0;
+	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT]{};
 
-	std::array<EntryHandle, 10> bufferHandles{};
-	std::array<BufferType, 10> bufferTypes{};
-	std::array<int, 10> bufferToResourceStatus{};
-	int bufferPoolsCounter = 0;
+	WindowManager* windowMan = nullptr;
 
-
-	int renderTargetsDrawDataAlloc = 0;
-	int vulkanRenderPassAlloc = 0;
-	std::array<EntryHandle, 20> renderPasses{};
-
-	std::array<EntryHandle, 10> imagePools{};
-	int imagePoolCounter = 0;
-
-	WindowManager *windowMan = nullptr;
-
-	uint32_t currentFrame = 0;
-	uint32_t previousFrame = ~0ui32;
-	std::array<uint32_t, MAX_FRAMES_IN_FLIGHT> queryCounts{};
-
-	ShaderGraphsHolder<50, 60> vulkanShaderGraphs;
+	PoolAllocator<EntryHandle> bufferHandles{};
 	
-	ShaderResourceManager<50> descriptorManager;
+	BufferType* bufferTypes{};
+	
+	int* bufferToResourceStatus{};
 
-	std::array<EntryHandle*, 25> pipelinesIdentifier{};
-	std::array<PipelineTemplateData, 25> pipelinesInstancesInfo{};
+	PoolAllocator<EntryHandle> imagePools{};
 
-	int vulkanDescriptorLayoutCounter = 0;
-	std::array<EntryHandle, 60> vulkanDescriptorLayouts{};
+	PoolAllocator<EntryHandle*> pipelineInstancesIdentifier{};
+	
+	PipelineInstanceData* pipelinesInstancesInfo{};
 
-	RenderAllocationHolder<100> allocations{};
+	PoolAllocator<PipelineHandle> pipelineHandles{};
 
-	ArrayAllocator<PipelineHandle, 200> stateObjectHandles{};
+	GPUCommand* gpuCommands{};
+	
+	PoolAllocator<AttachmentGraph> attachmentGraphs{};
 
-	ArrayAllocator<ComputeQueue, 10> computeQueues{};
+	PoolAllocator<AttachmentGraphInstance> attachmentGraphsInstances{};
 
-	std::array<GPUCommand, 10> gpuCommands{};
-	int gpuCommandCount = 0;
+	PoolAllocator<RenderQueue> renderTargetQueues{};
 
-	int minUniformAlignment;
-	int minStorageAlignment; 
+	PoolAllocator<ComputeQueue> computeQueues{};
+
+	PoolAllocator<EntryHandle> textureResourceHandles{};
+
+	int* textureToResourceStatus{};
+
+	PoolAllocator<EntryHandle> samplerResourceHandles{};
+
+	PoolAllocator<ResourceStatus> resourceStatuses{};
+
+	PoolAllocator<GenericPipelineStateInfo> pipelineInfos{};
+
+	PoolAllocator<EntryHandle> renderPasses{};
+
+	PoolAllocator<EntryHandle> mainRenderTargets{};
+
+	PoolAllocator<EntryHandle> shaderResourceTemplates{};
+
+	PoolAllocator<RenderAllocation> allocations{};
+
+	ShaderResourceManager descriptorManager{};
+	
+	ShaderGraphsHolder shaderGraphs;
 
 	MemoryDriverTransferPool driverHostMemoryUpdater;
 
@@ -267,52 +304,34 @@ struct RenderInstance
 
 	ImageMemoryUpdateManager imageMemoryUpdateManager;
 
-	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT];
-	DeviceSlabAllocator stagingBufferAllocators[MAX_FRAMES_IN_FLIGHT];
-
-	int pipelineInfoCounter = 0;
-	std::array<GenericPipelineStateInfo, 15> pipelineInfos{};
-
 	RingAllocator* cacheAllocator;
+
 	SlabAllocator* storageAllocator;
 
 	RingAllocator* updateCommandsCache;
 
 	SlabAllocator* updateCommandBuffers[2];
 
-	int currentUpdateCommandBuffer = 0;
-
-	EntryHandle mainRenderTargets[20]{};
-
-	ArrayAllocator<RenderQueue, 10> renderTargetQueues{};
-
-	int graphTemplateAlloc = 0;
-
-	AttachmentGraph* attachmentGraphs;
-
-	AttachmentGraphInstance* attachmentGraphsInstances;
-
-	int attachmentGraphInstancesCount = 0;
-
-	int pipelineIdentifierCount = 0;
-
 	Logger* internalRendererLogger;
 
-	EntryHandle queryPool = EntryHandle();
-
-	std::array<uint32_t, 10> queryResults{};
+	uint32_t* queryResults;
 
 	double deviceTimeStampPeriodNS = 0.0;
 
-	std::array<ResourceStatus, 75> resourceStatuses{};
-	int resourceStateCtr = 0;
+	int maxQueryResults = 0;
+	int gpuCommandCount = 0;
+	int maxGPUCommandCount = 0;
+	int currentUpdateCommandBuffer = 0;
+	uint32_t maxMSAALevels = 0;
+	uint32_t currentFrame = 0;
+	uint32_t previousFrame = ~0ui32;
 
-	std::array<int, 50> textureToResourceStatus{};
-	std::array<EntryHandle, 50> textureResourceHandles{};
-	int textureResourceHandlesCtr = 0;
+	int minUniformAlignment;
+	int minStorageAlignment;
 
-	std::array<EntryHandle, 50> samplerResourceHandles{};
-	int samplersResourceHandlesCtr = 0;
+	uint32_t queryCounts[MAX_FRAMES_IN_FLIGHT]{};
+
+	DeviceSlabAllocator stagingBufferAllocators[MAX_FRAMES_IN_FLIGHT];
 };
 
 namespace GlobalRenderer 

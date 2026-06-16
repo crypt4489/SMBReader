@@ -1479,7 +1479,7 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 		.indirectCountAllocation = ~0
 	};
 
-	jointMeshPipelines[jointIndex] = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&jointInfo, false);
+	jointMeshPipelines[jointIndex] = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&jointInfo, false);
 }
 
 
@@ -2413,7 +2413,7 @@ int CreateDebugCommandBuffers(int count)
 	};
 
 
-	debugIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&debugCullPipelineCreate);
+	debugIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&debugCullPipelineCreate);
 
 	if (debugIndirectDrawData.indirectCullPipeline < 0)
 	{
@@ -2457,7 +2457,7 @@ int CreateDebugCommandBuffers(int count)
 	};
 
 
-	debugIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&indirectDebugDrawPipelineCreate, false);
+	debugIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectDebugDrawPipelineCreate, false);
 
 	if (debugIndirectDrawData.indirectDrawPipeline < 0)
 	{
@@ -2558,7 +2558,7 @@ int CreateGenericMeshCommandBuffers(int count)
 		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
 	};
 
-	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&indirectDrawCreate, false);
+	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectDrawCreate, false);
 
 	if (mainIndirectDrawData.indirectDrawPipeline < 0)
 	{
@@ -2594,7 +2594,7 @@ int CreateGenericMeshCommandBuffers(int count)
 			.descriptorsetid = computeDescriptors.data()
 	};
 
-	mainIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&mainCullComputeSetup);
+	mainIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&mainCullComputeSetup);
 
 	int outlineDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(OUTLINE, 2, 3);
 
@@ -2639,7 +2639,7 @@ int CreateGenericMeshCommandBuffers(int count)
 		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
 	};
 
-	//int outlinePipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&outlineDrawCreate, true);
+	//int outlinePipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&outlineDrawCreate, true);
 
 	/*
 	
@@ -2712,7 +2712,7 @@ int CreateMeshWorldAssignment(int count)
 
 
 
-	worldSpaceAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&worldAssignmentPrefix);
+	worldSpaceAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&worldAssignmentPrefix);
 
 	if (worldSpaceAssignment.prefixSumPipeline < 0)
 	{
@@ -2750,7 +2750,7 @@ int CreateMeshWorldAssignment(int count)
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
 
-		worldSpaceAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&prefixSumComputePipeline);
+		worldSpaceAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&prefixSumComputePipeline);
 
 		if (worldSpaceAssignment.sumAfterPipeline < 0)
 		{
@@ -2783,7 +2783,7 @@ int CreateMeshWorldAssignment(int count)
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
 
-		worldSpaceAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
+		worldSpaceAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&incrementSumsComputePipeline);
 
 		if (worldSpaceAssignment.sumAppliedToBinPipeline < 0)
 		{
@@ -2827,7 +2827,7 @@ int CreateMeshWorldAssignment(int count)
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
-	worldSpaceAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&preWorldDivComputePipeline);
+	worldSpaceAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&preWorldDivComputePipeline);
 
 	if (worldSpaceAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
@@ -2867,7 +2867,7 @@ int CreateMeshWorldAssignment(int count)
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
-	worldSpaceAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
+	worldSpaceAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&postWorldDivComputePipeline);
 
 	if (worldSpaceAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
@@ -2931,7 +2931,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
 
-	lightAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&worldAssignmentPrefix);
+	lightAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&worldAssignmentPrefix);
 
 	if (lightAssignment.prefixSumPipeline < 0)
 	{
@@ -2969,7 +2969,7 @@ int CreateLightAssignments(int count)
 			return -1;
 		}
 
-		lightAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&prefixSumComputePipeline);
+		lightAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&prefixSumComputePipeline);
 
 		if (lightAssignment.sumAfterPipeline < 0)
 		{
@@ -3003,7 +3003,7 @@ int CreateLightAssignments(int count)
 		};
 
 
-		lightAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&incrementSumsComputePipeline);
+		lightAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&incrementSumsComputePipeline);
 
 		if (lightAssignment.sumAppliedToBinPipeline < 0)
 		{
@@ -3045,7 +3045,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
-	lightAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&preWorldDivComputePipeline);
+	lightAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&preWorldDivComputePipeline);
 
 	if (lightAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
@@ -3082,7 +3082,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
-	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&postWorldDivComputePipeline);
+	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&postWorldDivComputePipeline);
 
 	if (lightAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
@@ -3197,7 +3197,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 			.descriptorsetid = shadowClipDesc.data()
 	};
 	
-	mainShadowMapManager.shadowClippingPipeline = GlobalRenderer::gRenderInstance.CreateComputeVulkanPipelineObject(&shadowClipPipelineInfo);
+	mainShadowMapManager.shadowClippingPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&shadowClipPipelineInfo);
 
 	if (mainShadowMapManager.shadowClippingPipeline < 0)
 	{
@@ -3241,7 +3241,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	};
 
 
-	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&indirectShadowDrawCreate, false);
+	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectShadowDrawCreate, false);
 
 	if (smdpd.shadowMapPipeline < 0)
 	{
@@ -3288,7 +3288,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		.indirectCountAllocation = ~0
 	};
 
-	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
+	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&fullscreenInfo, false);
 
 	if (smdpd.fullScreenPipeline < 0)
 	{
@@ -3365,7 +3365,7 @@ int CreateMSAAPostFullScreen()
 		.indirectCountAllocation = ~0
 	};
 
-	mainFullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&fullscreenInfo, false);
+	mainFullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&fullscreenInfo, false);
 
 	if (mainFullScreenPipeline < 0)
 	{
@@ -3478,7 +3478,7 @@ int CreateSkyBox()
 		.indirectCountAllocation = ~0
 	};
 
-	skyboxPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsVulkanPipelineObject(&skyboxInfo, false);
+	skyboxPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&skyboxInfo, false);
 
 	if (skyboxPipeline < 0)
 	{
@@ -3501,9 +3501,40 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainWindow.CreateMainWindow();
 
-	GlobalRenderer::gRenderInstance.CreateRenderInstance(&RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
+	RenderInstanceCreateInfo riCreateInfo{};
+	riCreateInfo.maxAttachmentGraphTemplates = mainLayoutAttachments.size();
+	riCreateInfo.maxAttachmentGraphInstances = mainLayoutAttachments.size();
+	riCreateInfo.maxImagePoolsCount = 10;
+	riCreateInfo.maxBufferPoolsCount = 10;
+	riCreateInfo.maxRenderTargets = 20;
+	riCreateInfo.maxShaderGraphs = 50;
+	riCreateInfo.maxShaderHandles = 60;
+	riCreateInfo.maxShaderResourceSets = 50;
+	riCreateInfo.maxShaderResourceTemplates = 60;
+	riCreateInfo.maxShaderResourceSetSlabAllocator = 10 * KiB;
+	riCreateInfo.maxComputeQueues = 10;
+	riCreateInfo.maxRenderQueues = 10;
+	riCreateInfo.maxPipelineTemplates = 15;
+	riCreateInfo.maxPipelineInstances = 25;
+	riCreateInfo.maxPipelineHandles = 25;
+	riCreateInfo.maxAllocations = 50;
+	riCreateInfo.maxGPUCommands = 10;
+	riCreateInfo.maxTextureHandles = 50;
+	riCreateInfo.maxSamplerHandles = 1;
+	riCreateInfo.maxResourceStatuses = 75;
+	riCreateInfo.commandBuffersSize = 16 * KiB;
+	riCreateInfo.commandsCacheSize = 64 * KiB;
+	riCreateInfo.internalLoggerRingSize = 8 * KiB;
+	riCreateInfo.numberOfDriverHostAllocations = 800;
+	riCreateInfo.numberOfTransferCommandAllocations = 20;
+	riCreateInfo.numberOfResourceUpdateAllocations = 30;
+	riCreateInfo.numberOfDriverDeviceAllocations = 60;
+	riCreateInfo.numberOfImageMemoryAllocations = 30;
+	riCreateInfo.maxQueries = 10;
 
-	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(&mainWindow, mainLayoutAttachments.size());
+	GlobalRenderer::gRenderInstance.CreateRenderInstance(&riCreateInfo, &RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
+
+	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(&mainWindow);
 
 	size_t mainHostSize = 128 * MiB;
 	size_t mainDeviceSize = 64 * MiB;
@@ -4660,10 +4691,6 @@ void PrintDebugMemoryAllocation()
 	actualSize = snprintf(StringBuffer, 512, "Main texture memory allocation %d/%d", allocDetails.first, allocDetails.second);
 
 	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
-
-	GlobalRenderer::gRenderInstance.PrintOutBufferAllocations(&mainAppLogger);
-
-	GlobalRenderer::gRenderInstance.PrintOutTexturePoolAllocations(&mainAppLogger);
 }
 
 

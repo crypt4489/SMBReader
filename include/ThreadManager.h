@@ -37,10 +37,8 @@ struct Semaphore
     OSSemaphore semaphore;
 };
 
-
 struct SemaphoreGuard
 {
-
     SemaphoreGuard(Semaphore& _s) : sema(_s) { sema.Wait(); }
     ~SemaphoreGuard() { sema.Notify(); }
 

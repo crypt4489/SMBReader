@@ -157,7 +157,7 @@ struct PipelineHandle
 };
 
 
-struct PipelineTemplateData
+struct PipelineInstanceData
 {
 	int frameGraphIndices[4];
 	int frameGraphRenderPasses[4];
@@ -705,36 +705,6 @@ struct ShaderResourceUpdatePool
 
 		return linkRet;
 	}
-};
-
-template <int N>
-struct RenderAllocationHolder
-{
-	std::array<RenderAllocation, N> allocations;
-
-	RenderAllocation operator[](size_t index)
-	{
-		if (index >= N || index < 0)
-			return { EntryHandle(), ~0ui64, ~0ui64 };
-
-		return allocations[index];
-	}
-
-	RenderAllocation operator[](int index)
-	{
-		if (index >= N || index < 0)
-			return { EntryHandle(), ~0ui64, ~0ui64 };
-
-		return allocations[index];
-	}
-
-	int Allocate()
-	{
-		return allocationsIndex.fetch_add(1);
-	}
-
-	std::atomic<int> allocationsIndex;
-
 };
 
 enum ResourceType
