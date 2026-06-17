@@ -204,9 +204,24 @@ void DescriptorPoolBuilder::AddStoragePoolSize(uint32_t size)
 	poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, size };
 }
 
-void DescriptorPoolBuilder::AddImageSampler(uint32_t size)
+void DescriptorPoolBuilder::AddImageSamplerCombined(uint32_t size)
 {
 	poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, size };
+}
+
+void DescriptorPoolBuilder::AddStorageImage(uint32_t size)
+{
+	poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, size };
+}
+
+void DescriptorPoolBuilder::AddSampledImage(uint32_t size)
+{
+	poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE , size };
+}
+
+void DescriptorPoolBuilder::AddSampler(uint32_t size)
+{
+	poolSizes[counter++] = { VK_DESCRIPTOR_TYPE_SAMPLER, size };
 }
 
 RenderTarget::RenderTarget(EntryHandle renderPass, uint32_t imageCount, uint32_t _wSize, uint32_t _hSize, uint32_t _wOff, uint32_t _hOff, void* data)

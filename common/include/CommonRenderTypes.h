@@ -583,3 +583,13 @@ struct LogicalDeviceFeatures
 	bool useSPVDrawParameters;
 	bool useSPVDebugInfo;
 };
+
+enum class DescriptorTypes
+{
+	UNIFORM_DESCRIPTOR = 1,
+	UNORDERED_ACCESS_DESCRIPTOR = 2,
+	SAMPLED_IMAGE_DESCRIPTOR = 3,
+	STORAGE_IMAGE_DESCRIPTOR = 4,
+	SAMPLER_DESCRIPTOR = 5,
+	COMBINED_IMAGE_SAMPLER_DESCRIPTOR = 6,
+};

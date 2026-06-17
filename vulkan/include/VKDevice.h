@@ -196,7 +196,14 @@ struct DescriptorPoolBuilder
 
 	void AddStoragePoolSize(uint32_t size);
 
-	void AddImageSampler(uint32_t size);
+	void AddImageSamplerCombined(uint32_t size);
+
+	void AddStorageImage(uint32_t size);
+
+	void AddSampledImage(uint32_t size);
+
+	void AddSampler(uint32_t size);
+
 	VkDescriptorPoolSize* poolSizes;
 	VkDescriptorPoolCreateFlags flags;
 	size_t numPoolSizes;

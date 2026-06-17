@@ -723,13 +723,13 @@ struct ResourceStatus
 
 struct ComputeQueue
 {
-	int pipelines[15];
+	int pipelines[63];
 	uint32_t queueCount;
 };
 
 struct RenderQueue
 {
-	int pipelines[15];
+	int pipelines[63];
 	uint32_t queueCount;
 };
 
@@ -737,4 +737,21 @@ struct RenderTimelineSync
 {
 	EntryHandle driverTimelineObject;
 	uint64_t currentValue;
+};
+
+struct RenderSwapchainData
+{
+	EntryHandle swapChainIdx;
+	uint32_t width;
+	uint32_t height;
+};
+
+struct RenderWindowSpecificData
+{
+	EntryHandle vkRenderSurface;
+
+	EntryHandle operator()() 
+	{
+		return vkRenderSurface;
+	}
 };

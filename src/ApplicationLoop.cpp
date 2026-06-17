@@ -344,7 +344,8 @@ struct UniformGrid
 	int numberOfDivision;
 };
 
-static EntryHandle mainPresentationSwapChain = EntryHandle();
+static int mainPresentationSwapChain = -1;
+static int mainPresentationWindow = -1;
 static int mainHostBuffer = -1;
 static int mainDeviceBuffer = -1;
 
@@ -900,7 +901,11 @@ void ApplicationLoop::Execute()
 
 			if (mainWindow.windowData.info.HandleResizeRequested())
 			{
-				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainPresentationSwapChain);
+				int width = 0, height = 0;
+
+				mainWindow.GetWindowSize(&width, &height);
+
+				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainPresentationSwapChain, (uint32_t)width, (uint32_t)height);
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
 				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain), GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain));
@@ -3531,10 +3536,70 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.numberOfDriverDeviceAllocations = 60;
 	riCreateInfo.numberOfImageMemoryAllocations = 30;
 	riCreateInfo.maxQueries = 10;
+	riCreateInfo.maxWindows = 1;
+	riCreateInfo.maxSwapChains = 1;
+
+	GPUFeatureRequest request{};
+
+	request.desiredMaxImageWidth = 4096;
+	request.desiredMaxImageHeight = 4096;
+	request.deviceType = DISCRETE | INTEGRATED;
+	request.requireDescriptorBindingPartiallyBound = true;
+	request.requireDescriptorBindingSampledImageUpdateAfterBind = true;
+	request.requireDescriptorBindingUpdateUnusedWhilePending = true;
+	request.requireDescriptorBindingVariableDescriptorCount = true;
+	request.requireShaderSampledImageArrayNonUniformIndexing = true;
+	request.requireStorageBuffer8BitAccess = true;
+	request.requireDrawIndirectCount = true;
+	request.requireRuntimeDescriptorArray = true;
+	request.requireGeometryShader = false;
+	request.requireTextureCompressionBC = true;
+	request.requireTessellationShader = false;
+	request.requireSamplerAnisotropy = true;
+	request.requireMultiDrawIndirect = true;
+	request.requireWideLines = true;
+	request.requireTimelineSemaphores = true;
+
+	LogicalDeviceFeatures deviceFeatures{};
+
+	deviceFeatures.useSPVDebugInfo = true;
+	deviceFeatures.useSPVDrawParameters = true;
+	deviceFeatures.useSwapChain = true;
+	deviceFeatures.useSwapChainMaintenance = true;
 
 	GlobalRenderer::gRenderInstance.CreateRenderInstance(&riCreateInfo, &RenderInstanceMemoryAllocator, &RenderInstanceTemporaryAllocator);
 
-	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(&mainWindow);
+	GlobalRenderer::gRenderInstance.CreateHighLevelInstance(800 * KiB, 128 * KiB, 4 * KiB, 96 * KiB);
+
+	OSWindowInternalData internalWindowData;
+	
+	mainWindow.GetInternalData(&internalWindowData);
+
+	mainPresentationWindow = GlobalRenderer::gRenderInstance.CreateWindowedSurface(&internalWindowData);
+
+	GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapter(mainPresentationWindow, &request, &deviceFeatures);
+
+	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(mainPresentationWindow, &request, &deviceFeatures);
+
+	GlobalRenderer::gRenderInstance.CreatePerFrameStagingBuffers(128 * MiB);
+
+	std::array<DescriptorTypes, 4> descriptorTypes =
+	{
+		DescriptorTypes::UNIFORM_DESCRIPTOR,
+		DescriptorTypes::UNORDERED_ACCESS_DESCRIPTOR,
+		DescriptorTypes::SAMPLER_DESCRIPTOR,
+		DescriptorTypes::SAMPLED_IMAGE_DESCRIPTOR,
+	};
+
+	std::array<uint32_t, 4> descriptorCounts =
+	{
+		50,
+		50,
+		10,
+		50,
+	};
+
+	GlobalRenderer::gRenderInstance.CreateDescriptorHeap(descriptorTypes.data(), descriptorCounts.data(), 4, 100);
 
 	size_t mainHostSize = 128 * MiB;
 	size_t mainDeviceSize = 64 * MiB;
@@ -3549,7 +3614,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	ImageFormat requestedColorFormats = ImageFormat::B8G8R8A8;
 
-	ImageFormat mainColorFormat = GlobalRenderer::gRenderInstance.FindSupportedBackBufferColorFormat(&requestedColorFormats, 1);
+	ImageFormat mainColorFormat = GlobalRenderer::gRenderInstance.FindSupportedBackBufferColorFormat(mainPresentationWindow, &requestedColorFormats, 1);
 
 	ImageFormat requestedDSVFormats = ImageFormat::D24UNORMS8STENCIL;
 
@@ -3575,7 +3640,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	frameGraphsCount = mainLayoutAttachments.size();
 
-	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainColorFormat, 800, 600);
+	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainPresentationWindow, mainColorFormat, 800, 600);
 
 	std::array<AttachmentClear, 1> ShadowMapViewerClears {
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},

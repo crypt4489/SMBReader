@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <functional>
 #include <vulkan/vulkan.h>
 
@@ -45,6 +44,8 @@ namespace API
 
 struct RenderInstanceCreateInfo
 {
+	uint32_t maxWindows;
+	uint32_t maxSwapChains;
 	uint32_t maxAttachmentGraphTemplates;
 	uint32_t maxAttachmentGraphInstances;
 	uint32_t maxImagePoolsCount;
@@ -86,12 +87,12 @@ struct RenderInstance
 
 	void DestroySwapChainAttachments(EntryHandle swapChainIndex);
 
-	int RecreateSwapChain(EntryHandle swapChainIndex);
+	int RecreateSwapChain(int swapChainIndex, uint32_t width, uint32_t height);
 
 	int CreateAttachmentResources(int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height, 
 		RenderPassType rpType, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
-	int CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
+	int CreateSwapChainAttachment(int swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
 	int CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
@@ -101,9 +102,9 @@ struct RenderInstance
 
 	EntryHandle CreateVulkanComputePipelineTemplate(ShaderGraph* graph);
 
-	uint32_t BeginFrame(EntryHandle swapChainIndex);
+	uint32_t BeginFrame(int swapChainIndex);
 
-	int SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex);
+	int SubmitFrame(int swapChainIndex, uint32_t imageIndex);
 
 	void WaitOnRender();
 
@@ -140,11 +141,11 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(WindowManager* window);
+	void CreateVulkanRenderer(int windowedIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
 
-	uint32_t GetSwapChainHeight(EntryHandle swapChainIndex);
+	uint32_t GetSwapChainHeight(int swapChainIndex);
 
-	uint32_t GetSwapChainWidth(EntryHandle swapChainIndex);
+	uint32_t GetSwapChainWidth(int swapChainIndex);
 
 	int CreateGraphicsPipelineObject(GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
 
@@ -195,12 +196,12 @@ struct RenderInstance
 	int CreateRSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
 	int CreateDSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
 
-	ImageFormat FindSupportedBackBufferColorFormat(ImageFormat* requestedFormats, uint32_t requestSize);
+	ImageFormat FindSupportedBackBufferColorFormat(int surfaceLevel, ImageFormat* requestedFormats, uint32_t requestSize);
 	ImageFormat FindSupportedDepthFormat(ImageFormat* requestedFormats, uint32_t requestSize);
 
 	int CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount);
 
-	EntryHandle CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
+	int CreateSwapChainHandle(int surfaceIndex, ImageFormat mainBackBufferColorFormat, uint32_t width, uint32_t height);
 
 	void CreateShaderGraphs(StringView* shaderGraphLayouts, int shaderGraphLayoutsCount);
 
@@ -227,12 +228,22 @@ struct RenderInstance
 
 	void GetGPURequestedImageSizeAndAlignment(uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment);
 
+	int CreateDescriptorHeap(DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxSets);
+
+	int CreateWindowedSurface(OSWindowInternalData* windowData);
+
+	int CreateHighLevelInstance(uint32_t vkDriverSpecificMemory, uint32_t vkDriverCacheSize, uint32_t instancePermanentSpecificMemory, uint32_t instanceCacheMemory);
+
+	int CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
+
+	int CreatePerFrameStagingBuffers(uint32_t bufferSize);
+
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	VKInstance *vkInstance = nullptr;
 	EntryHandle deviceIndex = EntryHandle();
 	EntryHandle physicalIndex = EntryHandle();
-	EntryHandle renderSurfaceIndex = EntryHandle();
+	//EntryHandle renderSurfaceIndex = EntryHandle();
 	
 	EntryHandle graphicsComputeTransfer = EntryHandle();
 	EntryHandle presentQueue = EntryHandle();
@@ -246,7 +257,9 @@ struct RenderInstance
 
 	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT]{};
 
-	WindowManager* windowMan = nullptr;
+	PoolAllocator<RenderWindowSpecificData> windowsSurfaces{};
+
+	PoolAllocator<RenderSwapchainData> swapChains{};
 
 	PoolAllocator<EntryHandle> bufferHandles{};
 	

@@ -585,6 +585,10 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 
 	maxQueryResults = info->maxQueries;
 
+	windowsSurfaces.Create(instanceStorageAllocator, info->maxWindows);
+
+	swapChains.Create(instanceStorageAllocator, info->maxSwapChains);
+
 	return;
 }
 
@@ -639,25 +643,27 @@ void RenderInstance::DestroySwapChainAttachments(EntryHandle swapChainIndex)
 	}
 }
 
-int RenderInstance::RecreateSwapChain(EntryHandle swapChainIndex) {
-
+int RenderInstance::RecreateSwapChain(int swapChainIndex, uint32_t width, uint32_t height) 
+{
 	int ret = 0;
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
-	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+	RenderSwapchainData* data = swapChains.Get(swapChainIndex);
 
-	int width = 0, height = 0;
-	
-	windowMan->GetWindowSize(&width, &height);
+	VKSwapChain* swc = dev->GetSwapChain(data->swapChainIdx);
 
 	if (width && height) 
 	{
 		swc->Wait();
 
-		DestroySwapChainAttachments(swapChainIndex);
+		DestroySwapChainAttachments(data->swapChainIdx);
 
-		CreateSwapChainData(swapChainIndex, width, height, true);
+		CreateSwapChainData(data->swapChainIdx, width, height, true);
+
+		data->width = width;
+
+		data->height = height;
 
 		ret = 1;
 	}
@@ -954,18 +960,18 @@ int RenderInstance::CreateRenderPass(AttachmentGraphInstance* graphInstance)
 	return totalRenderPassesCreated;
 }
 
-uint32_t RenderInstance::BeginFrame(EntryHandle swapChainIndex)
+uint32_t RenderInstance::BeginFrame(int swapChainIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
+	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
+
 	int32_t res = dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
 
-	uint32_t imageIndex = dev->BeginFrameForSwapchain(swapChainIndex, rendererWaitSemaphores[currentFrame], currentFrame);
+	uint32_t imageIndex = dev->BeginFrameForSwapchain(swcData->swapChainIdx, rendererWaitSemaphores[currentFrame], currentFrame);
 
 	if (imageIndex == ~0ui32)
 	{
-		int ret = RecreateSwapChain(swapChainIndex);
-	
 		return imageIndex;
 	}
 
@@ -974,7 +980,7 @@ uint32_t RenderInstance::BeginFrame(EntryHandle swapChainIndex)
 	return imageIndex;
 }
 
-int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
+int RenderInstance::SubmitFrame(int swapChainIndex, uint32_t imageIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
@@ -1008,20 +1014,21 @@ int RenderInstance::SubmitFrame(EntryHandle swapChainIndex, uint32_t imageIndex)
 	if (res)
 		return -1;
 
+	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
+
 	if (presentQueue != graphicsComputeTransfer)
 	{
-		res = dev->PresentSwapChainSeparatePresentQueue(swapChainIndex, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, presentQueue);
+		res = dev->PresentSwapChainSeparatePresentQueue(swcData->swapChainIdx, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, presentQueue);
 	}
 	else
 	{
-		res = dev->PresentSwapChainCommandBufferInline(swapChainIndex, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, currentCBIndex[currentFrame]);
+		res = dev->PresentSwapChainCommandBufferInline(swcData->swapChainIdx, &rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, currentCBIndex[currentFrame]);
 	}
 
 	if (res) 
 	{
 		dev->CommandBufferWaitOn(UINT64_MAX, currentCBIndex[currentFrame]);
-		int ret = RecreateSwapChain(swapChainIndex);
-		return -1;
+		return res;
 	}
 
 	return 0;
@@ -1033,15 +1040,17 @@ void RenderInstance::WaitOnRender()
 	dev->WaitOnDevice();
 }
 
-int RenderInstance::CreateSwapChainAttachment(EntryHandle swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
+int RenderInstance::CreateSwapChainAttachment(int swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
 
-	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
+	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
+
+	VKSwapChain* swapChain = dev->GetSwapChain(swcData->swapChainIdx);
 
 	EntryHandle* backBuffers = swapChain->imageViews;
 
-	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swapChain->GetSwapChainWidth(), swapChain->GetSwapChainHeight(), RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
+	return CreateAttachmentResources(graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swcData->width, swcData->height, RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
 }
 
 int RenderInstance::CreatePerFrameAttachment(int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
@@ -2658,90 +2667,57 @@ int RenderInstance::CreateAttachmentGraph(StringView* attachmentLayout, int* sub
 	return currentGraphInstance;
 }
 
-void RenderInstance::CreateVulkanRenderer(WindowManager* window)
+int RenderInstance::CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
 {
-	this->windowMan = window;
-
-	void* driverInstanceDataHead = storageAllocator->Allocate((2 * MiB));
-	void* instanceDataHead = storageAllocator->Allocate((256 * KiB + 16 * KiB));
-
-	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, (2 * MiB), 256 * KiB);
-
-	VKInstanceDebugData vkDebugData{};
-
-	vkDebugData.userCallback = vulkanDebugCallback;
-	vkDebugData.userData = nullptr;
-	vkDebugData.flags = 0;
-	vkDebugData.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	vkDebugData.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT; // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
-	vkDebugData.enables[0] = VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
-	vkDebugData.enablesFeaturesCount = 0;
-
-	VKInstanceDebugData* vkDebugDataTemp = &vkDebugData;
-
-	RenderingInstanceFeatures instanceFeaturesRequest{};
-
-	instanceFeaturesRequest.useSurface = true;
-	instanceFeaturesRequest.useSwapChainMaintenance = true;
-	instanceFeaturesRequest.useValidation = true;
-	instanceFeaturesRequest.useDebugExt = true;
-	instanceFeaturesRequest.windowManagementType = WindowManagementType::WINDOWS32;
-
-	vkInstance->CreateRenderInstance(instanceDataHead, 16*KiB, 256*KiB, vkDebugDataTemp, &instanceFeaturesRequest);
-
-	OSWindowInternalData data;
-
-	windowMan->GetInternalData(&data);
-
-	GPUFeatureRequest request{};
-
-	request.desiredMaxImageWidth = 4096;
-	request.desiredMaxImageHeight = 4096;
-	request.deviceType = DISCRETE | INTEGRATED;
-	request.requireDescriptorBindingPartiallyBound = true;
-	request.requireDescriptorBindingSampledImageUpdateAfterBind = true;
-	request.requireDescriptorBindingUpdateUnusedWhilePending = true;
-	request.requireDescriptorBindingVariableDescriptorCount = true;
-	request.requireShaderSampledImageArrayNonUniformIndexing = true;
-	request.requireStorageBuffer8BitAccess = true;
-	request.requireDrawIndirectCount = true;
-	request.requireRuntimeDescriptorArray = true;
-	request.requireGeometryShader = false;
-	request.requireTextureCompressionBC = true;
-	request.requireTessellationShader = false;
-	request.requireSamplerAnisotropy = true;
-	request.requireMultiDrawIndirect = true;
-	request.requireWideLines = true;
-	request.requireTimelineSemaphores = true;
-
-	LogicalDeviceFeatures deviceFeatures{};
-
-	deviceFeatures.useSPVDebugInfo = true;
-	deviceFeatures.useSPVDrawParameters = true;
-	deviceFeatures.useSwapChain = true;
-	deviceFeatures.useSwapChainMaintenance = true;
-
-	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(&deviceFeatures);
+	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(requestedDeviceFeatures);
 
 	const char** deviceFeatureNames = (const char**)cacheAllocator->Allocate(sizeof(char*) * deviceExtNameCount);
 
-	vkInstance->GetLogicalDeviceExtensions(&deviceFeatures, deviceFeatureNames);
+	vkInstance->GetLogicalDeviceExtensions(requestedDeviceFeatures, deviceFeatureNames);
 
 	VkPhysicalDeviceVulkan12Features features12{};
 	VkPhysicalDeviceFeatures2 features2{};
 
-	API::ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(&request, &features2, &features12);
-
-	renderSurfaceIndex = vkInstance->CreateWindowedSurface(data.inst, data.wnd);
-	physicalIndex = vkInstance->CreatePhysicalDevice(renderSurfaceIndex, &request, deviceFeatureNames, deviceExtNameCount);
-	deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);
-
-	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
+	physicalIndex = vkInstance->CreatePhysicalDevice(windowsSurfaces.pool[windowIndex](), requestedPhysicalFeatures, deviceFeatureNames, deviceExtNameCount);
 
 	minUniformAlignment = vkInstance->GetMinimumUniformBufferAlignment(physicalIndex);
 	minStorageAlignment = vkInstance->GetMinimumStorageBufferAlignment(physicalIndex);
 
-	maxMSAALevels = std::max(std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex))-1, 1);
+	maxMSAALevels = std::max(std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex)) - 1, 1);
+
+	return 0;
+}
+
+int RenderInstance::CreatePerFrameStagingBuffers(uint32_t bufferSize)
+{
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
+
+	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		stagingBuffers[i] = majorDevice->CreateHostBuffer(bufferSize, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+		stagingBufferAllocators[i].dataSize = bufferSize;
+		stagingBufferAllocators[i].dataAllocator = 0;
+	}
+
+	return 0;
+}
+
+void RenderInstance::CreateVulkanRenderer(int windowedIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
+{	
+	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(requestedDeviceFeatures);
+
+	const char** deviceFeatureNames = (const char**)cacheAllocator->Allocate(sizeof(char*) * deviceExtNameCount);
+
+	vkInstance->GetLogicalDeviceExtensions(requestedDeviceFeatures, deviceFeatureNames);
+
+	VkPhysicalDeviceVulkan12Features features12{};
+	VkPhysicalDeviceFeatures2 features2{};
+
+	API::ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(requestedPhysicalFeatures, &features2, &features12);
+
+	deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);
+
+	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
 	uint32_t totalQueueFamilyCount = majorDevice->QueueFamilyDetailsCount();
 
@@ -2759,7 +2735,7 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 		//TO-DO implement fallback
 	}
 
-	queueSuccessful = majorDevice->GetPresentQueue(&queueIndices[1], &queueCounts[1], vkInstance->GetRenderSurface(renderSurfaceIndex), famPropsContainer);
+	queueSuccessful = majorDevice->GetPresentQueue(&queueIndices[1], &queueCounts[1], vkInstance->GetRenderSurface(windowsSurfaces.pool[windowedIndex]()), famPropsContainer);
 
 	if (queueSuccessful)
 	{
@@ -2817,28 +2793,13 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		stagingBuffers[i] = majorDevice->CreateHostBuffer(128 * MiB, true, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-		stagingBufferAllocators[i].dataSize = 128 * MiB;
-		stagingBufferAllocators[i].dataAllocator = 0;
-	}
-
-	DescriptorPoolBuilder builder = majorDevice->CreateDescriptorPoolBuilder(3, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
-
-	builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * 100);
-	builder.AddImageSampler(MAX_FRAMES_IN_FLIGHT * 100);
-	builder.AddStoragePoolSize(MAX_FRAMES_IN_FLIGHT * 100);
-
-	descriptorManager.deviceResourceHeap = majorDevice->CreateDesciptorPool(&builder, MAX_FRAMES_IN_FLIGHT * 100);
-
-	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-	{
 		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(graphicsComputeTransfer, 1, true, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 		currentCBIndex[i] = *lprimaryCommandBuffers;
 	}
 
 	cacheAllocator->Reset();
 
-	queryPool = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * 5 * 2);
+	queryPool = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * maxQueryResults);
 
 	deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
 
@@ -2852,22 +2813,32 @@ void RenderInstance::CreateVulkanRenderer(WindowManager* window)
 	rendererTimelineSyncObject.driverTimelineObject = *majorDevice->CreateTimelineSemaphores(1, rendererTimelineSyncObject.currentValue);
 }
 
-EntryHandle RenderInstance::CreateSwapChainHandle(ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
+int RenderInstance::CreateSwapChainHandle(int surfaceIndex, ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
 {
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
 
-	EntryHandle swapChainIndex = majorDevice->CreateSwapChain(MAX_FRAMES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, API::ConvertImageFormatToVulkanFormat(mainBackBufferColorFormat), renderSurfaceIndex);
+	RenderWindowSpecificData* winData = windowsSurfaces.Get(surfaceIndex);
+
+	int swapChainInternalIndex = swapChains.Allocate();
+
+	EntryHandle swapChainIndex = majorDevice->CreateSwapChain(MAX_FRAMES_IN_FLIGHT, MAX_FRAMES_IN_FLIGHT, API::ConvertImageFormatToVulkanFormat(mainBackBufferColorFormat), winData->vkRenderSurface);
 
 	CreateSwapChainData(swapChainIndex, _width, _height, false);
 
-	return swapChainIndex;
+	RenderSwapchainData* swcData = swapChains.Get(swapChainInternalIndex);
+
+	swcData->swapChainIdx = swapChainIndex;
+	swcData->height = _height;
+	swcData->width = _width;
+
+	return swapChainInternalIndex;
 }
 
-ImageFormat RenderInstance::FindSupportedBackBufferColorFormat(ImageFormat* requestedFormats, uint32_t requestSize)
+ImageFormat RenderInstance::FindSupportedBackBufferColorFormat(int surfaceIndex, ImageFormat* requestedFormats, uint32_t requestSize)
 {
 	for (uint32_t i = 0; i < requestSize; i++)
 	{
-		bool ret = vkInstance->ValidateSwapChainFormatSupport(physicalIndex, API::ConvertImageFormatToVulkanFormat(requestedFormats[i]), renderSurfaceIndex);
+		bool ret = vkInstance->ValidateSwapChainFormatSupport(physicalIndex, API::ConvertImageFormatToVulkanFormat(requestedFormats[i]), windowsSurfaces[surfaceIndex]());
 
 		if (ret)
 		{
@@ -2917,14 +2888,18 @@ int RenderInstance::CreateSampler(uint32_t maxMipsLevel)
 	return samplerIndex;
 }
 
-uint32_t RenderInstance::GetSwapChainHeight(EntryHandle swapChainIndex)
+uint32_t RenderInstance::GetSwapChainHeight(int swapChainIndex)
 {
-	return vkInstance->GetLogicalDevice(deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainHeight();
+	RenderSwapchainData* data = swapChains.Get(swapChainIndex);
+
+	return data->height;
 }
 
-uint32_t RenderInstance::GetSwapChainWidth(EntryHandle swapChainIndex)
+uint32_t RenderInstance::GetSwapChainWidth(int swapChainIndex)
 {
-	return vkInstance->GetLogicalDevice(deviceIndex)->GetSwapChain(swapChainIndex)->GetSwapChainWidth();
+	RenderSwapchainData* data = swapChains.Get(swapChainIndex);
+
+	return data->width;
 }
 
 EntryHandle RenderInstance::CreateShaderResourceSet(int descriptorSet)
@@ -4059,6 +4034,108 @@ int RenderInstance::CreateUniversalBuffer(size_t size, BufferType bufferMemoryTy
 	bufferToResourceStatus[bufferIndex] = resourceStatuses.Allocate();
 
 	return bufferIndex;
+}
+
+int RenderInstance::CreateHighLevelInstance(uint32_t vkDriverSpecificMemory, uint32_t vkDriverCacheSize, uint32_t instancePermanentSpecificMemory, uint32_t instanceCacheMemory)
+{
+	void* driverInstanceDataHead = storageAllocator->Allocate(vkDriverSpecificMemory + vkDriverCacheSize);
+	void* instanceDataHead = storageAllocator->Allocate(instancePermanentSpecificMemory + instanceCacheMemory);
+
+	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, vkDriverSpecificMemory, vkDriverCacheSize);
+
+	VKInstanceDebugData vkDebugData{};
+
+	vkDebugData.userCallback = vulkanDebugCallback;
+	vkDebugData.userData = nullptr;
+	vkDebugData.flags = 0;
+	vkDebugData.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	vkDebugData.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT; // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+	vkDebugData.enables[0] = VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT;
+	vkDebugData.enablesFeaturesCount = 0;
+
+	VKInstanceDebugData* vkDebugDataTemp = &vkDebugData;
+
+	RenderingInstanceFeatures instanceFeaturesRequest{};
+
+	instanceFeaturesRequest.useSurface = true;
+	instanceFeaturesRequest.useSwapChainMaintenance = true;
+	instanceFeaturesRequest.useValidation = true;
+	instanceFeaturesRequest.useDebugExt = true;
+	instanceFeaturesRequest.windowManagementType = WindowManagementType::WINDOWS32;
+
+	vkInstance->CreateRenderInstance(instanceDataHead, instancePermanentSpecificMemory, instanceCacheMemory, vkDebugDataTemp, &instanceFeaturesRequest);
+
+	return 0;
+}
+
+int RenderInstance::CreateWindowedSurface(OSWindowInternalData* windowData)
+{
+	int windowAllocIndex = windowsSurfaces.Allocate();
+
+	EntryHandle renderSurfaceIndex = vkInstance->CreateWindowedSurface(windowData->inst, windowData->wnd);
+
+	if (renderSurfaceIndex == EntryHandle())
+		return -1;
+
+	RenderWindowSpecificData* winData = windowsSurfaces.Get(windowAllocIndex);
+
+	winData->vkRenderSurface = renderSurfaceIndex;
+
+	return windowAllocIndex;
+}
+
+int RenderInstance::CreateDescriptorHeap(DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxSets)
+{
+	VKDevice* dev = vkInstance->GetLogicalDevice(deviceIndex);
+
+	DescriptorPoolBuilder builder = dev->CreateDescriptorPoolBuilder(numDescriptorTypesCount, VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT);
+
+	for (uint32_t i = 0; i < numDescriptorTypesCount; i++)
+	{
+		uint32_t individualCount = descriptorCountPerFrame[i];
+
+		switch (types[i])
+		{
+		case DescriptorTypes::UNIFORM_DESCRIPTOR:
+		{
+			builder.AddUniformPoolSize(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		case DescriptorTypes::UNORDERED_ACCESS_DESCRIPTOR:
+		{
+			builder.AddStoragePoolSize(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		case DescriptorTypes::SAMPLED_IMAGE_DESCRIPTOR:
+		{
+			builder.AddSampledImage(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		case DescriptorTypes::STORAGE_IMAGE_DESCRIPTOR:
+		{
+			builder.AddStorageImage(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		case DescriptorTypes::SAMPLER_DESCRIPTOR:
+		{
+			builder.AddSampler(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		case DescriptorTypes::COMBINED_IMAGE_SAMPLER_DESCRIPTOR:
+		{
+			builder.AddImageSamplerCombined(MAX_FRAMES_IN_FLIGHT * individualCount);
+			break;
+		}
+		default:
+		{
+			break;
+		}
+		}
+	}
+	
+	descriptorManager.deviceResourceHeap = dev->CreateDesciptorPool(&builder, MAX_FRAMES_IN_FLIGHT * maxSets);
+
+	return 0;
 }
 
 void RenderInstance::AddVulkanMemoryBarrier(RecordingBufferObject* rcb, int* descriptorid, int descriptorcount)

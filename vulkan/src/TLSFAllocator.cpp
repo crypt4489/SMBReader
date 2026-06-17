@@ -72,9 +72,6 @@ int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int s
 
 	unsigned int totalSizeOfFreeLists = sizeof(BlockHeader*) * tlsf_struct->numberofBlockPerFLILevel * tlsf_struct->numberofFLILevelBitmaps;
 
-	if ((totalSizeOfFreeLists + freeListsAlignmentMakeup + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) <= MIN_TLSF_SUPPORT_DATA_SIZE)
-		return -1;
-
 	if (memSize - (totalSizeOfFreeLists + freeListsAlignmentMakeup + totalSLIBitMapSize + sliBitmapsAlignmentMakeup) <= MIN_TLSF_SUPPORT_DATA_SIZE)
 		return -1;
 
