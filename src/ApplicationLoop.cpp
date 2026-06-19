@@ -344,6 +344,8 @@ struct UniformGrid
 	int numberOfDivision;
 };
 
+static int mainGPU = -1;
+static int mainLogicalDevice = -1;
 static int mainPresentationSwapChain = -1;
 static int mainPresentationWindow = -1;
 static int mainHostBuffer = -1;
@@ -3535,9 +3537,10 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.numberOfResourceUpdateAllocations = 30;
 	riCreateInfo.numberOfDriverDeviceAllocations = 60;
 	riCreateInfo.numberOfImageMemoryAllocations = 30;
-	riCreateInfo.maxQueries = 10;
 	riCreateInfo.maxWindows = 1;
 	riCreateInfo.maxSwapChains = 1;
+	riCreateInfo.maxGPUS = 1;
+	riCreateInfo.maxLogicalDevices = 1;
 
 	GPUFeatureRequest request{};
 
@@ -3577,9 +3580,24 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainPresentationWindow = GlobalRenderer::gRenderInstance.CreateWindowedSurface(&internalWindowData);
 
-	GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapter(mainPresentationWindow, &request, &deviceFeatures);
+	mainGPU = GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapter(mainPresentationWindow, &request, &deviceFeatures);
 
-	GlobalRenderer::gRenderInstance.CreateVulkanRenderer(mainPresentationWindow, &request, &deviceFeatures);
+	LogicalDeviceCreateInfo lDeviceCreateInfo{};
+
+	lDeviceCreateInfo.maxQueries = 10;
+	lDeviceCreateInfo.physicalDeviceIndex = mainGPU;
+	lDeviceCreateInfo.surfaceIndexForPresent = mainPresentationWindow;
+	lDeviceCreateInfo.requestedDeviceFeatures = &deviceFeatures;
+	lDeviceCreateInfo.requestedPhysicalFeatures = &request;
+	lDeviceCreateInfo.deviceInstCacheSize = 96 * KiB;
+	lDeviceCreateInfo.deviceInstHandleSize = 16 * KiB;
+	lDeviceCreateInfo.deviceInstPermanentSize = 32 * KiB;
+	lDeviceCreateInfo.driverCacheSize = 16 * KiB;
+	lDeviceCreateInfo.driverPermanentSize = 4 * MiB;
+
+	mainLogicalDevice = GlobalRenderer::gRenderInstance.CreateLogicalDevice(&lDeviceCreateInfo);
+
+	GlobalRenderer::gRenderInstance.SetCurrentInstanceDeviceIndex(mainLogicalDevice);
 
 	GlobalRenderer::gRenderInstance.CreatePerFrameStagingBuffers(128 * MiB);
 
@@ -3614,7 +3632,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	ImageFormat requestedColorFormats = ImageFormat::B8G8R8A8;
 
-	ImageFormat mainColorFormat = GlobalRenderer::gRenderInstance.FindSupportedBackBufferColorFormat(mainPresentationWindow, &requestedColorFormats, 1);
+	ImageFormat mainColorFormat = GlobalRenderer::gRenderInstance.FindSupportedBackBufferColorFormat(mainGPU, mainPresentationWindow, &requestedColorFormats, 1);
 
 	ImageFormat requestedDSVFormats = ImageFormat::D24UNORMS8STENCIL;
 

@@ -1494,7 +1494,7 @@ int VKDevice::CreateLogicalDevice(
 
 	tempDeviceHead += perCacheSize;
 
-	size_t devicePermAllocSize = perDeviceDataSize - (perEntriesSize+sizeof(TLSFMain));
+	size_t devicePermAllocSize = perDeviceDataSize - (sizeof(TLSFMain)+sizeof(VKAllocationCB));
 
 	permanentDeviceAlloc = (TLSFMain*)tempDeviceHead;
 

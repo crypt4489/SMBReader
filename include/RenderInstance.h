@@ -44,6 +44,8 @@ namespace API
 
 struct RenderInstanceCreateInfo
 {
+	uint32_t maxGPUS;
+	uint32_t maxLogicalDevices;
 	uint32_t maxWindows;
 	uint32_t maxSwapChains;
 	uint32_t maxAttachmentGraphTemplates;
@@ -74,7 +76,20 @@ struct RenderInstanceCreateInfo
 	uint32_t numberOfResourceUpdateAllocations;
 	uint32_t numberOfDriverDeviceAllocations;
 	uint32_t numberOfImageMemoryAllocations;
+};
+
+struct LogicalDeviceCreateInfo
+{
+	GPUFeatureRequest* requestedPhysicalFeatures; 
+	LogicalDeviceFeatures* requestedDeviceFeatures;
+	size_t driverPermanentSize;
+	size_t driverCacheSize;
+	size_t deviceInstPermanentSize;
+	size_t deviceInstHandleSize;
+	size_t deviceInstCacheSize;
 	uint32_t maxQueries;
+	int surfaceIndexForPresent;
+	int physicalDeviceIndex;
 };
 
 struct RenderInstance
@@ -141,7 +156,7 @@ struct RenderInstance
 
 	int CreateImagePool(size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 
-	void CreateVulkanRenderer(int windowedIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
+	int CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo);
 
 	uint32_t GetSwapChainHeight(int swapChainIndex);
 
@@ -196,7 +211,7 @@ struct RenderInstance
 	int CreateRSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
 	int CreateDSVMemoryPool(size_t size, ImageFormat format, int maxWidth, int maxHeight);
 
-	ImageFormat FindSupportedBackBufferColorFormat(int surfaceLevel, ImageFormat* requestedFormats, uint32_t requestSize);
+	ImageFormat FindSupportedBackBufferColorFormat(int physicalDeviceIndex, int surfaceLevel, ImageFormat* requestedFormats, uint32_t requestSize);
 	ImageFormat FindSupportedDepthFormat(ImageFormat* requestedFormats, uint32_t requestSize);
 
 	int CreateAttachmentGraph(StringView* attachmentLayout, int* subAttachCount);
@@ -238,24 +253,15 @@ struct RenderInstance
 
 	int CreatePerFrameStagingBuffers(uint32_t bufferSize);
 
+	void SetCurrentInstanceDeviceIndex(int selectedDeviceIndex);
+
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	VKInstance *vkInstance = nullptr;
-	EntryHandle deviceIndex = EntryHandle();
-	EntryHandle physicalIndex = EntryHandle();
-	//EntryHandle renderSurfaceIndex = EntryHandle();
-	
-	EntryHandle graphicsComputeTransfer = EntryHandle();
-	EntryHandle presentQueue = EntryHandle();
-	EntryHandle queryPool = EntryHandle();
 
-	EntryHandle rendererWaitSemaphores[MAX_FRAMES_IN_FLIGHT]{};
-	EntryHandle rendererFinishedSemaphores[MAX_FRAMES_IN_FLIGHT]{};
-	RenderTimelineSync rendererTimelineSyncObject{};
+	RenderPhysicalDeviceContainer* physicalDeviceIndices{};
 
-	EntryHandle currentCBIndex[MAX_FRAMES_IN_FLIGHT]{};
-
-	EntryHandle stagingBuffers[MAX_FRAMES_IN_FLIGHT]{};
+	RenderLogicalDeviceContainer* logicalDeviceIndices{};
 
 	PoolAllocator<RenderWindowSpecificData> windowsSurfaces{};
 
@@ -327,24 +333,14 @@ struct RenderInstance
 
 	Logger* internalRendererLogger;
 
-	uint32_t* queryResults;
-
-	double deviceTimeStampPeriodNS = 0.0;
-
-	int maxQueryResults = 0;
 	int gpuCommandCount = 0;
 	int maxGPUCommandCount = 0;
 	int currentUpdateCommandBuffer = 0;
-	uint32_t maxMSAALevels = 0;
 	uint32_t currentFrame = 0;
 	uint32_t previousFrame = ~0ui32;
-
-	int minUniformAlignment;
-	int minStorageAlignment;
-
-	uint32_t queryCounts[MAX_FRAMES_IN_FLIGHT]{};
-
-	DeviceSlabAllocator stagingBufferAllocators[MAX_FRAMES_IN_FLIGHT];
+	int physicalDeviceCounter = 0;
+	int logicalDeviceCounter = 0;
+	int instanceCurrentLogicalDeviceIndex = -1;
 };
 
 namespace GlobalRenderer 

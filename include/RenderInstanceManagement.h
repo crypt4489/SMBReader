@@ -744,6 +744,8 @@ struct RenderSwapchainData
 	EntryHandle swapChainIdx;
 	uint32_t width;
 	uint32_t height;
+	EntryHandle* rendererWaitSemaphores;
+	EntryHandle* rendererFinishedSemaphores;
 };
 
 struct RenderWindowSpecificData
@@ -754,4 +756,35 @@ struct RenderWindowSpecificData
 	{
 		return vkRenderSurface;
 	}
+};
+
+struct RenderPhysicalDeviceInformation
+{
+	int minUniformAlignment;
+	int minStorageAlignment;
+	int minCopyAlignment;
+	int maxMSAALevels;
+	double deviceTimeStampPeriodNS;
+};
+
+struct RenderPhysicalDeviceContainer
+{
+	EntryHandle physicalDeviceIndex;
+	RenderPhysicalDeviceInformation information;
+};
+
+struct RenderLogicalDeviceContainer
+{
+	EntryHandle logicalDeviceIndex;
+	EntryHandle graphicsComputeTransfer;
+	EntryHandle presentQueue;
+	EntryHandle queryPoolIndex; 
+	RenderTimelineSync deviceTimelineSyncObject;
+	EntryHandle* currentCommandBufferIndex;
+	EntryHandle* stagingBuffers;
+	RenderPhysicalDeviceInformation* relatedPhysDeviceInfo;
+	DeviceSlabAllocator* stagingBufferAllocators;
+	uint32_t* queryResults;
+	uint32_t* queryCounts;
+	int maxQueryResults = 0;
 };
