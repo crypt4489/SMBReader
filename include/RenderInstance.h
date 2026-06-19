@@ -233,11 +233,11 @@ struct RenderInstance
 
 	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorSet, int bindingIndex, int textureStart);
 
-	void PipelineUpdateInstanceCommandsBuffer(int pipelineIndex, int allocationIndex);
-	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, int vertexCount, int vertexBuffersubAlloc);
-	void PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, int indexCount, int indexStride, int indexSubAlloc);
+	void PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex);
+	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount, uint32_t vertexBuffersubAlloc);
+	void PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride, uint32_t indexSubAlloc);
 	void PipelineUpdateIndirectCountBuffer(int pipelineIndex, int allocationIndex);
-	void PipelineUpdateDispatchCommands(int pipelineIndex, int x, int y, int z);
+	void PipelineUpdateDispatchCommands(int pipelineIndex, uint32_t x, uint32_t y, uint32_t z);
 
 	int CreateUniversalBuffer(size_t size, BufferType bufferMemoryType);
 
@@ -338,8 +338,10 @@ struct RenderInstance
 	int currentUpdateCommandBuffer = 0;
 	uint32_t currentFrame = 0;
 	uint32_t previousFrame = ~0ui32;
-	int physicalDeviceCounter = 0;
-	int logicalDeviceCounter = 0;
+	uint32_t physicalDeviceCounter = 0;
+	uint32_t logicalDeviceCounter = 0;
+	uint32_t maxLogicalDevices;
+	uint32_t maxPhysicalDevices;
 	int instanceCurrentLogicalDeviceIndex = -1;
 };
 

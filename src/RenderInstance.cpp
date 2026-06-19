@@ -586,6 +586,9 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 
 	logicalDeviceIndices = (RenderLogicalDeviceContainer*)storageAllocator->Allocate(sizeof(RenderLogicalDeviceContainer) * info->maxLogicalDevices, alignof(RenderLogicalDeviceContainer));
 
+	maxLogicalDevices = info->maxLogicalDevices;
+	maxPhysicalDevices = info->maxGPUS;
+
 	return;
 }
 
@@ -4005,54 +4008,57 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 	return imageCount;
 }
 
-void RenderInstance::PipelineUpdateInstanceCommandsBuffer(int pipelineIndex, int allocationIndex)
+void RenderInstance::PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-	auto alloc = allocations[allocationIndex];
+	RenderAllocation alloc = allocations[allocationIndex];
+
+	int copiesOfstruct = alloc.structureCopies;
 
 	size_t align = alloc.alignment;
-	uint32_t copiesOfstruct = static_cast<uint32_t>(alloc.structureCopies);
 
-	EntryHandle indirectBufferHandle = bufferHandles[alloc.memIndex];
-	size_t indirectOffset = alloc.offset;
-	size_t indirectBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
+	uint32_t indirectOffset = alloc.offset;
+	uint32_t indirectBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
 	
 	if (handle->group == GRAPHICSO)
 	{
-	
+		handle->indirectBufferFrames = indirectBufferPerFrameSize;
+		handle->indirectBufferHandle = alloc.memIndex;
+		handle->indirectBufferOffset = indirectOffset;
 	}
 }
 
-void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, int vertexCount, int vertexBuffersubAlloc)
+void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount, uint32_t vertexBuffersubAlloc)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-	auto alloc = allocations[allocationIndex];
+	RenderAllocation alloc = allocations[allocationIndex];
 
-	EntryHandle vertexBufferHandle = bufferHandles[alloc.memIndex];
-	size_t vertexOffset = alloc.offset + vertexBuffersubAlloc;
-	size_t vertexCountLL = static_cast<size_t>(vertexCount);
+	uint32_t vertexOffset = (uint32_t)alloc.offset + vertexBuffersubAlloc;
 
 	if (handle->group == GRAPHICSO)
 	{
-	
+		handle->vertexBufferIndex = alloc.memIndex;
+		handle->vertexBufferOffset = vertexOffset;
+		handle->vertexCount = vertexCount;
 	}
 }
 
-void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, int indexCount, int indexStride, int indexSubAlloc)
+void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride, uint32_t indexSubAlloc)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-	auto alloc = allocations[allocationIndex];
+	RenderAllocation alloc = allocations[allocationIndex];
 
-	EntryHandle indexBufferHandle = bufferHandles[alloc.memIndex];
-	size_t indexOffset = alloc.offset + indexSubAlloc;
-	size_t indexCountLL = static_cast<size_t>(indexStride);
+	uint32_t indexOffset = (uint32_t)alloc.offset + indexSubAlloc;
 
 	if (handle->group == GRAPHICSO)
 	{
-	
+		handle->indexBufferHandle = alloc.memIndex;
+		handle->indexBufferOffset = indexOffset;
+		handle->indexSize = indexStride;
+		handle->indexCount = indexCount;
 	}
 }
 
@@ -4061,31 +4067,32 @@ void RenderInstance::PipelineUpdateIndirectCountBuffer(int pipelineIndex, int al
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-	auto alloc = allocations[allocationIndex];
+	RenderAllocation alloc = allocations[allocationIndex];
 
+	int copiesOfstruct = alloc.structureCopies;
+	
 	size_t align = alloc.alignment;
-	uint32_t copiesOfstruct = static_cast<uint32_t>(alloc.structureCopies);
-	EntryHandle indirectCountBufferHandle = bufferHandles[alloc.memIndex];
-	size_t indirectCountOffset = alloc.offset;
-	size_t indirectCountBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
+
+	uint32_t indirectCountOffset = alloc.offset;
+	uint32_t indirectCountBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
 
 	if (handle->group == GRAPHICSO)
 	{
-		
+		handle->indirectCountBufferHandle = alloc.memIndex;
+		handle->indirectCountBufferOffset = indirectCountOffset;
+		handle->indirectCountBufferStride = indirectCountBufferPerFrameSize;
 	}
 }
 
-void RenderInstance::PipelineUpdateDispatchCommands(int pipelineIndex, int x, int y, int z)
+void RenderInstance::PipelineUpdateDispatchCommands(int pipelineIndex, uint32_t x, uint32_t y, uint32_t z)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-	uint32_t xU = static_cast<uint32_t>(x);
-	uint32_t yU = static_cast<uint32_t>(y);
-	uint32_t zU = static_cast<uint32_t>(z);
-
 	if (handle->group == COMPUTESO)
 	{
-	
+		handle->x = x;
+		handle->y = y;
+		handle->z = z;
 	}
 }
 
