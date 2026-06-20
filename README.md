@@ -97,14 +97,14 @@ Clean-up Vulkan and add explicit error handling mechanism plus fallback when thi
 
 Finish render instance based on minimum specs for both Vulkan and DX12
 - Create configuration struct for initialization of flat arrays and remove hardcoded bounds where appropriate (done). 
-- Finish pipeline data updating and any skeleton functions
+- Finish pipeline data updating and any skeleton functions (done)
 - Finish resource transition and layout management and create an image tracking and initialization (allow user to specify image layout, usage by function and specify depth and layers explicitly)
 - Create mechanism for attachments layouts to be tracked and integrate with general image tracking pool.
 - Create feature request system and make it so user can query features request (while also maintaining minimum viable feature request for this layer) 
 - Make robust all bounds checking, add failure designation to all possible failure (including integration with new vulkan failure designation and error handling)
 - Make shader graph have hardcoded bounds and cleanup initialization function for shader graph (no std::string, no separate allocators for shader graph and shader details, check shader bounds during compilation) (done)
 - Separate window/swapchain creation from instance creation and make it explciitly controllable by app layer (done)
-- Separate descriptor pool/heap creation and make it explicitly controllable by app layer (done) and allow different heap/pool managers.
+- Separate descriptor pool/heap creation and make it explicitly controllable by app layer and allow different heap/pool managers (done).
 - Separate all vulkan specific functions or things that need to know it's using vulkan to separate file with compile type linking.
 - Accurately handle fallback and failure designations at all levels.
 - Correct staging buffer uploads and make it use optimal alignment and make it so that big uploads via memory tag can be chunked and do batching control there. 
