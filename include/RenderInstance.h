@@ -274,9 +274,7 @@ struct RenderInstance
 
 	PoolAllocator<EntryHandle> imagePools{};
 
-	PoolAllocator<EntryHandle*> pipelineInstancesIdentifier{};
-	
-	PipelineInstanceData* pipelinesInstancesInfo{};
+	PoolAllocator<RenderPipelineDescription> pipelineInstancesIdentifier{};
 
 	PoolAllocator<PipelineHandle> pipelineHandles{};
 
@@ -290,9 +288,7 @@ struct RenderInstance
 
 	PoolAllocator<ComputeQueue> computeQueues{};
 
-	PoolAllocator<EntryHandle> textureResourceHandles{};
-
-	int* textureToResourceStatus{};
+	PoolAllocator<RenderTextureDescription> textureResourceHandles{};
 
 	PoolAllocator<EntryHandle> samplerResourceHandles{};
 

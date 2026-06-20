@@ -543,7 +543,6 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 	imagePools.Create(storageAllocator, info->maxImagePoolsCount);
 
 	pipelineInstancesIdentifier.Create(instanceStorageAllocator, info->maxPipelineInstances);
-	pipelinesInstancesInfo = (PipelineInstanceData*)instanceStorageAllocator->Allocate(sizeof(PipelineInstanceData) * info->maxPipelineInstances, alignof(PipelineInstanceData));
 
 	pipelineHandles.Create(instanceStorageAllocator, info->maxPipelineHandles);
 
@@ -557,8 +556,6 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 	samplerResourceHandles.Create(instanceStorageAllocator, info->maxSamplerHandles);
 
 	textureResourceHandles.Create(instanceStorageAllocator, info->maxTextureHandles);
-
-	textureToResourceStatus = (int*)instanceStorageAllocator->Allocate(sizeof(int) * info->maxTextureHandles, alignof(int));
 
 	resourceStatuses.Create(instanceStorageAllocator, info->maxResourceStatuses);
 
@@ -1653,7 +1650,7 @@ int RenderInstance::CreateGraphicRenderStateObject(int deviceSelection, int shad
 
 		uint32_t totalPiplineVariations = 0;
 
-		PipelineInstanceData* instData = &pipelinesInstancesInfo[shaderGraphIndex];
+		PipelineInstanceData* instData = &pipelineInstancesIdentifier.Get(shaderGraphIndex)->instanceData;
 
 		instData->frameGraphCount = frameGraphCount;
 
@@ -1679,7 +1676,7 @@ int RenderInstance::CreateGraphicRenderStateObject(int deviceSelection, int shad
 			);
 		}
 		
-		pipelineInstancesIdentifier.pool[shaderGraphIndex] = pipelineHandles;
+		pipelineInstancesIdentifier.pool[shaderGraphIndex].pipelineIndices = pipelineHandles;
 	}
 
 	return 0;
@@ -1697,7 +1694,7 @@ int RenderInstance::CreateComputePipelineStateObject(int deviceSelection, int sh
 
 		*pipelineID = CreateVulkanComputePipelineTemplate(deviceSelection, graph);
 
-		pipelineInstancesIdentifier.pool[shaderGraphIndex] = pipelineID;
+		pipelineInstancesIdentifier.pool[shaderGraphIndex].pipelineIndices = pipelineID;
 	}
 
 	return 0;
@@ -2025,7 +2022,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
-				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
 			}
 			break;
 		}
@@ -2036,7 +2033,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
-				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
 			}
 			break;
 		}
@@ -2133,7 +2130,7 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 	{
 		link = imageMemoryUpdateManager.PopLink(&region, link);
 
-		EntryHandle handle = textureResourceHandles[region.textureIndex];
+		EntryHandle handle = textureResourceHandles[region.textureIndex].textureIndex;
 
 		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
 
@@ -2358,9 +2355,9 @@ int RenderInstance::CreateImageHandle(
 
 	int textureIndex = textureResourceHandles.Allocate();
 
-	textureResourceHandles.pool[textureIndex] = textureHandle;;
+	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
 
-	textureToResourceStatus[textureIndex] = resourceStatuses.Allocate();
+	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
 
 	return textureIndex;
 }
@@ -2388,12 +2385,14 @@ int RenderInstance::CreateStorageImage(
 		VK_IMAGE_LAYOUT_UNDEFINED, 0
 	);
 
-	int textureIndex = textureResourceHandles.Allocate();
-
-	textureResourceHandles.pool[textureIndex] = textureHandle;
-
 	if (samplerIndex >= 0)
 		dev->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+
+	int textureIndex = textureResourceHandles.Allocate();
+
+	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
+
+	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
 
 	return textureIndex;
 }
@@ -2427,7 +2426,9 @@ int RenderInstance::CreateCubeImageHandle(
 
 	int textureIndex = textureResourceHandles.Allocate();
 
-	textureResourceHandles.pool[textureIndex] = textureHandle;
+	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
+
+	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
 
 	return textureIndex;
 }
@@ -3043,7 +3044,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]], image->firstTexture + imageIndex, i, 0, frames);
+					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, image->firstTexture + imageIndex, i, 0, frames);
 				}
 
 			
@@ -3064,7 +3065,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]], image->firstTexture + imageIndex, i, 0, frames);
+					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, image->firstTexture + imageIndex, i, 0, frames);
 				}
 				
 				break;
@@ -3151,7 +3152,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 
 int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIntermediaryPipelineInfo* info, bool addToGraph)
 {
-	PipelineInstanceData* pid = &pipelinesInstancesInfo[info->pipelinename];
+	PipelineInstanceData* pid = &pipelineInstancesIdentifier.Get(info->pipelinename)->instanceData;
 
 	int ret = pipelineHandles.Allocate();
 
@@ -3326,7 +3327,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 			{
 				PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
 
-				EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup][0];
+				EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[0];
 
 				rcb.BindComputePipeline(pipelineTemp);
 
@@ -3431,7 +3432,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 					{
 						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
 
-						PipelineInstanceData* pid = &pipelinesInstancesInfo[handle->pipelineIdentifierGroup];
+						PipelineInstanceData* pid = &pipelineInstancesIdentifier.Get(handle->pipelineIdentifierGroup)->instanceData;
 
 						uint32_t pipelineOffset = 0;
 
@@ -3444,7 +3445,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 							}
 						}
 
-						EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup][pipelineOffset + sampleLevelForRenderPass];
+						EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[pipelineOffset + sampleLevelForRenderPass];
 
 						uint32_t drawSize = handle->vertexCount;
 
@@ -3976,7 +3977,7 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 	for (int i = 0; i < imageCount; i++)
 	{
 		int textureIndex = textureResourceHandles.Allocate();
-		textureResourceHandles.pool[textureIndex] = imageViews[i];
+		textureResourceHandles.pool[textureIndex].textureIndex = imageViews[i];
 		textureIds[i] = textureIndex;
 	}
 

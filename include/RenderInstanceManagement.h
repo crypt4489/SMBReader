@@ -810,3 +810,15 @@ struct RenderBufferDescription
 	BufferType type;
 	int resourceStatus;
 };
+
+struct RenderTextureDescription
+{
+	EntryHandle textureIndex;
+	int resourceStatusIndex;
+};
+
+struct RenderPipelineDescription
+{
+	PipelineInstanceData instanceData;
+	EntryHandle* pipelineIndices;
+};
