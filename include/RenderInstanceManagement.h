@@ -25,11 +25,12 @@ enum class TransferType
 
 struct ShaderResourceUpdate
 {
+	void* data;
 	ShaderResourceType type;
+	int descriptorManagerIndex;
 	int descriptorSet;
 	int bindingIndex;
 	int copyCount;
-	void* data;
 	int dataSize;
 };
 
@@ -47,6 +48,12 @@ struct BufferArrayUpdate
 	int* allocationIndices;
 };
 
+struct DescriptorPipelineInformation
+{
+	int descriptorManagerIndex;
+	int descriptorIndex;
+};
+
 struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
@@ -54,7 +61,7 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t vertexCount;
 	uint32_t pipelinename;
 	uint32_t descCount;
-	int* descriptorsetid;
+	DescriptorPipelineInformation* descriptorsetid;
 	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t instanceCount;
@@ -73,7 +80,7 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t z;
 	uint32_t pipelinename;
 	uint32_t descCount;
-	int* descriptorsetid;
+	DescriptorPipelineInformation* descriptorsetid;
 };
 
 struct BufferMemoryTransferRegion
@@ -133,7 +140,7 @@ struct PipelineHandle
 	int group;
 	int numHandles;
 	int pipelineIdentifierGroup;
-	int resourceSets[4];
+	DescriptorPipelineInformation resourceSets[16];
 	int resourceSetCount;
 	int vertexBufferIndex;
 	uint32_t vertexBufferOffset;
@@ -241,14 +248,19 @@ struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
 
 };
 
+#define PACK_DESCRIPTOR_MANAGER_INDEX(x) ((x) << 20)
+#define UNPACK_DESCRIPTOR_MANAGER_INDEX(x) ((x&0xFFF00000) >> 20)
+#define PACK_DESCRIPTOR_SET_INDEX(x) ((x&0x000FFFFF))
+#define UNPACK_DESCRIPTOR_SET_INDEX(x) ((x&0x000FFFFF))
+
 struct RenderDriverUpdateCommandResource: public RenderDriverUpdateCommandHeader
 {
-	int descriptorid; 
+	int descriptorIdManagerIndex; 
 	int bindingindex; 
 	ShaderResourceType type;
 	int cachedDataSize;
 	int copies;
-	void* data; 
+	void* data;
 
 	RenderDriverUpdateCommandHeader* GetNext()
 	{
@@ -620,7 +632,7 @@ struct ShaderResourceUpdatePool
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(int descriptorid, int bindingindex, ShaderResourceType type, void* data, int cachedDataSize, int copies)
+	int Create(int descriptorManagerIndex, int descriptorid, int bindingindex, ShaderResourceType type, void* data, int cachedDataSize, int copies)
 	{
 		ShaderResourceUpdate* region = nullptr;
 
@@ -630,6 +642,7 @@ struct ShaderResourceUpdatePool
 
 		region = &transferRegions[regionAlloc];
 
+		region->descriptorManagerIndex = descriptorManagerIndex;
 		region->data = data;
 		region->dataSize = cachedDataSize;
 		region->descriptorSet = descriptorid;
@@ -682,6 +695,7 @@ struct ShaderResourceUpdatePool
 		outputRegion->copyCount = region->copyCount;
 		outputRegion->dataSize = region->dataSize;
 		outputRegion->data = region->data;
+		outputRegion->descriptorManagerIndex = region->descriptorManagerIndex;
 
 		int linkRet = regionLinks[link];
 
@@ -700,6 +714,7 @@ struct ShaderResourceUpdatePool
 			region->descriptorSet = -1;
 			region->type = ShaderResourceType::INVALID_SHADER_RESOURCE;
 			region->dataSize = -1;
+			region->descriptorManagerIndex = -1;
 			regionLinks[link] = -1;
 		}
 
@@ -787,4 +802,11 @@ struct RenderLogicalDeviceContainer
 	uint32_t* queryResults;
 	uint32_t* queryCounts;
 	int maxQueryResults = 0;
+};
+
+struct RenderBufferDescription
+{
+	EntryHandle bufferHandle;
+	BufferType type;
+	int resourceStatus;
 };

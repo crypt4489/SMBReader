@@ -25,8 +25,7 @@ struct ShaderResourceManager
 
 	void Create(Allocator* shaderResourceMemoryAllocator, uint32_t shaderResourceSlabSize, uint32_t maxDescriptorSets)
 	{
-		shaderResourceInstAllocator.dataHead = shaderResourceMemoryAllocator->Allocate(shaderResourceSlabSize, alignof(void*));
-		shaderResourceInstAllocator.dataSize = shaderResourceSlabSize;
+		std::construct_at(&shaderResourceInstAllocator, shaderResourceMemoryAllocator->Allocate(shaderResourceSlabSize, alignof(void*)), shaderResourceSlabSize);
 		descriptorSetHandles.Create(shaderResourceMemoryAllocator, maxDescriptorSets);
 		memset(descriptorSetHandles.pool, 0xFF, sizeof(EntryHandle) * maxDescriptorSets);
 		descriptorSets = (uintptr_t*)shaderResourceMemoryAllocator->Allocate(sizeof(uintptr_t) * maxDescriptorSets, alignof(uintptr_t));

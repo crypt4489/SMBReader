@@ -350,6 +350,8 @@ static int mainPresentationSwapChain = -1;
 static int mainPresentationWindow = -1;
 static int mainHostBuffer = -1;
 static int mainDeviceBuffer = -1;
+static int mainDescriptorManagerIndex = -1;
+static ShaderResourceManager* descriptorManager = nullptr;
 
 static DeviceSlabAllocator mainHostAllocator, mainDeviceAllocator;
 
@@ -891,7 +893,7 @@ void ApplicationLoop::Execute()
 		samplerUpdate.resourceDstBegin = 0;
 		samplerUpdate.resourceHandles = &mainLinearSampler;
 
-		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainDescriptorManagerIndex, globalTexturesDescriptor, 0, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 		while (running)
 		{
@@ -907,7 +909,7 @@ void ApplicationLoop::Execute()
 
 				mainWindow.GetWindowSize(&width, &height);
 
-				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainPresentationSwapChain, (uint32_t)width, (uint32_t)height);
+				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainLogicalDevice, mainPresentationSwapChain, (uint32_t)width, (uint32_t)height);
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
 				RecreateFrameGraphAttachments(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain), GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain));
@@ -996,7 +998,7 @@ void ApplicationLoop::Execute()
 				updateMainDebugCommand--;
 			}
 
-			imageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainPresentationSwapChain);
+			imageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
 
 			if (imageIndex != ~0ui32) 
 			{
@@ -1036,9 +1038,9 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
 				}
 
-				GlobalRenderer::gRenderInstance.DrawScene(imageIndex);
+				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, imageIndex);
 
-				GlobalRenderer::gRenderInstance.SubmitFrame(mainPresentationSwapChain, imageIndex);
+				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, imageIndex);
 			}
 			else
 			{
@@ -1046,7 +1048,7 @@ void ApplicationLoop::Execute()
 				running = false;
 			}
 			
-			GlobalRenderer::gRenderInstance.EndFrame();	
+			GlobalRenderer::gRenderInstance.EndFrame(mainLogicalDevice);
 
 			running = ProcessCommands();
 
@@ -1075,7 +1077,7 @@ void CreateTexturePools()
 	for (int i = 0; i < 4; i++)
 	{
 		int texturePoolHandle = 
-			rendInst.CreateImagePool(
+			rendInst.CreateImagePool(mainLogicalDevice,
 			requestedSize,
 			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, false
 		);
@@ -1458,15 +1460,15 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 
 	jointMeshStaringLocations[jointIndex] = startingLocation;
 
-	int camJointData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(JOINTVISUAL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-	int JointDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(JOINTVISUAL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int camJointData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, JOINTVISUAL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int JointDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, JOINTVISUAL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(nullptr, camJointData, &globalBufferLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(nullptr, JointDesc, &jointMeshStaringLocations[jointIndex], 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(nullptr, JointDesc, &jointMeshWorldMatrix, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(nullptr, JointDesc, &jointMeshParentIndices, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(nullptr, camJointData, &globalBufferLocation, nullptr, 0, 1, 0);
+	descriptorManager->UploadConstant(nullptr, JointDesc, &jointMeshStaringLocations[jointIndex], 0);
+	descriptorManager->BindBufferToShaderResource(nullptr, JointDesc, &jointMeshWorldMatrix, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferView(nullptr, JointDesc, &jointMeshParentIndices, 0, 1, 1);
 
-	std::array<int, 2> Descs = { camJointData, JointDesc };
+	std::array<DescriptorPipelineInformation, 2> Descs = { mainDescriptorManagerIndex, camJointData, mainDescriptorManagerIndex, JointDesc };
 
 	GraphicsIntermediaryPipelineInfo jointInfo = {
 		.drawType = 0,
@@ -1486,7 +1488,7 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 		.indirectCountAllocation = ~0
 	};
 
-	jointMeshPipelines[jointIndex] = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&jointInfo, false);
+	jointMeshPipelines[jointIndex] = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &jointInfo, false);
 }
 
 
@@ -2284,14 +2286,14 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 			size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
-			GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+			GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
 				texture.width, texture.height, texture.miplevels, 1, format, &actualMemorySize, &actualMemoryAlignment
 			);
 
 			actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
 
 			mainDictionary.textureHandles[ii + globalTextureStartIndex] =
-				GlobalRenderer::gRenderInstance.CreateImageHandle(
+				GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
 					actualMemoryAddress,
 					texture.width,
 					texture.height,
@@ -2319,7 +2321,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 		update.resourceDstBegin = globalTextureStartIndex;
 		update.resourceHandles = mainDictionary.textureHandles.data() + globalTextureStartIndex;
 
-		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
+		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainDescriptorManagerIndex, globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 	}
 
 	for (int i = 0; i < totalMeshCount; i++) 
@@ -2371,33 +2373,33 @@ int CreateDebugCommandBuffers(int count)
 
 	ShaderResourceSetContext debugRSContext{ &mainAppLogger, false };
 
-	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndirectCommand),  debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	debugIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(VkDrawIndirectCommand),  debugIndirectDrawData.commandBufferSize, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	debugIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), debugIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	debugIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(DEBUGCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	debugIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, DEBUGCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
+	descriptorManager->BindBufferView(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalDebugTypesAlloc, 0, 1, 2);
+	descriptorManager->BindBufferView(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalDebugTypesAlloc, 0, 1, 2);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr,  0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr,  0, 1, 3);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalDebugStructAlloc, nullptr, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &globalDebugStructAlloc, nullptr, 0, 1, 4);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 5);
+	descriptorManager->BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 5);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCount, 0);
+	descriptorManager->UploadConstant(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, &debugIndirectDrawData.commandBufferCount, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	descriptorManager->BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 5, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	descriptorManager->BindBarrier(&debugRSContext, debugIndirectDrawData.indirectCullDescriptor, 5, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
 	if (debugRSContext.contextFailed)
 	{
@@ -2406,7 +2408,7 @@ int CreateDebugCommandBuffers(int count)
 	}
 
 
-	std::array debugCullDescriptors = { debugIndirectDrawData.indirectCullDescriptor };
+	std::array<DescriptorPipelineInformation, 1> debugCullDescriptors = { mainDescriptorManagerIndex, debugIndirectDrawData.indirectCullDescriptor };
 
 	ShaderComputeLayout* debugCullDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(DEBUGCULL);
 
@@ -2420,7 +2422,7 @@ int CreateDebugCommandBuffers(int count)
 	};
 
 
-	debugIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&debugCullPipelineCreate);
+	debugIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &debugCullPipelineCreate);
 
 	if (debugIndirectDrawData.indirectCullPipeline < 0)
 	{
@@ -2428,17 +2430,17 @@ int CreateDebugCommandBuffers(int count)
 		return -1;
 	}
 
-	debugIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(DEBUGDRAW, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	debugIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, DEBUGDRAW, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &globalDebugStructAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &globalDebugStructAlloc, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
+	descriptorManager->BindBufferView(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &debugIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &globalDebugTypesAlloc, 0, 1, 2);
+	descriptorManager->BindBufferView(&debugRSContext, debugIndirectDrawData.indirectDrawDescriptor, &globalDebugTypesAlloc, 0, 1, 2);
 
-	std::array<int, 2> indirectDebugDrawDescriptors = {
-		globalBufferDescriptor,
-		debugIndirectDrawData.indirectDrawDescriptor,
+	std::array<DescriptorPipelineInformation, 2> indirectDebugDrawDescriptors = {
+		mainDescriptorManagerIndex, globalBufferDescriptor,
+		mainDescriptorManagerIndex, debugIndirectDrawData.indirectDrawDescriptor,
 	};
 
 	if (debugRSContext.contextFailed)
@@ -2464,7 +2466,7 @@ int CreateDebugCommandBuffers(int count)
 	};
 
 
-	debugIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectDebugDrawPipelineCreate, false);
+	debugIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &indirectDebugDrawPipelineCreate, false);
 
 	if (debugIndirectDrawData.indirectDrawPipeline < 0)
 	{
@@ -2482,66 +2484,66 @@ int CreateGenericMeshCommandBuffers(int count)
 
 	ShaderResourceSetContext genericMeshRSContext{ &mainAppLogger, false };
 
-	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainIndirectDrawData.commandBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), count, alignof(VkDrawIndexedIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainIndirectDrawData.commandBufferCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(RENDEROBJCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	mainIndirectDrawData.indirectCullDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, RENDEROBJCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
-
-
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalRenderableLocation, nullptr, 0, 1, 5);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 6);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 7);
-
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
-
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 4, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	mainIndirectDrawData.indirectGlobalIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), mainIndirectDrawData.commandBufferSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalBufferLocation, nullptr, 0, 1, 2);
+	descriptorManager->BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCountAlloc, nullptr, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalRenderableLocation, nullptr, 0, 1, 5);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 6);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 7);
 
-	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(GENERIC, 2, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	descriptorManager->UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainGrid, 0);
+	descriptorManager->UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
+
+	descriptorManager->BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+	descriptorManager->BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+	descriptorManager->BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+
+	descriptorManager->BindBarrier(&genericMeshRSContext, mainIndirectDrawData.indirectCullDescriptor, 4, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+
+
+
+	mainIndirectDrawData.indirectDrawDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, GENERIC, 2, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	
 
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalLightTypesBuffer,  0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialsLocation, nullptr, 0, 1, 5);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalRenderableLocation, nullptr, 0, 1, 6);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 10);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 11);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalLightTypesBuffer,  0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialsLocation, nullptr, 0, 1, 5);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalRenderableLocation, nullptr, 0, 1, 6);
+	descriptorManager->BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalMaterialIndicesLocation, 0, 1, 7);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalBlendDetailsLocation, nullptr, 0, 1, 8);
+	descriptorManager->BindBufferView(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalBlendRangesLocation, 0, 1, 9);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 10);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 11);
 
-	std::array<int, 3> indirectDrawDescriptors = {
-		globalBufferDescriptor,
-		globalTexturesDescriptor,
-		mainIndirectDrawData.indirectDrawDescriptor,
+	std::array<DescriptorPipelineInformation, 3> indirectDrawDescriptors = {
+		mainDescriptorManagerIndex, globalBufferDescriptor,
+		mainDescriptorManagerIndex, globalTexturesDescriptor,
+		mainDescriptorManagerIndex, mainIndirectDrawData.indirectDrawDescriptor,
 	};
 
 	shadowMapIndex = mainDictionary.AllocateNTextureHandles(GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, nullptr);
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, globalTexturesDescriptor, 3, shadowMapIndex);
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAShadowMapping, 1, mainDescriptorManagerIndex, globalTexturesDescriptor, 3, shadowMapIndex);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &shadowMapIndex, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &GlobalRenderer::gRenderInstance.currentFrame, 1);
+	descriptorManager->UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &shadowMapIndex, 0);
+	descriptorManager->UploadConstant(&genericMeshRSContext, mainIndirectDrawData.indirectDrawDescriptor, &GlobalRenderer::gRenderInstance.currentFrame, 1);
 
 	if (genericMeshRSContext.contextFailed)
 	{
@@ -2565,7 +2567,7 @@ int CreateGenericMeshCommandBuffers(int count)
 		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
 	};
 
-	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectDrawCreate, false);
+	mainIndirectDrawData.indirectDrawPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &indirectDrawCreate, false);
 
 	if (mainIndirectDrawData.indirectDrawPipeline < 0)
 	{
@@ -2573,14 +2575,14 @@ int CreateGenericMeshCommandBuffers(int count)
 		return -1;
 	}
 
-	int cullLightDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int cullLightDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, RENDEROBJCULL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.deviceOffsetsAlloc, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.deviceCountsAlloc, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, cullLightDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, cullLightDescriptor, &globalLightTypesBuffer, 0, 1, 4 );
+	descriptorManager->BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
+	descriptorManager->BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.deviceOffsetsAlloc, 0, 1, 0);
+	descriptorManager->BindBufferView(&genericMeshRSContext, cullLightDescriptor, &lightAssignment.deviceCountsAlloc, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, cullLightDescriptor, &globalLightBuffer, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferView(&genericMeshRSContext, cullLightDescriptor, &globalLightTypesBuffer, 0, 1, 4 );
 
 	if (genericMeshRSContext.contextFailed)
 	{
@@ -2590,7 +2592,7 @@ int CreateGenericMeshCommandBuffers(int count)
 
 	ShaderComputeLayout* layout = GlobalRenderer::gRenderInstance.GetComputeLayout(RENDEROBJCULL);
 
-	std::array computeDescriptors = { mainIndirectDrawData.indirectCullDescriptor, cullLightDescriptor };
+	std::array<DescriptorPipelineInformation, 2> computeDescriptors = { mainDescriptorManagerIndex, mainIndirectDrawData.indirectCullDescriptor, mainDescriptorManagerIndex, cullLightDescriptor };
 
 	ComputeIntermediaryPipelineInfo mainCullComputeSetup = {
 			.x = count / layout->x,
@@ -2601,28 +2603,28 @@ int CreateGenericMeshCommandBuffers(int count)
 			.descriptorsetid = computeDescriptors.data()
 	};
 
-	mainIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&mainCullComputeSetup);
+	mainIndirectDrawData.indirectCullPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &mainCullComputeSetup);
 
-	int outlineDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(OUTLINE, 2, 3);
+	int outlineDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, OUTLINE, 2, 3);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalMeshLocation, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalVertexBuffer, nullptr, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshRSContext, outlineDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
+	descriptorManager->BindBufferView(&genericMeshRSContext, outlineDescriptor, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMeshRSContext, outlineDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
 
 	static Vector4f black = { 0.0, 0.0, 0.0, 1.0 };
 
 	static float outlineLength = 1.025;
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, outlineDescriptor, &black, 0);
+	descriptorManager->UploadConstant(&genericMeshRSContext, outlineDescriptor, &black, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshRSContext, outlineDescriptor, &outlineLength, 1);
+	descriptorManager->UploadConstant(&genericMeshRSContext, outlineDescriptor, &outlineLength, 1);
 
-	std::array<int, 2> indirectOutline = { outlineDescriptor };
+	std::array<DescriptorPipelineInformation, 1> indirectOutline = { mainDescriptorManagerIndex, outlineDescriptor };
 
 	if (genericMeshRSContext.contextFailed)
 	{
@@ -2672,35 +2674,35 @@ int CreateMeshWorldAssignment(int count)
 
 	uint32_t prefixCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)prefixLayout->x);
 
-	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	worldSpaceAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	worldSpaceAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	if (worldSpaceAssignment.totalSumsNeeded)
 	{
-		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 		
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else 
 	{
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
 	}
 
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
 	
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
+	descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.prefixSumDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
 
-	std::array prefixSumDescriptor = { worldSpaceAssignment.prefixSumDescriptors };
+	std::array<DescriptorPipelineInformation, 1> prefixSumDescriptor = { mainDescriptorManagerIndex, worldSpaceAssignment.prefixSumDescriptors };
 
 	if (genericMeshWorldRSContext.contextFailed)
 	{
@@ -2719,7 +2721,7 @@ int CreateMeshWorldAssignment(int count)
 
 
 
-	worldSpaceAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&worldAssignmentPrefix);
+	worldSpaceAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &worldAssignmentPrefix);
 
 	if (worldSpaceAssignment.prefixSumPipeline < 0)
 	{
@@ -2730,17 +2732,17 @@ int CreateMeshWorldAssignment(int count)
 	if (worldSpaceAssignment.totalSumsNeeded)
 	{
 
-		worldSpaceAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		worldSpaceAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
-		GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.totalSumsNeeded, 0);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
+		descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, &worldSpaceAssignment.totalSumsNeeded, 0);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAfterDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-		std::array prefixSumOverflowDescriptor = { worldSpaceAssignment.sumAfterDescriptors, };
+		std::array<DescriptorPipelineInformation, 1> prefixSumOverflowDescriptor = { mainDescriptorManagerIndex, worldSpaceAssignment.sumAfterDescriptors, };
 
 		if (genericMeshWorldRSContext.contextFailed)
 		{
@@ -2757,7 +2759,7 @@ int CreateMeshWorldAssignment(int count)
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
 
-		worldSpaceAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&prefixSumComputePipeline);
+		worldSpaceAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &prefixSumComputePipeline);
 
 		if (worldSpaceAssignment.sumAfterPipeline < 0)
 		{
@@ -2765,15 +2767,15 @@ int CreateMeshWorldAssignment(int count)
 			return -1;
 		}
 
-		worldSpaceAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		worldSpaceAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
-		GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+		descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, &worldSpaceAssignment.totalElementsCount, 0);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-		std::array incrementSumsDescriptor = { worldSpaceAssignment.sumAppliedToBinDescriptors, };
+		std::array<DescriptorPipelineInformation, 1> incrementSumsDescriptor = { mainDescriptorManagerIndex, worldSpaceAssignment.sumAppliedToBinDescriptors, };
 
 		if (genericMeshWorldRSContext.contextFailed)
 		{
@@ -2790,7 +2792,7 @@ int CreateMeshWorldAssignment(int count)
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
 
-		worldSpaceAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&incrementSumsComputePipeline);
+		worldSpaceAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &incrementSumsComputePipeline);
 
 		if (worldSpaceAssignment.sumAppliedToBinPipeline < 0)
 		{
@@ -2803,21 +2805,21 @@ int CreateMeshWorldAssignment(int count)
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(worldSpaceAssignment.totalElementsCount / (float)assignmentLayout->x);
 
-	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	worldSpaceAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, WORLDORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 4);
+	descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
+	descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-	std::array preWorldDivDescriptor = { worldSpaceAssignment.preWorldSpaceDivisionDescriptor, };
+	std::array<DescriptorPipelineInformation, 1> preWorldDivDescriptor = { mainDescriptorManagerIndex, worldSpaceAssignment.preWorldSpaceDivisionDescriptor };
 
 	if (genericMeshWorldRSContext.contextFailed)
 	{
@@ -2834,7 +2836,7 @@ int CreateMeshWorldAssignment(int count)
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
-	worldSpaceAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&preWorldDivComputePipeline);
+	worldSpaceAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &preWorldDivComputePipeline);
 
 	if (worldSpaceAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
@@ -2843,21 +2845,21 @@ int CreateMeshWorldAssignment(int count)
 	}
 
 
-	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(WORLDASSIGN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	worldSpaceAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, WORLDASSIGN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalMeshLocation, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &worldSpaceAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalRenderableLocation, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
+	descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
+	descriptorManager->UploadConstant(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, &mainIndirectDrawData.commandBufferCount, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMeshWorldRSContext, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-	std::array postWorldDivDescriptor = { worldSpaceAssignment.postWorldSpaceDivisionDescriptor, };
+	std::array<DescriptorPipelineInformation, 1> postWorldDivDescriptor = { mainDescriptorManagerIndex, worldSpaceAssignment.postWorldSpaceDivisionDescriptor, };
 
 	if (genericMeshWorldRSContext.contextFailed)
 	{
@@ -2874,7 +2876,7 @@ int CreateMeshWorldAssignment(int count)
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
-	worldSpaceAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&postWorldDivComputePipeline);
+	worldSpaceAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &postWorldDivComputePipeline);
 
 	if (worldSpaceAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
@@ -2897,31 +2899,31 @@ int CreateLightAssignments(int count)
 
 	uint32_t prefixCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)prefixLayout->x);
 
-	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.prefixSumDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	lightAssignment.deviceOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	lightAssignment.deviceCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.totalElementsCount, 0);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
+	descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.totalElementsCount, 0);
 
 	if (lightAssignment.totalSumsNeeded)
 	{
-		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+		lightAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else
 	{
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.prefixSumDescriptors, nullptr, nullptr, 0, 0, 2);
 	}
 
-	std::array prefixSumDescriptor = { lightAssignment.prefixSumDescriptors };
+	std::array<DescriptorPipelineInformation, 1> prefixSumDescriptor = { mainDescriptorManagerIndex, lightAssignment.prefixSumDescriptors };
 
 	if (genericLightWorldRSContext.contextFailed)
 	{
@@ -2938,7 +2940,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
 
-	lightAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&worldAssignmentPrefix);
+	lightAssignment.prefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &worldAssignmentPrefix);
 
 	if (lightAssignment.prefixSumPipeline < 0)
 	{
@@ -2949,17 +2951,17 @@ int CreateLightAssignments(int count)
 	if (lightAssignment.totalSumsNeeded)
 	{
 
-		lightAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		lightAssignment.sumAfterDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
-		GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.totalSumsNeeded, 0);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 0);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
+		descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, &lightAssignment.totalSumsNeeded, 0);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAfterDescriptors, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-		std::array prefixSumOverflowDescriptor = { lightAssignment.sumAfterDescriptors, };
+		std::array<DescriptorPipelineInformation, 1> prefixSumOverflowDescriptor = { mainDescriptorManagerIndex, lightAssignment.sumAfterDescriptors };
 
 		ComputeIntermediaryPipelineInfo prefixSumComputePipeline = {
 				.x = (uint32_t)lightAssignment.totalSumsNeeded,
@@ -2976,7 +2978,7 @@ int CreateLightAssignments(int count)
 			return -1;
 		}
 
-		lightAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&prefixSumComputePipeline);
+		lightAssignment.sumAfterPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &prefixSumComputePipeline);
 
 		if (lightAssignment.sumAfterPipeline < 0)
 		{
@@ -2984,15 +2986,15 @@ int CreateLightAssignments(int count)
 			return -1;
 		}
 
-		lightAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(PREFIXADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		lightAssignment.sumAppliedToBinDescriptors = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
-		GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.totalElementsCount, 0);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+		descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
+		descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, &lightAssignment.totalElementsCount, 0);
 
-		GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+		descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.sumAppliedToBinDescriptors, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-		std::array incrementSumsDescriptor = { lightAssignment.sumAppliedToBinDescriptors, };
+		std::array<DescriptorPipelineInformation, 1> incrementSumsDescriptor = { mainDescriptorManagerIndex, lightAssignment.sumAppliedToBinDescriptors, };
 
 		if (genericLightWorldRSContext.contextFailed)
 		{
@@ -3010,7 +3012,7 @@ int CreateLightAssignments(int count)
 		};
 
 
-		lightAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&incrementSumsComputePipeline);
+		lightAssignment.sumAppliedToBinPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &incrementSumsComputePipeline);
 
 		if (lightAssignment.sumAppliedToBinPipeline < 0)
 		{
@@ -3023,19 +3025,19 @@ int CreateLightAssignments(int count)
 
 	uint32_t assignmentGroupCount = (uint32_t)ceil(lightAssignment.totalElementsCount / (float)assignmentLayout->x);
 
-	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	lightAssignment.worldSpaceDivisionAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), lightAssignment.totalElementsCount * 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
-	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.preWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, LIGHTORGANIZE, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightCount, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBufferView(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 2);
+	descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &mainGrid, 0);
+	descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, &globalLightCount, 1);
+	descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.preWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-	std::array preWorldDivDescriptor = { lightAssignment.preWorldSpaceDivisionDescriptor, };
+	std::array<DescriptorPipelineInformation, 1> preWorldDivDescriptor = { mainDescriptorManagerIndex, lightAssignment.preWorldSpaceDivisionDescriptor, };
 
 	if (genericLightWorldRSContext.contextFailed)
 	{
@@ -3052,7 +3054,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
-	lightAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&preWorldDivComputePipeline);
+	lightAssignment.preWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &preWorldDivComputePipeline);
 
 	if (lightAssignment.preWorldSpaceDivisionPipeline < 0)
 	{
@@ -3060,19 +3062,19 @@ int CreateLightAssignments(int count)
 		return -1;
 	}
 
-	lightAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(LIGHTASSIGN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	lightAssignment.postWorldSpaceDivisionDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, LIGHTASSIGN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightCount, 1);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightBuffer, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightTypesBuffer, 0, 1, 3);
+	descriptorManager->BindBufferView(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
+	descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &mainGrid, 0);
+	descriptorManager->UploadConstant(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, &globalLightCount, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericLightWorldRSContext, lightAssignment.postWorldSpaceDivisionDescriptor, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
-	std::array postWorldDivDescriptor = { lightAssignment.postWorldSpaceDivisionDescriptor, };
+	std::array<DescriptorPipelineInformation, 1> postWorldDivDescriptor = { mainDescriptorManagerIndex, lightAssignment.postWorldSpaceDivisionDescriptor, };
 
 	if (genericLightWorldRSContext.contextFailed)
 	{
@@ -3089,7 +3091,7 @@ int CreateLightAssignments(int count)
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
-	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&postWorldDivComputePipeline);
+	lightAssignment.postWorldSpaceDivisionPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &postWorldDivComputePipeline);
 
 	if (lightAssignment.postWorldSpaceDivisionPipeline < 0)
 	{
@@ -3117,23 +3119,23 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	
 
 	mainShadowMapManager.shadowMapCountsAllocSize =  maxObjCount;
-	mainShadowMapManager.shadowMapCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapCountsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapCountsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapCountsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapOffsetsAllocSize =  maxObjCount;
-	mainShadowMapManager.shadowMapOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapOffsetsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapOffsetsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapOffsetsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapAssignmentsAllocSize = maxShadowMapAssignment * maxObjCount;
-	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapAssignmentsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapAssignmentsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 
 	mainShadowMapManager.shadowMapObjectIDsAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
-	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapObjectIDsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), mainShadowMapManager.shadowMapObjectIDsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	mainShadowMapManager.shadowMapObjectCountAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
 	mainShadowMapManager.shadowMapIndirectBufferAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapIndirectBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), mainShadowMapManager.shadowMapIndirectBufferAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator); ;
+	mainShadowMapManager.shadowMapIndirectBufferAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, sizeof(VkDrawIndexedIndirectCommand), mainShadowMapManager.shadowMapIndirectBufferAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator); ;
 	
 
 	mainShadowMapManager.shadowMapViewProjAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(Matrix4f) * 2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	mainShadowMapManager.shadowMapViewProjAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(Matrix4f) * 2, mainShadowMapManager.shadowMapViewProjAllocSize, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	mainShadowMapManager.shadowMapAtlasViewsAllocSize = maxObjCount;
-	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(ShadowMapView), mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
+	mainShadowMapManager.shadowMapAtlasViewsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(ShadowMapView), mainShadowMapManager.shadowMapAtlasViewsAllocSize, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 
 	BufferArrayUpdate shadowViewProjUp{};
@@ -3148,42 +3150,42 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	shadowAtlasViews.allocationIndices = &mainShadowMapManager.shadowMapAtlasViewsAlloc;
 
 
-	GlobalRenderer::gRenderInstance.UpdateBufferResourceArray(globalTexturesDescriptor, 1, ShaderResourceType::STORAGE_BUFFER, &shadowViewProjUp);
-	GlobalRenderer::gRenderInstance.UpdateBufferResourceArray(globalTexturesDescriptor, 2, ShaderResourceType::UNIFORM_BUFFER, &shadowAtlasViews);
+	GlobalRenderer::gRenderInstance.UpdateBufferResourceArray(mainDescriptorManagerIndex, globalTexturesDescriptor, 1, ShaderResourceType::STORAGE_BUFFER, &shadowViewProjUp);
+	GlobalRenderer::gRenderInstance.UpdateBufferResourceArray(mainDescriptorManagerIndex, globalTexturesDescriptor, 2, ShaderResourceType::UNIFORM_BUFFER, &shadowAtlasViews);
 
 	
-	mainShadowMapManager.shadowClippingDescriptor1 = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(SHADOWMAPCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-	mainShadowMapManager.shadowClippingDescriptor2 = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(SHADOWMAPCULL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	mainShadowMapManager.shadowClippingDescriptor1 = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SHADOWMAPCULL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	mainShadowMapManager.shadowClippingDescriptor2 = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SHADOWMAPCULL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapIndirectBufferAlloc, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalMeshLocation, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectCountAlloc, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalRenderableLocation, nullptr, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 5);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryRenderableLocation, nullptr, 0, 1, 6);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapIndirectBufferAlloc, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalMeshLocation, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainShadowMapManager.shadowMapObjectCountAlloc, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalRenderableLocation, nullptr, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 5);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalGeometryRenderableLocation, nullptr, 0, 1, 6);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &globalLightBuffer, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapCountsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &globalLightTypesBuffer, 0, 1, 4);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &globalLightBuffer, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapCountsAlloc, 0, 1, 2);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 3);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, &globalLightTypesBuffer, 0, 1, 4);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainIndirectDrawData.commandBufferCount, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalLightCount, 1);
+	descriptorManager->UploadConstant(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &mainIndirectDrawData.commandBufferCount, 0);
+	descriptorManager->UploadConstant(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, &globalLightCount, 1);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 3, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor1, 3, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
+	descriptorManager->BindBarrier(&genericMainShadowMapRSContext, mainShadowMapManager.shadowClippingDescriptor2, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
-	std::array shadowClipDesc = { mainShadowMapManager.shadowClippingDescriptor1, mainShadowMapManager.shadowClippingDescriptor2 };
+	std::array<DescriptorPipelineInformation, 2> shadowClipDesc = { mainDescriptorManagerIndex, mainShadowMapManager.shadowClippingDescriptor1, mainDescriptorManagerIndex, mainShadowMapManager.shadowClippingDescriptor2 };
 
 	if (genericMainShadowMapRSContext.contextFailed)
 	{
@@ -3204,7 +3206,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 			.descriptorsetid = shadowClipDesc.data()
 	};
 	
-	mainShadowMapManager.shadowClippingPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(&shadowClipPipelineInfo);
+	mainShadowMapManager.shadowClippingPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &shadowClipPipelineInfo);
 
 	if (mainShadowMapManager.shadowClippingPipeline < 0)
 	{
@@ -3212,24 +3214,26 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		return -1;
 	}
 
-	smdpd.shadowMapDescriptorSet = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(SHADOWMAPDRAW, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	smdpd.shadowMapDescriptorSet = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SHADOWMAPDRAW, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalMeshLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalVertexBuffer, nullptr, 0, 1, 1);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalRenderableLocation, nullptr, 0, 1, 3);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 4);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 5);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapViewProjAlloc, nullptr, 0, 1, 6);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAtlasViewsAlloc, nullptr, 0, 1, 7);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 8);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalGeometryRenderableLocation, nullptr, 0, 1, 9);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalMeshLocation, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalVertexBuffer, nullptr, 0, 1, 1);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapObjectIDsAlloc, 0, 1, 2);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalRenderableLocation, nullptr, 0, 1, 3);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapOffsetsAlloc, 0, 1, 4);
+	descriptorManager->BindBufferView(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAssignmentsAlloc, 0, 1, 5);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapViewProjAlloc, nullptr, 0, 1, 6);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &mainShadowMapManager.shadowMapAtlasViewsAlloc, nullptr, 0, 1, 7);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalGeometryDescriptionsLocation, nullptr, 0, 1, 8);
+	descriptorManager->BindBufferToShaderResource(&genericMainShadowMapRSContext, smdpd.shadowMapDescriptorSet, &globalGeometryRenderableLocation, nullptr, 0, 1, 9);
 
 	if (genericMainShadowMapRSContext.contextFailed)
 	{
 		genericMainShadowMapRSContext.contextLogger->ProcessMessage();
 		return -1;
 	}
+
+	std::array<DescriptorPipelineInformation, 1> indirectShadowMapDraw = { mainDescriptorManagerIndex, smdpd.shadowMapDescriptorSet };
 	
 	GraphicsIntermediaryPipelineInfo indirectShadowDrawCreate = {
 		.drawType = 0,
@@ -3237,7 +3241,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		.vertexCount = 0,
 		.pipelinename = SHADOWMAPDRAW,
 		.descCount = 1,
-		.descriptorsetid = &smdpd.shadowMapDescriptorSet,
+		.descriptorsetid = indirectShadowMapDraw.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.indexSize = 2,
 		.indexOffset = 0,
@@ -3248,7 +3252,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	};
 
 
-	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&indirectShadowDrawCreate, false);
+	smdpd.shadowMapPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &indirectShadowDrawCreate, false);
 
 	if (smdpd.shadowMapPipeline < 0)
 	{
@@ -3262,14 +3266,14 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	samplerUpdate.resourceDstBegin = 0;
 	samplerUpdate.resourceHandles = &mainLinearSampler;
 
-	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(FULLSCREEN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	smdpd.fullScreenDescriptorSet = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, FULLSCREEN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, smdpd.fullScreenDescriptorSet, 0, 0);
-	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAShadowMapping, 1, mainDescriptorManagerIndex,  smdpd.fullScreenDescriptorSet, 0, 0);
+	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainDescriptorManagerIndex, smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMainShadowMapRSContext, smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance.currentFrame, 0);
+	descriptorManager->UploadConstant(&genericMainShadowMapRSContext, smdpd.fullScreenDescriptorSet, &GlobalRenderer::gRenderInstance.currentFrame, 0);
 
-	std::array<int, 1> fullScreenDesc = { smdpd.fullScreenDescriptorSet };
+	std::array<DescriptorPipelineInformation, 1> fullScreenDesc = { mainDescriptorManagerIndex, smdpd.fullScreenDescriptorSet };
 
 	if (genericMainShadowMapRSContext.contextFailed)
 	{
@@ -3295,7 +3299,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		.indirectCountAllocation = ~0
 	};
 
-	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&fullscreenInfo, false);
+	smdpd.fullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &fullscreenInfo, false);
 
 	if (smdpd.fullScreenPipeline < 0)
 	{
@@ -3313,20 +3317,20 @@ void RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 
 	if (BasicShadow >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, BasicShadow, 0, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	}
 
 	if (MSAAPost >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAPost, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	}
 	
 	if (MSAAShadowMapping >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, 3, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, globalTexturesDescriptor, 3, shadowMapIndex);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, 3, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAShadowMapping, 1, mainDescriptorManagerIndex, globalTexturesDescriptor, 3, shadowMapIndex);
 	}
 }
 
@@ -3340,12 +3344,12 @@ int CreateMSAAPostFullScreen()
 	samplerUpdate.resourceDstBegin = 0;
 	samplerUpdate.resourceHandles = &mainLinearSampler;
 
-	int mainFullScreen = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(FULLSCREEN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int mainFullScreen = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, FULLSCREEN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAPost, 1, mainFullScreen, 0, 0);
-	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAPost, 1, mainDescriptorManagerIndex, mainFullScreen, 0, 0);
+	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainDescriptorManagerIndex, mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericMSAARSContext, mainFullScreen, &GlobalRenderer::gRenderInstance.currentFrame, 0);
+	descriptorManager->UploadConstant(&genericMSAARSContext, mainFullScreen, &GlobalRenderer::gRenderInstance.currentFrame, 0);
 
 	if (genericMSAARSContext.contextFailed)
 	{
@@ -3353,13 +3357,15 @@ int CreateMSAAPostFullScreen()
 		return -1;
 	}
 
+	std::array<DescriptorPipelineInformation, 1> mainFullScreenDesc = { mainDescriptorManagerIndex, mainFullScreen };
+
 	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
 		.drawType = 0,
 		.vertexBufferHandle = ~0,
 		.vertexCount = 4,
 		.pipelinename = FULLSCREEN,
 		.descCount = 1,
-		.descriptorsetid = &mainFullScreen,
+		.descriptorsetid = mainFullScreenDesc.data(),
 		.indexBufferHandle = ~0,
 		.indexCount = 0,
 		.instanceCount = 1,
@@ -3372,7 +3378,7 @@ int CreateMSAAPostFullScreen()
 		.indirectCountAllocation = ~0
 	};
 
-	mainFullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&fullscreenInfo, false);
+	mainFullScreenPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &fullscreenInfo, false);
 
 	if (mainFullScreenPipeline < 0)
 	{
@@ -3451,12 +3457,12 @@ int CreateSkyBox()
 
 	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
 
-	int camSkyboxData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(SKYBOX, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-	int skyboxDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(SKYBOX, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int camSkyboxData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	int skyboxDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&genericSkyBoxRSontext, camSkyboxData, &globalBufferLocation, nullptr, 0, 1, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.BindSampledImageToShaderResource(&genericSkyBoxRSontext, skyboxDesc, &skyboxCubeImage, 1, 0, 0);
-	GlobalRenderer::gRenderInstance.descriptorManager.UploadConstant(&genericSkyBoxRSontext, skyboxDesc, &matrix, 0);
+	descriptorManager->BindBufferToShaderResource(&genericSkyBoxRSontext, camSkyboxData, &globalBufferLocation, nullptr, 0, 1, 0);
+	descriptorManager->BindSampledImageToShaderResource(&genericSkyBoxRSontext, skyboxDesc, &skyboxCubeImage, 1, 0, 0);
+	descriptorManager->UploadConstant(&genericSkyBoxRSontext, skyboxDesc, &matrix, 0);
 
 	if (genericSkyBoxRSontext.contextFailed)
 	{
@@ -3464,7 +3470,7 @@ int CreateSkyBox()
 		return -1;
 	}
 
-	std::array<int, 2> skyboxDescs = { camSkyboxData, skyboxDesc };
+	std::array<DescriptorPipelineInformation, 2> skyboxDescs = { mainDescriptorManagerIndex, camSkyboxData, mainDescriptorManagerIndex, skyboxDesc };
 
 	GraphicsIntermediaryPipelineInfo skyboxInfo = {
 		.drawType = 0,
@@ -3485,7 +3491,7 @@ int CreateSkyBox()
 		.indirectCountAllocation = ~0
 	};
 
-	skyboxPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(&skyboxInfo, false);
+	skyboxPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &skyboxInfo, false);
 
 	if (skyboxPipeline < 0)
 	{
@@ -3516,9 +3522,8 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxRenderTargets = 20;
 	riCreateInfo.maxShaderGraphs = 50;
 	riCreateInfo.maxShaderHandles = 60;
-	riCreateInfo.maxShaderResourceSets = 50;
+	riCreateInfo.maxDescriptorManagers = 1;
 	riCreateInfo.maxShaderResourceTemplates = 60;
-	riCreateInfo.maxShaderResourceSetSlabAllocator = 10 * KiB;
 	riCreateInfo.maxComputeQueues = 10;
 	riCreateInfo.maxRenderQueues = 10;
 	riCreateInfo.maxPipelineTemplates = 15;
@@ -3597,9 +3602,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainLogicalDevice = GlobalRenderer::gRenderInstance.CreateLogicalDevice(&lDeviceCreateInfo);
 
-	GlobalRenderer::gRenderInstance.SetCurrentInstanceDeviceIndex(mainLogicalDevice);
-
-	GlobalRenderer::gRenderInstance.CreatePerFrameStagingBuffers(128 * MiB);
+	GlobalRenderer::gRenderInstance.CreatePerFrameStagingBuffers(mainLogicalDevice, 128 * MiB);
 
 	std::array<DescriptorTypes, 4> descriptorTypes =
 	{
@@ -3617,13 +3620,15 @@ void ApplicationLoop::InitializeRuntime()
 		50,
 	};
 
-	GlobalRenderer::gRenderInstance.CreateDescriptorHeap(descriptorTypes.data(), descriptorCounts.data(), 4, 100);
+	mainDescriptorManagerIndex = GlobalRenderer::gRenderInstance.CreateDescriptorHeap(mainLogicalDevice, descriptorTypes.data(), descriptorCounts.data(), 4, 100, 50, 10 * KiB);
+
+	descriptorManager = GlobalRenderer::gRenderInstance.descriptorManagers.Get(mainDescriptorManagerIndex);
 
 	size_t mainHostSize = 128 * MiB;
 	size_t mainDeviceSize = 64 * MiB;
 
-	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainDeviceSize, BufferType::DEVICE_MEMORY_TYPE);
-	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainHostSize, BufferType::HOST_MEMORY_TYPE);
+	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainDeviceSize, BufferType::DEVICE_MEMORY_TYPE);
+	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainHostSize, BufferType::HOST_MEMORY_TYPE);
 
 	mainHostAllocator.dataAllocator = 0;
 	mainHostAllocator.dataSize = mainHostSize;
@@ -3636,13 +3641,13 @@ void ApplicationLoop::InitializeRuntime()
 
 	ImageFormat requestedDSVFormats = ImageFormat::D24UNORMS8STENCIL;
 
-	ImageFormat mainDepthFormat = GlobalRenderer::gRenderInstance.FindSupportedDepthFormat(&requestedDSVFormats, 1);
+	ImageFormat mainDepthFormat = GlobalRenderer::gRenderInstance.FindSupportedDepthFormat(mainLogicalDevice, &requestedDSVFormats, 1);
 
 	size_t mainRTVSize = 800 * MiB, mainDSVSize = 1024 * MiB;
 
-	mainRTVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainRTVSize, mainColorFormat, 4096, 4096);
+	mainRTVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainLogicalDevice, mainRTVSize, mainColorFormat, 4096, 4096);
 
-	mainDSVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainDSVSize, mainDepthFormat, 4096, 4096);
+	mainDSVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainLogicalDevice, mainDSVSize, mainDepthFormat, 4096, 4096);
 
 	mainRTVSlab.dataAllocator = 0;
 	mainRTVSlab.dataSize = mainRTVSize;
@@ -3650,15 +3655,15 @@ void ApplicationLoop::InitializeRuntime()
 	mainDSVSlab.dataAllocator = 0;
 	mainDSVSlab.dataSize = mainDSVSize;
 
-	MSAAPost = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(&mainLayoutAttachments[0], nullptr);
-	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(&mainLayoutAttachments[1], nullptr);
-	MSAAShadowMapping = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(&mainLayoutAttachments[2], nullptr);
+	MSAAPost = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[0], nullptr);
+	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[1], nullptr);
+	MSAAShadowMapping = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[2], nullptr);
 
 	currentFrameGraphIndex = MSAAShadowMapping;
 
 	frameGraphsCount = mainLayoutAttachments.size();
 
-	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainPresentationWindow, mainColorFormat, 800, 600);
+	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainLogicalDevice, mainPresentationWindow, mainColorFormat, 800, 600);
 
 	std::array<AttachmentClear, 1> ShadowMapViewerClears {
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
@@ -3677,12 +3682,12 @@ void ApplicationLoop::InitializeRuntime()
 		CLEARDEPTH, {1.0, 0}
 	};
 
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, BasicShadow, 0, ShadowMapViewerClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAPost, 1, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainPresentationSwapChain, MSAAShadowMapping, 1, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, BasicShadow, 0, ShadowMapViewerClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAPost, 1, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 1, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	
-	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
@@ -3692,75 +3697,73 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance.CreatePipelines(pds.data(), pds.size());
 
-	GlobalRenderer::gRenderInstance.CreateShaderGraphs(layouts.data(), layouts.size());
+	GlobalRenderer::gRenderInstance.CreateShaderGraphs(mainLogicalDevice, layouts.data(), layouts.size());
 
-	mainLinearSampler = GlobalRenderer::gRenderInstance.CreateSampler(7);
+	mainLinearSampler = GlobalRenderer::gRenderInstance.CreateSampler(mainLogicalDevice, 7);
 
 	std::array frameGraphs = { MSAAPost, MSAAShadowMapping, BasicShadow };
 	std::array frameRenderPassSelection = { 0, 1, 0 };
 
 	std::array fullScreenFrameGraphs = { MSAAPost, BasicShadow };
 
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(GENERIC, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(TEXT, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(DEBUGDRAW, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(NORMALDEBUGDRAW, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(SKYBOX, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(OUTLINE, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(FULLSCREEN, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(SHADOWMAPDRAW, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(JOINTVISUAL, 8, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, GENERIC, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, TEXT, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, DEBUGDRAW, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, NORMALDEBUGDRAW, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SKYBOX, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, OUTLINE, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, FULLSCREEN, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SHADOWMAPDRAW, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, JOINTVISUAL, 8, frameGraphs.data(), frameRenderPassSelection.data(), 2);
 
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(INTERPOLATE);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(POLYNOMIAL);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(RENDEROBJCULL);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(DEBUGCULL);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(PREFIXSUM);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(PREFIXADD);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(WORLDORGANIZE);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(WORLDASSIGN);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(LIGHTORGANIZE);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(LIGHTASSIGN);
-	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(SHADOWMAPCULL);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, INTERPOLATE);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, POLYNOMIAL);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, RENDEROBJCULL);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, DEBUGCULL);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, PREFIXSUM);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, PREFIXADD);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, WORLDORGANIZE);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, WORLDASSIGN);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, LIGHTORGANIZE);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, LIGHTASSIGN);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, SHADOWMAPCULL);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue(15);
 
 	CreateTexturePools();
 
-	globalBufferLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalIndexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
-	globalVertexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainDeviceBuffer, globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
-	globalBufferDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(GENERIC, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-	globalTexturesDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(GENERIC, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	globalBufferLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalIndexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	globalVertexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, globalVertexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainDeviceAllocator);
+	globalBufferDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, GENERIC, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	globalTexturesDescriptor = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, GENERIC, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	globalMeshLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMeshSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalMaterialsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialsSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalMeshLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalMeshSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalMaterialsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalMaterialsSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalLightBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalLightTypesBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalLightTypesBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalLightBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalLightBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalLightTypesBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalLightTypesBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalDebugStructAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalDebugStructAllocSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalDebugTypesAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, sizeof(uint32_t), globalDebugStructMaxCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDebugStructAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalDebugStructAllocSize, 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDebugTypesAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), globalDebugStructMaxCount, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalMaterialIndicesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalMaterialIndicesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalMaterialIndicesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalBlendRangesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalBlendDetailsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalBlendDetailsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalBlendRangesLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalBlendRangesSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalGeometryDescriptionsLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalGeometryDescriptionsSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalGeometryRenderableLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalGeometryRenderableSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	jointMeshWorldMatrix = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Matrix4f), 1, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	jointMeshParentIndices = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	jointMeshWorldMatrix = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(Matrix4f), 1, 64, AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	jointMeshParentIndices = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, jointMeshWorldMatrixMaxCount * sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	ShaderResourceSetContext globalDescriptorBuilder{ &mainAppLogger, false };
 
-	GlobalRenderer::gRenderInstance.descriptorManager.BindBufferToShaderResource(&globalDescriptorBuilder, globalBufferDescriptor, &globalBufferLocation, nullptr, 0, 1, 0);
+	descriptorManager->BindBufferToShaderResource(&globalDescriptorBuilder, globalBufferDescriptor, &globalBufferLocation, nullptr, 0, 1, 0);
 
-	GlobalRenderer::gRenderInstance.descriptorManager.SetVariableArrayCount(&globalDescriptorBuilder, globalTexturesDescriptor, 3, 512);
-
-	std::array mainDrawBindGroups = { globalBufferDescriptor, globalTexturesDescriptor };
+	descriptorManager->SetVariableArrayCount(&globalDescriptorBuilder, globalTexturesDescriptor, 3, 512);
 
 	int creationRetSB = CreateSkyBox();
 	int creationRetDB = CreateDebugCommandBuffers(globalDebugStructMaxCount);
@@ -3796,7 +3799,7 @@ void ApplicationLoop::CleanupRuntime()
 {
 	stopThreadServer = true;
 
-	GlobalRenderer::gRenderInstance.WaitOnRender();
+	GlobalRenderer::gRenderInstance.WaitOnRender(mainLogicalDevice);
 
 	cleaned = true;
 }
@@ -4514,7 +4517,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
-	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
 		details.width, details.height, details.miplevels, details.arrayLayers, details.type, &actualMemorySize, &actualMemoryAlignment
 	);
 
@@ -4522,6 +4525,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	int imageIndex = 
 		GlobalRenderer::gRenderInstance.CreateCubeImageHandle(
+			mainLogicalDevice,
 			actualMemoryAddress,
 			details.width,
 			details.height,
@@ -4612,13 +4616,13 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
-	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(
+	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
 		details->width, details->height, details->miplevels, details->arrayLayers, details->type, &actualMemorySize, &actualMemoryAlignment
 	);
 
 	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
 
-	imageIndex = GlobalRenderer::gRenderInstance.CreateImageHandle(
+	imageIndex = GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
 			actualMemoryAddress,
 			details->width,
 			details->height,
@@ -4649,7 +4653,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 		update.resourceDstBegin = textureStart;
 		update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
 
-		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
+		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainDescriptorManagerIndex, globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 	}
 	else
 	{

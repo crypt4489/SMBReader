@@ -162,6 +162,8 @@ struct PoolAllocator
 		pool = (T*)allocator->Allocate(sizeof(T) * maxElements, alignof(T));
 		freeList = (int*)allocator->Allocate(sizeof(int) * maxElements, alignof(int));
 		maxCount = maxElements;
+		count = 0;
+		freeListTop = -1;
 	}
 
 	int Allocate()
