@@ -492,10 +492,10 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 	createInfo.enabledLayerCount = instanceLayerCount;
 
 	VkDebugUtilsMessengerCreateInfoEXT instanceDebugInfo{};
+	VkValidationFeaturesEXT validationFeatures{};
 
 	if (debugData)
 	{
-		VkValidationFeaturesEXT validationFeatures{};
 		validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
 		validationFeatures.enabledValidationFeatureCount = debugData->enablesFeaturesCount;
 		validationFeatures.pEnabledValidationFeatures = debugData->enables;
