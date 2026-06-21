@@ -15,7 +15,7 @@ file(GLOB APP_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/smb/include/*.h" "${CMAKE_CUR
 
 add_executable(${PROJECT_NAME} ${APP_SOURCES} ${APP_HEADERS})
 
-target_include_directories (${PROJECT_NAME} PRIVATE ${APP_INCLUDES} ${GLOBAL_INCLUDES})
+target_include_directories (${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
 target_link_libraries(${PROJECT_NAME} PRIVATE Core)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}

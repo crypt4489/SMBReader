@@ -50,7 +50,7 @@ target_link_libraries(${CORE_LIBRARY_NAME} PUBLIC vklib)
 if (WIN32)
     target_compile_definitions(
         ${CORE_LIBRARY_NAME}
-        PRIVATE
+        PUBLIC
         _WIN32_WINNT=0x0A00
     )
 endif()

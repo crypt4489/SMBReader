@@ -2,17 +2,21 @@ cmake_minimum_required(VERSION 3.28)
 
 set (PROJECT_NAME "vklib")
 
+find_package(Vulkan REQUIRED)
+
 set (
     PROJECT_INCLUDES 
     "${CMAKE_CURRENT_SOURCE_DIR}/include/" 
     "${CMAKE_CURRENT_SOURCE_DIR}/vklib/" 
-    "C:/VulkanSDK/1.3.290.0/Include/" 
+    "${Vulkan_INCLUDE_DIRS}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../common/include/"
     )
 
+get_filename_component(VULKAN_LIB_DIR ${Vulkan_LIBRARIES} DIRECTORY)
+
 set (
     PROJECT_LIBRARY_PATHS
-    "C:/VulkanSDK/1.3.290.0/Lib/"
+    "${VULKAN_LIB_DIR}"
     )
 
 file(GLOB PROJECT_SOURCES "src/*.cpp" "vklib/pch.cpp") 
@@ -41,6 +45,14 @@ source_group(TREE "${CMAKE_SOURCE_DIR}/common/include/"
 )
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC ${PROJECT_DEFINES})
+
+if(WIN32)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE _WIN32_WINNT=0x0601)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+elseif(UNIX)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_XCB_KHR)
+endif()
+
 target_include_directories (${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDES})
 target_link_directories(${PROJECT_NAME} PUBLIC ${PROJECT_LIBRARY_PATHS})
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -48,11 +60,3 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     $<$<CONFIG:Debug>:shaderc_combinedd>
     $<$<CONFIG:Release>:shaderc_combined>
 )
-
-if (WIN32)
-    target_compile_definitions(
-        ${PROJECT_NAME}
-        PRIVATE
-        _WIN32_WINNT=0x0601
-    )
-endif()
