@@ -302,7 +302,7 @@ struct MessageQueue
 
 	void* AcquireWrite(uint64_t dataSize)
 	{
-		uint64_t head = UpdateAtomic(write, dataSize, 0ul);
+		uint64_t head = UpdateAtomic(write, dataSize, (uint64_t)0);
 		if (write >= bufferSize) return nullptr;
 
 		void* ret = (void*)(bufferLocation + head);
@@ -348,7 +348,7 @@ struct CircularMessageQueueMPSC
 
 	void* AcquireWrite(uint64_t dataSize)
 	{
-		uint64_t head = UpdateAtomic(write, dataSize, 0ul);
+		uint64_t head = UpdateAtomic(write, dataSize, (uint64_t)0);
 
 		void* ret = (void*)(bufferLocation + head);
 

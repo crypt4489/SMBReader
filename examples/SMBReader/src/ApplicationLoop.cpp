@@ -1105,49 +1105,49 @@ bool MoveCamera(double fps)
 
 	if (camMovements[RIGHT])
 	{
-		c.LTM.MoveRight(stepfactor);
+		c.ltm.MoveRight(stepfactor);
 		moved = true;
 	}
 
 	if (camMovements[LEFT])
 	{
-		c.LTM.MoveRight(-stepfactor);
+		c.ltm.MoveRight(-stepfactor);
 		moved = true;
 	}
 
 	if (camMovements[FORWARD])
 	{
-		c.LTM.MoveForward(-stepfactor);
+		c.ltm.MoveForward(-stepfactor);
 		moved = true;
 	}
 
 	if (camMovements[BACK])
 	{
-		c.LTM.MoveForward(stepfactor);
+		c.ltm.MoveForward(stepfactor);
 		moved = true;
 	}
 
 	if (camMovements[PITCHDOWN])
 	{
-		c.LTM.PitchLTM(-angleFactor);
+		c.ltm.PitchLTM(-angleFactor);
 		moved = true;
 	}
 
 	if (camMovements[PITCHUP])
 	{
-		c.LTM.PitchLTM(angleFactor);
+		c.ltm.PitchLTM(angleFactor);
 		moved = true;
 	}
 
 	if (camMovements[ROTATEYLEFT])
 	{
-		c.LTM.RotateAroundUp(angleFactor);
+		c.ltm.RotateAroundUp(angleFactor);
 		moved = true;
 	}
 
 	if (camMovements[ROTATEYRIGHT])
 	{
-		c.LTM.RotateAroundUp(-angleFactor);
+		c.ltm.RotateAroundUp(-angleFactor);
 		moved = true;
 	}
 
@@ -1304,15 +1304,15 @@ void CreateCornerWall(float width, float height, float xDiv, float yDiv)
 
 	Matrix4f sideFrontPanel = CreateRotationMatrixMat4(Vector3f(0.0f, 0.0f, 1.0), DegToRad(-90.0f));
 
-	sideFrontPanel.translate = Vector4f(10.0f, 3.0, -5.0, 1.0);
+	sideFrontPanel.axes.translate = Vector4f(10.0f, 3.0, -5.0, 1.0);
 
 	Matrix4f backPanel = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0), DegToRad(-90.0f));
 
-	backPanel.translate = Vector4f(5.0f, 3.0, -10.0, 1.0);
+	backPanel.axes.translate = Vector4f(5.0f, 3.0, -10.0, 1.0);
 
 	Matrix4f floorPanel = Identity4f();
 
-	floorPanel.translate = { 5.0f, -2.0, -5.0, 1.0 };
+	floorPanel.axes.translate = { 5.0f, -2.0, -5.0, 1.0 };
 
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1679,7 +1679,7 @@ void CreateCrateObject()
 
 	Matrix4f crateMatrix = Identity4f();
 
-	crateMatrix.translate = Vector4f(-10.0, 5.0, 0.0f, 1.0f);
+	crateMatrix.axes.translate = Vector4f(-10.0, 5.0, 0.0f, 1.0f);
 
 	Sphere sphere;
 
@@ -1869,7 +1869,7 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 
 	geomSpecificData = Identity4f();
 
-	geomSpecificData.translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
+	geomSpecificData.axes.translate = Vector4f(0.f, 0.f, 0.f, 1.0f);
 
 	Matrix4f rotation = CreateRotationMatrixMat4(Vector3f(1.0f, 0.0f, 0.0f), DegToRad(90.0f));
 
@@ -2181,9 +2181,9 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 				Matrix4f translation = Identity4f();
 
-				translation.translate.x = skel->joints[joint].granny_position.x;
-				translation.translate.y = skel->joints[joint].granny_position.y;
-				translation.translate.z = skel->joints[joint].granny_position.z;
+				translation.axes.translate.x = skel->joints[joint].granny_position.x;
+				translation.axes.translate.y = skel->joints[joint].granny_position.y;
+				translation.axes.translate.z = skel->joints[joint].granny_position.z;
 
 				uint32_t parentIdx = skel->joints[joint].granny_parentIndex;
 
@@ -2200,9 +2200,9 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 					worldMats[joint] = worldMat;
 					
-					Vector3f parentPos = Vector3f(worldMats[parentIdx].translate.x, worldMats[parentIdx].translate.y, worldMats[parentIdx].translate.z);
+					Vector3f parentPos = Vector3f(worldMats[parentIdx].axes.translate.x, worldMats[parentIdx].axes.translate.y, worldMats[parentIdx].axes.translate.z);
 
-					Vector3f childPos = Vector3f(worldMat.translate.x, worldMat.translate.y, worldMat.translate.z);
+					Vector3f childPos = Vector3f(worldMat.axes.translate.x, worldMat.axes.translate.y, worldMat.axes.translate.z);
 
 					Vector3f boneDir =  parentPos - childPos;
 
@@ -2228,17 +2228,17 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 						worldMat = CreateRotationMatrixMat4(Normalize(axis), angle);
 					}
 
-					worldMat.right.x *= boneScale;
-					worldMat.right.y *= boneScale;
-					worldMat.right.z *= boneScale;
-					worldMat.up.x *= boneScale;
-					worldMat.up.y *= boneScale;
-					worldMat.up.z *= boneScale;
-					worldMat.forward.x *= boneScale;
-					worldMat.forward.y *= boneScale;
-					worldMat.forward.z *= boneScale;
+					worldMat.axes.right.x *= boneScale;
+					worldMat.axes.right.y *= boneScale;
+					worldMat.axes.right.z *= boneScale;
+					worldMat.axes.up.x *= boneScale;
+					worldMat.axes.up.y *= boneScale;
+					worldMat.axes.up.z *= boneScale;
+					worldMat.axes.forward.x *= boneScale;
+					worldMat.axes.forward.y *= boneScale;
+					worldMat.axes.forward.z *= boneScale;
 
-					worldMat.translate = Vector4f(parentPos.x, parentPos.y, parentPos.z, 1.0f);
+					worldMat.axes.translate = Vector4f(parentPos.x, parentPos.y, parentPos.z, 1.0f);
 					
 				}
 
@@ -3455,7 +3455,7 @@ int CreateSkyBox()
 
 	static Matrix4f matrix = Identity4f();
 
-	matrix.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
+	matrix.axes.translate = Vector4f(-30.0, 0.0, 0.0, 1.0f);
 
 	int camSkyboxData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	int skyboxDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
@@ -4102,7 +4102,7 @@ void SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 
 	Matrix4f transform = Identity4f();;
 
-	transform.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
+	transform.axes.translate = Vector4f(pos.x, pos.y, pos.z, 1.0f);
 
 	rendInst.UpdateDriverMemory(&transform, globalGeometryRenderableLocation, sizeof(Matrix4f), (sizeof(GPUMeshRenderable) * geomRenderable) + 16, TransferType::CACHED);
 }
