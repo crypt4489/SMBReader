@@ -25,7 +25,7 @@ file(GLOB PROJECT_HEADERS "include/*.h" "vklib/pch.h")
 
 file(GLOB COMMON_PROJECT_HEADERS "${CMAKE_SOURCE_DIR}/common/include/*.h")
 
-set (PROJECT_DEFINES)
+set (PROJECT_DEFINES ${USE_SHADERC_COMBINED})
 
 add_library(${PROJECT_NAME} STATIC ${PROJECT_SOURCES} ${PROJECT_HEADERS} ${COMMON_PROJECT_HEADERS})
 
@@ -46,21 +46,28 @@ source_group(TREE "${CMAKE_SOURCE_DIR}/common/include/"
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC ${PROJECT_DEFINES})
 
+if (${USE_SHADERC_COMBINED})
+    set(SHADERC_DEBUG_LIB "$<$<CONFIG:Debug>:shaderc_combinedd>")
+    set(SHADERC_RELEASE_LIB "$<$<CONFIG:Release>:shaderc_combined>")
+endif()
+
 if(WIN32)
     set(LIBVULKAN vulkan-1)
     target_compile_definitions(${PROJECT_NAME} PRIVATE _WIN32_WINNT=0x0601)
     target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 elseif(UNIX)
     set(LIBVULKAN vulkan)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
+    if (WINDOW_USE_X11)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_XCB_KHR)
+    elseif (WINDOW_USE_WAYLAND)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
+    endif()
 endif()
 
 target_include_directories (${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDES})
 target_link_directories(${PROJECT_NAME} PUBLIC ${PROJECT_LIBRARY_PATHS})
 target_link_libraries(${PROJECT_NAME} PUBLIC
     ${LIBVULKAN}
-    $<$<AND:$<CONFIG:Debug>,$<PLATFORM_ID:Windows>>:shaderc_combinedd>
-    $<$<AND:$<CONFIG:Debug>,$<NOT:$<PLATFORM_ID:Windows>>>:shaderc>
-    $<$<AND:$<CONFIG:Release>,$<PLATFORM_ID:Windows>>:shaderc_combined>
-    $<$<AND:$<CONFIG:Release>,$<NOT:$<PLATFORM_ID:Windows>>>:shaderc>
+    ${SHADERC_DEBUG_LIB}
+    ${SHADERC_RELEASE_LIB}
 )

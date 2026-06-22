@@ -26,7 +26,6 @@ file(GLOB GLOBAL_PIPELINE_LAYOUTS "pipelineLayout/*.pld")
 file(GLOB GLOBAL_ATTACHMENT_LAYOUTS "attachmentdescriptions/*.adf")
 
 if (WIN32)
-    
     list (APPEND GLOBAL_LIBRARY_PATHS "lib/windows")
     list (APPEND GLOBAL_INCLUDES "platform/windows/include/")
     
@@ -45,6 +44,10 @@ elseif(UNIX)
     list (APPEND GLOBAL_HEADERS ${LINUX_GLOBAL_HEADERS})
 endif()
 
+option(WINDOW_USE_WAYLAND "Enable wayland backend" OFF)
+
+option(WINDOW_USE_X11 "Enable X11 backend" OFF)
+
 set (PROJECT_DEFINES)
 
 add_subdirectory(vulkan)
@@ -52,6 +55,15 @@ add_subdirectory(vulkan)
 add_library(${CORE_LIBRARY_NAME} OBJECT ${GLOBAL_SOURCES} ${GLOBAL_HEADERS} ${GLOBAL_SHADERS} ${GLOBAL_PIPELINE_LAYOUTS} ${GLOBAL_ATTACHMENT_LAYOUTS})
 target_include_directories(${CORE_LIBRARY_NAME} PUBLIC ${GLOBAL_INCLUDES})
 target_compile_definitions(${CORE_LIBRARY_NAME} PUBLIC ${PROJECT_DEFINES})
+
+if (WINDOW_USE_WAYLAND)
+    target_compile_definitions(${CORE_LIBRARY_NAME} PUBLIC WINDOW_USE_WAYLAND)
+endif()
+
+if (WINDOW_USE_X11)
+    target_compile_definitions(${CORE_LIBRARY_NAME} PUBLIC WINDOW_USE_X11)
+endif()
+
 target_link_libraries(${CORE_LIBRARY_NAME} PUBLIC vklib)
 
 if (WIN32)
