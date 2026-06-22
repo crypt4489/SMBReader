@@ -120,7 +120,7 @@ namespace GLSLANG
 
     void DeleteShader(GLSLShaderProgram* shaderProgram)
     {
-#if defined(USE_SHADERC_COMBIND)  
+#if defined(USE_SHADERC_COMBINED)  
         glslang_program_delete(shaderProgram->programData);
 
         glslang_shader_delete(shaderProgram->shaderInfoData);
@@ -129,7 +129,7 @@ namespace GLSLANG
 
     int CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage, GLSLShaderProgram* shaderProgram)
     {
-#if defined(USE_SHADERC_COMBIND)  
+#if defined(USE_SHADERC_COMBINED)  
         glslang_stage_t glslstage = GLSLANG_STAGE_COUNT;
 
         switch (stage)

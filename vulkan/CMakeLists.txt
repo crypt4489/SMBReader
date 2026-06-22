@@ -51,6 +51,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC ${PROJECT_DEFINES})
 if (USE_SHADERC_COMBINED)
     set(SHADERC_DEBUG_LIB "$<$<CONFIG:Debug>:shaderc_combinedd>")
     set(SHADERC_RELEASE_LIB "$<$<CONFIG:Release>:shaderc_combined>")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_SHADERC_COMBINED)
 endif()
 
 if(WIN32)
