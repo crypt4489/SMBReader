@@ -7,7 +7,7 @@ typedef struct block_header_t
 	block_header_t* prevFree;
 	unsigned int size; // bits 0 = Free Block Indicator, bits 1 = whether the block is the last one of the pool or no, bits 2-31 = Actual Size of Block
 	int checksum;
-#if !defined(_WIN64)
+#if !defined(_WIN64) && !defined(__aarch64__)
 	int pad32[3];
 #endif
 } BlockHeader;

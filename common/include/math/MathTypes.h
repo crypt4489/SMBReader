@@ -6,6 +6,12 @@
 #define PACKED_END __pragma(pack(pop))
 #endif
 
+#if defined(__GNUC__)
+#define VEC_ALIGN 
+#define PACKED_BEGIN _Pragma("pack(push, 1)")
+#define PACKED_END _Pragma("pack(pop)")
+#endif
+
 #define TWOPI 6.283185307179586476925286766559f
 #define PI 3.1415926535897932384626433832795f
 #define PIHALF 1.5707963267948966192313216916398f
@@ -828,12 +834,11 @@ struct Matrix2f
 
 	float* operator[](int x);
 
-
 	union {
 		struct {
 			Vector2f x;
 			Vector2f y;
-		};
+		} rows;
 
 		float comp[4];
 	};
@@ -842,7 +847,6 @@ struct Matrix2f
 
 struct Matrix3f
 {
-
 	Matrix3f() = default;
 	Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z);
 
@@ -855,13 +859,13 @@ struct Matrix3f
 			Vector3f right;
 			Vector3f up;
 			Vector3f forward;
-		};
+		} axes;
 
 		struct {
 			Vector3f x;
 			Vector3f y;
 			Vector3f z;
-		};
+		} rows;
 
 		float comp[9];
 	};
@@ -882,14 +886,14 @@ struct Matrix4f
 			Vector4f up;
 			Vector4f forward;
 			Vector4f translate;
-		};
+		} axes;
 
 		struct {
 			Vector4f x;
 			Vector4f y;
 			Vector4f z;
 			Vector4f w;
-		};
+		} rows;
 
 		float comp[16];
 	};

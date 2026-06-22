@@ -313,7 +313,7 @@ namespace VK {
 				}
 			}
 
-			return ~0ui32;
+			return ~0U;
 		}
 
 		VkFormat findSupportedFormat(VkPhysicalDevice gpu, VkFormat* candidates, size_t candidateSize, VkImageTiling tiling, VkFormatFeatureFlags features)

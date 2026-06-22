@@ -1,47 +1,46 @@
 #include "math/MathTypes.h"
 #include "math/LTM.h"
-#include <cmath>
+#include <math.h>
 
 Matrix2f Add(Matrix2f a, Matrix2f b)
 {
-	return { a.x + b.x, a.y + b.y };
+	return { a.rows.x + b.rows.x, a.rows.y + b.rows.y };
 }
 
 Matrix2f Sub(Matrix2f a, Matrix2f b)
 {
-	return { a.x - b.x, a.y - b.y };
+	return { a.rows.x - b.rows.x, a.rows.y - b.rows.y };
 }
 
 Matrix2f Scale(Matrix2f m, float s)
 {
-	return { m.x * s, m.y * s };
+	return { m.rows.x * s, m.rows.y * s };
 }
-
 
 Matrix2f Multiply(Matrix2f a, Matrix2f b)
 {
 	Matrix2f res;
-	res.x = Multiply(a, b.x);
-	res.y = Multiply(a, b.y);
+	res.rows.x = Multiply(a, b.rows.x);
+	res.rows.y = Multiply(a, b.rows.y);
 	return res;
 }
 
 Vector2f Multiply(Matrix2f m, Vector2f v)
 {
-	return { (m.x.x * v.x + m.y.x * v.y), (m.x.y * v.x + m.y.y * v.y) };
+	return { (m.rows.x.x * v.x + m.rows.y.x * v.y), (m.rows.x.y * v.x + m.rows.y.y * v.y) };
 }
 
 Vector2f Multiply(Vector2f v, Matrix2f m)
 {
 	m = Transpose(m);
-	return { (m.x.x * v.x + m.y.x * v.y), (m.x.y * v.x + m.y.y * v.y) };
+	return { (m.rows.x.x * v.x + m.rows.y.x * v.y), (m.rows.x.y * v.x + m.rows.y.y * v.y) };
 }
 
 Matrix2f Transpose(Matrix2f m)
 {
 	Matrix2f res;
-	res.x = Vector2f(m.x.x, m.y.x);
-	res.y = Vector2f(m.x.y, m.y.y);
+	res.rows.x = Vector2f(m.rows.x.x, m.rows.y.x);
+	res.rows.y = Vector2f(m.rows.x.y, m.rows.y.y);
 	return res;
 }
 
@@ -59,8 +58,6 @@ Matrix2f Identity2f()
 {
 	return { {1.0,  0.0}, { 0.0, 1.0} };
 }
-
-
 
 Matrix2f operator+(Matrix2f a, Matrix2f b) 
 {
@@ -92,48 +89,47 @@ Matrix2f operator*(Matrix2f m, float s)
 	return Scale(m, s);
 }
 
-
 Matrix3f Add(Matrix3f a, Matrix3f b)
 {
-	return { a.x + b.x, a.y + b.y, a.z + b.z };
+	return { a.rows.x + b.rows.x, a.rows.y + b.rows.y, a.rows.z + b.rows.z };
 }
 
 Matrix3f Sub(Matrix3f a, Matrix3f b)
 {
-	return { a.x - b.x, a.y - b.y, a.z - b.z };
+	return { a.rows.x - b.rows.x, a.rows.y - b.rows.y, a.rows.z - b.rows.z };
 }
 
 Matrix3f Scale(Matrix3f m, float s)
 {
-	return { m.x * s, m.y * s, m.z * s };
+	return { m.rows.x * s, m.rows.y * s, m.rows.z * s };
 }
 
 Matrix3f Multiply(Matrix3f a, Matrix3f b)
 {
 	Matrix3f res;
-	res.x = Multiply(a, b.x);
-	res.y = Multiply(a, b.y);
-	res.z = Multiply(a, b.z);
+	res.rows.x = Multiply(a, b.rows.x);
+	res.rows.y = Multiply(a, b.rows.y);
+	res.rows.z = Multiply(a, b.rows.z);
 	return res;
 }
 
 Vector3f Multiply(Matrix3f m, Vector3f v)
 {
-	return { (m.x.x * v.x + m.y.x * v.y + m.z.x * v.z ), (m.x.y * v.x + m.y.y * v.y + m.z.y * v.z),  (m.x.z * v.x + m.y.z * v.y + m.z.z * v.z) };
+	return { (m.rows.x.x * v.x + m.rows.y.x * v.y + m.rows.z.x * v.z ), (m.rows.x.y * v.x + m.rows.y.y * v.y + m.rows.z.y * v.z),  (m.rows.x.z * v.x + m.rows.y.z * v.y + m.rows.z.z * v.z) };
 }
 
 Vector3f Multiply(Vector3f v, Matrix3f m)
 {
 	m = Transpose(m);
-	return { (m.x.x * v.x + m.y.x * v.y + m.z.x * v.z), (m.x.y * v.x + m.y.y * v.y + m.z.y * v.z),  (m.x.z * v.x + m.y.z * v.y + m.z.z * v.z) };
+	return { (m.rows.x.x * v.x + m.rows.y.x * v.y + m.rows.z.x * v.z), (m.rows.x.y * v.x + m.rows.y.y * v.y + m.rows.z.y * v.z),  (m.rows.x.z * v.x + m.rows.y.z * v.y + m.rows.z.z * v.z) };
 }
 
 Matrix3f Transpose(Matrix3f m)
 {
 	Matrix3f res;
-	res.x = Vector3f(m.x.x, m.y.x, m.z.x);
-	res.y = Vector3f(m.x.y, m.y.y, m.z.y);
-	res.z = Vector3f(m.x.z, m.y.z, m.z.z);
+	res.rows.x = Vector3f(m.rows.x.x, m.rows.y.x, m.rows.z.x);
+	res.rows.y = Vector3f(m.rows.x.y, m.rows.y.y, m.rows.z.y);
+	res.rows.z = Vector3f(m.rows.x.z, m.rows.y.z, m.rows.z.z);
 	return res;
 }
 
@@ -184,36 +180,36 @@ Matrix3f operator*(Matrix3f m, float s)
 
 Matrix4f Add(Matrix4f a, Matrix4f b)
 {
-	return { a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w };
+	return { a.rows.x + b.rows.x, a.rows.y + b.rows.y, a.rows.z + b.rows.z, a.rows.w + b.rows.w };
 }
 
 Matrix4f Sub(Matrix4f a, Matrix4f b)
 {
-	return { a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w };
+	return { a.rows.x - b.rows.x, a.rows.y - b.rows.y, a.rows.z - b.rows.z, a.rows.w - b.rows.w };
 }
 
 Matrix4f Scale(Matrix4f m, float s)
 {
-	return { m.x * s, m.y * s, m.z * s, m.w };
+	return { m.rows.x * s, m.rows.y * s, m.rows.z * s, m.rows.w };
 }
 
 Matrix4f Multiply(Matrix4f a, Matrix4f b)
 {
 	Matrix4f res;
-	res.x = Multiply(a, b.x);
-	res.y = Multiply(a, b.y);
-	res.z = Multiply(a, b.z);
-	res.w = Multiply(a, b.w);
+	res.rows.x = Multiply(a, b.rows.x);
+	res.rows.y = Multiply(a, b.rows.y);
+	res.rows.z = Multiply(a, b.rows.z);
+	res.rows.w = Multiply(a, b.rows.w);
 	return res;
 }
 
 Vector4f Multiply(Matrix4f m, Vector4f v)
 {
 	return { 
-		(m.x.x * v.x + m.y.x * v.y + m.z.x * v.z + m.w.x * v.w), 
-		(m.x.y * v.x + m.y.y * v.y + m.z.y * v.z + m.w.y * v.w),  
-		(m.x.z * v.x + m.y.z * v.y + m.z.z * v.z + m.w.z * v.w),  
-		(m.x.w * v.x + m.y.w * v.y + m.z.w * v.w + m.w.w * v.w) 
+		(m.rows.x.x * v.x + m.rows.y.x * v.y + m.rows.z.x * v.z + m.rows.w.x * v.w), 
+		(m.rows.x.y * v.x + m.rows.y.y * v.y + m.rows.z.y * v.z + m.rows.w.y * v.w),  
+		(m.rows.x.z * v.x + m.rows.y.z * v.y + m.rows.z.z * v.z + m.rows.w.z * v.w),  
+		(m.rows.x.w * v.x + m.rows.y.w * v.y + m.rows.z.w * v.w + m.rows.w.w * v.w) 
 	};
 }
 
@@ -222,20 +218,20 @@ Vector4f Multiply(Vector4f v, Matrix4f m)
 {
 	m = Transpose(m);
 	return {
-		(m.x.x * v.x + m.y.x * v.y + m.z.x * v.z + m.w.x * v.w),
-		(m.x.y * v.x + m.y.y * v.y + m.z.y * v.z + m.w.y * v.w),
-		(m.x.z * v.x + m.y.z * v.y + m.z.z * v.z + m.w.z * v.w),
-		(m.x.w * v.x + m.y.w * v.y + m.z.w * v.w + m.w.w * v.w)
+		(m.rows.x.x * v.x + m.rows.y.x * v.y + m.rows.z.x * v.z + m.rows.w.x * v.w),
+		(m.rows.x.y * v.x + m.rows.y.y * v.y + m.rows.z.y * v.z + m.rows.w.y * v.w),
+		(m.rows.x.z * v.x + m.rows.y.z * v.y + m.rows.z.z * v.z + m.rows.w.z * v.w),
+		(m.rows.x.w * v.x + m.rows.y.w * v.y + m.rows.z.w * v.w + m.rows.w.w * v.w)
 	};
 }
 
 Matrix4f Transpose(Matrix4f m)
 {
 	Matrix4f res;
-	res.x = Vector4f(m.x.x, m.y.x, m.z.x, m.w.x);
-	res.y = Vector4f(m.x.y, m.y.y, m.z.y, m.w.y);
-	res.z = Vector4f(m.x.z, m.y.z, m.z.z, m.w.z);
-	res.w = Vector4f(m.x.w, m.y.w, m.z.w, m.w.w);
+	res.rows.x = Vector4f(m.rows.x.x, m.rows.y.x, m.rows.z.x, m.rows.w.x);
+	res.rows.y = Vector4f(m.rows.x.y, m.rows.y.y, m.rows.z.y, m.rows.w.y);
+	res.rows.z = Vector4f(m.rows.x.z, m.rows.y.z, m.rows.z.z, m.rows.w.z);
+	res.rows.w = Vector4f(m.rows.x.w, m.rows.y.w, m.rows.z.w, m.rows.w.w);
 	return res;
 }
 
@@ -281,13 +277,13 @@ Matrix4f operator*(Matrix4f m, float s)
 
 Matrix2f::Matrix2f(Vector2f _x, Vector2f _y)
 {
-	x = _x;
-	y = _y;
+	rows.x = _x;
+	rows.y = _y;
 }
 
 Matrix2f::Matrix2f(const Matrix2f& old) {
-	x = old.x;
-	y = old.y;
+	rows.x = old.rows.x;
+	rows.y = old.rows.y;
 };
 
 float* Matrix2f::operator[](int x)
@@ -297,15 +293,15 @@ float* Matrix2f::operator[](int x)
 
 Matrix3f::Matrix3f(Vector3f _x, Vector3f _y, Vector3f _z)
 {
-	x = _x;
-	y = _y;
-	z = _z;
+	rows.x = _x;
+	rows.y = _y;
+	rows.z = _z;
 }
 
 Matrix3f::Matrix3f(const Matrix3f& old) {
-	x = old.x;
-	y = old.y;
-	z = old.z;
+	rows.x = old.rows.x;
+	rows.y = old.rows.y;
+	rows.z = old.rows.z;
 };
 
 float* Matrix3f::operator[](int x)
@@ -313,27 +309,25 @@ float* Matrix3f::operator[](int x)
 	return &comp[x * 3];
 }
 
-
 Matrix4f::Matrix4f(Vector4f _x, Vector4f _y, Vector4f _z, Vector4f _w)
 {
-	x = _x;
-	y = _y;
-	z = _z;
-	w = _w;
+	rows.x = _x;
+	rows.y = _y;
+	rows.z = _z;
+	rows.w = _w;
 }
 
 Matrix4f::Matrix4f(const Matrix4f& old) {
-	x = old.x;
-	y = old.y;
-	z = old.z;
-	w = old.w;
+	rows.x = old.rows.x;
+	rows.y = old.rows.y;
+	rows.z = old.rows.z;
+	rows.w = old.rows.w;
 };
 
 float* Matrix4f::operator[](int x)
 {
 	return &comp[x * 4];
 }
-
 
 Matrix3f CreateRotationMatrix(const Vector3f& up, float angle)
 {
@@ -579,9 +573,9 @@ Matrix4f CreateScaleMatrix(float scale)
 {
 	Matrix4f scaleM = Identity4f();
 
-	scaleM.right.x *= scale;
-	scaleM.up.y *= scale;
-	scaleM.forward.z *= scale;
+	scaleM.axes.right.x *= scale;
+	scaleM.axes.up.y *= scale;
+	scaleM.axes.forward.z *= scale;
 
 	return scaleM;
 }

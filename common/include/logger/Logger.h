@@ -3,7 +3,8 @@
 #include "OSFile.h"
 #include "OSMutex.h"
 #include "StringUtils.h"
-#include <cstdint>
+#include <stdint.h>
+#include <stddef.h>
 
 enum LogMessageType
 {

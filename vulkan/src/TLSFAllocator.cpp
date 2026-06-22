@@ -3,6 +3,7 @@
 #include <string.h>
 #include <cassert>
 #include <stdio.h>
+#include <cstdint>
 
 #ifdef _MSC_VER
 #include <intrin.h>

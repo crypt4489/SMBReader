@@ -1,5 +1,5 @@
 #include "FileManager.h"
-
+#include <string.h>
 // Initialize static members
 std::filesystem::path FileManager::currDir = std::filesystem::current_path();
 

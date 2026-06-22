@@ -4,14 +4,14 @@
 
 void Camera::CamLookAt(const Vector3f& pos, const Vector3f& target, const Vector3f& up)
 {
-	LookAt(&LTM, pos, target, up);
+	LookAt(&ltm, pos, target, up);
 }
 
 void Camera::UpdateCamera()
 {
-	View = CreateViewMatrix(&LTM);
+	View = CreateViewMatrix(&ltm);
 
-	World = LTM.GetWorldMatrix();
+	World = ltm.GetWorldMatrix();
 }
 
 void Camera::CreateProjectionMatrix(float aspect, float n, float f, float angle)

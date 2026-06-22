@@ -1,6 +1,9 @@
 #pragma once
-
+#if defined(_WIN32) || defined(_WIN64)
 #include "WinOSWindow.h"
+#elif defined(__linux__)
+#include "LinuxOSWindow.h"
+#endif
 #include "OSWindow.h"
 #include "StringUtils.h"
 

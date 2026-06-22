@@ -300,7 +300,7 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage(uint64_t _timeout, VkSemaphore a
 	if (result != VK_SUCCESS) 
 	{
 		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED), result);
-		return ~0ul;
+		return ~0U;
 	}
 
 	return imageIndex;
@@ -326,7 +326,7 @@ uint32_t VKSwapChain::AcquireNextSwapChainImage2(uint64_t _timeout, VkSemaphore 
 	if (result != VK_SUCCESS)
 	{
 		device->AddDeviceErrorCode((MINOR_CODE_PACK(DEVICE_VK_TYPE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_ACQUIRE_IMAGE_FAILED), result);
-		return ~0ul;
+		return ~0U;
 	}
 
 	return imageIndex;

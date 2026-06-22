@@ -1,5 +1,5 @@
 #include "imageutils/TextureIO.h"
-#include <algorithm>
+#include <string.h>
 void ReadBMPData(char* _fileData, int dataPointer, TextureDetails* details)
 {
 	int uLine;
@@ -25,11 +25,11 @@ void ReadBMPData(char* _fileData, int dataPointer, TextureDetails* details)
 
 int ReadBMPDetails(char* _fileData, TextureDetails* details)
 {
-	auto iter = _fileData;
+	char* iter = _fileData;
 
 	TexUtils::BMP::BitmapFileHeader fh;
 
-	std::copy(iter, iter + sizeof(TexUtils::BMP::BitmapFileHeader), reinterpret_cast<char*>(&fh));
+	memcpy(reinterpret_cast<char*>(&fh), iter, sizeof(TexUtils::BMP::BitmapFileHeader));
 
 	if (fh.bfType != 0x4D42)
 	{
@@ -40,7 +40,7 @@ int ReadBMPDetails(char* _fileData, TextureDetails* details)
 
 	TexUtils::BMP::BitmapInfoHeader ih;
 
-	std::copy(iter, iter + sizeof(TexUtils::BMP::BitmapInfoHeader), reinterpret_cast<char*>(&ih));
+	memcpy(reinterpret_cast<char*>(&ih), iter, sizeof(TexUtils::BMP::BitmapInfoHeader));
 
 	uint32_t width = details->width = ih.biWidth;
 	uint32_t height = details->height = ih.biHeight;

@@ -4,11 +4,12 @@
 #include "VKDevice.h"
 #include <vulkan/vulkan.h>
 
-#ifdef _MSC_VER
+#if defined (VK_USE_PLATFORM_WIN32_KHR)
 #include <vulkan/vulkan_win32.h>
 #endif
 
-#include <cassert>
+#include <assert.h>
+#include <string.h>
 
 #define BASE_ERROR_STRING_ALLOCATION 150
 
@@ -305,6 +306,8 @@ bool VKInstance::ValidateSwapChainFormatSupport(EntryHandle gpuIndex, VkFormat r
 	return false;
 }
 
+#if defined (_WIN32) || defined(_WIN64)
+
 EntryHandle VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 {
 	VkSurfaceKHR renderSurface = VK_NULL_HANDLE;
@@ -332,6 +335,8 @@ EntryHandle VKInstance::CreateWindowedSurface(HINSTANCE hInst, HWND hWnd)
 
 	return allocIndex;
 }
+
+#endif
 
 double VKInstance::GetTimeStampPeriod(EntryHandle gpuIndex)
 {	
@@ -398,7 +403,19 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 		switch (featuresRequest->windowManagementType)
 		{
 		case WindowManagementType::WINDOWS32:
+#if defined (_WIN32) || defined(_WIN64)
 			instanceExtensions[instIndex++] = VK_KHR_WIN32_SURFACE_EXTENSION_NAME;
+#endif
+			break;
+		case WindowManagementType::XLIB:
+#if defined (VK_USE_PLATFORM_XCB_KHR)
+			instanceExtensions[instIndex++] = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
+#endif
+			break;
+		case WindowManagementType::WAYLAND:
+#if defined (VK_USE_PLATFORM_WAYLAND_KHR)
+			instanceExtensions[instIndex++] = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
+#endif
 			break;
 		default:
 			return -1;

@@ -1,6 +1,7 @@
+#include "math/MathTypes.h"
 #include "math/VertexTypes.h"
 #include <array>
-#include "math/MathTypes.h"
+#include <string.h>
 
 text_vertex_t::text_vertex_t(Vector2f _p, Vector2f _t, Vector4f _c) :
 	POSITION(_p), TEXTURE(_t), COLOR(_c)

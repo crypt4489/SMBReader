@@ -1,5 +1,6 @@
 #pragma once
-#include <cstdint>
+#include <stdint.h>
+#include <stddef.h>
 
 #define KiB 1024
 #define MiB (1024 * KiB)
@@ -40,9 +41,7 @@ struct QueueIndex
 		return this->ID == other.ID;
 	}
 
-	
-
-	uint8_t ID = ~0ui8;
+	uint8_t ID = ~0;
 };
 
 struct EntryHandle
@@ -53,7 +52,6 @@ struct EntryHandle
 
 	explicit EntryHandle(size_t _id) : ID(_id) {};
 
-	
 	EntryHandle& operator=(const size_t n) {
 		this->ID = n;
 		return *this;
@@ -122,7 +120,7 @@ struct EntryHandle
 		return this->ID != n;
 	}
 
-	size_t ID = ~0ui64;
+	size_t ID = ~0ULL;
 };
 
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.25)
 
 set (CORE_LIBRARY_NAME "Core")
 
@@ -35,7 +35,14 @@ if (WIN32)
 
     file(GLOB WIN_GLOBAL_HEADERS "platform/windows/include/*.h")
     list (APPEND GLOBAL_HEADERS ${WIN_GLOBAL_HEADERS})
+elseif(UNIX)
+    list (APPEND GLOBAL_INCLUDES "platform/linux/include/")
+    
+    file(GLOB LINUX_GLOBAL_SOURCES "platform/linux/src/*.cpp") 
+    list (APPEND GLOBAL_SOURCES ${LINUX_GLOBAL_SOURCES})
 
+    file(GLOB LINUX_GLOBAL_HEADERS "platform/linux/include/*.h")
+    list (APPEND GLOBAL_HEADERS ${LINUX_GLOBAL_HEADERS})
 endif()
 
 set (PROJECT_DEFINES)

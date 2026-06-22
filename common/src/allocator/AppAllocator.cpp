@@ -1,5 +1,6 @@
 #include "allocator/AppAllocator.h"
 
+#include <string.h>
 
 std::pair<int, int> Allocator::GetUsageAndCapacity() const {
 	return { dataAllocator.load(), dataSize };

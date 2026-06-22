@@ -10,7 +10,6 @@
 #include "ShaderManagement.h"
 #include "RenderInstanceManagement.h"
 #include "ShaderResourceSet.h"
-#include "ThreadManager.h"
 #include "WindowManager.h"
 
 namespace API 
@@ -332,7 +331,7 @@ struct RenderInstance
 	int maxGPUCommandCount = 0;
 	int currentUpdateCommandBuffer = 0;
 	uint32_t currentFrame = 0;
-	uint32_t previousFrame = ~0ui32;
+	uint32_t previousFrame = ~0U;
 	uint32_t physicalDeviceCounter = 0;
 	uint32_t logicalDeviceCounter = 0;
 	uint32_t maxLogicalDevices;

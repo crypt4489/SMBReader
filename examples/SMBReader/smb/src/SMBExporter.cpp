@@ -7,6 +7,8 @@
 
 #include <iostream>
 
+#include <string.h>
+
 void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 {
 	auto& chunk = smb->chunks;
@@ -92,7 +94,7 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 			break;
 		case SMBImageFormat::SMB_B8G8R8A8_UNORM:
 			individualSize = writeWidth * writeHeight * 4;
-			std::memcpy(input, ptr, individualSize);
+			memcpy(input, ptr, individualSize);
 			break;
 		default:
 			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";

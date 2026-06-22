@@ -564,6 +564,8 @@ struct GPUFeatureRequest
 enum class WindowManagementType
 {
 	WINDOWS32 = 1,
+	XLIB = 2,
+	WAYLAND = 3,
 };
 
 struct RenderingInstanceFeatures

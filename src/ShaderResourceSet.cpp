@@ -1417,7 +1417,7 @@ int HandleDepthTest(char* fileData, int size, int currentLocation, GenericPipeli
 	return charStride;
 }
 
-static StencilOp ParseStencilOp(uint32_t codeV)
+static StencilOp ParseStencilOp(unsigned long codeV)
 {
 	switch (codeV)
 	{

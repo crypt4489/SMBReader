@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.25)
 
 set (PROJECT_NAME "vklib")
 
@@ -47,16 +47,20 @@ source_group(TREE "${CMAKE_SOURCE_DIR}/common/include/"
 target_compile_definitions(${PROJECT_NAME} PUBLIC ${PROJECT_DEFINES})
 
 if(WIN32)
+    set(LIBVULKAN vulkan-1)
     target_compile_definitions(${PROJECT_NAME} PRIVATE _WIN32_WINNT=0x0601)
     target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
 elseif(UNIX)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_XCB_KHR)
+    set(LIBVULKAN vulkan)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
 endif()
 
 target_include_directories (${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDES})
 target_link_directories(${PROJECT_NAME} PUBLIC ${PROJECT_LIBRARY_PATHS})
 target_link_libraries(${PROJECT_NAME} PUBLIC
-    vulkan-1
-    $<$<CONFIG:Debug>:shaderc_combinedd>
-    $<$<CONFIG:Release>:shaderc_combined>
+    ${LIBVULKAN}
+    $<$<AND:$<CONFIG:Debug>,$<PLATFORM_ID:Windows>>:shaderc_combinedd>
+    $<$<AND:$<CONFIG:Debug>,$<NOT:$<PLATFORM_ID:Windows>>>:shaderc>
+    $<$<AND:$<CONFIG:Release>,$<PLATFORM_ID:Windows>>:shaderc_combined>
+    $<$<AND:$<CONFIG:Release>,$<NOT:$<PLATFORM_ID:Windows>>>:shaderc>
 )

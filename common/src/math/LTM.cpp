@@ -1,27 +1,27 @@
 #include "math/LTM.h"
 Vector3f LTM::GetPos() const {
-	return Vector3f(LTM.translate.x, LTM.translate.y, LTM.translate.z);
+	return Vector3f(LTM.axes.translate.x, LTM.axes.translate.y, LTM.axes.translate.z);
 }
 
 Vector3f LTM::GetForward() const {
-	return Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
+	return Vector3f(LTM.axes.forward.x, LTM.axes.forward.y, LTM.axes.forward.z);
 }
 
 Vector3f LTM::GetUp() const {
-	return Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
+	return Vector3f(LTM.axes.up.x, LTM.axes.up.y, LTM.axes.up.z);
 }
 
 Vector3f LTM::GetRight() const {
-	return Vector3f(LTM.right.x, LTM.right.y, LTM.right.z);
+	return Vector3f(LTM.axes.right.x, LTM.axes.right.y, LTM.axes.right.z);
 }
 
 Vector3f LTM::GetScale() const {
-	return Vector3f(LTM.right.w, LTM.up.w, LTM.forward.w);
+	return Vector3f(LTM.axes.right.w, LTM.axes.up.w, LTM.axes.forward.w);
 }
 
 void LTM::SetPos(const Vector4f& _pos)
 {
-	LTM.translate = _pos;
+	LTM.axes.translate = _pos;
 }
 
 void LTM::SetPos(const Vector3f& _pos)
@@ -94,9 +94,9 @@ void LTM::RotateAroundUp(double angle)
 	Matrix3f rot = CreateRotationMatrix(Vector3f(0.0, 1.0f, 0.0f), DegToRad(static_cast<float>(angle)));
 
 
-	Vector3f right = Vector3f(LTM.right.x, LTM.right.y, LTM.right.z);
-	Vector3f up = Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
-	Vector3f forward = Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
+	Vector3f right = Vector3f(LTM.axes.right.x, LTM.axes.right.y, LTM.axes.right.z);
+	Vector3f up = Vector3f(LTM.axes.up.x, LTM.axes.up.y, LTM.axes.up.z);
+	Vector3f forward = Vector3f(LTM.axes.forward.x, LTM.axes.forward.y, LTM.axes.forward.z);
 
 	right = right * rot;
 	up = up * rot;
@@ -106,19 +106,19 @@ void LTM::RotateAroundUp(double angle)
 
 	forward = Normalize(forward);
 
-	LTM.right = Vector4f(right.x, right.y, right.z, LTM[0][3]);
-	LTM.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
-	LTM.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
+	LTM.axes.right = Vector4f(right.x, right.y, right.z, LTM[0][3]);
+	LTM.axes.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
+	LTM.axes.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
 
 }
 
 void LTM::PitchLTM(double angle)
 {
 
-	Vector3f right = { LTM.right.x, LTM.right.y, LTM.right.z };
+	Vector3f right = { LTM.axes.right.x, LTM.axes.right.y, LTM.axes.right.z };
 
-	Vector3f up = Vector3f(LTM.up.x, LTM.up.y, LTM.up.z);
-	Vector3f forward = Vector3f(LTM.forward.x, LTM.forward.y, LTM.forward.z);
+	Vector3f up = Vector3f(LTM.axes.up.x, LTM.axes.up.y, LTM.axes.up.z);
+	Vector3f forward = Vector3f(LTM.axes.forward.x, LTM.axes.forward.y, LTM.axes.forward.z);
 
 	Matrix3f rot = CreateRotationMatrix(right, DegToRad(static_cast<float>(angle)));
 
@@ -129,8 +129,8 @@ void LTM::PitchLTM(double angle)
 
 	forward = Normalize(forward);
 
-	LTM.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
-	LTM.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
+	LTM.axes.up = Vector4f(up.x, up.y, up.z, LTM[1][3]);
+	LTM.axes.forward = Vector4f(forward.x, forward.y, forward.z, LTM[2][3]);
 }
 
 Matrix4f LTM::GetWorldMatrix()

@@ -4,6 +4,8 @@
 #include <bit>
 #include <limits>
 
+#include <string.h>
+
 #include "FileManager.h"
 #include "ShaderResourceSet.h"
 #include "ThreadManager.h"
@@ -751,7 +753,7 @@ int RenderInstance::CreateFrameGraphInstance(int deviceSelection, AttachmentGrap
 		}
 
 	
-		int renderPassSampleCount = std::max(std::bit_width((unsigned)sampHi)-1, 1);
+		int renderPassSampleCount = std::max((int)std::bit_width((uint32_t)sampHi)-1, 1);
 
 		rpInst->maxSampleCount = renderPassSampleCount;
 
@@ -976,7 +978,7 @@ uint32_t RenderInstance::BeginFrame(int deviceSelection, int swapChainIndex)
 
 	uint32_t imageIndex = dev->BeginFrameForSwapchain(swcData->swapChainIdx, swcData->rendererWaitSemaphores[currentFrame], currentFrame);
 
-	if (imageIndex == ~0ui32)
+	if (imageIndex == ~0UL)
 	{
 		return imageIndex;
 	}
@@ -1114,7 +1116,7 @@ int RenderInstance::CreateAttachmentResources(
 		int sampHi = resourceInst->sampHi;
 		int sampLo = resourceInst->sampLo;
 
-		int sampleCount = std::max(std::bit_width((unsigned)sampHi)-1, 1);
+		int sampleCount = std::max((int)std::bit_width((unsigned int)sampHi)-1, 1);
 
 		int imageWidth = width;
 		int imageHeight = height;
@@ -2735,7 +2737,7 @@ int RenderInstance::CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureReque
 	container->physicalDeviceIndex = physicalIndex;
 	container->information.minUniformAlignment = vkInstance->GetMinimumUniformBufferAlignment(physicalIndex);
 	container->information.minStorageAlignment = vkInstance->GetMinimumStorageBufferAlignment(physicalIndex);
-	container->information.maxMSAALevels = std::max(std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex)) - 1, 1);
+	container->information.maxMSAALevels = std::max((int)std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex)) - 1, 1);
 	container->information.deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
 
 	return physicalEntryIndex;
@@ -3174,14 +3176,14 @@ int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIn
 
 	posStruct->pushRangeCount = pushRangeCount;
 
-	uint32_t indexOffset = ~0ui32;
+	uint32_t indexOffset = ~0U;
 
-	uint32_t vertexOffset = ~0ui32;
+	uint32_t vertexOffset = ~0U;
 
-	uint32_t indirectOffset = ~0ui32;
+	uint32_t indirectOffset = ~0U;
 	uint32_t indirectBufferPerFrameSize = 0;
 
-	uint32_t indirectCountOffset = ~0ui32;
+	uint32_t indirectCountOffset = ~0U;
 	uint32_t indirectCountBufferPerFrameSize = 0;
 
 	if (info->indexBufferHandle != ~0)
@@ -4163,7 +4165,11 @@ int RenderInstance::CreateWindowedSurface(OSWindowInternalData* windowData)
 {
 	int windowAllocIndex = windowsSurfaces.Allocate();
 
+#if defined(_WIN32) || defined(_WIN64)
 	EntryHandle renderSurfaceIndex = vkInstance->CreateWindowedSurface(windowData->inst, windowData->wnd);
+#else
+	EntryHandle renderSurfaceIndex = EntryHandle();
+#endif
 
 	if (renderSurfaceIndex == EntryHandle())
 		return -1;

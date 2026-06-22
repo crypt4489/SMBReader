@@ -1,9 +1,11 @@
 #pragma once
 #include "StringUtils.h"
 #include "IndexTypes.h"
+
+#include <array>
+#include <atomic>
 #include <type_traits>
 #include <utility>
-#include <atomic>
 
 template <typename T_AtomicType>
 T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride, T_AtomicType wrapAroundSize, T_AtomicType alignment)
@@ -300,7 +302,7 @@ struct MessageQueue
 
 	void* AcquireWrite(uint64_t dataSize)
 	{
-		uint64_t head = UpdateAtomic(write, dataSize, 0ull);
+		uint64_t head = UpdateAtomic(write, dataSize, 0ul);
 		if (write >= bufferSize) return nullptr;
 
 		void* ret = (void*)(bufferLocation + head);
@@ -346,7 +348,7 @@ struct CircularMessageQueueMPSC
 
 	void* AcquireWrite(uint64_t dataSize)
 	{
-		uint64_t head = UpdateAtomic(write, dataSize, 0ull);
+		uint64_t head = UpdateAtomic(write, dataSize, 0ul);
 
 		void* ret = (void*)(bufferLocation + head);
 

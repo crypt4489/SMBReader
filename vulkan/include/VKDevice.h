@@ -1,7 +1,9 @@
 #pragma once
 
 #include <bitset>
+#include <condition_variable>
 #include <mutex>
+
 
 #include "vulkan/vulkan.h"
 

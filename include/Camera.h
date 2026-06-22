@@ -12,7 +12,7 @@ struct Camera
 
 	void CreateCameraFrustrum(float _angle, float aspect, float n, float far);
 
-	LTM LTM{};
+	LTM ltm{};
 	Matrix4f View{};
 	Matrix4f Projection{};
 	Frustum camFrustum{};

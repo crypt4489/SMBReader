@@ -120,13 +120,16 @@ namespace GLSLANG
 
     void DeleteShader(GLSLShaderProgram* shaderProgram)
     {
+#if defined(WIN32) || defined(_WIN64)
         glslang_program_delete(shaderProgram->programData);
 
         glslang_shader_delete(shaderProgram->shaderInfoData);
+#endif
     }
 
     int CompileShader(VkDevice& device, char* data, VkShaderStageFlags stage, GLSLShaderProgram* shaderProgram)
     {
+#if defined(WIN32) || defined(_WIN64)  
         glslang_stage_t glslstage = GLSLANG_STAGE_COUNT;
 
         switch (stage)
@@ -212,5 +215,8 @@ namespace GLSLANG
         shaderProgram->programData = program;
 
         return 0;
+#else
+        return -1;
+#endif
     }
 }

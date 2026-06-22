@@ -1000,7 +1000,7 @@ void ApplicationLoop::Execute()
 
 			imageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
 
-			if (imageIndex != ~0ui32) 
+			if (imageIndex != ~0UL) 
 			{
 				if (currentFrameGraphIndex == MSAAShadowMapping)
 				{

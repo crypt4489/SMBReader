@@ -183,9 +183,9 @@ struct VKInstance
 	int GetMinimumStorageBufferAlignment(EntryHandle gpuIndex);
 
 	int GetMinimumUniformBufferAlignment(EntryHandle gpuIndex);
-
+#if defined (_WIN32) || defined(_WIN64)
 	EntryHandle CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
-
+#endif
 	double GetTimeStampPeriod(EntryHandle gpuIndex);
 
 	EntryHandle AddTypedHandleToPool(VKInstanceHandleType handleType, void* handlePtr);

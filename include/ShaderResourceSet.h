@@ -5,6 +5,8 @@
 #include "logger/Logger.h"
 #include "ShaderManagement.h"
 
+#include <string.h>
+
 BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type);
 
 struct ShaderResourceSetContext

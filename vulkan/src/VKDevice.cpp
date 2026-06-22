@@ -13,8 +13,9 @@
 #include "VKTexture.h"
 #include "VKUtilities.h"
 
-#include <cassert>
+#include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 #define BASE_ERROR_STRING_ALLOCATION 160
 
@@ -571,7 +572,7 @@ static size_t FindQueueManagerByCapapbilites(QueueManager* managers, size_t mana
 		}
 	}
 
-	return ~0ui64;
+	return ~0ULL;
 }
 
 
@@ -2919,7 +2920,7 @@ VKDevice::QueueDetails VKDevice::GetQueueHandle(EntryHandle queueManagerIndex)
 
 	if (!manager)
 	{
-		return { ~0ui32, ~0ui32, EntryHandle() };
+		return { ~0U, ~0U, EntryHandle() };
 	}
 
 	uint32_t queueIdx = manager->GetQueue();
@@ -3152,7 +3153,7 @@ uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, EntryHandl
 	VkSemaphore acquireSemaphore = GetSemaphore(acquireSemaphoreHandle);
 
 	if (!swapChain || !acquireSemaphore)
-		return ~0ui32;
+		return ~0U;
 
 	uint32_t imageIndex = swapChain->AcquireNextSwapChainImage2(UINT64_MAX, acquireSemaphore, currentFrame);
 
@@ -3558,7 +3559,7 @@ int VKDevice::CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex)
 {
 	VKCommandBuffer* vkcb = GetCommandBuffer(bufferIndex);
 
-	if (vkcb->fenceIdx == ~0ui64)
+	if (vkcb->fenceIdx == EntryHandle())
 		return 0;
 
 	VkFence fence = GetFence(vkcb->fenceIdx);
@@ -3618,7 +3619,7 @@ int VKDevice::WriteToHostBuffer(EntryHandle hostIndex, void* data, size_t size, 
 	uintptr_t iter = (uintptr_t)datalocal;
 	for (int i = 0; i < copies; i++)
 	{
-		std::memcpy((void*)iter, data, size);
+		memcpy((void*)iter, data, size);
 		iter += stride;
 	}
 	vkUnmapMemory(device, deviceMem->memory);
@@ -3639,7 +3640,7 @@ int VKDevice::WriteToHostBufferBatch(EntryHandle hostIndex, void** dataPoints, s
 	uintptr_t iter = (uintptr_t)datalocal;
 	for (int i = 0; i < numCopies; i++)
 	{
-		std::memcpy((void*)(iter+offsets[i]), dataPoints[i], sizes[i]);
+		memcpy((void*)(iter+offsets[i]), dataPoints[i], sizes[i]);
 	}
 	vkUnmapMemory(device, deviceMem->memory);
 
@@ -3656,7 +3657,7 @@ int VKDevice::ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, siz
 	void* datalocal;
 	vkMapMemory(device, deviceMem->memory, offset, size, 0, &datalocal);
 
-	std::memcpy(dest, datalocal, size);
+	memcpy(dest, datalocal, size);
 	
 	vkUnmapMemory(device, deviceMem->memory);
 
@@ -3690,7 +3691,7 @@ int VKDevice::WriteToDeviceBuffer(
 	
 	vkMapMemory(device, stagingMemory, allocOffset, size, 0, &ldata);
 	
-	std::memcpy(ldata, data, size);
+	memcpy(ldata, data, size);
 		
 	vkUnmapMemory(device, stagingMemory);
 
@@ -3735,7 +3736,7 @@ int VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stag
 
 	for (int i = 0; i < entries; i++)
 	{
-		std::memcpy(ldata + stagingOffsets[i], data[i], sizes[i]);
+		memcpy(ldata + stagingOffsets[i], data[i], sizes[i]);
 		
 		 bufferCopyObjects[i].srcOffset = stagingOffsets[i];
 		 bufferCopyObjects[i].dstOffset = destOffsets[i];
@@ -3782,7 +3783,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 	char* pixels = imageData;
 	vkMapMemory(device, stagingMemory, offsetAlloc, imagesSize, 0, reinterpret_cast<void**>(&data));
 
-	std::memcpy(data, pixels, imagesSize);
+	memcpy(data, pixels, imagesSize);
 
 	vkUnmapMemory(device, stagingMemory);
 
@@ -3832,7 +3833,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 	char* pixels = imageData;
 	vkMapMemory(device, stagingMemory, offsetAlloc, imagesSize, 0, reinterpret_cast<void**>(&data));
 
-	std::memcpy(data, pixels, imagesSize);
+	memcpy(data, pixels, imagesSize);
 
 	vkUnmapMemory(device, stagingMemory);
 
@@ -3945,7 +3946,7 @@ uint32_t QueueManager::GetQueue()
 		}
 	}
 
-	return ~0ui32;
+	return ~0U;
 }
 
 void QueueManager::ReturnQueue(size_t queueNum)

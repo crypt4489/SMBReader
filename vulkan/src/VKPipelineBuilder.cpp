@@ -4,6 +4,8 @@
 #include "VKDevice.h"
 #include <array>
 
+#include <string.h>
+
 VKGraphicsPipelineBuilder::VKGraphicsPipelineBuilder(VkRenderPass _rp, VKDevice *d, uint32_t colorsBlendAttchCount, uint32_t descriptorCount, uint32_t _dynamicStateCount, uint32_t pushConstantCount)
 {
 	renderPass = _rp; 
