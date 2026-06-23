@@ -1,5 +1,37 @@
 #include "OSFile.h"
 
+#include <string.h>
+
+#include <fcntl.h>
+#include <poll.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define MAX_PATH 4096
+
+static int ConvertOSFileFlags(OSFileFlags flags)
+{
+    int osFlags = 0;
+
+    if ((flags & READ) && (flags & WRITE))
+    {   
+        osFlags |= O_RDWR;
+    } 
+    else
+    {
+        if (flags & READ)
+            osFlags |= O_RDONLY;
+        if (flags & WRITE)
+            osFlags |= O_WRONLY;
+    }
+    
+    if (flags & (CREATE | CREATE_IF_NOT_EXIST))
+        osFlags |= O_CREAT;
+
+    return osFlags;
+}
+
 OSFileMemoryRequirements OSGetFileMemoryRequirements(int maxNumberOfOpenFiles)
 {
     OSFileMemoryRequirements memReqs{ 0, 1 };
@@ -19,44 +51,143 @@ int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
 
 int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
+    char namescratch[MAX_PATH];
+
+    memcpy(namescratch, filename, nameLength);
+
+    namescratch[nameLength] = '\0';
+
+    int fcntlFlags = ConvertOSFileFlags(flags);
+
+    int fd = open(namescratch, fcntlFlags, S_IRUSR | S_IWUSR | S_IXUSR /*| S_IRGRP | S_IWGRP | S_IXGRP*/);
+
+    if (fd < 0)
+    {
+        return OS_FAILED_CREATE;
+    }
+
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
+    fileHandle->osDataHandle = fd;
+
     return OS_SUCCESS;
 }
 
 int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
+    char namescratch[MAX_PATH];
+
+    memcpy(namescratch, filename, nameLength);
+
+    namescratch[nameLength] = '\0';
+
+    int fcntlFlags = ConvertOSFileFlags(flags);
+
+    int fd = open(namescratch, fcntlFlags);
+
+    if (fd < 0)
+        return OS_FAILED_CREATE;
+
+    struct stat statBuffer{};
+
+    int fstatRet = fstat(fd, &statBuffer);
+
+    if (fstatRet < 0)
+    {
+        close(fd);
+        return OS_FAILED_SIZE;
+    }
+
+    fileHandle->fileLength = (int)statBuffer.st_size;
+    fileHandle->filePointer = 0;
+    fileHandle->osDataHandle = fd;
+
     return OS_SUCCESS;
 }
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
+    int retCode = close(fileHandle->osDataHandle);
+
+    if (retCode < 0)
+        return OS_FILE_CLOSED_FAILED;
+
+    fileHandle->osDataHandle = -1;
+    fileHandle->fileLength = -1;
+    fileHandle->filePointer = -1;
+
     return OS_SUCCESS;
 }
 
 int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-    return 0;
+    if (fileHandle->osDataHandle < 0)
+        return OS_FAILED_READ;
+
+    ssize_t readCount = read(fileHandle->osDataHandle, buffer, size);
+
+    if (readCount < 0)
+        return OS_FAILED_READ;
+
+    fileHandle->filePointer += readCount;
+
+    return (int)readCount;
 }
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
 {
-    return 0;
+    if (fileHandle->osDataHandle < 0)
+        return OS_FAILED_WRITE;
+
+    ssize_t writeCount = write(fileHandle->osDataHandle, buffer, size);
+
+    if (writeCount < 0)
+        return OS_FAILED_WRITE;
+
+    fileHandle->filePointer += writeCount;
+
+    return OS_SUCCESS;
 }
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 {
+    if (fileHandle->osDataHandle < 0)
+        return OS_FAILED_SEEK;
+
+    int whence = SEEK_SET;
+
+    switch (flags)
+    {
+    case BEGIN:
+        break;
+    case CURRENT:
+        whence = SEEK_CUR;
+        break;
+    case END:
+        whence = SEEK_END;
+        break;
+    default:
+        return OS_INVALID_ARGUMENT;
+    }
+
+    off_t newOffset = lseek(fileHandle->osDataHandle, pointer, whence);
+
+    if (newOffset < 0)
+        return OS_FAILED_SEEK;
+
+    fileHandle->filePointer = newOffset;
+
     return OS_SUCCESS;
 }
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator)
 {
-   // char pathscratch[MAX_PATH];
-
-    return 0;
+    return OS_FILE_FUNCTION_NOT_IMPLEMENTED;
 }
 
 int OSNextFile(OSFileIterator* iterator)
 {
-    return 0;
+    return OS_FILE_FUNCTION_NOT_IMPLEMENTED;
 }
 
 void OSGetSTDInput(OSFileHandle* fileHandle)
@@ -68,20 +199,33 @@ void OSGetSTDInput(OSFileHandle* fileHandle)
 
 void OSGetSTDOutput(OSFileHandle* fileHandle)
 {
-    fileHandle->osDataHandle = 0;
+    fileHandle->osDataHandle = 1;
     fileHandle->fileLength = -1;
     fileHandle->filePointer = -1;
-
 }
 
 void OSGetSTDError(OSFileHandle* fileHandle)
 {
-    fileHandle->osDataHandle = 0;
+    fileHandle->osDataHandle = 2;
     fileHandle->fileLength = -1;
     fileHandle->filePointer = -1;
 }
 
 int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
 {
-    return 0;
+    struct pollfd fds{};
+
+    fds.fd = fileHandle->osDataHandle;
+    fds.events = POLLIN;
+    fds.revents = 0;
+
+    int pollRet = poll(&fds, 1, millisecondTimeOut);
+
+    if (pollRet < 0)
+        return OS_FAILED_POLL;
+
+    if (!pollRet)
+        return OS_FILE_POLL_TIMEOUT;
+
+    return pollRet;
 }

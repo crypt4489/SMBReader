@@ -48,16 +48,19 @@ option(USE_SHADERC_COMBINED "Enable ShaderC compilation" OFF)
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC ${PROJECT_DEFINES})
 
-if (USE_SHADERC_COMBINED)
-    set(SHADERC_DEBUG_LIB "$<$<CONFIG:Debug>:shaderc_combinedd>")
-    set(SHADERC_RELEASE_LIB "$<$<CONFIG:Release>:shaderc_combined>")
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_SHADERC_COMBINED)
-endif()
+
 
 if(WIN32)
     set(LIBVULKAN vulkan-1)
     target_compile_definitions(${PROJECT_NAME} PRIVATE _WIN32_WINNT=0x0601)
     target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+
+    if (USE_SHADERC_COMBINED)
+        set(SHADERC_DEBUG_LIB "$<$<CONFIG:Debug>:shaderc_combinedd>")
+        set(SHADERC_RELEASE_LIB "$<$<CONFIG:Release>:shaderc_combined>")
+        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_SHADERC_COMBINED)
+    endif()
+
 elseif(UNIX)
     set(LIBVULKAN vulkan)
     if (WINDOW_USE_X11)
@@ -65,6 +68,12 @@ elseif(UNIX)
     elseif (WINDOW_USE_WAYLAND)
         target_compile_definitions(${PROJECT_NAME} PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     endif()
+
+    if (USE_SHADERC_COMBINED)
+        set(SHADERC_RELEASE_LIB shaderc_combined)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE USE_SHADERC_COMBINED)
+    endif()
+
 endif()
 
 target_include_directories (${PROJECT_NAME} PUBLIC ${PROJECT_INCLUDES})

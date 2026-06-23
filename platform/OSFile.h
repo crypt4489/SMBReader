@@ -43,7 +43,10 @@ enum OSFileErrorFlags
 	OS_FAILED_SEARCH_ITER = -7,
 	OS_REACH_ITER_END = -8,
 	OS_STD_HANDLE_INVALID = -9,
-	OS_FILE_POLL_TIMEOUT = -10
+	OS_FILE_POLL_TIMEOUT = -10, 
+	OS_FILE_CLOSED_FAILED = -11,
+	OS_FILE_FUNCTION_NOT_IMPLEMENTED = -12,
+	OS_FAILED_POLL = -13,
 };
 
 struct OSFileIterator
@@ -77,7 +80,7 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer);
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags);
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer);
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer);
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator);
 

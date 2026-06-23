@@ -217,7 +217,7 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
     return hBytesRead;
 }
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, char* buffer)
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
 {
     HANDLE hFile = INVALID_HANDLE_VALUE;
 
@@ -255,22 +255,17 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
 
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
 
-    int currentPointer = fileHandle->filePointer;
-
     DWORD moveMethod = FILE_BEGIN;
 
     switch (flags)
     {
     case BEGIN:
-        currentPointer = pointer;
         break;
     case CURRENT:
         moveMethod = FILE_CURRENT;
-        currentPointer += pointer;
         break;
     case END:
         moveMethod = FILE_END;
-        currentPointer = fileHandle->fileLength;
         break;
     default:
         return OS_INVALID_ARGUMENT;
@@ -283,7 +278,7 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
         return OS_FAILED_SEEK;
     }
 
-    fileHandle->filePointer = currentPointer;
+    fileHandle->filePointer = nRet;
 
     return OS_SUCCESS;
 }
