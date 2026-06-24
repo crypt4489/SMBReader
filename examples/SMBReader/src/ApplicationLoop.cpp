@@ -2104,6 +2104,8 @@ int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, c
 
 void ProcessSMBFile(SMBFile *file, int arenaIndex)
 {
+	uint64_t readCount = 0;
+
 	const int MAX_GEO_FILES = 2;
 	const int MAX_TEXTURES = 10;
 
@@ -2131,7 +2133,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 			char* geomHeader = (char*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(chunk[i].headerSize);
 
-			OSReadFile(&file->fileHandle, chunk[i].headerSize, geomHeader);
+			OSReadFile(&file->fileHandle, chunk[i].headerSize, geomHeader, &readCount);
 
 		    int geometryPorcessRet = ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file->fileOffset, chunk[i].fileOffset + file->numContiguousBytes + file->fileOffset, &mainAppLogger, &SMBThreadedFileInputAllocators[arenaIndex]);
 
@@ -4176,15 +4178,14 @@ int CreateGPUGeometryRenderable(int geomGPURenderableIndex, const Matrix4f& matr
 
 void ScanSTDIN(void* data)
 {
-
 	HANDLE stdInHandle = GetStdHandle(STD_INPUT_HANDLE);
 
 	OSFileHandle stdIn;
 
 	OSGetSTDInput(&stdIn);
 
-	DWORD numberOfBytesRead;
-	DWORD events;
+	LARGE_INTEGER numberOfBytesRead;
+	DWORD events, readReturn = 0;
 	INPUT_RECORD record;
 
 	char inputBuffer[1024];
@@ -4218,9 +4219,9 @@ void ScanSTDIN(void* data)
 			continue;
 		}
 
-		numberOfBytesRead = OSReadFile(&stdIn, 1024, inputBuffer);
+		readReturn = OSReadFile(&stdIn, 1024, inputBuffer, &numberOfBytesRead);
 
-		if (numberOfBytesRead <= 0)
+		if (readReturn < 0)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot get ReadFile from stdinput\n"));
 			break;
@@ -4453,7 +4454,9 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	void* fileData = GlobalInputScratchAllocator.Allocate(size);
 
-	int nRead = OSReadFile(&outHandle, size, (char*)fileData);
+	uint64_t readCount = 0;
+
+	int nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
 
 	OSCloseFile(&outHandle);
 
@@ -4486,7 +4489,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 		fileData = GlobalInputScratchAllocator.Allocate(size);
 
-		nRead = OSReadFile(&outHandle, size, (char*)fileData);
+		nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
 
 		OSCloseFile(&outHandle);
 
@@ -4583,8 +4586,10 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 		int size = outHandle.fileLength;
 
 		void* fileData = GlobalInputScratchAllocator.Allocate(size);
+		
+		uint64_t readCount = 0;
 
-		int nRead = OSReadFile(&outHandle, size, (char*)fileData);
+		int nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
 
 		OSCloseFile(&outHandle);
 

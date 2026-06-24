@@ -49,6 +49,8 @@ bld/
 
 shaders/compiled/*.spv
 
+platform/linux/include/xdg-*
+
 *.*old
 
 # Visual Studio 2015/2017 cache/options directory

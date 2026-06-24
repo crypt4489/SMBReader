@@ -106,9 +106,11 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 		uint32_t offset = (writeHeight - 1) * bpr;
 
+		uint64_t writeOutSize;
+
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			OSWriteFile(&handle, bpr, input + offset);
+			OSWriteFile(&handle, bpr, input + offset, &writeOutSize);
 			offset -= bpr;
 		}
 

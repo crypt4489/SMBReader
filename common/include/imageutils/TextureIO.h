@@ -50,10 +50,11 @@ namespace TexUtils
 			BitmapFileHeader fileheader{ 0x4d42, sizeof(BitmapFileHeader) + sizeof(BitmapInfoHeader) + (width * height * 4), 0, 0, 0x36 };
 			BitmapInfoHeader infoheader{ sizeof(BitmapInfoHeader), width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 
-			OSWriteFile(handle, sizeof(BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType));
-			
+			uint64_t writeOutSize;
 
-			OSWriteFile(handle, sizeof(BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize));
+			OSWriteFile(handle, sizeof(BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType), &writeOutSize);
+			
+			OSWriteFile(handle, sizeof(BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize), &writeOutSize);
 	
 		}
 	}

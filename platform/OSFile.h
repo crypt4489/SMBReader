@@ -1,15 +1,18 @@
 
 #pragma once
+
+#include <stdint.h>
+
 struct OSFileHandle
 {
-	unsigned int fileLength;
-	int filePointer;
+	uint64_t fileLength;
+	uint64_t filePointer;
 	int osDataHandle;
 
 	OSFileHandle()
 	{
-		fileLength = -1;
-		filePointer = -1;
+		fileLength = 0;
+		filePointer = 0;
 		osDataHandle = -1;
 	}
 };
@@ -76,11 +79,11 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
 int OSCloseFile(OSFileHandle* fileHandle);
 
-int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer);
+int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize);
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags);
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer);
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize);
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator);
 

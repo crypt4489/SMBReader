@@ -100,9 +100,11 @@ int Logger::ProcessMessage()
 			break;
 		}
 
-		OSWriteFile(&fileHandle, prefixLen, (char*)prefixFormat);
+		uint64_t writeOutSize;
 
-		OSWriteFile(&fileHandle, currentMessage->charCount - 1, string);
+		OSWriteFile(&fileHandle, prefixLen, (char*)prefixFormat, &writeOutSize);
+
+		OSWriteFile(&fileHandle, currentMessage->charCount - 1, string, &writeOutSize);
 
 		currentHead += currentMessage->allocSize;
 

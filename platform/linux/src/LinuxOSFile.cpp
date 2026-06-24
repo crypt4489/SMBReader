@@ -10,6 +10,10 @@
 
 #define MAX_PATH 4096
 
+#define FILE_DESCRIPTOR_STD_IN 0
+#define FILE_DESCRIPTOR_STD_OUT 1
+#define FILE_DESCRIPTOR_STD_ERR 2
+
 static int ConvertOSFileFlags(OSFileFlags flags)
 {
     int osFlags = 0;
@@ -26,8 +30,14 @@ static int ConvertOSFileFlags(OSFileFlags flags)
             osFlags |= O_WRONLY;
     }
     
-    if (flags & (CREATE | CREATE_IF_NOT_EXIST))
+    if (flags & CREATE)
+    {
+        osFlags |= (O_CREAT | O_TRUNC);
+    }
+    else if (flags & CREATE_IF_NOT_EXIST)
+    {
         osFlags |= O_CREAT;
+    }
 
     return osFlags;
 }
@@ -53,6 +63,9 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
 {
     char namescratch[MAX_PATH];
 
+    if (nameLength <= 0 || nameLength >= MAX_PATH)
+        return OS_INVALID_ARGUMENT;
+
     memcpy(namescratch, filename, nameLength);
 
     namescratch[nameLength] = '\0';
@@ -77,6 +90,9 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 {
     char namescratch[MAX_PATH];
 
+    if (nameLength <= 0 || nameLength >= MAX_PATH)
+        return OS_INVALID_ARGUMENT;
+
     memcpy(namescratch, filename, nameLength);
 
     namescratch[nameLength] = '\0';
@@ -98,7 +114,7 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
         return OS_FAILED_SIZE;
     }
 
-    fileHandle->fileLength = (int)statBuffer.st_size;
+    fileHandle->fileLength = statBuffer.st_size;
     fileHandle->filePointer = 0;
     fileHandle->osDataHandle = fd;
 
@@ -107,19 +123,22 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
+    if (fileHandle->osDataHandle <= 2)
+        return OS_INVALID_ARGUMENT;
+
     int retCode = close(fileHandle->osDataHandle);
 
     if (retCode < 0)
         return OS_FILE_CLOSED_FAILED;
 
     fileHandle->osDataHandle = -1;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 
     return OS_SUCCESS;
 }
 
-int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
+int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize)
 {
     if (fileHandle->osDataHandle < 0)
         return OS_FAILED_READ;
@@ -131,10 +150,12 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 
     fileHandle->filePointer += readCount;
 
-    return (int)readCount;
+    *dataReadSize = readCount;
+
+    return OS_SUCCESS;
 }
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize)
 {
     if (fileHandle->osDataHandle < 0)
         return OS_FAILED_WRITE;
@@ -145,6 +166,8 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
         return OS_FAILED_WRITE;
 
     fileHandle->filePointer += writeCount;
+
+    *dataWriteSize = writeCount;
 
     return OS_SUCCESS;
 }
@@ -192,27 +215,30 @@ int OSNextFile(OSFileIterator* iterator)
 
 void OSGetSTDInput(OSFileHandle* fileHandle)
 {
-    fileHandle->osDataHandle = 0;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->osDataHandle = FILE_DESCRIPTOR_STD_IN;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 }
 
 void OSGetSTDOutput(OSFileHandle* fileHandle)
 {
-    fileHandle->osDataHandle = 1;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->osDataHandle = FILE_DESCRIPTOR_STD_OUT;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 }
 
 void OSGetSTDError(OSFileHandle* fileHandle)
 {
-    fileHandle->osDataHandle = 2;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->osDataHandle = FILE_DESCRIPTOR_STD_ERR;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 }
 
 int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
 {
+    if (fileHandle->osDataHandle < 0)
+        return OS_FAILED_POLL;
+
     struct pollfd fds{};
 
     fds.fd = fileHandle->osDataHandle;

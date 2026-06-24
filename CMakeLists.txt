@@ -15,6 +15,8 @@ set (GLOBAL_INCLUDES
 
 set (GLOBAL_LIBRARY_PATHS "vulkan/lib/")
 
+set (GLOBAL_LIBRARIES_USED)
+
 file(GLOB GLOBAL_SOURCES "src/*.cpp" "common/src/*/*.cpp") 
 
 file(GLOB GLOBAL_HEADERS "common/include/*/*.h" "include/*.h" "platform/*.h" "common/include/*.h")
@@ -42,6 +44,8 @@ elseif(UNIX)
 
     file(GLOB LINUX_GLOBAL_HEADERS "platform/linux/include/*.h")
     list (APPEND GLOBAL_HEADERS ${LINUX_GLOBAL_HEADERS})
+
+    list (APPEND GLOBAL_LIBRARIES_USED pthread)
 endif()
 
 option(WINDOW_USE_WAYLAND "Enable wayland backend" OFF)
@@ -53,11 +57,15 @@ set (PROJECT_DEFINES)
 add_subdirectory(vulkan)
 
 add_library(${CORE_LIBRARY_NAME} OBJECT ${GLOBAL_SOURCES} ${GLOBAL_HEADERS} ${GLOBAL_SHADERS} ${GLOBAL_PIPELINE_LAYOUTS} ${GLOBAL_ATTACHMENT_LAYOUTS})
+
 target_include_directories(${CORE_LIBRARY_NAME} PUBLIC ${GLOBAL_INCLUDES})
 target_compile_definitions(${CORE_LIBRARY_NAME} PUBLIC ${PROJECT_DEFINES})
+target_link_directories(${CORE_LIBRARY_NAME} PUBLIC ${GLOBAL_LIBRARY_PATHS})
+target_link_libraries(${CORE_LIBRARY_NAME} PUBLIC ${GLOBAL_LIBRARIES_USED})
 
 if (WINDOW_USE_WAYLAND)
     target_compile_definitions(${CORE_LIBRARY_NAME} PUBLIC WINDOW_USE_WAYLAND)
+    target_link_libraries(${CORE_LIBRARY_NAME} PUBLIC wayland-client)
 endif()
 
 if (WINDOW_USE_X11)

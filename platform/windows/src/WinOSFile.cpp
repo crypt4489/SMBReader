@@ -6,7 +6,6 @@ static HANDLE* intFileHandles;
 static std::atomic<int8_t>* freeList;
 static int maxFreeListEntry = 0;
 
-
 static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
 static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
 static HANDLE stdErrorHandle = INVALID_HANDLE_VALUE;
@@ -106,12 +105,16 @@ int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
 
     maxFreeListEntry = handleSize;
 
-    return 0;
+    return OS_SUCCESS;
 }
 
 int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
     char pathscratch[MAX_PATH];
+
+     if (nameLength <= 0 || nameLength >= MAX_PATH)
+        return OS_FAILED_CREATE;
+
     HANDLE hFile;
     DWORD fileShare = 0, creationFlags = 0;
     DWORD hAccess = ConvertOSFlags(flags, &fileShare, &creationFlags);
@@ -135,12 +138,14 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
     fileHandle->osDataHandle = internalHandlePtr;
 
     return OS_SUCCESS;
-
 }
 
 int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
     char pathscratch[MAX_PATH];
+
+    if (nameLength <= 0 || nameLength >= MAX_PATH)
+        return OS_FAILED_CREATE;
 
     HANDLE hFile;
     DWORD fileShare = 0, creationFlags = 0;
@@ -156,9 +161,11 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
         return OS_FAILED_CREATE;
     }
 
-    DWORD fileSize = GetFileSize(hFile, NULL);
+    LARGE_INTEGER fileSize;
 
-    if (fileSize == INVALID_FILE_SIZE)
+    BOOL retVal = GetFileSizeEx(hFile, &fileSize);
+
+    if (!retVal)
     {
         CloseHandle(hFile);
         return OS_FAILED_SIZE;
@@ -177,17 +184,24 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
-    if (fileHandle->osDataHandle == -1)
-        return -1;
+    if (fileHandle->osDataHandle < 0 || fileHandle->osDataHandle >= maxFreeListEntry)
+        return OS_FILE_CLOSED_FAILED;
+
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+
     CloseHandle(hFile);
+
     intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;
     freeList[fileHandle->osDataHandle].store(1, std::memory_order_release);
-    memset(fileHandle, -1, sizeof(OSFileHandle));
+
+    fileHandle->osDataHandle = -1;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
+
     return OS_SUCCESS;
 }
 
-int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
+int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize)
 {
     if (fileHandle->osDataHandle >= maxFreeListEntry+1)
     {
@@ -200,9 +214,13 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
     {
         hFile = stdInputHandle;
     }
-    else
+    else if (fileHandle->osDataHandle < maxFreeListEntry && fileHandle->osDataHandle >= 0)
     {
         hFile = intFileHandles[fileHandle->osDataHandle];
+    }
+    else 
+    {
+        return OS_FAILED_READ;
     }
 
     DWORD hBytesRead = 0;
@@ -213,11 +231,13 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
     }
 
     fileHandle->filePointer += hBytesRead;
+    
+    *dataReadSize = hBytesRead;
 
-    return hBytesRead;
+    return OS_SUCCESS;
 }
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
+int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize)
 {
     HANDLE hFile = INVALID_HANDLE_VALUE;
 
@@ -229,9 +249,13 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
     {
         hFile = stdOutputHandle;
     }
-    else if (fileHandle->osDataHandle < maxFreeListEntry)
+    else if (fileHandle->osDataHandle < maxFreeListEntry && fileHandle->osDataHandle >= 0)
     {
         hFile = intFileHandles[fileHandle->osDataHandle];
+    }
+    else 
+    {
+        return OS_FAILED_WRITE;
     }
 
     DWORD hBytesWrite = 0;
@@ -243,7 +267,9 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
 
     fileHandle->filePointer += hBytesWrite;
 
-    return hBytesWrite;
+    *dataWriteSize = hBytesWrite;
+
+    return OS_SUCCESS;
 }
 
 int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
@@ -251,6 +277,10 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
     if (fileHandle->osDataHandle >= maxFreeListEntry)
     {
         return OS_STD_HANDLE_INVALID;
+    }
+    else if (fileHandle->osDataHandle < 0)
+    {
+        return OS_FAILED_SEEK;
     }
 
     HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
@@ -287,7 +317,8 @@ int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterato
 {
     char pathscratch[MAX_PATH];
 
-    if (!searchString || !iterator) return OS_INVALID_ARGUMENT;
+    if (!searchString || !iterator || nameLength <= 0) 
+        return OS_INVALID_ARGUMENT;
 
     int index = FindFreeIndex();
 
@@ -308,14 +339,12 @@ int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterato
     strncpy(iterator->currentFileName, data.cFileName, 250);
     iterator->osDataHandle = index;
 
-    return 0;
+    return OS_SUCCESS;
 }
 
 int OSNextFile(OSFileIterator* iterator)
 {
     if (!iterator) return OS_INVALID_ARGUMENT;
-
-    
 
     int index = iterator->osDataHandle;
 
@@ -331,7 +360,7 @@ int OSNextFile(OSFileIterator* iterator)
 
     strncpy(iterator->currentFileName, data.cFileName, 250);
 
-    return 0;
+    return OS_SUCCESS;
 }
 
 void OSGetSTDInput(OSFileHandle* fileHandle)
@@ -342,8 +371,8 @@ void OSGetSTDInput(OSFileHandle* fileHandle)
     }
 
     fileHandle->osDataHandle = maxFreeListEntry;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 }
 
 void OSGetSTDOutput(OSFileHandle* fileHandle)
@@ -354,8 +383,8 @@ void OSGetSTDOutput(OSFileHandle* fileHandle)
     }
 
     fileHandle->osDataHandle = maxFreeListEntry + 2;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 
 }
 
@@ -367,8 +396,8 @@ void OSGetSTDError(OSFileHandle* fileHandle)
     }
 
     fileHandle->osDataHandle = maxFreeListEntry + 1;
-    fileHandle->fileLength = -1;
-    fileHandle->filePointer = -1;
+    fileHandle->fileLength = 0;
+    fileHandle->filePointer = 0;
 }
 
 int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
@@ -387,14 +416,19 @@ int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
     {
         hFile = stdOutputHandle;
     }
-    else if (fileHandle->osDataHandle < maxFreeListEntry)
+    else if (fileHandle->osDataHandle < maxFreeListEntry && fileHandle->osDataHandle >= 0)
     {
         hFile = intFileHandles[fileHandle->osDataHandle];
     }
+    else 
+    {
+        return OS_FAILED_POLL;
+    }
 
-    DWORD ret = WaitForSingleObject(hFile, 500);
+    DWORD ret = WaitForSingleObject(hFile, millisecondTimeOut);
 
-    if (ret == WAIT_TIMEOUT) return OS_FILE_POLL_TIMEOUT;
+    if (ret == WAIT_TIMEOUT) 
+        return OS_FILE_POLL_TIMEOUT;
 
-    return 0;
+    return OS_SUCCESS;
 }

@@ -1607,6 +1607,8 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 		VkShaderStageFlags shaderFlags = API::ConvertShaderStageToVulkanShaderStage(map->type);
 
+		uint64_t readCount = 0;
+
 		if (FileManager::FileExists(&nameView)) {
 
 			OSOpenFile(nameView.stringData, nameView.charCount, READ, &handle);
@@ -1615,7 +1617,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength);
 
-			OSReadFile(&handle, shaderLength, shaderData);
+			OSReadFile(&handle, shaderLength, shaderData, &readCount);
 		}
 		else
 		{
@@ -1625,7 +1627,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength + 1);
 
-			OSReadFile(&handle, shaderLength, shaderData);
+			OSReadFile(&handle, shaderLength, shaderData, &readCount);
 
 			if (shaderData[shaderLength - 1] != '\0')
 			{
