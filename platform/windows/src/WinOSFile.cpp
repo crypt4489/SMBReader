@@ -171,7 +171,7 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
         return OS_FAILED_SIZE;
     }
 
-    fileHandle->fileLength = fileSize;
+    fileHandle->fileLength = (uint64_t)fileSize.QuadPart;
     fileHandle->filePointer = 0;
 
     int internalHandlePtr = FindFreeIndex();

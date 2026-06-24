@@ -4183,8 +4183,7 @@ void ScanSTDIN(void* data)
 	OSFileHandle stdIn;
 
 	OSGetSTDInput(&stdIn);
-
-	LARGE_INTEGER numberOfBytesRead;
+	uint64_t numberOfBytesRead;
 	DWORD events, readReturn = 0;
 	INPUT_RECORD record;
 
