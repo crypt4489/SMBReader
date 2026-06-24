@@ -4,23 +4,42 @@
 #include "StringUtils.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-static bool done = false;
+static volatile bool done = false;
 
-void Hello(void* argument)
+void ScanSTDIN(void* argument)
 {
+    uint64_t readSize;
+
+    char inputBuffer[512];
+
     OSFileHandle stdInHandle;
 
     OSGetSTDInput(&stdInHandle);
 
     int pollCommand = OS_FILE_POLL_TIMEOUT;
 
-   // while(pollCommand == OS_FILE_POLL_TIMEOUT && !done)
+    while(!done)
     {
         pollCommand = OSPollFile(&stdInHandle, 500);
-    }
 
-    printf("end of thread!");
+        if (pollCommand > 0)
+        {
+            OSReadFile(&stdInHandle, sizeof(inputBuffer), inputBuffer, &readSize);
+
+            inputBuffer[readSize] = '\0';
+
+            if (strcmp(inputBuffer, "end"))
+            {
+                break;
+            }
+            else
+            {
+                printf("%s\n", inputBuffer);
+            }
+        }
+    }
 
     done = true;
 }
@@ -99,9 +118,7 @@ int main(int argc, const char** argv)
 
     OSThreadHandle handle{};
 
-    char* str = "Jello";
-
-   // OSCreateThread(&handle, str, Hello, OS_THREAD_NONE);
+    OSCreateThread(&handle, nullptr, ScanSTDIN, OS_THREAD_NONE);
 
     OSSeedWindowMemory(nullptr, 0, 0);
 
@@ -111,22 +128,15 @@ int main(int argc, const char** argv)
     {
         int ret = PollOSWindowEvents(nullptr);
 
-       // printf("hello!");
-
         if (ret)
         {
-           // printf("hello!");
             done = true;
-            retCode = 1;
-            break;
         }
     }
-    
-    printf("end of main thread");
 
-   // OSJoinThread(&handle);
+    OSJoinThread(&handle);
 
-  //  OSCloseThread(&handle);
+    OSCloseThread(&handle);
 
     free(threadData);
 
