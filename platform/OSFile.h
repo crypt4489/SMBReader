@@ -81,7 +81,7 @@ int OSCloseFile(OSFileHandle* fileHandle);
 
 int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize);
 
-int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags);
+int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags);
 
 int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize);
 

@@ -272,7 +272,7 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t
     return OS_SUCCESS;
 }
 
-int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
+int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
 {
     if (fileHandle->osDataHandle >= maxFreeListEntry)
     {
@@ -301,14 +301,18 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
         return OS_INVALID_ARGUMENT;
     }
 
-    DWORD nRet = SetFilePointer(hFile, pointer, NULL, moveMethod);
+    LARGE_INTEGER winSeekPointer, setSeekPointer;
 
-    if (nRet == INVALID_SET_FILE_POINTER)
+    winSeekPointer.QuadPart = pointer;
+
+    BOOL wRet = SetFilePointerEx(hFile, winSeekPointer, &setSeekPointer, moveMethod);
+
+    if (!wRet)
     {
         return OS_FAILED_SEEK;
     }
 
-    fileHandle->filePointer = nRet;
+    fileHandle->filePointer = setSeekPointer.QuadPart;
 
     return OS_SUCCESS;
 }

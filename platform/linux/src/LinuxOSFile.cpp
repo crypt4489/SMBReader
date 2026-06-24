@@ -172,7 +172,7 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t
     return OS_SUCCESS;
 }
 
-int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
+int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
 {
     if (fileHandle->osDataHandle < 0)
         return OS_FAILED_SEEK;
@@ -193,7 +193,7 @@ int OSSeekFile(OSFileHandle* fileHandle, int pointer, OSRelativeFlags flags)
         return OS_INVALID_ARGUMENT;
     }
 
-    off_t newOffset = lseek(fileHandle->osDataHandle, pointer, whence);
+    off64_t newOffset = lseek64(fileHandle->osDataHandle, pointer, whence);
 
     if (newOffset < 0)
         return OS_FAILED_SEEK;
