@@ -19,7 +19,7 @@ struct ShaderResourceManager
 {
 	SlabAllocator shaderResourceInstAllocator{};
 	PoolAllocator<EntryHandle> descriptorSetHandles{};
-	uintptr_t* descriptorSets{};
+	ShaderResourceSet** descriptorSets{};
 
 	EntryHandle deviceResourceHeap = EntryHandle();
 
@@ -30,10 +30,10 @@ struct ShaderResourceManager
 		std::construct_at(&shaderResourceInstAllocator, shaderResourceMemoryAllocator->Allocate(shaderResourceSlabSize, alignof(void*)), shaderResourceSlabSize);
 		descriptorSetHandles.Create(shaderResourceMemoryAllocator, maxDescriptorSets);
 		memset(descriptorSetHandles.pool, 0xFF, sizeof(EntryHandle) * maxDescriptorSets);
-		descriptorSets = (uintptr_t*)shaderResourceMemoryAllocator->Allocate(sizeof(uintptr_t) * maxDescriptorSets, alignof(uintptr_t));
+		descriptorSets = (ShaderResourceSet**)shaderResourceMemoryAllocator->Allocate(sizeof(ShaderResourceSet*) * maxDescriptorSets, alignof(ShaderResourceSet*));
 	}
 
-	int AddShaderToSets(uintptr_t location)
+	int AddShaderToSets(ShaderResourceSet* location)
 	{
 		int indexRet = descriptorSetHandles.Allocate();
 
@@ -42,12 +42,75 @@ struct ShaderResourceManager
 		return indexRet;
 	}
 
-	void SetVariableArrayCount(ShaderResourceSetContext* context, int descriptorSet, int bindingIndex, int varArrayCount)
+	int GetConstantBufferCount(int descriptorSet)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		
-		uintptr_t* setOffsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		ShaderResourceSet* set = descriptorSets[descriptorSet];
+
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
+
+		int iter = set->bindingCount - 1;
+
+		int count = 0;
+
+		while (iter >= 0)
+		{
+			ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[iter--]);
+			if (ret->type == ShaderResourceType::CONSTANT_BUFFER) count++;
+			else break;
+		}
+
+		return count;
+	}
+
+	ShaderResourceHeader* GetConstantBuffer(int descriptorSet, int constantBuffer)
+	{
+		ShaderResourceSet* set = descriptorSets[descriptorSet];
+
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
+
+		ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[set->bindingCount - (constantBuffer + 1)]);
+
+		if (ret->type != ShaderResourceType::CONSTANT_BUFFER) return nullptr;
+
+		return ret;
+	}
+};
+
+struct ShaderResourceSetHandle
+{
+	ShaderResourceSetHandle() = default;
+
+	ShaderResourceSetHandle(int _descriptorManagerIndex, int _descriptorSetIndex)
+		:
+		descriptorManagerIndex(_descriptorManagerIndex), descriptorSetIndex(_descriptorSetIndex)
+	{
+
+	}
+
+	int descriptorManagerIndex;
+	int descriptorSetIndex;
+};
+
+struct ShaderResourceSetBuilder
+{
+	ShaderResourceSet* set;
+	ShaderResourceSetHandle handle{};
+
+	ShaderResourceSetBuilder(int _descriptorManagerIndex, int _descriptorSetIndex, ShaderResourceSet* _setPtr)
+		:
+		set(_setPtr), handle(_descriptorManagerIndex, _descriptorSetIndex)
+	{
+
+	}
+
+	ShaderResourceSetHandle operator()()
+	{
+		return handle;
+	}
+
+	void SetVariableArrayCount(ShaderResourceSetContext* context, int bindingIndex, int varArrayCount)
+	{
+		uintptr_t* setOffsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceHeader* header = (ShaderResourceHeader*)setOffsets[bindingIndex];
 
@@ -60,11 +123,9 @@ struct ShaderResourceManager
 
 	}
 
-	void BindBufferToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* allocationIndex, int* offsets,  int firstBuffer, int bufferCount, int bindingIndex)
+	void BindBufferToShaderResource(ShaderResourceSetContext* context, int* allocationIndex, int* offsets, int firstBuffer, int bufferCount, int bindingIndex)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* setOffsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* setOffsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceBuffer* header = (ShaderResourceBuffer*)setOffsets[bindingIndex];
 
@@ -77,11 +138,9 @@ struct ShaderResourceManager
 		header->bufferCount = bufferCount;
 	}
 
-	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
@@ -93,11 +152,9 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindSamplerResourceToShaderResource(int descriptorSet, int* indices, int samplerCount, int firstSampler, int bindingIndex)
+	void BindSamplerResourceToShaderResource(int* indices, int samplerCount, int firstSampler, int bindingIndex)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceSampler* header = (ShaderResourceSampler*)offsets[bindingIndex];
 
@@ -109,11 +166,9 @@ struct ShaderResourceManager
 		header->firstSampler = firstSampler;
 	}
 
-	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int descriptorSet, int* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceImage* header = (ShaderResourceImage*)offsets[bindingIndex];
 
@@ -125,34 +180,27 @@ struct ShaderResourceManager
 		header->firstTexture = firstTexture;
 	}
 
-	void BindBufferView(ShaderResourceSetContext* context, int descriptorSet, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
+	void BindBufferView(ShaderResourceSetContext* context, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceBufferView* header = (ShaderResourceBufferView*)offsets[bindingIndex];
 
 		if (header->type != ShaderResourceType::BUFFER_VIEW)
 			return;
 
-
 		header->viewCount = viewCount;
 		header->firstView = firstView;
 		header->allocationIndex = allocationIndex;
 	}
 
-	void BindBarrier(ShaderResourceSetContext* context, int descriptorSet, int binding, BarrierStage stage, BarrierAction action)
+	void BindBarrier(ShaderResourceSetContext* context, int binding, BarrierStage stage, BarrierAction action)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
-
-
-		head = offsets[binding];
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
+		
+		uintptr_t head = offsets[binding];
+		
 		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
-
-
 
 		switch (desc->type)
 		{
@@ -188,14 +236,12 @@ struct ShaderResourceManager
 		}
 	}
 
-	void BindImageBarrier(ShaderResourceSetContext* context, int descriptorSet, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
+	void BindImageBarrier(ShaderResourceSetContext* context, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);;
 
-
-		head = offsets[binding];
+		uintptr_t head = offsets[binding];
+		
 		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
 
 		if (desc->type != ShaderResourceType::SAMPLER2D && desc->type != ShaderResourceType::SAMPLERCUBE && desc->type != ShaderResourceType::SAMPLER3D && desc->type != ShaderResourceType::IMAGESTORE2D && desc->type != ShaderResourceType::IMAGE2D)
@@ -235,11 +281,9 @@ struct ShaderResourceManager
 		}
 	}
 
-	ShaderResourceHeader* GetConstantBuffer(int descriptorSet, int constantBuffer)
+	ShaderResourceHeader* GetConstantBuffer(int constantBuffer)
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		ShaderResourceHeader* ret = (ShaderResourceHeader*)(offsets[set->bindingCount - (constantBuffer + 1)]);
 
@@ -248,11 +292,9 @@ struct ShaderResourceManager
 		return ret;
 	}
 
-	int GetConstantBufferCount(int descriptorSet)
+	int GetConstantBufferCount()
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		int iter = set->bindingCount - 1;
 
@@ -268,16 +310,14 @@ struct ShaderResourceManager
 		return count;
 	}
 
-	int GetBarrierCount(int descriptorSet)
+	int GetBarrierCount()
 	{
-		uintptr_t head = descriptorSets[descriptorSet];
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
 		return set->barrierCount;
 	}
 
-	void UploadConstant(ShaderResourceSetContext* context, int descriptorset, void* data, int bufferLocation)
+	void UploadConstant(ShaderResourceSetContext* context, void* data, int bufferLocation)
 	{
-		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(descriptorset, bufferLocation);
+		ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(bufferLocation);
 		if (!header) return;
 		header->data = data;
 	}

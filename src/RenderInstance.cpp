@@ -2001,11 +2001,12 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 		if (index != previousBuffer)
 		{
 			builder = dev->UpdateDescriptorSet(index);
+			
 			previousBuffer = index;
 
-			uintptr_t head = manager->descriptorSets[region.descriptorSet];
-			set = (ShaderResourceSet*)head;
-			offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+			set = manager->descriptorSets[region.descriptorSet];
+			
+			offsets = (uintptr_t*)(set + 1);
 		}
 
 		switch (region.type)
@@ -2536,7 +2537,7 @@ int RenderInstance::CreateDSVMemoryPool(int deviceSelection, size_t size, ImageF
 	return CreateImagePool(deviceSelection, size, format, maxWidth, maxHeight, true);
 }
 
-int RenderInstance::AllocateShaderResourceSet(int descriptorManagerIndex, int shaderGraphIndex, int targetSet, int setCount)
+ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descriptorManagerIndex, int shaderGraphIndex, int targetSet, int setCount)
 { 
 	ShaderResourceManager* manager = descriptorManagers.Get(descriptorManagerIndex);
 
@@ -2698,7 +2699,9 @@ int RenderInstance::AllocateShaderResourceSet(int descriptorManagerIndex, int sh
 		offset[desc->binding] = (uintptr_t)desc;
     }
 
-	return manager->AddShaderToSets((uintptr_t)set);
+	int descriptorSetIndex = manager->AddShaderToSets(set);
+
+	return { descriptorManagerIndex, descriptorSetIndex, set };
 }
 
 int RenderInstance::CreateAttachmentGraph(int deviceSelection, StringView* attachmentLayout, int* subAttachCount)
@@ -3004,9 +3007,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	uintptr_t head = descriptorManager->descriptorSets[descriptorSet];
-	ShaderResourceSet* set = (ShaderResourceSet*)head;
-	uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+	ShaderResourceSet* set = descriptorManager->descriptorSets[descriptorSet];
+
+	uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 	int frames = set->setCount;	
 
@@ -3172,8 +3175,8 @@ int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIn
 	{
 		ShaderResourceManager* descriptorManager = descriptorManagers.Get(info->descriptorsetid[i].descriptorManagerIndex);
 		posStruct->resourceSets[i] = info->descriptorsetid[i];
-		CreateShaderResourceSet(descriptorManager, deviceSelection, info->descriptorsetid[i].descriptorIndex);
-		pushRangeCount += descriptorManager->GetConstantBufferCount(info->descriptorsetid[i].descriptorIndex);
+		CreateShaderResourceSet(descriptorManager, deviceSelection, info->descriptorsetid[i].descriptorSetIndex);
+		pushRangeCount += descriptorManager->GetConstantBufferCount(info->descriptorsetid[i].descriptorSetIndex);
 	}
 
 	posStruct->pushRangeCount = pushRangeCount;
@@ -3274,8 +3277,8 @@ int RenderInstance::CreateComputePipelineObject(int deviceSelection, ComputeInte
 	{
 		ShaderResourceManager* descriptorManager = descriptorManagers.Get(info->descriptorsetid[i].descriptorManagerIndex);
 		posStruct->resourceSets[i] = info->descriptorsetid[i];
-		CreateShaderResourceSet(descriptorManager, deviceSelection, info->descriptorsetid[i].descriptorIndex);
-		pushRangeCount += descriptorManager->GetConstantBufferCount(info->descriptorsetid[i].descriptorIndex);
+		CreateShaderResourceSet(descriptorManager, deviceSelection, info->descriptorsetid[i].descriptorSetIndex);
+		pushRangeCount += descriptorManager->GetConstantBufferCount(info->descriptorsetid[i].descriptorSetIndex);
 	}
 
 	posStruct->pushRangeCount = pushRangeCount;
@@ -3339,14 +3342,14 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 				{
 					ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[ii].descriptorManagerIndex);
 
-					rcb.BindComputeDescriptorSets(descriptorManager->descriptorSetHandles[handle->resourceSets[ii].descriptorIndex], currentFrame, 1, ii, 0, nullptr);
+					rcb.BindComputeDescriptorSets(descriptorManager->descriptorSetHandles[handle->resourceSets[ii].descriptorSetIndex], currentFrame, 1, ii, 0, nullptr);
 				}
 
 				for (uint32_t ii = 0, jj = 0, constantBufferPerSet = 0; ii < handle->pushRangeCount && jj < handle->resourceSetCount;)
 				{
 					ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[jj].descriptorManagerIndex);
 
-					ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager->GetConstantBuffer(handle->resourceSets[jj].descriptorIndex, constantBufferPerSet++);
+					ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager->GetConstantBuffer(handle->resourceSets[jj].descriptorSetIndex, constantBufferPerSet++);
 					if (!pushArgs)
 					{
 						jj++;
@@ -3471,7 +3474,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 						{
 							ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[ii].descriptorManagerIndex);
 
-							rcb.BindGraphicsDescriptorSets(descriptorManager->descriptorSetHandles[handle->resourceSets[ii].descriptorIndex], currentFrame, 1, ii, 0, nullptr);
+							rcb.BindGraphicsDescriptorSets(descriptorManager->descriptorSetHandles[handle->resourceSets[ii].descriptorSetIndex], currentFrame, 1, ii, 0, nullptr);
 						}
 
 						if (handle->vertexBufferIndex != -1)
@@ -3484,7 +3487,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 						{
 							ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[ii].descriptorManagerIndex);
 
-							ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager->GetConstantBuffer(handle->resourceSets[jj].descriptorIndex, constantBufferPerSet++);
+							ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager->GetConstantBuffer(handle->resourceSets[jj].descriptorSetIndex, constantBufferPerSet++);
 							
 							if (!pushArgs)
 							{
@@ -3811,7 +3814,7 @@ void RenderInstance::InsertTransferCommand(int allocationIndex, int size, int al
 
 }
 
-void RenderInstance::UpdateShaderResourceArray(int descriptorManagerIndex, int descriptorid, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData)
+void RenderInstance::UpdateShaderResourceArray(ShaderResourceSetHandle handle, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData)
 {
 	RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandResource));
 
@@ -3842,13 +3845,13 @@ void RenderInstance::UpdateShaderResourceArray(int descriptorManagerIndex, int d
 	}
 	}
 
-	ShaderResourceManager* descriptorManager = descriptorManagers.Get(descriptorManagerIndex);
+	ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle.descriptorManagerIndex);
 
-	ShaderResourceSet* set = (ShaderResourceSet*)descriptorManager->descriptorSets[descriptorid];
+	ShaderResourceSet* set = descriptorManager->descriptorSets[handle.descriptorSetIndex];
 
 	rducr->bindingindex = bindingindex;
 	rducr->updateType = DriverUpdateType::RESOURCEUPDATE;
-	rducr->descriptorIdManagerIndex = PACK_DESCRIPTOR_MANAGER_INDEX(descriptorManagerIndex) | PACK_DESCRIPTOR_SET_INDEX(descriptorid);
+	rducr->descriptorIdManagerIndex = PACK_DESCRIPTOR_MANAGER_INDEX(handle.descriptorManagerIndex) | PACK_DESCRIPTOR_SET_INDEX(handle.descriptorSetIndex);
 	rducr->type = type;
 	rducr->cachedDataSize = argSize;
 	rducr->data = argData;
@@ -3856,7 +3859,7 @@ void RenderInstance::UpdateShaderResourceArray(int descriptorManagerIndex, int d
 }
 
 
-void RenderInstance::UpdateBufferResourceArray(int descriptorManagerIndex, int descriptorid, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData)
+void RenderInstance::UpdateBufferResourceArray(ShaderResourceSetHandle handle, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData)
 {
 	RenderDriverUpdateCommandResource* rducr = (RenderDriverUpdateCommandResource*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandResource));
 
@@ -3886,13 +3889,13 @@ void RenderInstance::UpdateBufferResourceArray(int descriptorManagerIndex, int d
 	}
 	}
 
-	ShaderResourceManager* descriptorManager = descriptorManagers.Get(descriptorManagerIndex);
+	ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle.descriptorManagerIndex);
 
-	ShaderResourceSet* set = (ShaderResourceSet*)descriptorManager->descriptorSets[descriptorid];
+	ShaderResourceSet* set = descriptorManager->descriptorSets[handle.descriptorSetIndex];
 
 	rducr->bindingindex = bindingindex;
 	rducr->updateType = DriverUpdateType::RESOURCEUPDATE;
-	rducr->descriptorIdManagerIndex = PACK_DESCRIPTOR_MANAGER_INDEX(descriptorManagerIndex) | PACK_DESCRIPTOR_SET_INDEX(descriptorid);
+	rducr->descriptorIdManagerIndex = PACK_DESCRIPTOR_MANAGER_INDEX(handle.descriptorManagerIndex) | PACK_DESCRIPTOR_SET_INDEX(handle.descriptorSetIndex);
 	rducr->type = type;
 	rducr->cachedDataSize = argSize;
 	rducr->data = argData;
@@ -3968,7 +3971,7 @@ void RenderInstance::SwapUpdateCommands()
 }
 
 
-int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorManagerIndex, int descriptorSet, int bindingIndex, int textureStart)
+int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart)
 {
 	AttachmentGraphInstance* currentGraphInstance = attachmentGraphsInstances.Get(frameGraph);
 
@@ -3991,7 +3994,7 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 	update.resourceDstBegin = textureStart;
 	update.resourceHandles = textureIds;
 
-	UpdateShaderResourceArray(descriptorManagerIndex, descriptorSet, bindingIndex, ShaderResourceType::IMAGE2D, &update);
+	UpdateShaderResourceArray(handle, bindingIndex, ShaderResourceType::IMAGE2D, &update);
 
 	return imageCount;
 }
@@ -4245,7 +4248,7 @@ int RenderInstance::CreateDescriptorHeap(int deviceSelection, DescriptorTypes* t
 	return descriptorManagerIndex;
 }
 
-void RenderInstance::AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, DescriptorPipelineInformation* descriptorid, int descriptorcount)
+void RenderInstance::AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -4254,12 +4257,10 @@ void RenderInstance::AddVulkanMemoryBarrier(int deviceSelection, RecordingBuffer
 	for (int i = 0; i < descriptorcount; i++)
 	{
 		ShaderResourceManager* manager = descriptorManagers.Get(descriptorid[i].descriptorManagerIndex);
-
-		uintptr_t head = manager->descriptorSets[descriptorid[i].descriptorIndex];
 		
-		ShaderResourceSet* set = (ShaderResourceSet*)head;
+		ShaderResourceSet* set = manager->descriptorSets[descriptorid[i].descriptorSetIndex];
 
-		uintptr_t* offsets = (uintptr_t*)(head + sizeof(ShaderResourceSet));
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
 
 		int counter = 0;
 

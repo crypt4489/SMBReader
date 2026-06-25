@@ -9,7 +9,6 @@
 #include "math/VertexTypes.h"
 #include "ShaderManagement.h"
 #include "RenderInstanceManagement.h"
-#include "ShaderResourceSet.h"
 #include "WindowManager.h"
 
 namespace API 
@@ -180,11 +179,11 @@ struct RenderInstance
 
 	void CreateShaderResourceMap(int deviceSelection, ShaderGraph *graph);
 
-	int AllocateShaderResourceSet(int descriptorManagerIndex, int shaderGraphIndex, int targetSet, int setCount);
+	ShaderResourceSetBuilder AllocateShaderResourceSet(int descriptorManagerIndex, int shaderGraphIndex, int targetSet, int setCount);
 
 	EntryHandle CreateShaderResourceSet(ShaderResourceManager* descriptorManager, int deviceSelection, int descriptorSet);
 
-	void AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, DescriptorPipelineInformation* descriptorid, int descriptorcount);
+	void AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
@@ -204,9 +203,9 @@ struct RenderInstance
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
 
-	void UpdateShaderResourceArray(int descriptorManagerIndex, int descriptorid, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData);
+	void UpdateShaderResourceArray(ShaderResourceSetHandle handle, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData);
 
-	void UpdateBufferResourceArray(int descriptorManagerIndex, int descriptorid, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData);
+	void UpdateBufferResourceArray(ShaderResourceSetHandle handle, int bindingindex, ShaderResourceType type, BufferArrayUpdate* resourceArrayData);
 
 	void SwapUpdateCommands();
 
@@ -235,7 +234,7 @@ struct RenderInstance
 
 	void AddCommandQueue(int index, GPUCommandStreamType type);
 
-	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int descriptorManagerIndex, int descriptorSet, int bindingIndex, int textureStart);
+	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart);
 
 	void PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex);
 	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount, uint32_t vertexBuffersubAlloc);

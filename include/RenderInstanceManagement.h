@@ -1,8 +1,9 @@
 #pragma once
 
 #include <atomic>
-#include <cstdint>
+#include <stdint.h>
 #include "CommonRenderTypes.h"
+#include "ShaderResourceSet.h"
 
 enum RenderingBackend
 {
@@ -48,12 +49,6 @@ struct BufferArrayUpdate
 	int* allocationIndices;
 };
 
-struct DescriptorPipelineInformation
-{
-	int descriptorManagerIndex;
-	int descriptorIndex;
-};
-
 struct GraphicsIntermediaryPipelineInfo
 {
 	uint32_t drawType;
@@ -61,7 +56,7 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t vertexCount;
 	uint32_t pipelinename;
 	uint32_t descCount;
-	DescriptorPipelineInformation* descriptorsetid;
+	ShaderResourceSetHandle* descriptorsetid;
 	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t instanceCount;
@@ -80,7 +75,7 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t z;
 	uint32_t pipelinename;
 	uint32_t descCount;
-	DescriptorPipelineInformation* descriptorsetid;
+	ShaderResourceSetHandle* descriptorsetid;
 };
 
 struct BufferMemoryTransferRegion
@@ -140,7 +135,7 @@ struct PipelineHandle
 	int group;
 	int numHandles;
 	int pipelineIdentifierGroup;
-	DescriptorPipelineInformation resourceSets[16];
+	ShaderResourceSetHandle resourceSets[16];
 	int resourceSetCount;
 	int vertexBufferIndex;
 	uint32_t vertexBufferOffset;
