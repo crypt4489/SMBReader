@@ -185,6 +185,8 @@ struct RenderInstance
 
 	void AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
 
+	void AddVulkanMemoryBarrier2(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
 	void EndFrame(int deviceSelection);

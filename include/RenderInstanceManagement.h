@@ -717,7 +717,7 @@ struct ShaderResourceUpdatePool
 	}
 };
 
-enum ResourceType
+enum ResourceStatusType
 {
 	BUFFER_RESOURCE = 1,
 	IMAGE_RESOURCE = 2,
@@ -725,7 +725,7 @@ enum ResourceType
 
 struct ResourceStatus
 {
-	ResourceType resourceType;
+	ResourceStatusType resourceType;
 	BarrierStage currStage;
 	BarrierAction currAction;
 	ImageLayout currentLayout;
@@ -810,6 +810,11 @@ struct RenderTextureDescription
 {
 	EntryHandle textureIndex;
 	int resourceStatusIndex;
+	ImageFormat format; 
+	uint32_t imageHeight;
+	uint32_t imageWidth;
+	uint32_t mipLayers;
+	uint32_t arrayLayers;
 };
 
 struct RenderPipelineDescription

@@ -52,7 +52,9 @@ enum class ImageLayout
 	PRESENT = 5,
 	DEPTHATTACHMENT = 6,
 	STENCILATTACHMENT = 7,
-	GENERAL = 8
+	GENERAL = 8,
+	TRANSFER_DEST_OPTIMAL = 9,
+	TRANSFER_SRC_OPTIMAL = 10,
 };
 
 enum class ImageUsage
@@ -95,6 +97,7 @@ enum BarrierStageBits
 	FRAGMENT_BARRIER = 8,
 	BEGINNING_OF_PIPE = 16,
 	INDIRECT_DRAW_BARRIER = 32,
+	TRANSFER_STAGE = 64,
 };
 
 typedef int BarrierAction;

@@ -674,6 +674,10 @@ struct VKDevice
 		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
 		uint32_t mips, uint32_t layers, EntryHandle queueManagerIndex);
 
+	int TransitionImageLayout(RecordingBufferObject* rbo, EntryHandle imageIndex,
+		VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout,
+		uint32_t mips, uint32_t layers);
+
 	DescriptorSetBuilder* UpdateDescriptorSet(EntryHandle descriptorHandle);
 
 	int CommandBufferWaitOn(uint64_t timeout, EntryHandle bufferIndex);
@@ -698,14 +702,14 @@ struct VKDevice
 	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format, size_t stagingOffsetStart, EntryHandle queueManagerIndex
+		int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, EntryHandle queueManagerIndex
 	);
 
 	int UploadImageData(EntryHandle textureIndex,
 		char* imageData, size_t totalImageDataSize,
 		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format, size_t stagingOffsetStart, RecordingBufferObject* rbo
+		int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, RecordingBufferObject* rbo
 	);
 
 	int WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* destOffsets, size_t cumulativesize, size_t* stagingOffsets, int entries, RecordingBufferObject* rbo);

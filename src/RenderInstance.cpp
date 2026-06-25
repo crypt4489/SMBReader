@@ -347,6 +347,12 @@ namespace API
 		case ImageLayout::PRESENT:
 			outLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			break;
+		case ImageLayout::TRANSFER_DEST_OPTIMAL:
+			outLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			break;
+		case ImageLayout::TRANSFER_SRC_OPTIMAL:
+			outLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			break;
 		}
 
 		return outLayout;
@@ -2025,9 +2031,17 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 		{
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 
+			ShaderResourceImage* imageResource = (ShaderResourceImage*)offsets[region.bindingIndex];
+
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
 				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+
+				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
+				{
+					imageResource->textureHandles[iter + update->resourceDstBegin] = update->resourceHandles[iter];
+					imageResource->textureCount = std::max(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
+				}
 			}
 			break;
 		}
@@ -2137,9 +2151,18 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 
 		EntryHandle handle = textureResourceHandles[region.textureIndex].textureIndex;
 
+		ResourceStatus* resourceStatus = resourceStatuses.Get(textureResourceHandles[region.textureIndex].resourceStatusIndex);
+
+		ImageLayout currentLayout = resourceStatus->currentLayout;
+
+		resourceStatus->currentLayout = ImageLayout::TRANSFER_DEST_OPTIMAL;
+		resourceStatus->currStage = BarrierStageBits::TRANSFER_STAGE;
+		resourceStatus->currAction = BarrierActionBits::WRITE_SHADER_RESOURCE;
+
 		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
 
-		dev->UploadImageData(handle,
+		dev->UploadImageData(
+			handle,
 			(char*)region.data,
 			region.totalSize,
 			deviceContainer->stagingBuffers[currentFrame],
@@ -2148,6 +2171,7 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 			region.mipLevels,
 			region.layers,
 			API::ConvertImageFormatToVulkanFormat(region.format),
+			API::ConvertImageLayoutToVulkanImageLayout(currentLayout),
 			currentImageOffsetInUploadArena,
 			rbo
 		);
@@ -2360,9 +2384,21 @@ int RenderInstance::CreateImageHandle(
 
 	int textureIndex = textureResourceHandles.Allocate();
 
-	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
+	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
-	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
+	renderTexDesc->arrayLayers = 1;
+	renderTexDesc->mipLayers = mipLevels;
+	renderTexDesc->imageWidth = width;
+	renderTexDesc->imageHeight = height;
+	renderTexDesc->format = format;
+	renderTexDesc->textureIndex = textureHandle;
+
+	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
+
+	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
+
+	textureStatus->currentLayout = ImageLayout::UNDEFINED;
+	textureStatus->resourceType = ResourceStatusType::IMAGE_RESOURCE;
 
 	return textureIndex;
 }
@@ -2395,9 +2431,21 @@ int RenderInstance::CreateStorageImage(
 
 	int textureIndex = textureResourceHandles.Allocate();
 
-	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
+	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
-	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
+	renderTexDesc->arrayLayers = 1;
+	renderTexDesc->mipLayers = mipLevels;
+	renderTexDesc->imageWidth = width;
+	renderTexDesc->imageHeight = height;
+	renderTexDesc->format = format;
+	renderTexDesc->textureIndex = textureHandle;
+
+	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
+
+	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
+
+	textureStatus->currentLayout = ImageLayout::UNDEFINED;
+	textureStatus->resourceType = ResourceStatusType::IMAGE_RESOURCE;
 
 	return textureIndex;
 }
@@ -2431,9 +2479,21 @@ int RenderInstance::CreateCubeImageHandle(
 
 	int textureIndex = textureResourceHandles.Allocate();
 
-	textureResourceHandles.pool[textureIndex].textureIndex = textureHandle;;
+	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
-	textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatuses.Allocate();
+	renderTexDesc->arrayLayers = 6;
+	renderTexDesc->mipLayers = mipLevels;
+	renderTexDesc->imageWidth = width;
+	renderTexDesc->imageHeight = height;
+	renderTexDesc->format = format;
+	renderTexDesc->textureIndex = textureHandle;
+
+	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
+
+	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
+
+	textureStatus->currentLayout = ImageLayout::UNDEFINED;
+	textureStatus->resourceType = ResourceStatusType::IMAGE_RESOURCE;
 
 	return textureIndex;
 }
@@ -2586,7 +2646,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		{
 			ShaderResourceImage* image = (ShaderResourceImage*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImage));
 			
-			image->textureHandles = nullptr;
+			image->textureHandles = (int*)storageAllocator->Allocate(sizeof(int) * (DESCRIPTOR_COUNT_MASK & image->arrayCount), alignof(int));
 			image->textureCount = 0;
 			image->firstTexture = 0;
 
@@ -3037,15 +3097,18 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 			case ShaderResourceType::SAMPLERSTATE:
 			{
 			ShaderResourceSampler* image = (ShaderResourceSampler*)header;
+			/*
 			if (!image->samplerHandles) break;
 			for (int sampler = 0; sampler < image->samplerCount; sampler++)
 			{
 				builder->AddSamplerDescription(samplerResourceHandles[image->samplerHandles[sampler]], image->firstSampler + sampler, i, 0, frames);
 			}
+			*/
 			break;
 			}
 			case ShaderResourceType::IMAGE2D:
 			{
+				/*
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
 				if (!image->textureHandles) break;
 
@@ -3053,7 +3116,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 				{
 					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, image->firstTexture + imageIndex, i, 0, frames);
 				}
-
+				*/
 			
 				break;
 			}
@@ -3418,6 +3481,19 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 						currClear->depthStencil.stencil = instances[g].clear.val.sdata;
 						clearCount++;
 						break;
+					}
+				}
+
+				if (possibleQueueIndex >= 0)
+				{
+					RenderQueue* queue = renderTargetQueues.Get(possibleQueueIndex);
+
+					for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
+					{
+						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
+
+						AddVulkanMemoryBarrier2(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
+
 					}
 				}
 
@@ -3985,6 +4061,12 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 	{
 		int textureIndex = textureResourceHandles.Allocate();
 		textureResourceHandles.pool[textureIndex].textureIndex = imageViews[i];
+		textureResourceHandles.pool[textureIndex].imageHeight = 0xFFFFFFFF;
+		textureResourceHandles.pool[textureIndex].imageWidth = 0xCFFFFFFF;
+		int resourceStatusIndex = resourceStatuses.Allocate();
+		textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatusIndex;
+		resourceStatuses.pool[resourceStatusIndex].resourceType = IMAGE_RESOURCE;
+		resourceStatuses.pool[resourceStatusIndex].currentLayout = ImageLayout::SHADERREADABLE;
 		textureIds[i] = textureIndex;
 	}
 
@@ -4170,7 +4252,7 @@ int RenderInstance::CreateWindowedSurface(OSWindowInternalData* windowData)
 {
 	int windowAllocIndex = windowsSurfaces.Allocate();
 
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32)
 	EntryHandle renderSurfaceIndex = vkInstance->CreateWindowedSurface(windowData->inst, windowData->wnd);
 #else
 	EntryHandle renderSurfaceIndex = EntryHandle();
@@ -4471,6 +4553,67 @@ void RenderInstance::AddVulkanMemoryBarrier(int deviceSelection, RecordingBuffer
 					break;
 				}
 				}
+			}
+		}
+	}
+}
+
+void RenderInstance::AddVulkanMemoryBarrier2(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
+{
+	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+
+	for (int i = 0; i < descriptorcount; i++)
+	{
+		ShaderResourceManager* manager = descriptorManagers.Get(descriptorid[i].descriptorManagerIndex);
+
+		ShaderResourceSet* set = manager->descriptorSets[descriptorid[i].descriptorSetIndex];
+
+		uintptr_t* offsets = (uintptr_t*)(set + 1);
+
+		int counter = 0;
+
+		while (counter < set->bindingCount)
+		{
+			ShaderResourceHeader* header = (ShaderResourceHeader*)offsets[counter++];
+			switch (header->type)
+			{
+			case ShaderResourceType::SAMPLERCUBE:
+			case ShaderResourceType::SAMPLER2D:
+			case ShaderResourceType::IMAGE2D:
+			{
+				ShaderResourceImage* imageBarrier = (ShaderResourceImage*)header;
+
+				int arrayCount = imageBarrier->textureCount;
+
+				if (header->action == ShaderResourceAction::SHADERREAD || header->action == ShaderResourceAction::SHADERREADWRITE)
+				{
+					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
+					{
+						int currImageIndex = imageBarrier->textureHandles[imageIndex];
+
+						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
+
+						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
+
+						if (status->currentLayout != ImageLayout::SHADERREADABLE)
+						{
+							dev->TransitionImageLayout(
+								rcb, desc->textureIndex, 
+								API::ConvertImageFormatToVulkanFormat(desc->format), 
+								API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout), 
+								API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE), 
+								desc->mipLayers, 
+								desc->arrayLayers
+							);
+
+							status->currentLayout = ImageLayout::SHADERREADABLE;
+						}
+					}
+				}
+				break;
+			}
 			}
 		}
 	}
