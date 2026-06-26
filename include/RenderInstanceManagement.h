@@ -61,8 +61,6 @@ struct GraphicsIntermediaryPipelineInfo
 	uint32_t indexCount;
 	uint32_t instanceCount;
 	uint32_t indexSize;
-	uint32_t indexOffset;
-	uint32_t vertexOffset;
 	int indirectAllocation;
 	int indirectDrawCount;
 	int indirectCountAllocation;
@@ -123,11 +121,28 @@ struct RenderAllocation
 	int memIndex;
 };
 
+#define MAKE_SUBALLOCATION_INDEX(x) ((x) |= 0x80000000)
+#define CHECK_SUBALLOCATION_INDEX(x) ((x) & 0x80000000)
+#define GET_SUBALLOCATION_INDEX(x) ((x) & ~(0x80000000))
+
+struct RenderSubAllocation
+{
+	size_t offset;
+	size_t deviceAllocSize;
+	size_t requestedSize;
+	size_t alignment;
+	EntryHandle viewIndex;
+	AllocationType allocType;
+	ComponentFormatType formatType;
+	int structureCopies;
+	int parentAllocation;
+};
+
+
 enum AppPipelineHandleType
 {
 	COMPUTESO,
 	GRAPHICSO,
-	INDIRECTSO,
 };
 
 struct PipelineHandle
@@ -138,9 +153,7 @@ struct PipelineHandle
 	ShaderResourceSetHandle resourceSets[16];
 	int resourceSetCount;
 	int vertexBufferIndex;
-	uint32_t vertexBufferOffset;
 	uint32_t vertexCount;
-	uint32_t indexBufferOffset;
 	int indexBufferHandle;
 	uint32_t indexCount;
 	uint32_t pushRangeCount;
@@ -148,11 +161,7 @@ struct PipelineHandle
 	uint32_t indexSize;
 	uint32_t indirectDrawCount;
 	int indirectBufferHandle;
-	uint32_t indirectBufferOffset;
-	uint32_t indirectBufferFrames;
 	int indirectCountBufferHandle;
-	uint32_t indirectCountBufferOffset;
-	uint32_t indirectCountBufferStride;
 	uint32_t x;
 	uint32_t y;
 	uint32_t z;
@@ -721,6 +730,7 @@ enum ResourceStatusType
 {
 	BUFFER_RESOURCE = 1,
 	IMAGE_RESOURCE = 2,
+	MANAGED_IMAGE_RESOURCE = 3,
 };
 
 struct ResourceStatus
@@ -756,6 +766,7 @@ struct RenderSwapchainData
 	uint32_t height;
 	EntryHandle* rendererWaitSemaphores;
 	EntryHandle* rendererFinishedSemaphores;
+	int* textureIds;
 };
 
 struct RenderWindowSpecificData

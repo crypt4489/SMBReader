@@ -577,6 +577,8 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 
 	allocations.Create(instanceStorageAllocator, info->maxAllocations);
 
+	subAllocations.Create(instanceStorageAllocator, info->maxSubAllocations);
+
 	descriptorManagers.Create(instanceStorageAllocator, info->maxDescriptorManagers);
 
 	shaderGraphs.Create(instanceStorageAllocator, info->maxShaderGraphs, info->maxShaderHandles);
@@ -641,6 +643,12 @@ void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandl
 				{
 					dev->DestroyImage(inst->attachmentImage[sampIndex][d]);
 					dev->DestroyImageView(inst->attachmentImageView[sampIndex][d]);
+
+					RenderTextureDescription* texDesc = textureResourceHandles.Get(inst->textureIds[sampIndex][d]);
+
+					resourceStatuses.Free(texDesc->resourceStatusIndex);
+
+					textureResourceHandles.Free(inst->textureIds[sampIndex][d]);
 				}
 
 				sampLo <<= 1;
@@ -1070,18 +1078,18 @@ int RenderInstance::CreateSwapChainAttachment(int deviceSelection, int swapChain
 
 	EntryHandle* backBuffers = swapChain->imageViews;
 
-	return CreateAttachmentResources(deviceSelection, graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swcData->width, swcData->height, RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
+	return CreateAttachmentResources(deviceSelection, graphIndex, renderPassIndex, swapChain->imageCount, backBuffers, swcData->textureIds, swcData->width, swcData->height, RenderPassType::SWAPCHAIN_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
 }
 
 int RenderInstance::CreatePerFrameAttachment(int deviceSelection, int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
-	return CreateAttachmentResources(deviceSelection, graphIndex, renderPassIndex, imageCount, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
+	return CreateAttachmentResources(deviceSelection, graphIndex, renderPassIndex, imageCount, nullptr, nullptr, width, height, RenderPassType::PER_FRAME_IMAGE_COUNT, clears, rtvAllocator, dsvAllocator, rtvPoolIndex, dsvPoolIndex);
 }
 
 int RenderInstance::CreateAttachmentResources(
 	int deviceSelection,
 	int graphIndex, int renderPassIndex, int imageCount, 
-	EntryHandle* backBufferViews, uint32_t width, uint32_t height, 
+	EntryHandle* backBufferViews, int* backBufferTexturesIds, uint32_t width, uint32_t height, 
 	RenderPassType rpType, AttachmentClear* clears,
 	DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
@@ -1135,7 +1143,10 @@ int RenderInstance::CreateAttachmentResources(
 		if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
 		{
 			resourceInst->attachmentImageView = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * 1);
+			resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * 1);
+			
 			resourceInst->attachmentImageView[0] = backBufferViews;
+			resourceInst->textureIds[0] = backBufferTexturesIds;
 		}
 		else
 		{
@@ -1143,15 +1154,17 @@ int RenderInstance::CreateAttachmentResources(
 			{
 				resourceInst->attachmentImage = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * sampleCount);
 
+				resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * sampleCount);
+
 				for (int c = 0; c<sampleCount; c++)
 				{ 
 					resourceInst->attachmentImage[c] = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
+					resourceInst->textureIds[c] = (int*)storageAllocator->Allocate(sizeof(int) * imageCount);
 				}
 			}
 
 			if (!resourceInst->attachmentImageView)
 			{
-
 				resourceInst->attachmentImageView = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * sampleCount);
 
 				for (int c = 0; c < sampleCount; c++)
@@ -1203,6 +1216,28 @@ int RenderInstance::CreateAttachmentResources(
 						resourceInst->attachmentImageView[v][g]
 							=
 							dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
+
+						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+						desc->arrayLayers = 1;
+						desc->mipLayers = 1;
+
+						desc->imageHeight = imageHeight;
+						desc->imageWidth = imageWidth;
+						
+						desc->format = resourceTempl->format;
+
+						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+
+						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+						status->currentLayout = ImageLayout::UNDEFINED;
 					}
 
 					sampLo <<= 1;
@@ -1234,6 +1269,28 @@ int RenderInstance::CreateAttachmentResources(
 								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
+
+						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+						desc->arrayLayers = 1;
+						desc->mipLayers = 1;
+
+						desc->imageHeight = imageHeight;
+						desc->imageWidth = imageWidth;
+
+						desc->format = resourceTempl->format;
+
+						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+
+						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+						status->currentLayout = ImageLayout::UNDEFINED;
 					}
 
 					sampLo <<= 1;
@@ -1263,6 +1320,28 @@ int RenderInstance::CreateAttachmentResources(
 								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
+
+						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+						desc->arrayLayers = 1;
+						desc->mipLayers = 1;
+
+						desc->imageHeight = imageHeight;
+						desc->imageWidth = imageWidth;
+
+						desc->format = resourceTempl->format;
+
+						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+
+						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+						status->currentLayout = ImageLayout::UNDEFINED;
 					}
 					sampLo <<= 1;
 
@@ -1293,6 +1372,29 @@ int RenderInstance::CreateAttachmentResources(
 								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
 
 						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
+
+						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+						desc->arrayLayers = 1;
+						desc->mipLayers = 1;
+
+						desc->imageHeight = imageHeight;
+						desc->imageWidth = imageWidth;
+
+						desc->format = resourceTempl->format;
+
+						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+
+						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+						status->currentLayout = ImageLayout::UNDEFINED;
+
 					}
 					sampLo <<= 1;
 
@@ -1333,6 +1435,29 @@ int RenderInstance::CreateAttachmentResources(
 					resourceInst->attachmentImageView[0][g]
 						=
 						dev->CreateImageView(resourceInst->attachmentImage[0][g], 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+
+					int textureIndex = resourceInst->textureIds[0][g] = textureResourceHandles.Allocate();
+
+					RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+					desc->arrayLayers = 1;
+					desc->mipLayers = 1;
+
+					desc->imageHeight = imageHeight;
+					desc->imageWidth = imageWidth;
+
+					desc->format = resourceTempl->format;
+
+					desc->textureIndex = resourceInst->attachmentImageView[0][g];
+
+					int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+					ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+					status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+					status->currentLayout = ImageLayout::UNDEFINED;
+
 				}
 				break;
 
@@ -1934,17 +2059,61 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 		int handle = region.allocationIndex;
 
 		size_t intSize = region.size;
-		
-		size_t rsize = allocations[handle].requestedSize;
-		size_t align = allocations[handle].alignment;
 
-		rsize *= allocations[handle].structureCopies;
+		size_t rsize = 0, align = 0, intOffset = 0;
 
-		rsize = (rsize + align-1) & ~(align - 1);
+		int bufferHandle = -1;
 
-		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.allocoffset;
+		if (CHECK_SUBALLOCATION_INDEX(handle))
+		{
+			int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle);
 
-		EntryHandle index = bufferHandles[allocations[handle].memIndex].bufferHandle;
+			RenderSubAllocation* subAlloc = subAllocations.Get(subAllocHanlde);
+
+			RenderAllocation* alloc = allocations.Get(subAlloc->parentAllocation);
+
+			rsize = subAlloc->requestedSize;
+			align = subAlloc->alignment;
+
+			rsize *= subAlloc->structureCopies;
+
+			rsize = (rsize + align - 1) & ~(align - 1);
+
+			if (subAlloc->allocType == AllocationType::PERFRAME)
+			{
+				intOffset = region.allocoffset + (currentFrame * rsize) + subAlloc->offset + alloc->offset;
+			}
+			else if (subAlloc->allocType == AllocationType::STATIC)
+			{
+				intOffset = subAlloc->offset + alloc->offset + region.allocoffset;
+			}
+
+			bufferHandle = alloc->memIndex;
+		}
+		else
+		{
+			RenderAllocation* alloc = allocations.Get(handle);
+
+			rsize = alloc->requestedSize;
+			align = alloc->alignment;
+
+			rsize *= alloc->structureCopies;
+
+			rsize = (rsize + align - 1) & ~(align - 1);
+
+			if (alloc->allocType == AllocationType::PERFRAME)
+			{
+				intOffset = (currentFrame * rsize) + alloc->offset + region.allocoffset;;
+			}
+			else if (alloc->allocType == AllocationType::STATIC)
+			{
+				intOffset = alloc->offset + region.allocoffset;
+			}
+
+			bufferHandle = alloc->memIndex;
+		}
+
+		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
 
 		void* data = region.data;
 
@@ -2015,15 +2184,27 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 			offsets = (uintptr_t*)(set + 1);
 		}
 
+		if (!offsets || !set)
+			continue;
+
 		switch (region.type)
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 
+			ShaderResourceSampler* samplerHeader = (ShaderResourceSampler*)offsets[region.bindingIndex];
+
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
 				builder->AddSamplerDescription(samplerResourceHandles[update->resourceHandles[iter]], update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+
+				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
+				{
+					samplerHeader->samplerHandles[iter + update->resourceDstBegin] = update->resourceHandles[iter];
+					samplerHeader->samplerCount = std::max(samplerHeader->samplerCount, (iter + update->resourceDstBegin) + 1);
+				}
+
 			}
 			break;
 		}
@@ -2050,9 +2231,17 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 		{
 			DeviceHandleArrayUpdate* update = (DeviceHandleArrayUpdate*)region.data;
 
+			ShaderResourceImage* imageResource = (ShaderResourceImage*)offsets[region.bindingIndex];
+
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
 				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+
+				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
+				{
+					imageResource->textureHandles[iter + update->resourceDstBegin] = update->resourceHandles[iter];
+					imageResource->textureCount = std::max(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
+				}
 			}
 			break;
 		}
@@ -2211,8 +2400,33 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 	while (link >= 0)
 	{
 		link = driverDeviceMemoryUpdater.PopLink(&region, link, &linkprev);
-		
-		EntryHandle index = bufferHandles[allocations.Get(region.allocationIndex)->memIndex].bufferHandle;
+
+		int bufferHandle = -1;
+
+		size_t currentAllocOffset = -1;
+
+		if (CHECK_SUBALLOCATION_INDEX(region.allocationIndex))
+		{
+			int subAllocHanlde = GET_SUBALLOCATION_INDEX(region.allocationIndex);
+
+			RenderSubAllocation* subAlloc = subAllocations.Get(subAllocHanlde);
+
+			RenderAllocation* alloc = allocations.Get(subAlloc->parentAllocation);
+
+			currentAllocOffset = subAlloc->offset + alloc->offset + region.allocoffset;
+
+			bufferHandle = alloc->memIndex;
+		}
+		else
+		{
+			RenderAllocation* alloc = allocations.Get(region.allocationIndex);
+
+			currentAllocOffset = alloc->offset + region.allocoffset;
+
+			bufferHandle = alloc->memIndex;
+		}
+
+		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
 	
 		if (index != previousBuffer)
 		{
@@ -2230,7 +2444,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 		uploadArenaOffset[batchCounter] = stagingAlloc->Allocate(region.size, 64);
 		batchSizes[batchCounter] = region.size;
 		batchData[batchCounter] = region.data;
-		batchOffsets[batchCounter] = allocations.Get(region.allocationIndex)->offset + region.allocoffset;
+		batchOffsets[batchCounter] = currentAllocOffset;
 
 		batchCounter++;
 	}
@@ -2262,16 +2476,60 @@ void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBuffer
 
 		size_t intSize = region.size;
 
-		size_t rsize = allocations[handle].requestedSize;
-		size_t align = allocations[handle].alignment;
+		size_t rsize = 0, align = 0, intOffset = 0;
 
-		rsize *= allocations[handle].structureCopies;
+		int bufferHandle = -1;
 
-		rsize = (rsize + align - 1) & ~(align - 1);
+		if (CHECK_SUBALLOCATION_INDEX(handle))
+		{
+			int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle);
 
-		size_t intOffset = allocations[handle].offset + (currentFrame * rsize) + region.offset;
+			RenderSubAllocation* subAlloc = subAllocations.Get(subAllocHanlde);
 
-		EntryHandle index = bufferHandles[allocations[handle].memIndex].bufferHandle;
+			RenderAllocation* alloc = allocations.Get(subAlloc->parentAllocation);
+
+			rsize = subAlloc->requestedSize;
+			align = subAlloc->alignment;
+
+			rsize *= subAlloc->structureCopies;
+
+			rsize = (rsize + align - 1) & ~(align - 1);
+
+			if (subAlloc->allocType == AllocationType::PERFRAME)
+			{
+				intOffset = region.offset + (currentFrame * rsize) + subAlloc->offset + alloc->offset;
+			}
+			else if (subAlloc->allocType == AllocationType::STATIC)
+			{
+				intOffset = subAlloc->offset + alloc->offset + region.offset;
+			}
+
+			bufferHandle = alloc->memIndex;
+		}
+		else
+		{
+			RenderAllocation* alloc = allocations.Get(handle);
+
+			rsize = alloc->requestedSize;
+			align = alloc->alignment;
+
+			rsize *= alloc->structureCopies;
+
+			rsize = (rsize + align - 1) & ~(align - 1);
+
+			if (alloc->allocType == AllocationType::PERFRAME)
+			{
+				intOffset = (currentFrame * rsize) + alloc->offset;
+			}
+			else if (alloc->allocType == AllocationType::STATIC)
+			{
+				intOffset = alloc->offset;
+			}
+
+			bufferHandle = alloc->memIndex;
+		}
+
+		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
 
 		rbo->FillBuffer(index, intSize, intOffset, region.fillVal);
 
@@ -2355,6 +2613,62 @@ int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, si
 	}
 
 	return index;
+}
+
+int RenderInstance::CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator)
+{
+	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+
+	switch (bufferAlignmentType)
+	{
+	case BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT:
+		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1);
+		break;
+	case BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT:
+		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1);
+		break;
+	}
+
+	size_t allocSize = ((copiesOfStructure * structureSize) + alignment - 1) & ~(alignment - 1);
+
+	size_t copies = 1;
+
+	switch (allocType)
+	{
+	case AllocationType::STATIC:
+		break;
+	case AllocationType::PERFRAME:
+		copies = MAX_FRAMES_IN_FLIGHT;
+		break;
+	case AllocationType::PERDRAW:
+		break;
+	}
+
+	RenderAllocation* alloc = allocations.Get(parentAllocation);
+
+	size_t location = allocator->Allocate(allocSize * copies, alignment);
+
+	int index = subAllocations.Allocate();
+
+	RenderSubAllocation* subAlloc = subAllocations.Get(index);
+
+	subAlloc->parentAllocation = parentAllocation;
+	subAlloc->offset = location;
+	subAlloc->deviceAllocSize = allocSize * copies;
+	subAlloc->requestedSize = structureSize;
+	subAlloc->alignment = alignment;
+	subAlloc->allocType = allocType;
+	subAlloc->formatType = formatType;
+	subAlloc->structureCopies = copiesOfStructure;
+
+	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
+	{
+		subAlloc->viewIndex = dev->CreateBufferView(bufferHandles[alloc->memIndex].bufferHandle, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, alloc->offset + location, copies);
+	}
+
+	return MAKE_SUBALLOCATION_INDEX(index);
 }
 
 int RenderInstance::CreateImageHandle(
@@ -2627,17 +2941,16 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 
 		if (resource->set != targetSet) continue;
 
-		ShaderResourceHeader* desc = (ShaderResourceHeader*)manager->shaderResourceInstAllocator.Head();;
+		ShaderResourceHeader* desc = (ShaderResourceHeader*)manager->shaderResourceInstAllocator.Head();
 
 		switch (resource->type)
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
-			ShaderResourceSampler* image = (ShaderResourceSampler*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceSampler));
+			ShaderResourceSampler* samplerDeats = (ShaderResourceSampler*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceSampler));
 			
-			image->samplerHandles = nullptr;
-			image->samplerCount = 0;
-			image->firstSampler = 0;
+			samplerDeats->samplerHandles = (int*)manager->shaderResourceInstAllocator.Allocate(sizeof(int) * (DESCRIPTOR_COUNT_MASK & resource->arrayCount), alignof(int));
+			samplerDeats->samplerCount = 0;
 			
 			break;
 		}
@@ -2646,25 +2959,9 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		{
 			ShaderResourceImage* image = (ShaderResourceImage*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImage));
 			
-			image->textureHandles = (int*)storageAllocator->Allocate(sizeof(int) * (DESCRIPTOR_COUNT_MASK & image->arrayCount), alignof(int));
+			image->textureHandles = (int*)manager->shaderResourceInstAllocator.Allocate(sizeof(int) * (DESCRIPTOR_COUNT_MASK & resource->arrayCount), alignof(int));
 			image->textureCount = 0;
-			image->firstTexture = 0;
 
-
-			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
-			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
-			{
-				ShaderResourceImageBarrier* barriers = (ShaderResourceImageBarrier*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImageBarrier)*2);
-				barriers[0].dstStage = ConvertShaderStageToBarrierStage(resource->stages);
-				barriers[0].dstAction = WRITE_SHADER_RESOURCE;
-				barriers[0].type = memBarrierType;
-
-				barriers[1].srcStage = ConvertShaderStageToBarrierStage(resource->stages);
-				barriers[1].srcAction = WRITE_SHADER_RESOURCE;
-				barriers[1].type = memBarrierType;
-
-				set->barrierCount += 2;
-			}
 			break;
 		}
 		case ShaderResourceType::SAMPLER3D:
@@ -2673,22 +2970,9 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		{
 			ShaderResourceImage* image = (ShaderResourceImage*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImage));
 			
-			image->textureHandles = nullptr;
+			image->textureHandles = (int*)manager->shaderResourceInstAllocator.Allocate(sizeof(int) * (DESCRIPTOR_COUNT_MASK & resource->arrayCount), alignof(int));
 			image->textureCount = 0;
-			image->firstTexture = 0;
-
-			memBarrierType = MemoryBarrierType::IMAGE_BARRIER;
-
-			if (resource->action == ShaderResourceAction::SHADERWRITE || resource->action == ShaderResourceAction::SHADERREADWRITE)
-			{
-				ShaderResourceImageBarrier* barriers = (ShaderResourceImageBarrier*)manager->shaderResourceInstAllocator.Allocate(sizeof(ShaderResourceImageBarrier));
-				
-				barriers->srcStage = ConvertShaderStageToBarrierStage(resource->stages);
-				barriers->srcAction = WRITE_SHADER_RESOURCE;
-				barriers->type = memBarrierType;
-				
-				set->barrierCount++;
-			}
+		
 			break;
 		}
 		case ShaderResourceType::CONSTANT_BUFFER:
@@ -2964,6 +3248,8 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 
 	CreateSwapChainData(deviceSelection, swapChainIndex, _width, _height, false);
 
+	VKSwapChain* vkSwcData = dev->GetSwapChain(swapChainIndex);
+
 	RenderSwapchainData* swcData = swapChains.Get(swapChainInternalIndex);
 
 	swcData->swapChainIdx = swapChainIndex;
@@ -2973,10 +3259,35 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 	swcData->rendererWaitSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
 	swcData->rendererFinishedSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
 
+	swcData->textureIds = (int*)storageAllocator->Allocate(sizeof(int) * MAX_FRAMES_IN_FLIGHT);
+
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		swcData->rendererWaitSemaphores[i] = *dev->CreateSemaphores(1);
+		
 		swcData->rendererFinishedSemaphores[i] = *dev->CreateSemaphores(1);
+
+		int textureID = swcData->textureIds[i] = textureResourceHandles.Allocate();
+
+		RenderTextureDescription* desc = textureResourceHandles.Get(textureID);
+
+		desc->arrayLayers = 1;
+
+		desc->imageHeight = _height;
+
+		desc->imageWidth = _width;
+
+		desc->mipLayers = 1;
+
+		desc->format = mainBackBufferColorFormat;
+
+		//desc->textureIndex = vkSwcData->images[i];
+
+		int resourceIndex = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+		ResourceStatus* status = resourceStatuses.Get(resourceIndex);
+
+		status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
 	}
 
 	return swapChainInternalIndex;
@@ -3096,28 +3407,24 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 		{
 			case ShaderResourceType::SAMPLERSTATE:
 			{
-			ShaderResourceSampler* image = (ShaderResourceSampler*)header;
-			/*
-			if (!image->samplerHandles) break;
-			for (int sampler = 0; sampler < image->samplerCount; sampler++)
-			{
-				builder->AddSamplerDescription(samplerResourceHandles[image->samplerHandles[sampler]], image->firstSampler + sampler, i, 0, frames);
-			}
-			*/
-			break;
+				ShaderResourceSampler* image = (ShaderResourceSampler*)header;
+	
+				for (int sampler = 0; sampler < image->samplerCount; sampler++)
+				{
+					builder->AddSamplerDescription(samplerResourceHandles[image->samplerHandles[sampler]], sampler, i, 0, frames);
+				}
+
+				break;
 			}
 			case ShaderResourceType::IMAGE2D:
 			{
-				/*
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				if (!image->textureHandles) break;
-
+				
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, image->firstTexture + imageIndex, i, 0, frames);
+					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, imageIndex, i, 0, frames);
 				}
-				*/
-			
+
 				break;
 			}
 			case ShaderResourceType::IMAGESTORE2D:
@@ -3131,11 +3438,10 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 			case ShaderResourceType::SAMPLERCUBE:
 			{
 				ShaderResourceImage* image = (ShaderResourceImage*)header;
-				if (!image->textureHandles) break;
-
+			
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, image->firstTexture + imageIndex, i, 0, frames);
+					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, imageIndex, i, 0, frames);
 				}
 				
 				break;
@@ -3244,54 +3550,12 @@ int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIn
 
 	posStruct->pushRangeCount = pushRangeCount;
 
-	uint32_t indexOffset = ~0U;
-
-	uint32_t vertexOffset = ~0U;
-
-	uint32_t indirectOffset = ~0U;
-	uint32_t indirectBufferPerFrameSize = 0;
-
-	uint32_t indirectCountOffset = ~0U;
-	uint32_t indirectCountBufferPerFrameSize = 0;
-
-	if (info->indexBufferHandle != ~0)
-	{
-		indexOffset = static_cast<uint32_t>(allocations[info->indexBufferHandle].offset) + info->indexOffset;
-	}
-
-	if (info->vertexBufferHandle != ~0)
-	{
-		vertexOffset = static_cast<uint32_t>(allocations[info->vertexBufferHandle].offset) + info->vertexOffset;
-	}
-
-	if (info->indirectAllocation != ~0)
-	{
-		size_t align = allocations[info->indirectAllocation].alignment;
-		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectAllocation].structureCopies);
-		indirectOffset = static_cast<uint32_t>(allocations[info->indirectAllocation].offset);
-		indirectBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1)) ;
-	}
-
-	if (info->indirectCountAllocation != ~0)
-	{
-		size_t align = allocations[info->indirectCountAllocation].alignment;
-		uint32_t copiesOfstruct = static_cast<uint32_t>(allocations[info->indirectCountAllocation].structureCopies);
-		indirectCountOffset = static_cast<uint32_t>(allocations[info->indirectCountAllocation].offset);
-		indirectCountBufferPerFrameSize = static_cast<uint32_t>(((allocations[info->indirectCountAllocation].requestedSize * copiesOfstruct) + align - 1) & ~(align - 1));
-	}
-
 	posStruct->indexBufferHandle = info->indexBufferHandle;
-	posStruct->indexBufferOffset = indexOffset;
 	posStruct->indexCount = info->indexCount;
 	posStruct->vertexBufferIndex = info->vertexBufferHandle;
-	posStruct->vertexBufferOffset = vertexOffset;
 	posStruct->vertexCount = info->vertexCount;
-	posStruct->indirectBufferFrames = indirectBufferPerFrameSize;
 	posStruct->indirectBufferHandle = info->indirectAllocation;
-	posStruct->indirectBufferOffset = indirectOffset;
 	posStruct->indirectCountBufferHandle = info->indirectCountAllocation;
-	posStruct->indirectCountBufferOffset = indirectCountOffset;
-	posStruct->indirectCountBufferStride = indirectCountBufferPerFrameSize;
 	posStruct->instanceCount = info->instanceCount;
 	posStruct->indexSize = info->indexSize;
 	posStruct->indirectDrawCount = info->indirectDrawCount;
@@ -3492,7 +3756,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 					{
 						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
 
-						AddVulkanMemoryBarrier2(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
+						GenerateGraphicsDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
 
 					}
 				}
@@ -3530,20 +3794,6 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 
 						EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[pipelineOffset + sampleLevelForRenderPass];
 
-						uint32_t drawSize = handle->vertexCount;
-
-						uint32_t perFrameCommandOffset = handle->indirectBufferFrames;
-
-						uint32_t perFrameCountOffset = handle->indirectCountBufferStride;
-
-						RenderAllocation vertexAlloc = allocations[handle->vertexBufferIndex];
-
-						RenderAllocation indexAlloc = allocations[handle->indexBufferHandle];
-
-						RenderAllocation indirectBufferAlloc = allocations[handle->indirectBufferHandle];
-
-						RenderAllocation indirectCountBufferAlloc = allocations[handle->indirectCountBufferHandle];
-
 						rcb.BindGraphicsPipeline(pipelineTemp);
 
 						for (uint32_t ii = 0; ii < handle->resourceSetCount; ii++)
@@ -3553,10 +3803,138 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 							rcb.BindGraphicsDescriptorSets(descriptorManager->descriptorSetHandles[handle->resourceSets[ii].descriptorSetIndex], currentFrame, 1, ii, 0, nullptr);
 						}
 
+						uint32_t vertexCount = handle->vertexCount;
+
+						uint32_t indexCount = handle->indexCount;
+
+						size_t perFrameIndirectBufferOffset = -1, perFrameIndirectCountBufferOffset = -1;
+
+						size_t vertexOffset = -1, indexOffset = -1, indirectBufferBaseOffset = -1, indirectCountBufferBaseOffset = -1;
+
+						int vertexMemIndex = -1, indexMemIndex = -1, indirectBufferIndex = -1, indirectCountBufferIndex = -1;
+
 						if (handle->vertexBufferIndex != -1)
 						{
-							size_t vertexOffset = handle->vertexBufferOffset;
-							rcb.BindVertexBuffer(bufferHandles[vertexAlloc.memIndex].bufferHandle, 0, 1, &vertexOffset);
+							if (CHECK_SUBALLOCATION_INDEX(handle->vertexBufferIndex))
+							{
+								int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle->vertexBufferIndex);
+
+								RenderSubAllocation* vertexSubAlloc = subAllocations.Get(subAllocHanlde);
+
+								RenderAllocation* vertexAlloc = allocations.Get(vertexSubAlloc->parentAllocation);
+
+								vertexMemIndex = vertexAlloc->memIndex;
+
+								vertexOffset = vertexAlloc->offset + vertexSubAlloc->offset;
+							}
+							else
+							{
+								RenderAllocation* vertexAlloc = allocations.Get(handle->vertexBufferIndex);
+
+								vertexMemIndex = vertexAlloc->memIndex;
+
+								vertexOffset = vertexAlloc->offset;
+							}
+
+							rcb.BindVertexBuffer(bufferHandles[vertexMemIndex].bufferHandle, 0, 1, &vertexOffset);
+						}
+
+						if (handle->indexBufferHandle != -1)
+						{
+							if (CHECK_SUBALLOCATION_INDEX(handle->indexBufferHandle))
+							{
+								int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle->indexBufferHandle);
+
+								RenderSubAllocation* indexSubAlloc = subAllocations.Get(subAllocHanlde);
+
+								RenderAllocation* indexAlloc = allocations.Get(indexSubAlloc->parentAllocation);
+
+								indexMemIndex = indexAlloc->memIndex;
+
+								indexOffset = indexAlloc->offset + indexSubAlloc->offset;
+							}
+							else
+							{
+								RenderAllocation* indexAlloc = allocations.Get(handle->indexBufferHandle);
+
+								indexMemIndex = indexAlloc->memIndex;
+
+								indexOffset = indexAlloc->offset;
+							}
+
+							rcb.BindIndexBuffer(bufferHandles[indexMemIndex].bufferHandle, indexOffset, handle->indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+						}
+
+						if (handle->indirectBufferHandle != -1)
+						{
+							if (CHECK_SUBALLOCATION_INDEX(handle->indirectBufferHandle))
+							{
+								int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle->indirectBufferHandle);
+
+								RenderSubAllocation* indirectBufferSubAlloc = subAllocations.Get(subAllocHanlde);
+
+								RenderAllocation* indirectBufferAlloc = allocations.Get(indirectBufferSubAlloc->parentAllocation);
+
+								size_t align = indirectBufferSubAlloc->alignment;
+								
+								size_t copiesOfstruct = static_cast<size_t>(indirectBufferSubAlloc->structureCopies);
+
+								indirectBufferBaseOffset = indirectBufferAlloc->offset + indirectBufferSubAlloc->offset;
+
+								perFrameIndirectBufferOffset = (((indirectBufferSubAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+								indirectBufferIndex = indirectBufferAlloc->memIndex;
+							}
+							else
+							{
+								RenderAllocation* indirectBufferAlloc = allocations.Get(handle->indirectBufferHandle);
+
+								size_t align = indirectBufferAlloc->alignment;
+
+								size_t copiesOfstruct = static_cast<size_t>(indirectBufferAlloc->structureCopies);
+
+								indirectBufferBaseOffset = indirectBufferAlloc->offset;
+
+								perFrameIndirectBufferOffset = (((indirectBufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+								indirectBufferIndex = indirectBufferAlloc->memIndex;
+							}
+						}
+
+						if (handle->indirectCountBufferHandle != -1)
+						{
+							if (CHECK_SUBALLOCATION_INDEX(handle->indirectCountBufferHandle))
+							{
+								int subAllocHanlde = GET_SUBALLOCATION_INDEX(handle->indirectCountBufferHandle);
+
+								RenderSubAllocation* indirectCountBufferSubAlloc = subAllocations.Get(subAllocHanlde);
+
+								RenderAllocation* indirectCountBufferAlloc = allocations.Get(indirectCountBufferSubAlloc->parentAllocation);
+
+								size_t align = indirectCountBufferSubAlloc->alignment;
+
+								size_t copiesOfstruct = static_cast<size_t>(indirectCountBufferSubAlloc->structureCopies);
+
+								indirectCountBufferBaseOffset = indirectCountBufferAlloc->offset + indirectCountBufferSubAlloc->offset;
+
+								perFrameIndirectCountBufferOffset = (((indirectCountBufferSubAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+								indirectCountBufferIndex = indirectCountBufferAlloc->memIndex;
+							}
+							else
+							{
+								RenderAllocation* indirectCountBufferAlloc = allocations.Get(handle->indirectCountBufferHandle);
+
+								size_t align = indirectCountBufferAlloc->alignment;
+
+								size_t copiesOfstruct = static_cast<size_t>(indirectCountBufferAlloc->structureCopies);
+
+								indirectCountBufferBaseOffset = indirectCountBufferAlloc->offset;
+
+								perFrameIndirectCountBufferOffset = (((indirectCountBufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+								indirectCountBufferIndex = indirectCountBufferAlloc->memIndex;
+							}
 						}
 
 						for (uint32_t ii = 0, jj = 0, constantBufferPerSet = 0; ii < handle->pushRangeCount && jj < handle->resourceSetCount;)
@@ -3579,45 +3957,52 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 
 						if (handle->indirectBufferHandle != -1)
 						{
-							perFrameCommandOffset *=  currentFrame;
+							perFrameIndirectBufferOffset *=  currentFrame;
 
-							perFrameCountOffset *= currentFrame;
+							perFrameIndirectCountBufferOffset *= currentFrame;
 
-							if (handle->indexBufferHandle != -1)
+							if (indexMemIndex != -1)
 							{
-								rcb.BindIndexBuffer(bufferHandles[indexAlloc.memIndex].bufferHandle, handle->indexBufferOffset, handle->indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-
 								if (handle->indirectCountBufferHandle != -1)
 								{
-									rcb.BindingDrawIndexedIndirectCount(bufferHandles[indirectBufferAlloc.memIndex].bufferHandle, bufferHandles[indirectCountBufferAlloc.memIndex].bufferHandle, handle->indirectBufferOffset + perFrameCommandOffset, handle->indirectCountBufferOffset + perFrameCountOffset, handle->indirectDrawCount);
+									rcb.BindingDrawIndexedIndirectCount(
+										bufferHandles[indirectBufferIndex].bufferHandle, 
+										bufferHandles[indirectCountBufferIndex].bufferHandle, 
+										indirectBufferBaseOffset + perFrameIndirectBufferOffset, 
+										indirectCountBufferBaseOffset + perFrameIndirectCountBufferOffset, 
+										handle->indirectDrawCount);
 								}
 								else
 								{
-									rcb.BindingIndexedIndirectDrawCmd(bufferHandles[indirectBufferAlloc.memIndex].bufferHandle, handle->indirectDrawCount, handle->indirectBufferOffset + perFrameCommandOffset);
+									rcb.BindingIndexedIndirectDrawCmd(bufferHandles[indirectBufferIndex].bufferHandle, handle->indirectDrawCount, indirectBufferBaseOffset + perFrameIndirectBufferOffset);
 								}
 							}
 							else
 							{
 								if (handle->indirectCountBufferHandle != -1)
 								{
-									rcb.BindingDrawIndirectCount(bufferHandles[indirectBufferAlloc.memIndex].bufferHandle, bufferHandles[indirectCountBufferAlloc.memIndex].bufferHandle, handle->indirectBufferOffset + perFrameCommandOffset, handle->indirectCountBufferOffset + perFrameCountOffset, handle->indirectDrawCount);
+									rcb.BindingDrawIndirectCount(
+										bufferHandles[indirectBufferIndex].bufferHandle,
+										bufferHandles[indirectCountBufferIndex].bufferHandle,
+										indirectBufferBaseOffset + perFrameIndirectBufferOffset,
+										indirectCountBufferBaseOffset + perFrameIndirectCountBufferOffset,
+										handle->indirectDrawCount);
 								}
 								else
 								{
-									rcb.BindingIndirectDrawCmd(bufferHandles[indirectBufferAlloc.memIndex].bufferHandle, handle->indirectDrawCount, handle->indirectBufferOffset + perFrameCommandOffset);
+									rcb.BindingIndirectDrawCmd(bufferHandles[indirectBufferIndex].bufferHandle, handle->indirectDrawCount, indirectBufferBaseOffset + perFrameIndirectBufferOffset);
 								}
 							}
 						}
 						else
 						{
-							if (handle->indexBufferHandle != -1)
+							if (indexMemIndex != -1)
 							{
-								rcb.BindIndexBuffer(bufferHandles[indexAlloc.memIndex].bufferHandle, handle->indexBufferOffset, handle->indexSize == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-								rcb.BindingDrawIndexedCmd(static_cast<uint32_t>(handle->indexCount), handle->instanceCount, 0, 0, 0);
+								rcb.BindingDrawIndexedCmd(indexCount, handle->instanceCount, 0, 0, 0);
 							}
 							else
 							{
-								rcb.BindingDrawCmd(0, drawSize, 0, handle->instanceCount);
+								rcb.BindingDrawCmd(0, vertexCount, 0, handle->instanceCount);
 							}
 						}
 					}
@@ -3821,8 +4206,6 @@ void RenderInstance::ReadData(int deviceSelection, int handle, void* dest, int s
 	dev->ReadHostBuffer(dest, index, size, intOffset+offset);
 }
 
-
-
 void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType)
 {
 	void* outData = data;
@@ -3835,9 +4218,24 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 		memcpy(outData, data, size);
 	}
 
-	if (allocations[allocationIndex].allocType == AllocationType::PERFRAME)
+	if (CHECK_SUBALLOCATION_INDEX(allocationIndex))
 	{
-		copies = MAX_FRAMES_IN_FLIGHT;
+		RenderSubAllocation* subAlloc = subAllocations.Get(GET_SUBALLOCATION_INDEX(allocationIndex));
+
+		if (subAlloc->allocType == AllocationType::PERFRAME)
+		{
+			copies = MAX_FRAMES_IN_FLIGHT;
+		}
+
+	}
+	else
+	{
+		RenderAllocation* alloc = allocations.Get(allocationIndex);
+
+		if (alloc->allocType == AllocationType::PERFRAME)
+		{
+			copies = MAX_FRAMES_IN_FLIGHT;
+		}
 	}
 
 	RenderDriverUpdateCommandMemory* rducm = (RenderDriverUpdateCommandMemory*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandMemory));
@@ -3852,7 +4250,6 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 
 void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
 {
-
 	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
 
 	rduci->data = data;
@@ -3872,16 +4269,30 @@ void RenderInstance::InsertTransferCommand(int allocationIndex, int size, int al
 
 	int copies = 1;
 
-	if (allocations[allocationIndex].allocType == AllocationType::PERFRAME)
+	if (CHECK_SUBALLOCATION_INDEX(allocationIndex))
 	{
-		copies = MAX_FRAMES_IN_FLIGHT;
-	}
+		RenderSubAllocation* subAlloc = subAllocations.Get(GET_SUBALLOCATION_INDEX(allocationIndex));
 
+		if (subAlloc->allocType == AllocationType::PERFRAME)
+		{
+			copies = MAX_FRAMES_IN_FLIGHT;
+		}
+	}
+	else
+	{
+		RenderAllocation* alloc = allocations.Get(allocationIndex);
+
+		if (alloc->allocType == AllocationType::PERFRAME)
+		{
+			copies = MAX_FRAMES_IN_FLIGHT;
+		}
+
+	}
 
 	rducf->action = action;
 	rducf->allocationIndex = allocationIndex;
-	rducf->stage = stage;
 	rducf->allocOffset = allocOffset;
+	rducf->stage = stage;
 	rducf->fillValue = fillValue;
 	rducf->stage = stage;
 	rducf->size = size;
@@ -4008,7 +4419,7 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::TRANSFERCOMMAND:
 		{
 			RenderDriverUpdateCommandFill* rducf = (RenderDriverUpdateCommandFill*)header;
-			transferCommandPool.Create(rducf->allocationIndex, rducf->size, rducf->allocOffset, rducf->fillValue, rducf->stage, rducf->action, rducf->copiesWithin);
+			transferCommandPool.Create(rducf->allocationIndex,  rducf->size, rducf->allocOffset, rducf->fillValue, rducf->stage, rducf->action, rducf->copiesWithin);
 			header = rducf->GetNext();
 			currentSize -= sizeof(RenderDriverUpdateCommandFill);
 			break;
@@ -4024,13 +4435,27 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::MEMORYUPDATE:
 		{
 			RenderDriverUpdateCommandMemory* rducm = (RenderDriverUpdateCommandMemory*)header;
-			
 
-			if (bufferHandles[allocations[rducm->allocationIndex].memIndex].type == BufferType::HOST_MEMORY_TYPE)
+			int truthIndex = rducm->allocationIndex;
+
+			if (CHECK_SUBALLOCATION_INDEX(truthIndex))
+			{
+				int subAllocHanlde = GET_SUBALLOCATION_INDEX(rducm->allocationIndex);
+
+				RenderSubAllocation* subAlloc = subAllocations.Get(subAllocHanlde);
+
+				truthIndex = subAlloc->parentAllocation;
+			}
+
+			RenderAllocation* alloc = allocations.Get(truthIndex);
+
+			BufferType bufType = bufferHandles[alloc->memIndex].type;
+
+			if (bufType == BufferType::HOST_MEMORY_TYPE)
 			{
 				driverHostMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
-			else if (bufferHandles[allocations[rducm->allocationIndex].memIndex].type == BufferType::DEVICE_MEMORY_TYPE)
+			else if (bufType == BufferType::DEVICE_MEMORY_TYPE)
 			{
 				driverDeviceMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
@@ -4059,14 +4484,7 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 
 	for (int i = 0; i < imageCount; i++)
 	{
-		int textureIndex = textureResourceHandles.Allocate();
-		textureResourceHandles.pool[textureIndex].textureIndex = imageViews[i];
-		textureResourceHandles.pool[textureIndex].imageHeight = 0xFFFFFFFF;
-		textureResourceHandles.pool[textureIndex].imageWidth = 0xCFFFFFFF;
-		int resourceStatusIndex = resourceStatuses.Allocate();
-		textureResourceHandles.pool[textureIndex].resourceStatusIndex = resourceStatusIndex;
-		resourceStatuses.pool[resourceStatusIndex].resourceType = IMAGE_RESOURCE;
-		resourceStatuses.pool[resourceStatusIndex].currentLayout = ImageLayout::SHADERREADABLE;
+		int textureIndex = currentGraphInstance->resources[resourceIndex].textureIds[0][i];
 		textureIds[i] = textureIndex;
 	}
 
@@ -4086,50 +4504,35 @@ void RenderInstance::PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int 
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 	RenderAllocation alloc = allocations[allocationIndex];
-
-	int copiesOfstruct = alloc.structureCopies;
-
-	size_t align = alloc.alignment;
-
-	uint32_t indirectOffset = alloc.offset;
-	uint32_t indirectBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
 	
 	if (handle->group == GRAPHICSO)
 	{
-		handle->indirectBufferFrames = indirectBufferPerFrameSize;
 		handle->indirectBufferHandle = alloc.memIndex;
-		handle->indirectBufferOffset = indirectOffset;
 	}
 }
 
-void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount, uint32_t vertexBuffersubAlloc)
+void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 	RenderAllocation alloc = allocations[allocationIndex];
-
-	uint32_t vertexOffset = (uint32_t)alloc.offset + vertexBuffersubAlloc;
 
 	if (handle->group == GRAPHICSO)
 	{
 		handle->vertexBufferIndex = alloc.memIndex;
-		handle->vertexBufferOffset = vertexOffset;
 		handle->vertexCount = vertexCount;
 	}
 }
 
-void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride, uint32_t indexSubAlloc)
+void RenderInstance::PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 	RenderAllocation alloc = allocations[allocationIndex];
 
-	uint32_t indexOffset = (uint32_t)alloc.offset + indexSubAlloc;
-
 	if (handle->group == GRAPHICSO)
 	{
 		handle->indexBufferHandle = alloc.memIndex;
-		handle->indexBufferOffset = indexOffset;
 		handle->indexSize = indexStride;
 		handle->indexCount = indexCount;
 	}
@@ -4142,18 +4545,9 @@ void RenderInstance::PipelineUpdateIndirectCountBuffer(int pipelineIndex, int al
 
 	RenderAllocation alloc = allocations[allocationIndex];
 
-	int copiesOfstruct = alloc.structureCopies;
-	
-	size_t align = alloc.alignment;
-
-	uint32_t indirectCountOffset = alloc.offset;
-	uint32_t indirectCountBufferPerFrameSize = ((alloc.requestedSize * copiesOfstruct) + align - 1) & ~(align - 1);
-
 	if (handle->group == GRAPHICSO)
 	{
 		handle->indirectCountBufferHandle = alloc.memIndex;
-		handle->indirectCountBufferOffset = indirectCountOffset;
-		handle->indirectCountBufferStride = indirectCountBufferPerFrameSize;
 	}
 }
 
@@ -4558,7 +4952,7 @@ void RenderInstance::AddVulkanMemoryBarrier(int deviceSelection, RecordingBuffer
 	}
 }
 
-void RenderInstance::AddVulkanMemoryBarrier2(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
+void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -4596,6 +4990,9 @@ void RenderInstance::AddVulkanMemoryBarrier2(int deviceSelection, RecordingBuffe
 						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
 
 						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
+
+						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
+							continue;
 
 						if (status->currentLayout != ImageLayout::SHADERREADABLE)
 						{

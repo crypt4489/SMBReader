@@ -53,9 +53,6 @@ struct RenderInstanceCreateInfo
 	uint32_t maxRenderTargets;
 	uint32_t maxShaderGraphs;
 	uint32_t maxShaderHandles;
-	//uint32_t maxShaderResourceSets;
-	//
-	//uint32_t maxShaderResourceSetSlabAllocator;
 	uint32_t maxShaderResourceTemplates;
 	uint32_t maxDescriptorManagers;
 	uint32_t maxComputeQueues;
@@ -64,6 +61,7 @@ struct RenderInstanceCreateInfo
 	uint32_t maxPipelineInstances;
 	uint32_t maxPipelineHandles;
 	uint32_t maxAllocations;
+	uint32_t maxSubAllocations;
 	uint32_t maxGPUCommands;
 	uint32_t maxTextureHandles;
 	uint32_t maxSamplerHandles;
@@ -104,7 +102,7 @@ struct RenderInstance
 
 	int RecreateSwapChain(int deviceSelection, int swapChainIndex, uint32_t width, uint32_t height);
 
-	int CreateAttachmentResources(int deviceSelection, int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, uint32_t width, uint32_t height,
+	int CreateAttachmentResources(int deviceSelection, int graphIndex, int renderPassIndex, int imageCount, EntryHandle* backBufferViews, int* backBufferTextureIds, uint32_t width, uint32_t height,
 		RenderPassType rpType, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
 	int CreateSwapChainAttachment(int deviceSelection, int swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
@@ -185,7 +183,11 @@ struct RenderInstance
 
 	void AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
 
-	void AddVulkanMemoryBarrier2(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+	void GenerateGraphicsDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+
+	void GenerateComputeDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+
+	void GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* pipelineHandle);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
@@ -239,8 +241,8 @@ struct RenderInstance
 	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart);
 
 	void PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex);
-	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount, uint32_t vertexBuffersubAlloc);
-	void PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride, uint32_t indexSubAlloc);
+	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount);
+	void PipelineUpdateIndexBuffer(int pipelineIndex, int allocationIndex, uint32_t indexCount, uint32_t indexStride);
 	void PipelineUpdateIndirectCountBuffer(int pipelineIndex, int allocationIndex);
 	void PipelineUpdateDispatchCommands(int pipelineIndex, uint32_t x, uint32_t y, uint32_t z);
 
@@ -257,6 +259,8 @@ struct RenderInstance
 	int CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
 
 	int CreatePerFrameStagingBuffers(int deviceSelection, uint32_t bufferSize);
+
+	int CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -303,6 +307,8 @@ struct RenderInstance
 	PoolAllocator<EntryHandle> shaderResourceTemplates{};
 
 	PoolAllocator<RenderAllocation> allocations{};
+
+	PoolAllocator<RenderSubAllocation> subAllocations{};
 
 	PoolAllocator<ShaderResourceManager> descriptorManagers{};
 	

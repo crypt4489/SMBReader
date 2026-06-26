@@ -1430,9 +1430,10 @@ void CreateJointVisualData()
 
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
-	int vertexAlloc = jointMeshVertexAlloc = vertexBufferAlloc.Allocate(sizeof(Verts), 64);
-	int indexAlloc = jointMeshIndexAlloc = indexBufferAlloc.Allocate(sizeof(Indices), 64);
+	int vertexAlloc = jointMeshVertexAlloc = rendInst.CreateSuballocation(mainLogicalDevice, globalVertexBuffer, sizeof(Verts), 1, 64, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &vertexBufferAlloc);
+	int indexAlloc = jointMeshIndexAlloc = rendInst.CreateSuballocation(mainLogicalDevice, globalIndexBuffer, sizeof(Indices), 1, 64, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &indexBufferAlloc);
 
+	/*
 	if (indexAlloc < 0 ||
 		vertexAlloc < 0)
 	{
@@ -1441,8 +1442,10 @@ void CreateJointVisualData()
 		return;
 	}
 
-	rendInst.UpdateDriverMemory(Verts, globalVertexBuffer, sizeof(Verts), vertexAlloc, TransferType::CACHED);
-	rendInst.UpdateDriverMemory(Indices, globalIndexBuffer, sizeof(Indices), indexAlloc, TransferType::CACHED);
+	*/
+
+	rendInst.UpdateDriverMemory(Verts, jointMeshVertexAlloc, sizeof(Verts), 0, TransferType::CACHED);
+	rendInst.UpdateDriverMemory(Indices, jointMeshIndexAlloc, sizeof(Indices), 0, TransferType::CACHED);
 
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Joint Object"));
 }
@@ -1472,17 +1475,15 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 
 	GraphicsIntermediaryPipelineInfo jointInfo = {
 		.drawType = 0,
-		.vertexBufferHandle = globalVertexBuffer,
+		.vertexBufferHandle = jointMeshVertexAlloc,
 		.vertexCount = 6,
 		.pipelinename = JOINTVISUAL,
 		.descCount = 2,
 		.descriptorsetid = Descs.data(),
-		.indexBufferHandle = globalIndexBuffer,
+		.indexBufferHandle = jointMeshIndexAlloc,
 		.indexCount = 32,
 		.instanceCount = (uint32_t)numberOfJoints,
 		.indexSize = 2,
-		.indexOffset = (uint32_t)jointMeshIndexAlloc,
-		.vertexOffset = (uint32_t)jointMeshVertexAlloc,
 		.indirectAllocation = ~0,
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
@@ -2464,8 +2465,6 @@ int CreateDebugCommandBuffers(int count)
 		.descriptorsetid = indirectDebugDrawDescriptors.data(),
 		.indexBufferHandle = ~0,
 		.indexSize = 0,
-		.indexOffset = 0,
-		.vertexOffset = 0,
 		.indirectAllocation = debugIndirectDrawData.commandBufferAlloc,
 		.indirectDrawCount = debugIndirectDrawData.commandBufferSize,
 		.indirectCountAllocation = debugIndirectDrawData.commandBufferCountAlloc
@@ -2568,8 +2567,6 @@ int CreateGenericMeshCommandBuffers(int count)
 		.descriptorsetid = indirectDrawDescriptors.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.indexSize = 2,
-		.indexOffset = 0,
-		.vertexOffset = 0,
 		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
 		.indirectDrawCount = mainIndirectDrawData.commandBufferSize,
 		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
@@ -2649,8 +2646,6 @@ int CreateGenericMeshCommandBuffers(int count)
 		.descriptorsetid = indirectOutline.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.indexSize = 2,
-		.indexOffset = 0,
-		.vertexOffset = 0,
 		.indirectAllocation = mainIndirectDrawData.commandBufferAlloc,
 		.indirectDrawCount = mainIndirectDrawData.commandBufferSize,
 		.indirectCountAllocation = mainIndirectDrawData.commandBufferCountAlloc
@@ -3266,8 +3261,6 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		.descriptorsetid = indirectShadowMapDraw.data(),
 		.indexBufferHandle = globalIndexBuffer,
 		.indexSize = 2,
-		.indexOffset = 0,
-		.vertexOffset = 0,
 		.indirectAllocation = mainShadowMapManager.shadowMapIndirectBufferAlloc,
 		.indirectDrawCount = mainShadowMapManager.shadowMapIndirectBufferAllocSize,
 		.indirectCountAllocation = mainShadowMapManager.shadowMapObjectCountAlloc
@@ -3316,8 +3309,6 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 		.indexCount = 0,
 		.instanceCount = 1,
 		.indexSize = 0,
-		.indexOffset = 0,
-		.vertexOffset = 0,
 		.indirectAllocation = ~0,
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
@@ -3396,9 +3387,6 @@ int CreateMSAAPostFullScreen()
 		.indexCount = 0,
 		.instanceCount = 1,
 		.indexSize = 0,
-		.indexOffset = (uint32_t)0,
-
-		.vertexOffset = (uint32_t)0,
 		.indirectAllocation = ~0,
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
@@ -3460,11 +3448,13 @@ int CreateSkyBox()
 		Vector4f(1.0, -1.0, -1.0, 1.0)
 	};
 
-	int vertexAlloc = vertexBufferAlloc.Allocate(sizeof(BoxVerts), 64);
-	int indexAlloc = indexBufferAlloc.Allocate(sizeof(BoxIndices), 64);
 
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(BoxVerts, globalVertexBuffer, sizeof(BoxVerts), vertexAlloc, TransferType::CACHED);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(BoxIndices, globalIndexBuffer, sizeof(BoxIndices), indexAlloc, TransferType::CACHED);
+	int vertexAlloc = GlobalRenderer::gRenderInstance.CreateSuballocation(mainLogicalDevice, globalVertexBuffer, sizeof(BoxVerts), 1, 64, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &vertexBufferAlloc);
+	int indexAlloc = GlobalRenderer::gRenderInstance.CreateSuballocation(mainLogicalDevice, globalIndexBuffer, sizeof(BoxIndices), 1, 64, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &indexBufferAlloc);
+
+
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(BoxVerts, vertexAlloc, sizeof(BoxVerts), 0, TransferType::CACHED);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(BoxIndices, indexAlloc, sizeof(BoxIndices), 0, TransferType::CACHED);
 
 	StringView names[6] = {
 		STRING_VIEW_FROM_LITERAL("face4.bmp"),
@@ -3500,7 +3490,7 @@ int CreateSkyBox()
 
 	GraphicsIntermediaryPipelineInfo skyboxInfo = {
 		.drawType = 0,
-		.vertexBufferHandle = globalVertexBuffer,
+		.vertexBufferHandle = vertexAlloc,
 		.vertexCount = 24,
 		.pipelinename = SKYBOX,
 		.descCount = 2,
@@ -3509,9 +3499,6 @@ int CreateSkyBox()
 		.indexCount = 36,
 		.instanceCount = 1,
 		.indexSize = 2,
-		.indexOffset = (uint32_t)indexAlloc,
-
-		.vertexOffset = (uint32_t)vertexAlloc,
 		.indirectAllocation = ~0,
 		.indirectDrawCount = 0,
 		.indirectCountAllocation = ~0
@@ -3556,10 +3543,11 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxPipelineInstances = 25;
 	riCreateInfo.maxPipelineHandles = 25;
 	riCreateInfo.maxAllocations = 50;
+	riCreateInfo.maxSubAllocations = 30;
 	riCreateInfo.maxGPUCommands = 10;
-	riCreateInfo.maxTextureHandles = 50;
+	riCreateInfo.maxTextureHandles = 100;
 	riCreateInfo.maxSamplerHandles = 1;
-	riCreateInfo.maxResourceStatuses = 75;
+	riCreateInfo.maxResourceStatuses = 125;
 	riCreateInfo.commandBuffersSize = 16 * KiB;
 	riCreateInfo.commandsCacheSize = 64 * KiB;
 	riCreateInfo.internalLoggerRingSize = 8 * KiB;
@@ -3646,7 +3634,7 @@ void ApplicationLoop::InitializeRuntime()
 		50,
 	};
 
-	mainDescriptorManagerIndex = GlobalRenderer::gRenderInstance.CreateDescriptorHeap(mainLogicalDevice, descriptorTypes.data(), descriptorCounts.data(), 4, 100, 50, 10 * KiB);
+	mainDescriptorManagerIndex = GlobalRenderer::gRenderInstance.CreateDescriptorHeap(mainLogicalDevice, descriptorTypes.data(), descriptorCounts.data(), 4, 100, 50, 32 * KiB);
 
 	size_t mainHostSize = 128 * MiB;
 	size_t mainDeviceSize = 64 * MiB;

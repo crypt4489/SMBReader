@@ -147,9 +147,13 @@ struct ShaderResourceSetBuilder
 		if (header->type != ShaderResourceType::IMAGESTORE2D && header->type != ShaderResourceType::IMAGE2D)
 			return;
 
-		header->textureHandles = index;
-		header->textureCount = textureCount;
-		header->firstTexture = firstTexture;
+		for (int i = 0; i < textureCount; i++)
+		{
+			header->textureHandles[firstTexture + i] = index[i];
+		}
+
+		if ((firstTexture + textureCount) > header->textureCount)
+			header->textureCount = (firstTexture + textureCount);
 	}
 
 	void BindSamplerResourceToShaderResource(int* indices, int samplerCount, int firstSampler, int bindingIndex)
@@ -160,10 +164,14 @@ struct ShaderResourceSetBuilder
 
 		if (header->type != ShaderResourceType::SAMPLERSTATE)
 			return;
+	
+		for (int i = 0; i < samplerCount; i++)
+		{
+			header->samplerHandles[firstSampler + i] = indices[i];
+		}
 
-		header->samplerHandles = indices;
-		header->samplerCount = samplerCount;
-		header->firstSampler = firstSampler;
+		if ((firstSampler + samplerCount) > header->samplerCount)
+			header->samplerCount = (firstSampler + samplerCount);
 	}
 
 	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
@@ -175,9 +183,13 @@ struct ShaderResourceSetBuilder
 		if (header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE && header->type != ShaderResourceType::SAMPLER3D)
 			return;
 
-		header->textureHandles = index;
-		header->textureCount = textureCount;
-		header->firstTexture = firstTexture;
+		for (int i = 0; i < textureCount; i++)
+		{
+			header->textureHandles[firstTexture + i] = index[i];
+		}
+
+		if ((firstTexture + textureCount) > header->textureCount)
+			header->textureCount = (firstTexture + textureCount);
 	}
 
 	void BindBufferView(ShaderResourceSetContext* context, int* allocationIndex, int firstView, int viewCount, int bindingIndex)

@@ -223,14 +223,12 @@ struct ShaderResourceSampler : public ShaderResourceHeader
 {
 	int* samplerHandles;
 	int samplerCount;
-	int firstSampler;
 };
 
 struct ShaderResourceImage : public ShaderResourceHeader
 {
 	int* textureHandles;
 	int textureCount;
-	int firstTexture;
 };
 
 struct ShaderResourceBuffer : public ShaderResourceHeader
@@ -442,6 +440,7 @@ struct AttachmentResourceInstance
 {
 	EntryHandle** attachmentImage;
 	EntryHandle** attachmentImageView;
+	int** textureIds;
 	AttachmentResourceInstanceUsage usage;
 	int sampLo;
 	int sampHi;
