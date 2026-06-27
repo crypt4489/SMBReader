@@ -98,8 +98,8 @@ Clean-up Vulkan and add explicit error handling mechanism plus fallback when thi
 Finish render instance based on minimum specs for both Vulkan and DX12
 - Create configuration struct for initialization of flat arrays and remove hardcoded bounds where appropriate (done). 
 - Finish pipeline data updating and any skeleton functions (done)
-- Finish resource transition and layout management and create an image tracking and initialization (allow user to specify image layout, usage by function and specify depth and layers explicitly)
-- Create mechanism for attachments layouts to be tracked and integrate with general image tracking pool.
+- Finish resource transition and layout management and create an image tracking and initialization (allow user to specify image layout, usage by function and specify depth and layers explicitly) (almost done)
+- Create mechanism for attachments layouts to be tracked and integrate with general image tracking pool (done)
 - Create feature request system and make it so user can query features request (while also maintaining minimum viable feature request for this layer) 
 - Make robust all bounds checking, add failure designation to all possible failure (including integration with new vulkan failure designation and error handling)
 - Make shader graph have hardcoded bounds and cleanup initialization function for shader graph (no std::string, no separate allocators for shader graph and shader details, check shader bounds during compilation) (done)
@@ -112,6 +112,7 @@ Finish render instance based on minimum specs for both Vulkan and DX12
 - Add destructor functions for various different handle creation and make use of the pool allocators.
 - Create separate GPU command streams and have them be selectable for submission.
 - Finish logging and error tracking in shader resource binding.
+- Remove texture from vulkan layer and make the image views attachable to the render texture resource.
 
 Finish app level architecture
 - Finish OS systems in windows and remove bad design decisions
