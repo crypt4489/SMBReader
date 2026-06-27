@@ -119,25 +119,9 @@ struct RenderAllocation
 	ComponentFormatType formatType;
 	int structureCopies;
 	int memIndex;
-};
-
-#define MAKE_SUBALLOCATION_INDEX(x) ((x) |= 0x80000000)
-#define CHECK_SUBALLOCATION_INDEX(x) ((x) & 0x80000000)
-#define GET_SUBALLOCATION_INDEX(x) ((x) & ~(0x80000000))
-
-struct RenderSubAllocation
-{
-	size_t offset;
-	size_t deviceAllocSize;
-	size_t requestedSize;
-	size_t alignment;
-	EntryHandle viewIndex;
-	AllocationType allocType;
-	ComponentFormatType formatType;
-	int structureCopies;
+	int resourceStatus;
 	int parentAllocation;
 };
-
 
 enum AppPipelineHandleType
 {
@@ -166,7 +150,6 @@ struct PipelineHandle
 	uint32_t y;
 	uint32_t z;
 };
-
 
 struct PipelineInstanceData
 {
@@ -736,8 +719,8 @@ enum ResourceStatusType
 struct ResourceStatus
 {
 	ResourceStatusType resourceType;
-	BarrierStage currStage;
-	BarrierAction currAction;
+	BarrierStage currStage[3];
+	BarrierAction currAction[3];
 	ImageLayout currentLayout;
 };
 

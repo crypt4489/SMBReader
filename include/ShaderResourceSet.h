@@ -132,10 +132,14 @@ struct ShaderResourceSetBuilder
 		if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER)
 			return;
 
-		header->allocationIndex = allocationIndex;
-		header->offsets = offsets;
-		header->firstBuffer = firstBuffer;
-		header->bufferCount = bufferCount;
+		for (int i = 0; i < bufferCount; i++)
+		{
+			header->allocationIndex[firstBuffer + i] = allocationIndex[i];
+		}
+
+		if ((firstBuffer + bufferCount) > header->bufferCount)
+			header->bufferCount = (firstBuffer + bufferCount);
+
 	}
 
 	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
@@ -201,96 +205,14 @@ struct ShaderResourceSetBuilder
 		if (header->type != ShaderResourceType::BUFFER_VIEW)
 			return;
 
-		header->viewCount = viewCount;
-		header->firstView = firstView;
-		header->allocationIndex = allocationIndex;
-	}
-
-	void BindBarrier(ShaderResourceSetContext* context, int binding, BarrierStage stage, BarrierAction action)
-	{
-		uintptr_t* offsets = (uintptr_t*)(set + 1);
-		
-		uintptr_t head = offsets[binding];
-		
-		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
-
-		switch (desc->type)
+		for (int i = 0; i < viewCount; i++)
 		{
-		case ShaderResourceType::IMAGE2D:
-		case ShaderResourceType::IMAGESTORE2D:
-		case ShaderResourceType::SAMPLER2D:
-		{
-			head += sizeof(ShaderResourceImage);
-			ShaderResourceBarrier* barrier = (ShaderResourceBarrier*)head;
-
-			barrier->dstAction = action;
-			barrier->dstStage = stage;
-			break;
-		}
-		case ShaderResourceType::BUFFER_VIEW:
-		{
-			head += sizeof(ShaderResourceBufferView);
-			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
-			barrier->dstStage = stage;
-			barrier->dstAction = action;
-			break;
-		}
-		case ShaderResourceType::STORAGE_BUFFER:
-		case ShaderResourceType::UNIFORM_BUFFER:
-		{
-
-			head += sizeof(ShaderResourceBuffer);
-			ShaderResourceBufferBarrier* barrier = (ShaderResourceBufferBarrier*)head;
-			barrier->dstStage = stage;
-			barrier->dstAction = action;
-			break;
-		}
-		}
-	}
-
-	void BindImageBarrier(ShaderResourceSetContext* context, int binding, int barrierIndex, BarrierStage stage, BarrierAction action, ImageLayout oldLayout, ImageLayout dstLayout, bool location)
-	{
-		uintptr_t* offsets = (uintptr_t*)(set + 1);;
-
-		uintptr_t head = offsets[binding];
-		
-		ShaderResourceHeader* desc = (ShaderResourceHeader*)offsets[binding];
-
-		if (desc->type != ShaderResourceType::SAMPLER2D && desc->type != ShaderResourceType::SAMPLERCUBE && desc->type != ShaderResourceType::SAMPLER3D && desc->type != ShaderResourceType::IMAGESTORE2D && desc->type != ShaderResourceType::IMAGE2D)
-			return;
-
-		switch (desc->type)
-		{
-		case ShaderResourceType::IMAGE2D:
-		case ShaderResourceType::IMAGESTORE2D:
-		case ShaderResourceType::SAMPLER2D:
-			head += sizeof(ShaderResourceImage);
-
-			break;
-		case ShaderResourceType::STORAGE_BUFFER:
-		case ShaderResourceType::UNIFORM_BUFFER:
-
-			head += sizeof(ShaderResourceBuffer);
-			break;
+			header->allocationIndex[firstView + i] = allocationIndex[i];
 		}
 
+		if ((firstView + viewCount) > header->viewCount)
+			header->viewCount = (firstView + viewCount);
 
-		ShaderResourceImageBarrier* imageBarrier = (ShaderResourceImageBarrier*)head;
-
-
-		imageBarrier[barrierIndex].imageType = ImageUsage::COLOR;
-		imageBarrier[barrierIndex].dstResourceLayout = dstLayout;
-		imageBarrier[barrierIndex].srcResourceLayout = oldLayout;
-
-		if (location)
-		{
-			imageBarrier[barrierIndex].dstAction = action;
-			imageBarrier[barrierIndex].dstStage = stage;
-		}
-		else {
-			imageBarrier[barrierIndex].srcAction = action;
-			imageBarrier[barrierIndex].srcStage = stage;
-		}
 	}
 
 	ShaderResourceHeader* GetConstantBuffer(int constantBuffer)
@@ -320,11 +242,6 @@ struct ShaderResourceSetBuilder
 		}
 
 		return count;
-	}
-
-	int GetBarrierCount()
-	{
-		return set->barrierCount;
 	}
 
 	void UploadConstant(ShaderResourceSetContext* context, void* data, int bufferLocation)

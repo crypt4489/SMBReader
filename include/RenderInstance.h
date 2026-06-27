@@ -181,8 +181,6 @@ struct RenderInstance
 
 	EntryHandle CreateShaderResourceSet(ShaderResourceManager* descriptorManager, int deviceSelection, int descriptorSet);
 
-	void AddVulkanMemoryBarrier(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
-
 	void GenerateGraphicsDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
 
 	void GenerateComputeDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
@@ -205,7 +203,7 @@ struct RenderInstance
 
 	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
 
-	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action);
+	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue);
 
 	void UpdateShaderResourceArray(ShaderResourceSetHandle handle, int bindingindex, ShaderResourceType type, DeviceHandleArrayUpdate* resourceArrayData);
 
@@ -307,8 +305,6 @@ struct RenderInstance
 	PoolAllocator<EntryHandle> shaderResourceTemplates{};
 
 	PoolAllocator<RenderAllocation> allocations{};
-
-	PoolAllocator<RenderSubAllocation> subAllocations{};
 
 	PoolAllocator<ShaderResourceManager> descriptorManagers{};
 	

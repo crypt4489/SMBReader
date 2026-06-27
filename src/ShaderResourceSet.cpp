@@ -96,7 +96,7 @@ BarrierStage ConvertShaderStageToBarrierStage(ShaderStageType type)
 {
 	BarrierStage flags = 0;
 	flags |= (VERTEX_SHADER_BARRIER) * ((type & VERTEXSHADERSTAGE) != 0);
-	//flags |= (VK_SHADER_STAGE_FRAGMENT_BIT) * ((type & FRAGMENTSHADERSTAGE) != 0);
+	flags |= (FRAGMENT_BARRIER) * ((type & FRAGMENTSHADERSTAGE) != 0);
 	flags |= (COMPUTE_BARRIER) * ((type & COMPUTESHADERSTAGE) != 0);
 	return flags;
 }

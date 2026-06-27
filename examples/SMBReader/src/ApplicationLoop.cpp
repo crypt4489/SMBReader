@@ -923,6 +923,7 @@ void ApplicationLoop::Execute()
 
 			if (previousGlobalLightCount != globalLightCount || updateLights)
 			{
+				
 				if (!updateLights)
 				{
 					updateLights = framesInFlight;
@@ -930,7 +931,7 @@ void ApplicationLoop::Execute()
 
 				if (previousGlobalLightCount != globalLightCount)
 				{
-					GlobalRenderer::gRenderInstance.InsertTransferCommand(lightAssignment.deviceCountsAlloc, lightAssignment.totalElementsCount * sizeof(uint32_t), 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(lightAssignment.deviceCountsAlloc, lightAssignment.totalElementsCount * sizeof(uint32_t), 0, 0);
 				
 					previousGlobalLightCount = globalLightCount;
 				}
@@ -942,14 +943,16 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, lightAssignment.postWorldSpaceDivisionPipeline);
 
 				updateLights--;
+			
 			}
 
 			if (mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount || updateShadowMap)
 			{
+				
 				if (!updateShadowMap)
 				{
 					updateShadowMap = framesInFlight;
-					GlobalRenderer::gRenderInstance.InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(mainShadowMapManager.shadowMapObjectCountAlloc, 8, 0, 0);
 				}
 
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, mainShadowMapManager.shadowClippingPipeline);
@@ -959,16 +962,17 @@ void ApplicationLoop::Execute()
 
 			if (cameraMove || mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount || updateMainDrawCommand)
 			{
+
 				if (!updateMainDrawCommand || cameraMove) 
 				{
 					updateMainDrawCommand = framesInFlight;
-					GlobalRenderer::gRenderInstance.InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(mainIndirectDrawData.commandBufferCountAlloc, 8, 0, 0);
 				}
 
 				if (mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount)
 				{
 					if (updateMainDrawCommand == framesInFlight)
-						GlobalRenderer::gRenderInstance.InsertTransferCommand(worldSpaceAssignment.deviceCountsAlloc, worldSpaceAssignment.totalElementsCount * sizeof(uint32_t), 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(worldSpaceAssignment.deviceCountsAlloc, worldSpaceAssignment.totalElementsCount * sizeof(uint32_t), 0, 0);
 
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, worldSpaceAssignment.preWorldSpaceDivisionPipeline);
 
@@ -987,9 +991,10 @@ void ApplicationLoop::Execute()
 
 			if (cameraMove || debugIndirectDrawData.commandBufferCount != mainDebugDrawRenderableCount || updateMainDebugCommand)
 			{
+			
 				if (!updateMainDebugCommand || cameraMove)
 				{
-					GlobalRenderer::gRenderInstance.InsertTransferCommand(debugIndirectDrawData.commandBufferCountAlloc, 8, 0, 0, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE | READ_SHADER_RESOURCE);
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(debugIndirectDrawData.commandBufferCountAlloc, 8, 0, 0);
 					updateMainDebugCommand = framesInFlight;
 				}
 				mainDebugDrawRenderableCount = debugIndirectDrawData.commandBufferCount;
@@ -2400,11 +2405,6 @@ int CreateDebugCommandBuffers(int count)
 
 	indirectCullBuilder.UploadConstant(&debugRSContext,  &debugIndirectDrawData.commandBufferCount, 0);
 
-	indirectCullBuilder.BindBarrier(&debugRSContext, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-	indirectCullBuilder.BindBarrier(&debugRSContext, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-	indirectCullBuilder.BindBarrier(&debugRSContext, 5, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
 
 	if (debugRSContext.contextFailed)
 	{
@@ -2512,20 +2512,10 @@ int CreateGenericMeshCommandBuffers(int count)
 	indirectCullBuilder.UploadConstant(&genericMeshRSContext, &mainGrid, 0);
 	indirectCullBuilder.UploadConstant(&genericMeshRSContext, &mainIndirectDrawData.commandBufferCount, 1);
 
-	indirectCullBuilder.BindBarrier(&genericMeshRSContext, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-	indirectCullBuilder.BindBarrier(&genericMeshRSContext, 5, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-	indirectCullBuilder.BindBarrier(&genericMeshRSContext, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-
-	indirectCullBuilder.BindBarrier(&genericMeshRSContext, 4, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-
 	ShaderResourceSetBuilder indirectDrawBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, GENERIC, 2, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	
 	mainIndirectDrawData.indirectDrawDescriptor = indirectDrawBuilder();
 	
-
-
 	indirectDrawBuilder.BindBufferToShaderResource(&genericMeshRSContext, &globalMeshLocation, nullptr, 0, 1, 0);
 	indirectDrawBuilder.BindBufferToShaderResource(&genericMeshRSContext, &globalVertexBuffer, nullptr, 0, 1, 1);
 	indirectDrawBuilder.BindBufferView(&genericMeshRSContext, &mainIndirectDrawData.indirectGlobalIDsAlloc, 0, 1, 2);
@@ -2690,20 +2680,14 @@ int CreateMeshWorldAssignment(int count)
 		worldSpaceAssignment.deviceSumsAlloc = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), worldSpaceAssignment.totalSumsNeeded, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 		
 		prefixSumBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
-
-		prefixSumBuilder.BindBarrier(&genericMeshWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else 
 	{
 		prefixSumBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, nullptr, nullptr, 0, 0, 2);
 	}
 
-
 	prefixSumBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
 	prefixSumBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
-	
-
-	prefixSumBuilder.BindBarrier(&genericMeshWorldRSContext, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 	prefixSumBuilder.UploadConstant(&genericMeshWorldRSContext, &worldSpaceAssignment.totalElementsCount, 0);
 
@@ -2744,9 +2728,6 @@ int CreateMeshWorldAssignment(int count)
 		sumAfterBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 		sumAfterBuilder.UploadConstant(&genericMeshWorldRSContext, &worldSpaceAssignment.totalSumsNeeded, 0);
 
-		sumAfterBuilder.BindBarrier(&genericMeshWorldRSContext, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-		sumAfterBuilder.BindBarrier(&genericMeshWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-
 		std::array<ShaderResourceSetHandle, 1> prefixSumOverflowDescriptor = { worldSpaceAssignment.sumAfterDescriptors, };
 
 		if (genericMeshWorldRSContext.contextFailed)
@@ -2779,8 +2760,6 @@ int CreateMeshWorldAssignment(int count)
 		sumAppliedToBin.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
 		sumAppliedToBin.BindBufferToShaderResource(&genericMeshWorldRSContext, &worldSpaceAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
 		sumAppliedToBin.UploadConstant(&genericMeshWorldRSContext, &worldSpaceAssignment.totalElementsCount, 0);
-
-		sumAppliedToBin.BindBarrier(&genericMeshWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 		std::array<ShaderResourceSetHandle, 1> incrementSumsDescriptor = { worldSpaceAssignment.sumAppliedToBinDescriptors, };
 
@@ -2826,8 +2805,6 @@ int CreateMeshWorldAssignment(int count)
 	worldSpaceDivisionBuilder.UploadConstant(&genericMeshWorldRSContext, &mainGrid, 0);
 	worldSpaceDivisionBuilder.UploadConstant(&genericMeshWorldRSContext, &mainIndirectDrawData.commandBufferCount, 1);
 
-	worldSpaceDivisionBuilder.BindBarrier(&genericMeshWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-
 	std::array<ShaderResourceSetHandle, 1> preWorldDivDescriptor = { worldSpaceAssignment.preWorldSpaceDivisionDescriptor };
 
 	if (genericMeshWorldRSContext.contextFailed)
@@ -2865,9 +2842,6 @@ int CreateMeshWorldAssignment(int count)
 	postWorldSpaceDivisionBuilder.BindBufferToShaderResource(&genericMeshWorldRSContext, &globalGeometryRenderableLocation, nullptr, 0, 1, 5);
 	postWorldSpaceDivisionBuilder.UploadConstant(&genericMeshWorldRSContext, &mainGrid, 0);
 	postWorldSpaceDivisionBuilder.UploadConstant(&genericMeshWorldRSContext, &mainIndirectDrawData.commandBufferCount, 1);
-
-	postWorldSpaceDivisionBuilder.BindBarrier(&genericMeshWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	postWorldSpaceDivisionBuilder.BindBarrier(&genericMeshWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 	std::array<ShaderResourceSetHandle, 1> postWorldDivDescriptor = {  worldSpaceAssignment.postWorldSpaceDivisionDescriptor, };
 
@@ -2918,7 +2892,6 @@ int CreateLightAssignments(int count)
 
 	prefixSumBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceCountsAlloc, nullptr, 0, 1, 0);
 	prefixSumBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 1);
-	prefixSumBuilder.BindBarrier(&genericLightWorldRSContext, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	prefixSumBuilder.UploadConstant(&genericLightWorldRSContext, &lightAssignment.totalElementsCount, 0);
 
 	if (lightAssignment.totalSumsNeeded)
@@ -2927,7 +2900,6 @@ int CreateLightAssignments(int count)
 
 		prefixSumBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 
-		prefixSumBuilder.BindBarrier(&genericLightWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 	}
 	else
 	{
@@ -2970,9 +2942,6 @@ int CreateLightAssignments(int count)
 		sumAfterBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 2);
 		sumAfterBuilder.UploadConstant(&genericLightWorldRSContext, &lightAssignment.totalSumsNeeded, 0);
 
-		sumAfterBuilder.BindBarrier(&genericLightWorldRSContext, 1, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-		sumAfterBuilder.BindBarrier(&genericLightWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-
 		std::array<ShaderResourceSetHandle, 1> prefixSumOverflowDescriptor = { lightAssignment.sumAfterDescriptors };
 
 		ComputeIntermediaryPipelineInfo prefixSumComputePipeline = {
@@ -3005,8 +2974,6 @@ int CreateLightAssignments(int count)
 		sumAppliedToBinBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceOffsetsAlloc, nullptr, 0, 1, 0);
 		sumAppliedToBinBuilder.BindBufferToShaderResource(&genericLightWorldRSContext, &lightAssignment.deviceSumsAlloc, nullptr, 0, 1, 1);
 		sumAppliedToBinBuilder.UploadConstant(&genericLightWorldRSContext, &lightAssignment.totalElementsCount, 0);
-
-		sumAppliedToBinBuilder.BindBarrier(&genericLightWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 		std::array<ShaderResourceSetHandle, 1> incrementSumsDescriptor = { lightAssignment.sumAppliedToBinDescriptors, };
 
@@ -3050,7 +3017,6 @@ int CreateLightAssignments(int count)
 	preWorldSpaceBuilder.BindBufferView(&genericLightWorldRSContext, &globalLightTypesBuffer, 0, 1, 2);
 	preWorldSpaceBuilder.UploadConstant(&genericLightWorldRSContext, &mainGrid, 0);
 	preWorldSpaceBuilder.UploadConstant(&genericLightWorldRSContext, &globalLightCount, 1);
-	preWorldSpaceBuilder.BindBarrier(&genericLightWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 	std::array<ShaderResourceSetHandle, 1> preWorldDivDescriptor = { lightAssignment.preWorldSpaceDivisionDescriptor, };
 
@@ -3087,8 +3053,6 @@ int CreateLightAssignments(int count)
 	postWorldBuilder.BindBufferView(&genericLightWorldRSContext, &lightAssignment.worldSpaceDivisionAlloc, 0, 1, 2);
 	postWorldBuilder.UploadConstant(&genericLightWorldRSContext, &mainGrid, 0);
 	postWorldBuilder.UploadConstant(&genericLightWorldRSContext, &globalLightCount, 1);
-	postWorldBuilder.BindBarrier(&genericLightWorldRSContext, 0, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
-	postWorldBuilder.BindBarrier(&genericLightWorldRSContext, 2, COMPUTE_BARRIER, READ_SHADER_RESOURCE);
 
 	std::array<ShaderResourceSetHandle, 1> postWorldDivDescriptor = { lightAssignment.postWorldSpaceDivisionDescriptor, };
 
@@ -3192,13 +3156,6 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 	shadowClippingDescriptorB1.UploadConstant(&genericMainShadowMapRSContext, &mainIndirectDrawData.commandBufferCount, 0);
 	shadowClippingDescriptorB1.UploadConstant(&genericMainShadowMapRSContext, &globalLightCount, 1);
-	shadowClippingDescriptorB1.BindBarrier(&genericMainShadowMapRSContext, 0, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-	shadowClippingDescriptorB1.BindBarrier(&genericMainShadowMapRSContext, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-	shadowClippingDescriptorB1.BindBarrier(&genericMainShadowMapRSContext, 3, INDIRECT_DRAW_BARRIER, READ_INDIRECT_COMMAND);
-
-	shadowClippingDescriptorB2.BindBarrier(&genericMainShadowMapRSContext, 1, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-	shadowClippingDescriptorB2.BindBarrier(&genericMainShadowMapRSContext, 2, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
-	shadowClippingDescriptorB2.BindBarrier(&genericMainShadowMapRSContext, 3, VERTEX_SHADER_BARRIER, READ_SHADER_RESOURCE);
 
 	std::array<ShaderResourceSetHandle, 2> shadowClipDesc = { mainShadowMapManager.shadowClippingDescriptor1, mainShadowMapManager.shadowClippingDescriptor2 };
 
@@ -3809,6 +3766,8 @@ void ApplicationLoop::InitializeRuntime()
 	c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 
 	UpdateCameraMatrix();
+
+	
 }
 
 void ApplicationLoop::CleanupRuntime()

@@ -86,7 +86,8 @@ enum BarrierActionBits
 	READ_SHADER_RESOURCE = 2,
 	READ_UNIFORM_BUFFER = 4,
 	READ_VERTEX_INPUT = 8,
-	READ_INDIRECT_COMMAND = 16
+	READ_INDIRECT_COMMAND = 16,
+	TRANSFER_WRITE_DATA_RESOURCE = 32,
 };
 
 enum BarrierStageBits
@@ -97,7 +98,7 @@ enum BarrierStageBits
 	FRAGMENT_BARRIER = 8,
 	BEGINNING_OF_PIPE = 16,
 	INDIRECT_DRAW_BARRIER = 32,
-	TRANSFER_STAGE = 64,
+	TRANSFER_BARRIER = 64,
 };
 
 typedef int BarrierAction;
@@ -204,7 +205,6 @@ struct ShaderResourceSet
 	int bindingCount;
 	int layoutHandle;
 	int setCount;
-	int barrierCount;
 	int samplerCount;
 	int viewCount;
 	int constantsCount;
@@ -215,6 +215,7 @@ struct ShaderResourceHeader
 {
 	ShaderResourceType type;
 	ShaderResourceAction action;
+	ShaderStageType stage;
 	int binding;
 	int arrayCount;
 };
@@ -234,15 +235,12 @@ struct ShaderResourceImage : public ShaderResourceHeader
 struct ShaderResourceBuffer : public ShaderResourceHeader
 {
 	int* allocationIndex;
-	int* offsets;
-	int firstBuffer;
 	int bufferCount;
 };
 
 struct ShaderResourceBufferView : public ShaderResourceHeader
 {
 	int* allocationIndex;
-	int firstView;
 	int viewCount;
 };
 
