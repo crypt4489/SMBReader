@@ -104,8 +104,6 @@ struct TransferCommand
 	int offset;
 	int allocationIndex;
 	int copycount;
-	BarrierStage dstStage;
-	BarrierAction dstAction;
 };
 
 struct RenderAllocation
@@ -207,8 +205,7 @@ struct RenderDriverUpdateCommandFill : public RenderDriverUpdateCommandHeader
 	int allocOffset;
 	int copiesWithin;
 	uint32_t fillValue; 
-	BarrierStage stage; 
-	BarrierAction action;
+	int pad[2];
 
 	RenderDriverUpdateCommandHeader* GetNext()
 	{
@@ -393,7 +390,7 @@ struct TransferCommandsPool
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(int allocationIndex, int size, int allocOffset, uint32_t fillValue, BarrierStage stage, BarrierAction action, int copies)
+	int Create(int allocationIndex, int size, int allocOffset, uint32_t fillValue, int copies)
 	{
 		int link = Find(allocationIndex, allocOffset);
 		TransferCommand* region = nullptr;
@@ -424,8 +421,6 @@ struct TransferCommandsPool
 		}
 
 		region->copycount = copies;
-		region->dstStage = stage;
-		region->dstAction = action;
 
 		return 0;
 	}
@@ -460,8 +455,6 @@ struct TransferCommandsPool
 		outputRegion->copycount = transferRegions[link].copycount;
 		outputRegion->fillVal = transferRegions[link].fillVal;
 		outputRegion->offset = transferRegions[link].offset;
-		outputRegion->dstStage = transferRegions[link].dstStage;
-		outputRegion->dstAction = transferRegions[link].dstAction;
 		int linkRet = regionLinks[link];
 		if (transferRegions[link].copycount > 1)
 		{
@@ -478,8 +471,6 @@ struct TransferCommandsPool
 			region->copycount = -1;
 			region->offset = -1;
 			region->fillVal = 0;
-			region->dstAction = -1;
-			region->dstStage = -1;
 		}
 		return linkRet;
 	}
@@ -800,15 +791,22 @@ struct RenderBufferDescription
 	int resourceStatus;
 };
 
+#define MAX_SAMPLER_ATTACHED_TO_TEXTURE 4
+#define MAX_VIEWS_ATTACHED_TO_TEXTURE 4
+
 struct RenderTextureDescription
 {
 	EntryHandle textureIndex;
+	int viewIndex[MAX_VIEWS_ATTACHED_TO_TEXTURE];
+	int samplerIndex[MAX_VIEWS_ATTACHED_TO_TEXTURE];
 	int resourceStatusIndex;
 	ImageFormat format; 
 	uint32_t imageHeight;
 	uint32_t imageWidth;
 	uint32_t mipLayers;
 	uint32_t arrayLayers;
+	uint32_t samplerCount;
+	uint32_t viewCount;
 };
 
 struct RenderPipelineDescription

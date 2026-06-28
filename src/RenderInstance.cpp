@@ -567,6 +567,8 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 
 	textureResourceHandles.Create(instanceStorageAllocator, info->maxTextureHandles);
 
+	textureViewsResourceHandles.Create(instanceStorageAllocator, info->maxTextureHandles);
+
 	resourceStatuses.Create(instanceStorageAllocator, info->maxResourceStatuses);
 
 	pipelineInfos.Create(instanceStorageAllocator, info->maxPipelineTemplates);
@@ -608,7 +610,7 @@ void RenderInstance::DestoryTexture(int deviceSelection, EntryHandle handle)
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	dev->DestroyTexture(handle);
+	//dev->DestroyTexture(handle);
 }
 
 void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandle swapChainIndex)
@@ -649,6 +651,8 @@ void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandl
 					resourceStatuses.Free(texDesc->resourceStatusIndex);
 
 					textureResourceHandles.Free(inst->textureIds[sampIndex][d]);
+
+					textureViewsResourceHandles.Free(texDesc->viewIndex[0]);
 				}
 
 				sampLo <<= 1;
@@ -1229,7 +1233,11 @@ int RenderInstance::CreateAttachmentResources(
 						
 						desc->format = resourceTempl->format;
 
-						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+						desc->textureIndex = resourceInst->attachmentImage[v][g];
+
+						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
+
+						textureViewsResourceHandles.pool[viewIndex] = resourceInst->attachmentImageView[v][g];
 
 						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -1282,7 +1290,11 @@ int RenderInstance::CreateAttachmentResources(
 
 						desc->format = resourceTempl->format;
 
-						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+						desc->textureIndex = resourceInst->attachmentImage[v][g];
+
+						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
+
+						textureViewsResourceHandles.pool[viewIndex] = resourceInst->attachmentImageView[v][g];
 
 						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -1333,7 +1345,11 @@ int RenderInstance::CreateAttachmentResources(
 
 						desc->format = resourceTempl->format;
 
-						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+						desc->textureIndex = resourceInst->attachmentImage[v][g];
+
+						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
+
+						textureViewsResourceHandles.pool[viewIndex] = resourceInst->attachmentImageView[v][g];
 
 						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -1385,7 +1401,11 @@ int RenderInstance::CreateAttachmentResources(
 
 						desc->format = resourceTempl->format;
 
-						desc->textureIndex = resourceInst->attachmentImageView[v][g];
+						desc->textureIndex = resourceInst->attachmentImage[v][g];
+
+						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
+
+						textureViewsResourceHandles.pool[viewIndex] = resourceInst->attachmentImageView[v][g];
 
 						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -1448,7 +1468,11 @@ int RenderInstance::CreateAttachmentResources(
 
 					desc->format = resourceTempl->format;
 
-					desc->textureIndex = resourceInst->attachmentImageView[0][g];
+					desc->textureIndex = resourceInst->attachmentImage[0][g];
+
+					int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
+
+					textureViewsResourceHandles.pool[viewIndex] = resourceInst->attachmentImageView[0][g];
 
 					int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -2186,7 +2210,11 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
-				builder->AddImageResourceDescription(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+				RenderTextureDescription* desc = textureResourceHandles.Get(update->resourceHandles[iter]);
+
+				EntryHandle viewHandle = textureViewsResourceHandles[desc->viewIndex[0]];
+
+				builder->AddImageResourceDescription(viewHandle, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
 
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
@@ -2205,7 +2233,13 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 
 			for (int iter = 0; iter < update->resourceCount; iter++)
 			{
-				builder->AddCombinedTextureArray(textureResourceHandles[update->resourceHandles[iter]].textureIndex, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
+				RenderTextureDescription* desc = textureResourceHandles.Get(update->resourceHandles[iter]);
+
+				EntryHandle viewHandle = textureViewsResourceHandles[desc->viewIndex[0]];
+
+				EntryHandle samplerHandle = samplerResourceHandles[desc->samplerIndex[0]];
+
+				builder->AddCombinedTextureArray(viewHandle, samplerHandle, update->resourceDstBegin + iter, region.bindingIndex, currentFrame, 1);
 
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
@@ -2616,20 +2650,32 @@ int RenderInstance::CreateImageHandle(
 
 	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
 
-	EntryHandle textureHandle = dev->CreateImageHandle(
-		width, height, 1,
-		mipLevels, gpuMemAddress, actualFormat,
-		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_TYPE_2D, 
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+	EntryHandle textureHandle = dev->CreateImage(
+		width, 
+		height, 
+		mipLevels, 
+		actualFormat, 
+		1,
+	    VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, 0);
+		VK_IMAGE_USAGE_SAMPLED_BIT, 
+		1, 
+		gpuMemAddress, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+		VK_IMAGE_LAYOUT_UNDEFINED, 
+		VK_IMAGE_TILING_OPTIMAL, 
+		0, 
+		VK_IMAGE_TYPE_2D, 
+		imagePools[poolIndex]
+	);
 
-	if (samplerIndex >= 0)
-		dev->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+	EntryHandle viewHandle = dev->CreateImageView(textureHandle, mipLevels, 1, actualFormat , VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 
 	int textureIndex = textureResourceHandles.Allocate();
+
+	int viewIndex = textureViewsResourceHandles.Allocate();
+
+	textureViewsResourceHandles.pool[viewIndex] = viewHandle;
 
 	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
@@ -2639,6 +2685,10 @@ int RenderInstance::CreateImageHandle(
 	renderTexDesc->imageHeight = height;
 	renderTexDesc->format = format;
 	renderTexDesc->textureIndex = textureHandle;
+	renderTexDesc->viewIndex[0] = viewIndex;
+	renderTexDesc->samplerIndex[0] = samplerIndex;
+	renderTexDesc->viewCount = 1;
+	renderTexDesc->samplerCount = 1;
 
 	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -2660,23 +2710,33 @@ int RenderInstance::CreateStorageImage(
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	EntryHandle textureHandle = dev->CreateImageHandle(
-		width, height, 1,
-		mipLevels, gpuMemAddress, API::ConvertImageFormatToVulkanFormat(format),
-		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT, 
-		VK_IMAGE_TYPE_2D,
+	EntryHandle textureHandle = dev->CreateImage(
+		width,
+		height,
+		mipLevels,
+		API::ConvertImageFormatToVulkanFormat(format),
+		1,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT | 
+		VK_IMAGE_USAGE_SAMPLED_BIT |
 		VK_IMAGE_USAGE_STORAGE_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, 0
+		1,
+		gpuMemAddress,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_TILING_OPTIMAL,
+		0,
+		VK_IMAGE_TYPE_2D,
+		imagePools[poolIndex]
 	);
 
-	if (samplerIndex >= 0)
-		dev->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+	EntryHandle viewHandle = dev->CreateImageView(textureHandle, mipLevels, 1, API::ConvertImageFormatToVulkanFormat(format), VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 
 	int textureIndex = textureResourceHandles.Allocate();
+
+	int viewIndex = textureViewsResourceHandles.Allocate();
+
+	textureViewsResourceHandles.pool[viewIndex] = viewHandle;
 
 	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
@@ -2686,6 +2746,14 @@ int RenderInstance::CreateStorageImage(
 	renderTexDesc->imageHeight = height;
 	renderTexDesc->format = format;
 	renderTexDesc->textureIndex = textureHandle;
+	renderTexDesc->viewIndex[0] = viewIndex;
+	renderTexDesc->viewCount = 1;
+
+	if (samplerIndex >= 0)
+	{
+		renderTexDesc->samplerIndex[0] = samplerIndex;
+		renderTexDesc->samplerCount = 1;
+	}
 
 	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -2709,22 +2777,32 @@ int RenderInstance::CreateCubeImageHandle(
 
 	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
 
-	EntryHandle textureHandle = dev->CreateImageHandle(
-		width, height, 6,
-		mipLevels, gpuMemAddress, actualFormat,
-		imagePools[poolIndex],
-		VK_IMAGE_ASPECT_COLOR_BIT,
-		VK_IMAGE_TYPE_2D,
+	EntryHandle textureHandle = dev->CreateImage(
+		width,
+		height,
+		mipLevels,
+		actualFormat,
+		6,
 		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 		VK_IMAGE_USAGE_SAMPLED_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
+		1,
+		gpuMemAddress,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		VK_IMAGE_LAYOUT_UNDEFINED,
+		VK_IMAGE_TILING_OPTIMAL,
+		VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT,
+		VK_IMAGE_TYPE_2D,
+		imagePools[poolIndex]
 	);
 
-	if (samplerIndex >= 0)
-		dev->AssignSamplerToTexture(textureHandle, samplerResourceHandles[samplerIndex]);
+	EntryHandle viewHandle = dev->CreateImageView(textureHandle, mipLevels, 6, actualFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_CUBE);
 
 	int textureIndex = textureResourceHandles.Allocate();
+
+	int viewIndex = textureViewsResourceHandles.Allocate();
+
+	textureViewsResourceHandles.pool[viewIndex] = viewHandle;
 
 	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
 
@@ -2734,6 +2812,14 @@ int RenderInstance::CreateCubeImageHandle(
 	renderTexDesc->imageHeight = height;
 	renderTexDesc->format = format;
 	renderTexDesc->textureIndex = textureHandle;
+	renderTexDesc->viewIndex[0] = viewIndex;
+	renderTexDesc->viewCount = 1;
+
+	if (samplerIndex >= 0)
+	{
+		renderTexDesc->samplerIndex[0] = samplerIndex;
+		renderTexDesc->samplerCount = 1;
+	}
 
 	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
 
@@ -3327,7 +3413,11 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 				
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddImageResourceDescription(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, imageIndex, i, 0, frames);
+					RenderTextureDescription* desc = textureResourceHandles.Get(image->textureHandles[imageIndex]);
+
+					EntryHandle viewHandle = textureViewsResourceHandles[desc->viewIndex[0]];
+
+					builder->AddImageResourceDescription(viewHandle, imageIndex, i, 0, frames);
 				}
 
 				break;
@@ -3346,7 +3436,13 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 			
 				for (int imageIndex = 0; imageIndex < image->textureCount; imageIndex++)
 				{
-					builder->AddCombinedTextureArray(textureResourceHandles[image->textureHandles[imageIndex]].textureIndex, imageIndex, i, 0, frames);
+					RenderTextureDescription* desc = textureResourceHandles.Get(image->textureHandles[imageIndex]);
+
+					EntryHandle viewHandle = textureViewsResourceHandles[desc->viewIndex[0]];
+
+					EntryHandle samplerHandle = samplerResourceHandles[desc->samplerIndex[0]];
+
+					builder->AddCombinedTextureArray(viewHandle, samplerHandle, imageIndex, i, 0, frames);
 				}
 				
 				break;
@@ -4225,7 +4321,7 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::TRANSFERCOMMAND:
 		{
 			RenderDriverUpdateCommandFill* rducf = (RenderDriverUpdateCommandFill*)header;
-			transferCommandPool.Create(rducf->allocationIndex,  rducf->size, rducf->allocOffset, rducf->fillValue, rducf->stage, rducf->action, rducf->copiesWithin);
+			transferCommandPool.Create(rducf->allocationIndex,  rducf->size, rducf->allocOffset, rducf->fillValue, rducf->copiesWithin);
 			header = rducf->GetNext();
 			currentSize -= sizeof(RenderDriverUpdateCommandFill);
 			break;
@@ -4272,8 +4368,6 @@ void RenderInstance::SwapUpdateCommands()
 int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart)
 {
 	AttachmentGraphInstance* currentGraphInstance = attachmentGraphsInstances.Get(frameGraph);
-
-	EntryHandle* imageViews = currentGraphInstance->resources[resourceIndex].attachmentImageView[0];
 
 	int imageCount = currentGraphInstance->resources[resourceIndex].imageCount;
 
@@ -4562,10 +4656,7 @@ void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, Rec
 							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout);
 							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByTexture(desc->textureIndex);
-
-							if (!barrier.image)
-								barrier.image = dev->GetImageByHandle(desc->textureIndex);
+							barrier.image = dev->GetImageByHandle(desc->textureIndex);
 
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -4749,10 +4840,7 @@ void RenderInstance::GenerateComputeDescriptorBarriers(int deviceSelection, Reco
 							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout);
 							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByTexture(desc->textureIndex);
-
-							if (!barrier.image)
-								barrier.image = dev->GetImageByHandle(desc->textureIndex);
+							barrier.image = dev->GetImageByHandle(desc->textureIndex);
 
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -4812,10 +4900,7 @@ void RenderInstance::GenerateComputeDescriptorBarriers(int deviceSelection, Reco
 							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout);
 							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::WRITEABLE);
-							barrier.image = dev->GetImageByTexture(desc->textureIndex);
-
-							if (!barrier.image)
-								barrier.image = dev->GetImageByHandle(desc->textureIndex);
+							barrier.image = dev->GetImageByHandle(desc->textureIndex);
 
 							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;

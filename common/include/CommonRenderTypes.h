@@ -79,7 +79,6 @@ enum class ComponentFormatType
 	R16G16B16_SINT = 11
 };
 
-
 enum BarrierActionBits
 {
 	WRITE_SHADER_RESOURCE = 1,
@@ -104,42 +103,6 @@ enum BarrierStageBits
 typedef int BarrierAction;
 
 typedef int BarrierStage;
-
-enum class MemoryBarrierType
-{
-	MEMORY_BARRIER = 0,
-	IMAGE_BARRIER = 1,
-	BUFFER_BARRIER = 2,
-	BARRIER_MAX_ENUM
-};
-
-struct ShaderResourceBarrier
-{
-	MemoryBarrierType type;
-	BarrierStage srcStage;
-	BarrierStage dstStage;
-	BarrierAction srcAction;
-	BarrierAction dstAction;
-};
-
-struct ShaderResourceImageBarrier : public ShaderResourceBarrier
-{
-	ImageLayout srcResourceLayout;
-	ImageLayout dstResourceLayout;
-	ImageUsage imageType;
-};
-
-struct ShaderResourceBufferBarrier : public ShaderResourceBarrier
-{
-
-};
-
-struct ShaderResourceState
-{
-	BarrierAction currentAction;
-	BarrierStage currentStage;
-	ImageLayout layout;  
-};
 
 enum class ShaderResourceType
 {
@@ -171,7 +134,6 @@ enum ShaderStageTypeBits
 	FRAGMENTSHADERSTAGE = 2,
 	COMPUTESHADERSTAGE = 4,
 };
-
 
 typedef int ShaderStageType;
 
@@ -243,7 +205,6 @@ struct ShaderResourceBufferView : public ShaderResourceHeader
 	int* allocationIndex;
 	int viewCount;
 };
-
 
 struct ShaderResourceConstantBuffer : public ShaderResourceHeader
 {
@@ -354,7 +315,6 @@ struct GenericPipelineStateInfo
 	VertexBufferDescription vertexBufferDesc[4];
 };
 
-
 enum class AttachmentDescriptionType
 {
 	COLORATTACH = 0,
@@ -381,7 +341,6 @@ enum class AttachmentStoreUsage
 	ATTACHDISCARD = 1,
 	ATTACHSTORE = 2
 };
-
 
 struct AttachmentResource
 {

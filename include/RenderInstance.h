@@ -292,6 +292,8 @@ struct RenderInstance
 
 	PoolAllocator<RenderTextureDescription> textureResourceHandles{};
 
+	PoolAllocator<EntryHandle> textureViewsResourceHandles{};
+
 	PoolAllocator<EntryHandle> samplerResourceHandles{};
 
 	PoolAllocator<ResourceStatus> resourceStatuses{};

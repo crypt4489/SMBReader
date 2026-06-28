@@ -10,7 +10,6 @@
 #include "VKDescriptorSetBuilder.h"
 #include "VKPipelineBuilder.h"
 #include "VKSwapChain.h"
-#include "VKTexture.h"
 #include "VKUtilities.h"
 
 #include <assert.h>
@@ -1833,6 +1832,7 @@ EntryHandle* VKDevice::CreateReusableCommandBuffers(
 	return intHandles;
 }
 
+/*
 EntryHandle VKDevice::CreateImageHandle(
 	uint32_t width, uint32_t height, uint32_t layers,
 	uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
@@ -1896,6 +1896,7 @@ EntryHandle VKDevice::CreateImageHandle(
 
 	return texImageHandle;
 }
+*/
 
 EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 {
@@ -2287,7 +2288,7 @@ void VKDevice::DestroyDevice()
 			break;
 
 		case VulkTextureHandle:
-			DestroyTexture(handle);
+			//DestroyTexture(handle);
 			break;
 
 		case VulkBufferView:
@@ -2555,6 +2556,7 @@ void VKDevice::DestroyTimelineSemaphore(EntryHandle handle)
 	ReturnHandleObject(handle);
 }
 
+/*
 void VKDevice::DestroyTexture(EntryHandle handle)
 {
 	VKTexture* tex = GetTexture(handle);
@@ -2571,6 +2573,7 @@ void VKDevice::DestroyTexture(EntryHandle handle)
 	
 	ReturnHandleObject(handle);
 }
+*/
 
 
 //GETTERS
@@ -2789,6 +2792,7 @@ VkImage VKDevice::GetImageByHandle(EntryHandle handle)
 	return imageAllocation->imageHandle;
 }
 
+/*
 VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 {
 	VKTexture* tex = GetTexture(handle);
@@ -2798,6 +2802,7 @@ VkImage VKDevice::GetImageByTexture(EntryHandle handle)
 
 	return GetImageByHandle(tex->imageIndex);
 }
+*/
 
 ImageMemoryPool* VKDevice::GetImageMemoryPool(EntryHandle handle)
 {
@@ -2827,6 +2832,8 @@ VkImageView VKDevice::GetImageViewByHandle(EntryHandle handle)
 	return reinterpret_cast<VkImageView>(objHandle.memoryLocation);
 }
 
+/*
+
 VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewIndex)
 {
 	VKTexture* tex = GetTexture(handle);
@@ -2836,6 +2843,8 @@ VkImageView VKDevice::GetImageViewByTexture(EntryHandle handle, int imageViewInd
 
 	return GetImageViewByHandle(tex->viewIndex[imageViewIndex]);
 }
+
+*/
 
 PipelineCacheObject* VKDevice::GetPipelineCacheObject(EntryHandle handle)
 {
@@ -2991,6 +3000,7 @@ VkSampler VKDevice::GetSamplerByHandle(EntryHandle handle)
 	return reinterpret_cast<VkSampler>(objHandle.memoryLocation);
 }
 
+/*
 VkSampler VKDevice::GetSamplerByTexture(EntryHandle handle, int samplerIndex)
 {
 	VKTexture* tex = GetTexture(handle);
@@ -3000,6 +3010,7 @@ VkSampler VKDevice::GetSamplerByTexture(EntryHandle handle, int samplerIndex)
 
 	return GetSamplerByHandle(tex->samplerIndex[samplerIndex]);
 }
+*/
 
 VkSemaphore VKDevice::GetSemaphore(EntryHandle handle)
 {
@@ -3068,6 +3079,7 @@ TexelBufferView* VKDevice::GetTexelBufferView(EntryHandle handle)
 	return alloc;
 }
 
+/*
 VKTexture* VKDevice::GetTexture(EntryHandle handle)
 {
 	HandlePoolObject objHandle = GetVkTypeFromEntry(handle);
@@ -3080,6 +3092,7 @@ VKTexture* VKDevice::GetTexture(EntryHandle handle)
 
 	return reinterpret_cast<VKTexture*>(objHandle.memoryLocation);
 }
+*/
 
 //ACTIONS
 
@@ -3134,9 +3147,10 @@ void VKDevice::GetImageMemorySizeAndAlignment(
 	return;
 }
 
-int VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex)
+/*
+int VKDevice::AssignSamplerToTexture(EntryHandle imageIndex, EntryHandle samplerIndex)
 {
-	VKTexture* tex = GetTexture(textureIndex);
+	VKTexture* tex = GetTexture(imageIndex);
 
 	if (!tex) 
 		return -1;
@@ -3145,6 +3159,7 @@ int VKDevice::AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle sampl
 
 	return 0;
 }
+*/
 
 uint32_t VKDevice::BeginFrameForSwapchain(EntryHandle swapChainIndex, EntryHandle acquireSemaphoreHandle, uint32_t currentFrame)
 {
@@ -3563,9 +3578,6 @@ int VKDevice::TransitionImageLayout(RecordingBufferObject* rbo, EntryHandle imag
 	VkImage image = GetImageByHandle(imageIndex);
 
 	if (!image)
-		image = GetImageByTexture(imageIndex);
-
-	if (!image)
 		return -1;
 
 	VK::Utils::MultiCommands::TransitionImageLayout(
@@ -3773,7 +3785,7 @@ int VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stag
 	return 0;
 }
 
-int VKDevice::UploadImageData(EntryHandle textureIndex, 
+int VKDevice::UploadImageData(EntryHandle imageIndex, 
 	char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex, 
 	int width, int height, int layers,
 	int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, EntryHandle queueManagerIndex
@@ -3786,7 +3798,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 	if (!stagingBufferAlloc)
 		return -1;
 
-	VkImage image = GetImageByTexture(textureIndex);
+	VkImage image = GetImageByHandle(imageIndex);
 
 	if (!image)
 		return -1;
@@ -3832,7 +3844,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 	return 0;
 }
 
-int VKDevice::UploadImageData(EntryHandle textureIndex,
+int VKDevice::UploadImageData(EntryHandle imageIndex,
 	char* imageData, size_t totalImageDataSize,
 	EntryHandle stagingBufferIndex,
 	int width, int height,
@@ -3858,7 +3870,7 @@ int VKDevice::UploadImageData(EntryHandle textureIndex,
 
 	vkUnmapMemory(device, stagingMemory);
 
-	VkImage image = GetImageByTexture(textureIndex);
+	VkImage image = GetImageByHandle(imageIndex);
 
 	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, startingLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, layers);
 

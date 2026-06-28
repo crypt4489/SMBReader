@@ -2,7 +2,6 @@
 
 #include "VKDescriptorSetBuilder.h"
 #include "VKDevice.h"
-#include "VKTexture.h"
 
 
 DescriptorSetBuilder::DescriptorSetBuilder(VKDevice* _d, size_t _ds)
@@ -58,16 +57,15 @@ void DescriptorSetBuilder::AddStorageBufferView(VkBufferView buffer, uint32_t bi
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddStorageImageDescription(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+void DescriptorSetBuilder::AddStorageImageDescription(EntryHandle* viewHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
 
 	for (uint32_t i = 0; i < texCount; i++)
 	{
 		VkDescriptorImageInfo* imageInfo = &imageInfos[i];
-		VKTexture* tex = device->GetTexture(textureHandles[i]);
 		imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo->imageView = device->GetImageViewByTexture(textureHandles[i], 0);
+		imageInfo->imageView = device->GetImageViewByHandle(viewHandles[i]);
 		imageInfo->sampler = VK_NULL_HANDLE;
 	}
 
@@ -89,18 +87,15 @@ void DescriptorSetBuilder::AddStorageImageDescription(EntryHandle* textureHandle
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle viewHandle, EntryHandle samplerIndex, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
 	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
 
-	
-	VKTexture* tex = device->GetTexture(textureHandle);
 	imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo->imageView = device->GetImageViewByTexture(textureHandle, 0);
-	imageInfo->sampler = device->GetSamplerByTexture(textureHandle, 0);
+	imageInfo->imageView = device->GetImageViewByHandle(viewHandle);
+	imageInfo->sampler = device->GetSamplerByHandle(samplerIndex);
 	
-
 	for (uint32_t set = firstSet; set < firstSet + setCount; set++)
 	{
 		VkWriteDescriptorSet descriptorWrite{};
@@ -118,7 +113,7 @@ void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle textureHandle, ui
 }
 
 
-void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle* viewHandles, EntryHandle* samplerHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
@@ -126,10 +121,9 @@ void DescriptorSetBuilder::AddCombinedTextureArray(EntryHandle* textureHandles, 
 	for (uint32_t i = 0; i < texCount; i++)
 	{
 		VkDescriptorImageInfo* imageInfo = &imageInfos[i];
-		VKTexture* tex = device->GetTexture(textureHandles[i]);
 		imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo->imageView = device->GetImageViewByTexture(textureHandles[i], 0);
-		imageInfo->sampler = device->GetSamplerByTexture(textureHandles[i], 0);
+		imageInfo->imageView = device->GetImageViewByHandle(viewHandles[i]);
+		imageInfo->sampler = device->GetSamplerByHandle(samplerHandles[i]);
 	}
 
 	for (uint32_t set = firstSet; set < firstSet+setCount; set++)
@@ -195,8 +189,7 @@ void DescriptorSetBuilder::AddBufferTypePerFrame(VkBuffer buffer, VkDeviceSize s
 
 	for (uint32_t i = firstSet; i < setCount+firstSet; i++)
 	{
-
-		auto& ref = bufferInfos[i];
+		VkDescriptorBufferInfo& ref = bufferInfos[i];
 		ref.buffer = buffer;
 		ref.offset = offset;
 		ref.range = size;
@@ -220,7 +213,11 @@ void DescriptorSetBuilder::AddBufferTypePerFrame(VkBuffer buffer, VkDeviceSize s
 void DescriptorSetBuilder::AddSamplerDescription(EntryHandle samplerHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
+	
+	imageInfo->imageView = VK_NULL_HANDLE;
+	imageInfo->imageLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	imageInfo->sampler = device->GetSamplerByHandle(samplerHandle);
+	
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
 
 	for (uint32_t set = firstSet; set < setCount + firstSet; set++)
@@ -239,18 +236,12 @@ void DescriptorSetBuilder::AddSamplerDescription(EntryHandle samplerHandle, uint
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle textureHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle viewHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkDescriptorImageInfo* imageInfo = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo)));
 
 	imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo->imageView = device->GetImageViewByTexture(textureHandle, 0);
-
-	if (!imageInfo->imageView)
-	{
-		imageInfo->imageView = device->GetImageViewByHandle(textureHandle);
-	}
-	
+	imageInfo->imageView = device->GetImageViewByHandle(viewHandle);
 
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));
 
@@ -270,7 +261,7 @@ void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle textureHandle
 	vkUpdateDescriptorSets(device->device, setCount, descriptorWrites, 0, nullptr);
 }
 
-void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle* textureHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
+void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle* viewHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount)
 {
 	VkDescriptorImageInfo* imageInfos = reinterpret_cast<VkDescriptorImageInfo*>(device->AllocFromDeviceCache(sizeof(VkDescriptorImageInfo) * texCount));
 
@@ -278,12 +269,7 @@ void DescriptorSetBuilder::AddImageResourceDescription(EntryHandle* textureHandl
 	{
 		VkDescriptorImageInfo* imageInfo = &imageInfos[i];
 		imageInfo->imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo->imageView = device->GetImageViewByTexture(textureHandles[i], 0);
-
-		if (!imageInfo->imageView)
-		{
-			imageInfo->imageView = device->GetImageViewByHandle(textureHandles[i]);
-		}
+		imageInfo->imageView = device->GetImageViewByHandle(viewHandles[i]);
 	}
 
 	VkWriteDescriptorSet* descriptorWrites = reinterpret_cast<VkWriteDescriptorSet*>(device->AllocFromDeviceCache(sizeof(VkWriteDescriptorSet) * setCount));

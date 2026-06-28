@@ -377,7 +377,7 @@ struct VKDevice
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount, size_t memoryAddr,
 		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
-
+/*
 	EntryHandle CreateImageHandle(
 		uint32_t width, uint32_t height, uint32_t layers,
 		uint32_t mipLevels, size_t memAddr, VkFormat imageFormat,
@@ -385,6 +385,8 @@ struct VKDevice
 		VkImageAspectFlags flags,
 		VkImageType imageType, VkImageUsageFlags usageFlags, VkImageLayout imageLayout, VkImageCreateFlags createFlags
 	);
+
+	*/
 
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
@@ -479,13 +481,13 @@ struct VKDevice
 
 	VkImage GetImageByHandle(EntryHandle handle);
 
-	VkImage GetImageByTexture(EntryHandle handle);
+//	VkImage GetImageByTexture(EntryHandle handle);
 
 	ImageMemoryPool* GetImageMemoryPool(EntryHandle handle);
 
 	VkImageView GetImageViewByHandle(EntryHandle handle);
 
-	VkImageView GetImageViewByTexture(EntryHandle handle, int imageViewIndex);
+//	VkImageView GetImageViewByTexture(EntryHandle handle, int imageViewIndex);
 
 	PipelineCacheObject* GetPipelineCacheObject(EntryHandle handle);
 
@@ -522,7 +524,7 @@ struct VKDevice
 
 	VkSampler GetSamplerByHandle(EntryHandle handle);
 
-	VkSampler GetSamplerByTexture(EntryHandle handle, int samplerIndex);
+//	VkSampler GetSamplerByTexture(EntryHandle handle, int samplerIndex);
 
 	VkSemaphore GetSemaphore(EntryHandle handle);
 
@@ -534,7 +536,7 @@ struct VKDevice
 
 	TexelBufferView* GetTexelBufferView(EntryHandle handle);
 
-	VKTexture* GetTexture(EntryHandle handle);
+//	VKTexture* GetTexture(EntryHandle handle);
 
 	//Destructors
 
@@ -584,7 +586,7 @@ struct VKDevice
 
 	void DestroyTimelineSemaphore(EntryHandle handle);
 
-	void DestroyTexture(EntryHandle handle);
+//	void DestroyTexture(EntryHandle handle);
 
 	void DestroyTexelBufferView(EntryHandle handle);
 
@@ -610,8 +612,6 @@ struct VKDevice
 
 
 	//ACTIONS/HELPERS
-
-	int AssignSamplerToTexture(EntryHandle textureIndex, EntryHandle samplerIndex);
 
 	uint32_t BeginFrameForSwapchain(EntryHandle swapChainIndex, EntryHandle acquireSemaphoreHandle, uint32_t currentFrame);
 
@@ -699,13 +699,13 @@ struct VKDevice
 
 	int ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
 
-	int UploadImageData(EntryHandle textureIndex,
+	int UploadImageData(EntryHandle imageIndex,
 		char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
 		int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, EntryHandle queueManagerIndex
 	);
 
-	int UploadImageData(EntryHandle textureIndex,
+	int UploadImageData(EntryHandle imageIndex,
 		char* imageData, size_t totalImageDataSize,
 		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
