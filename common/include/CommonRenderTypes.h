@@ -141,15 +141,16 @@ struct ShaderResourceSetTemplate
 {
 	int vulkanDescLayout;
 	int dx12DescriptorTable;
-	int bindingCount;
 	int resourceStart;
-	int samplerCount;
-	int viewCount;
+	int totalResourceCount;
 	int constantsCount;
+	int bindingCount;
+	int totalSamplersCount;
+	int totalViewsCount;
 	int constantStageCount;
 };
 
-struct ShaderResource
+struct ShaderResourceTemplate
 {
 	ShaderStageType stages;
 	ShaderResourceAction action;
@@ -162,16 +163,8 @@ struct ShaderResource
 	int rangeIndex;
 };
 
-struct ShaderResourceSet
-{
-	int bindingCount;
-	int layoutHandle;
-	int setCount;
-	int samplerCount;
-	int viewCount;
-	int constantsCount;
-	int constantStageCount;
-};
+#define MAX_SHADER_RESOURCE_SET_CONSTANT_BUFFER_COUNT 8
+#define MAX_SHADER_RESOURCE_SET_RESOURCE_COUNT 32
 
 struct ShaderResourceHeader
 {
@@ -182,28 +175,36 @@ struct ShaderResourceHeader
 	int arrayCount;
 };
 
-struct ShaderResourceSampler : public ShaderResourceHeader
+struct ShaderResourceSampler
 {
-	int* samplerHandles;
 	int samplerCount;
+	int* samplerHandles;
 };
 
-struct ShaderResourceImage : public ShaderResourceHeader
+struct ShaderResourceImage
 {
-	int* textureHandles;
 	int textureCount;
+	int* textureHandles;
 };
 
-struct ShaderResourceBuffer : public ShaderResourceHeader
+struct ShaderResourceBuffer
 {
-	int* allocationIndex;
 	int bufferCount;
+	int* allocationIndex;
 };
 
-struct ShaderResourceBufferView : public ShaderResourceHeader
+struct ShaderResourceArray : public ShaderResourceHeader
 {
-	int* allocationIndex;
-	int viewCount;
+	union
+	{
+		ShaderResourceSampler samplers;
+
+		ShaderResourceImage images;
+
+		ShaderResourceBuffer buffers;
+
+		ShaderResourceBuffer views;
+	} resourceArray;
 };
 
 struct ShaderResourceConstantBuffer : public ShaderResourceHeader
@@ -213,6 +214,14 @@ struct ShaderResourceConstantBuffer : public ShaderResourceHeader
 	int offset;
 	int rangeindex;
 	void* data;
+};
+
+struct ShaderResourceSet
+{
+	int setCount;
+	ShaderResourceConstantBuffer constantBuffers[MAX_SHADER_RESOURCE_SET_CONSTANT_BUFFER_COUNT];
+	ShaderResourceArray resourceBindings[MAX_SHADER_RESOURCE_SET_RESOURCE_COUNT];
+	ShaderResourceSetTemplate* templateMetaData;
 };
 
 struct ShaderComputeLayout
@@ -554,3 +563,12 @@ enum class DescriptorTypes
 	SAMPLER_DESCRIPTOR = 5,
 	COMBINED_IMAGE_SAMPLER_DESCRIPTOR = 6,
 };
+
+enum ImageViewAspectMaskBits
+{
+	COLOR_IMAGE_ASPECT = 1,
+	DEPTH_IMAGE_ASPECT = 2,
+	STENCIL_IMAGE_ASPECT = 4,
+};
+
+typedef int ImageViewAspectMask;

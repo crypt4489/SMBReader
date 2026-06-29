@@ -275,14 +275,15 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 
 		setLay->resourceStart = resourceIter;
 		setLay->constantsCount = 0;
-		setLay->samplerCount = 0;
+		setLay->totalSamplersCount= 0;
 		setLay->constantStageCount = 0;
-		setLay->viewCount = 0;
+		setLay->totalViewsCount = 0;
+		setLay->bindingCount = 0;
 	
 		while (tag && tag->hashCode == hash("ShaderResourceItem"))
 		{
+			ShaderResourceTemplate* resource = &graph->shaderResources[resourceIter++];
 
-			ShaderResource* resource = &graph->shaderResources[resourceIter++];
 			if (tag->resourceType == ShaderResourceType::CONSTANT_BUFFER)
 			{
 				resource->binding = ~0;
@@ -297,12 +298,14 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 
 				if (tag->resourceType == ShaderResourceType::SAMPLERSTATE)
 				{
-					setLay->samplerCount += checkForUnbounded;
+					setLay->totalSamplersCount += checkForUnbounded;
 				}
 				else
 				{
-					setLay->viewCount += checkForUnbounded;
+					setLay->totalViewsCount += checkForUnbounded;
 				}
+
+				bindingCount++;
 			}
 
 			resource->rangeIndex = tag->pushRangeStage;
@@ -314,15 +317,13 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 			resource->set = i;
 			resource->size = tag->size;
 			resource->offset = tag->offset;
-			setLay->bindingCount++;
-
-			if (!(tag->resourceType == ShaderResourceType::CONSTANT_BUFFER))
-			{
-				bindingCount++;
-			}
+			
+			setLay->totalResourceCount++;
 
 			tag = (ShaderResourceItemXMLTag*)TreeNodes[++resIter];
 		}
+
+		setLay->bindingCount = setLay->totalResourceCount - setLay->constantsCount;
 	}
 
 	*shaderDetailCount = shaderCount;

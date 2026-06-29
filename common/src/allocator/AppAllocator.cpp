@@ -107,12 +107,12 @@ void* SlabAllocator::Allocate(int _allocSize, int alignment)
 {
 	char* head = (char*)dataHead;
 
-	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
-
-	if ((out + _allocSize) > dataSize)
+	if ((dataAllocator + _allocSize) > dataSize)
 	{
 		return nullptr;
 	}
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
 
 	return (head + out);
 }
@@ -121,12 +121,12 @@ void* SlabAllocator::Allocate(int _allocSize)
 {
 	char* head = (char*)dataHead;
 
-	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
-
-	if ((out + _allocSize) > dataSize)
+	if ((dataAllocator + _allocSize) > dataSize)
 	{
 		return nullptr;
 	}
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
 
 	return (head + out);
 }
@@ -135,12 +135,12 @@ void* SlabAllocator::CAllocate(int _allocSize, int alignment)
 {
 	char* head = (char*)dataHead;
 
-	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
-
-	if ((out + _allocSize) > dataSize)
+	if ((dataAllocator + _allocSize) > dataSize)
 	{
 		return nullptr;
 	}
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0, alignment);
 
 	memset((head + out), 0, _allocSize);
 
@@ -151,12 +151,12 @@ void* SlabAllocator::CAllocate(int _allocSize)
 {
 	char* head = (char*)dataHead;
 
-	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
-
-	if ((out + _allocSize) > dataSize)
+	if ((dataAllocator + _allocSize) > dataSize)
 	{
 		return nullptr;
 	}
+
+	int out = UpdateAtomic(dataAllocator, _allocSize, 0);
 
 	memset((head + out), 0, _allocSize);
 

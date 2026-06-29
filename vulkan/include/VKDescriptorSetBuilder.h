@@ -36,21 +36,21 @@ struct DescriptorSetBuilder
 
 	int AllocDescriptorSets(VkDescriptorPool pool, VkDescriptorSetLayout descriptorSetLayout, uint32_t setCount, uint32_t variableCount);
 
-	void AddStorageImageDescription(EntryHandle* viewHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+	void AddStorageImageDescription(EntryHandle* viewHandles, VkImageLayout* layouts, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
-	void AddCombinedTextureArray(EntryHandle* viewHandles, EntryHandle* samplerHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet,  uint32_t setCount);
+	void AddCombinedTextureArray(EntryHandle* viewHandles, EntryHandle* samplerHandles, VkImageLayout* layouts, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet,  uint32_t setCount);
 
-	void AddImageResourceDescription(EntryHandle* viewHandles, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+	void AddImageResourceDescription(EntryHandle* viewHandles, VkImageLayout* layouts, uint32_t texCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
 	void AddSamplerDescription(EntryHandle* samplerHandles, uint32_t samplerCount, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
 	void AddSamplerDescription(EntryHandle samplerHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
-	void AddImageResourceDescription(EntryHandle viewHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+	void AddImageResourceDescription(EntryHandle viewHandle, VkImageLayout layout, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
-	void AddCombinedTextureArray(EntryHandle viewHandle, EntryHandle samplerIndex, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+	void AddCombinedTextureArray(EntryHandle viewHandle, EntryHandle samplerIndex, VkImageLayout layout, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
-	void AddStorageImageDescription(EntryHandle viewHandle, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
+	void AddStorageImageDescription(EntryHandle viewHandle, VkImageLayout layout, uint32_t dstArrayElement, uint32_t binding, uint32_t firstSet, uint32_t setCount);
 
 	EntryHandle AddDescriptorsToCache();
 

@@ -248,7 +248,7 @@ struct RenderInstance
 
 	void GetGPURequestedImageSizeAndAlignment(int deviceSelection, uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment);
 
-	int CreateDescriptorHeap(int deviceSelection, DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxDescriptorSets, uint32_t maxShaderResourceSets, uint32_t maxShaderResourceSetSlabAllocator);
+	int CreateDescriptorHeap(int deviceSelection, DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxDescriptorSets, uint32_t maxShaderResourceSets);
 
 	int CreateWindowedSurface(OSWindowInternalData* windowData);
 
@@ -260,6 +260,8 @@ struct RenderInstance
 
 	int CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
+	int CreateResourceStatusActions(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts);
+	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	VKInstance *vkInstance = nullptr;
@@ -292,7 +294,7 @@ struct RenderInstance
 
 	PoolAllocator<RenderTextureDescription> textureResourceHandles{};
 
-	PoolAllocator<EntryHandle> textureViewsResourceHandles{};
+	PoolAllocator<RenderImageViewDescription> textureViewsResourceHandles{};
 
 	PoolAllocator<EntryHandle> samplerResourceHandles{};
 

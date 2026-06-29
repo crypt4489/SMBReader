@@ -710,9 +710,9 @@ enum ResourceStatusType
 struct ResourceStatus
 {
 	ResourceStatusType resourceType;
-	BarrierStage currStage[3];
-	BarrierAction currAction[3];
-	ImageLayout currentLayout;
+	BarrierStage* currStage;
+	BarrierAction* currAction;
+	ImageLayout* currentLayout;
 };
 
 struct ComputeQueue
@@ -793,6 +793,7 @@ struct RenderBufferDescription
 
 #define MAX_SAMPLER_ATTACHED_TO_TEXTURE 4
 #define MAX_VIEWS_ATTACHED_TO_TEXTURE 4
+#define ATTACHMENT_VIEW_INDEX 0
 
 struct RenderTextureDescription
 {
@@ -813,4 +814,18 @@ struct RenderPipelineDescription
 {
 	PipelineInstanceData instanceData;
 	EntryHandle* pipelineIndices;
+};
+
+#define IMAGE_VIEW_ALL_MIPS ~0U
+#define IMAGE_VIEW_ALL_LAYERS ~0U
+
+struct RenderImageViewDescription
+{
+	ImageViewAspectMask mask;
+	uint32_t firstMipLevel;
+	uint32_t mipLevelCount;
+	uint32_t firstLayer;
+	uint32_t layerCount;
+	ImageLayout desiredLayoutForView;
+	EntryHandle viewIndex;
 };

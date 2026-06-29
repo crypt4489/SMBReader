@@ -31,7 +31,7 @@ struct ShaderGraph
 	int resourceCount;
 
 	ShaderMap shaderMaps[MAX_SHADER_MAPS];
-	ShaderResource shaderResources[MAX_SHADER_RESOURCES];
+	ShaderResourceTemplate shaderResources[MAX_SHADER_RESOURCES];
 	ShaderResourceSetTemplate shaderResourceSetTemplates[MAX_SHADER_RESOURCE_SET_TEMPLATES];
 };
 
