@@ -1380,7 +1380,7 @@ EntryHandle VKDevice::CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memo
 }
 
 EntryHandle VKDevice::CreateImageView(
-	EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
+	EntryHandle imageIndex, uint32_t firstMip, uint32_t firstLayer, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
 	VkResult vkRes = VK_SUCCESS;
@@ -1399,9 +1399,9 @@ EntryHandle VKDevice::CreateImageView(
 	viewInfo.viewType = imageViewType;
 	viewInfo.format = type;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
-	viewInfo.subresourceRange.baseMipLevel = 0;
+	viewInfo.subresourceRange.baseMipLevel = firstMip;
 	viewInfo.subresourceRange.levelCount = mipLevels;
-	viewInfo.subresourceRange.baseArrayLayer = 0;
+	viewInfo.subresourceRange.baseArrayLayer = firstLayer;
 	viewInfo.subresourceRange.layerCount = layersCount;
 
 	if ((vkRes = vkCreateImageView(device, &viewInfo, nullptr, &imageView)) != VK_SUCCESS) 
@@ -1422,7 +1422,7 @@ EntryHandle VKDevice::CreateImageView(
 }
 
 EntryHandle VKDevice::CreateImageView(
-	VkImage image, uint32_t mipLevels, uint32_t layersCount,
+	VkImage image, uint32_t firstMip, uint32_t firstLayer, uint32_t mipLevels, uint32_t layersCount,
 	VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType)
 {
 	VkResult vkRes = VK_SUCCESS;
@@ -1436,9 +1436,9 @@ EntryHandle VKDevice::CreateImageView(
 	viewInfo.viewType = imageViewType;
 	viewInfo.format = type;
 	viewInfo.subresourceRange.aspectMask = aspectMask;
-	viewInfo.subresourceRange.baseMipLevel = 0;
+	viewInfo.subresourceRange.baseMipLevel = firstMip;
 	viewInfo.subresourceRange.levelCount = mipLevels;
-	viewInfo.subresourceRange.baseArrayLayer = 0;
+	viewInfo.subresourceRange.baseArrayLayer = firstLayer;
 	viewInfo.subresourceRange.layerCount = layersCount;
 
 	if ((vkRes = vkCreateImageView(device, &viewInfo, nullptr, &imageView)) != VK_SUCCESS)

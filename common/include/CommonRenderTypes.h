@@ -181,10 +181,29 @@ struct ShaderResourceSampler
 	int* samplerHandles;
 };
 
+struct ShaderResourceImageContainer
+{
+	int textureHandle;
+	int viewIndex;
+};
+
+struct ShaderResourceCombinedImageContainer
+{
+	int textureHandle;
+	int viewIndex;
+	int samplerHandle;
+};
+
 struct ShaderResourceImage
 {
 	int textureCount;
-	int* textureHandles;
+	ShaderResourceImageContainer* textureDetails;
+};
+
+struct ShaderResourceCombinedImage
+{
+	int textureCount;
+	ShaderResourceCombinedImageContainer* textureDetails;
 };
 
 struct ShaderResourceBuffer
@@ -204,6 +223,8 @@ struct ShaderResourceArray : public ShaderResourceHeader
 		ShaderResourceBuffer buffers;
 
 		ShaderResourceBuffer views;
+
+		ShaderResourceCombinedImage combinedImages;
 	} resourceArray;
 };
 
@@ -572,3 +593,11 @@ enum ImageViewAspectMaskBits
 };
 
 typedef int ImageViewAspectMask;
+
+enum class ImageType
+{
+	IMAGE_1D = 1,
+	IMAGE_2D = 2,
+	IMAGE_3D = 3,
+	IMAGE_CUBE = 4,
+};

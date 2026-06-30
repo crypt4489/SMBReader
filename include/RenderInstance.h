@@ -38,6 +38,12 @@ namespace API
 	void ConvertGPUFeatureRequestToVkPhysicalDeviceProperties(const GPUFeatureRequest* request,
 		VkPhysicalDeviceFeatures2* features2,
 		VkPhysicalDeviceVulkan12Features* features12);
+
+	VkImageType ConvertImageTypeToVulkanImageType(ImageType imageType);
+
+	VkImageAspectFlags ConvertImageViewAspectMaskToVulkanImageAspectFlags(ImageViewAspectMask aspectMask);
+
+	VkImageViewType ConvertImageTypeToVulkanImageViewType(ImageType imageType);
 }
 
 struct RenderInstanceCreateInfo
@@ -141,19 +147,15 @@ struct RenderInstance
 		int deviceSelection,
 		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat type, int poolIndex, int samplerIndex);
-
-	int CreateCubeImageHandle(
-		int deviceSelection,
-		size_t gpuMemAddress,
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
+		uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, int poolIndex);
 
 	int CreateStorageImage(
 		int deviceSelection,
 		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat format, int poolIndex, int samplerIndex);
+		uint32_t mipLevels, ImageFormat format, int poolIndex);
+
+	int CreateImageView(int deviceSelection, int imageHandle, int firstMip, int mipCount, int firstLayer, int layerCount, ImageViewAspectMask imageAspect, ImageLayout desiredImageLayoutUsage);
 
 	int CreateImagePool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
 

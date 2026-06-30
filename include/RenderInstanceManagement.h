@@ -35,11 +35,32 @@ struct ShaderResourceUpdate
 	int dataSize;
 };
 
+enum class DeviceHandleArrayUpdateType
+{
+	TEXTURE_VIEW_UPDATE = 1,
+	TEXTURE_VIEW_SAMPLER_UPDATE = 2,
+	SAMPLER_UPDATE = 3,
+};
+
+struct DeviceHandleArrayUpdateTextureView
+{
+	int imageHandle;
+	int viewIndex;
+};
+
+struct DeviceHandleArrayUpdateTextureViewSampler
+{
+	int imageHandle;
+	int viewIndex;
+	int samplerHandle;
+};
+
 struct DeviceHandleArrayUpdate
 {
+	DeviceHandleArrayUpdateType updateType;
 	int resourceDstBegin;
 	int resourceCount;
-	int* resourceHandles;
+	void* resourceHandles;
 };
 
 struct BufferArrayUpdate
@@ -791,7 +812,6 @@ struct RenderBufferDescription
 	int resourceStatus;
 };
 
-#define MAX_SAMPLER_ATTACHED_TO_TEXTURE 4
 #define MAX_VIEWS_ATTACHED_TO_TEXTURE 4
 #define ATTACHMENT_VIEW_INDEX 0
 
@@ -799,9 +819,9 @@ struct RenderTextureDescription
 {
 	EntryHandle textureIndex;
 	int viewIndex[MAX_VIEWS_ATTACHED_TO_TEXTURE];
-	int samplerIndex[MAX_VIEWS_ATTACHED_TO_TEXTURE];
 	int resourceStatusIndex;
 	ImageFormat format; 
+	ImageType imageType;
 	uint32_t imageHeight;
 	uint32_t imageWidth;
 	uint32_t mipLayers;

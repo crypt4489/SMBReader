@@ -391,11 +391,11 @@ struct VKDevice
 	EntryHandle CreateImageMemoryPool(VkDeviceSize poolSize, uint32_t memoryTypeIndex);
 
 	EntryHandle CreateImageView(
-		EntryHandle imageIndex, uint32_t mipLevels, uint32_t layersCount,
+		EntryHandle imageIndex, uint32_t firstMip, uint32_t firstLayer, uint32_t mipLevels, uint32_t layersCount,
 		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
 	EntryHandle CreateImageView(
-		VkImage image, uint32_t mipLevels, uint32_t layersCount,
+		VkImage image, uint32_t firstMip, uint32_t firstLayer, uint32_t mipLevels, uint32_t layersCount,
 		VkFormat type, VkImageAspectFlags aspectMask, VkImageViewType imageViewType);
 
 	int CreateLogicalDevice(

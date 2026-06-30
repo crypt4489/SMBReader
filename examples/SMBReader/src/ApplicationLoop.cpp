@@ -507,7 +507,7 @@ static Logger mainAppLogger{};
 
 static int mainLinearSampler = -1;
 
-static uint32_t imageIndex = 0;
+static uint32_t swcImageIndex = 0;
 
 static int mainRTVIndex;
 static int mainDSVIndex;
@@ -888,6 +888,7 @@ void ApplicationLoop::Execute()
 
 		DeviceHandleArrayUpdate samplerUpdate;
 
+		samplerUpdate.updateType = DeviceHandleArrayUpdateType::SAMPLER_UPDATE;
 		samplerUpdate.resourceCount = 1;
 		samplerUpdate.resourceDstBegin = 0;
 		samplerUpdate.resourceHandles = &mainLinearSampler;
@@ -1002,9 +1003,9 @@ void ApplicationLoop::Execute()
 				updateMainDebugCommand--;
 			}
 
-			imageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
+			swcImageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
 
-			if (imageIndex != ~0UL) 
+			if (swcImageIndex != ~0UL)
 			{
 				if (currentFrameGraphIndex == MSAAShadowMapping)
 				{
@@ -1042,9 +1043,9 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
 				}
 
-				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, imageIndex);
+				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, swcImageIndex);
 
-				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, imageIndex);
+				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
 			}
 			else
 			{
@@ -2300,16 +2301,19 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 			actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
 
-			mainDictionary.textureHandles[ii + globalTextureStartIndex] =
-				GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
-					actualMemoryAddress,
-					texture.width,
-					texture.height,
-					texture.miplevels,
-					format,
-					poolIndex,
-					mainLinearSampler
-				);
+			int smbImageIndex = mainDictionary.textureHandles[ii + globalTextureStartIndex] =
+					GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
+						actualMemoryAddress,
+						texture.width,
+						texture.height,
+						texture.miplevels,
+						1,
+						format,
+						ImageType::IMAGE_2D,
+						poolIndex
+					);
+
+			int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, smbImageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
 
 			GlobalRenderer::gRenderInstance.UpdateImageMemory(
 				texture.data,
@@ -2323,11 +2327,20 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 			);
 		}
 
+		DeviceHandleArrayUpdateTextureView* texViews = (DeviceHandleArrayUpdateTextureView*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(DeviceHandleArrayUpdateTextureView) * totalTextureCount);
+
+		for (int imageIndex = 0; imageIndex < totalTextureCount; imageIndex++)
+		{
+			texViews[imageIndex].imageHandle = mainDictionary.textureHandles[globalTextureStartIndex + imageIndex];
+			texViews[imageIndex].viewIndex = 0;
+		}
+
 		DeviceHandleArrayUpdate update;
 
+		update.updateType = DeviceHandleArrayUpdateType::TEXTURE_VIEW_UPDATE;
 		update.resourceCount = totalTextureCount;
 		update.resourceDstBegin = globalTextureStartIndex;
-		update.resourceHandles = mainDictionary.textureHandles.data() + globalTextureStartIndex;
+		update.resourceHandles = texViews;
 
 		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 	}
@@ -3234,6 +3247,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	
 	DeviceHandleArrayUpdate samplerUpdate;
 
+	samplerUpdate.updateType = DeviceHandleArrayUpdateType::SAMPLER_UPDATE;
 	samplerUpdate.resourceCount = 1;
 	samplerUpdate.resourceDstBegin = 0;
 	samplerUpdate.resourceHandles = &mainLinearSampler;
@@ -3312,6 +3326,7 @@ int CreateMSAAPostFullScreen()
 
 	DeviceHandleArrayUpdate samplerUpdate;
 
+	samplerUpdate.updateType = DeviceHandleArrayUpdateType::SAMPLER_UPDATE;
 	samplerUpdate.resourceCount = 1;
 	samplerUpdate.resourceDstBegin = 0;
 	samplerUpdate.resourceHandles = &mainLinearSampler;
@@ -3433,8 +3448,10 @@ int CreateSkyBox()
 	ShaderResourceSetBuilder camSkyboxData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	ShaderResourceSetBuilder skyboxDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, SKYBOX, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
+	int viewIndex = 0;
+
 	camSkyboxData.BindBufferToShaderResource(&genericSkyBoxRSontext, &globalBufferLocation, 0, 1, 0);
-	skyboxDesc.BindSampledImageToShaderResource(&genericSkyBoxRSontext, &skyboxCubeImage, 1, 0, 0);
+	skyboxDesc.BindSampledImageToShaderResource(&genericSkyBoxRSontext, &skyboxCubeImage, &viewIndex, &mainLinearSampler, 1, 0, 0);
 	skyboxDesc.UploadConstant(&genericSkyBoxRSontext, &matrix, 0);
 
 	if (genericSkyBoxRSontext.contextFailed)
@@ -4498,23 +4515,27 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
 
-	int imageIndex = 
-		GlobalRenderer::gRenderInstance.CreateCubeImageHandle(
+	int cubeImageIndex = 
+		GlobalRenderer::gRenderInstance.CreateImageHandle(
 			mainLogicalDevice,
 			actualMemoryAddress,
 			details.width,
 			details.height,
 			details.miplevels,
+			6,
 			details.type,
-			poolIndex,
-			mainLinearSampler
+			ImageType::IMAGE_CUBE,
+			poolIndex
 		);
 
-	if (imageIndex >= 0)
+
+	if (cubeImageIndex >= 0)
 	{
+		int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, cubeImageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+
 		GlobalRenderer::gRenderInstance.UpdateImageMemory(
 			details.data,
-			imageIndex,
+			cubeImageIndex,
 			textureCount * details.dataSize,
 			details.width,
 			details.height,
@@ -4528,7 +4549,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Failed to register image to renderer"));
 	}
 
-	return imageIndex;
+	return cubeImageIndex;
 }
 
 int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
@@ -4539,7 +4560,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 	int totalBlobSize = 0;
 
-	int imageIndex = -1;
+	int twoDimageIndex = -1;
 
 	for (int i = 0; i < mipCounts; i++)
 	{
@@ -4599,21 +4620,27 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
 
-	imageIndex = GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
+	twoDimageIndex = GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
 			actualMemoryAddress,
 			details->width,
 			details->height,
 			details->miplevels,
+			details->arrayLayers,
 			details->type,
-			poolIndex,
-			mainLinearSampler
+			ImageType::IMAGE_2D,
+			poolIndex
 		);
 
-	if (imageIndex >= 0)
+	
+
+	if (twoDimageIndex >= 0)
 	{
+
+		int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, twoDimageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+
 		GlobalRenderer::gRenderInstance.UpdateImageMemory(
 			details->data,
-			imageIndex,
+			twoDimageIndex,
 			totalBlobSize,
 			details->width,
 			details->height,
@@ -4622,13 +4649,19 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->type
 		);
 
-		mainDictionary.textureHandles[textureStart] = imageIndex;
+		DeviceHandleArrayUpdateTextureView arrayUpdateStruct{};
+
+		arrayUpdateStruct.imageHandle = twoDimageIndex;
+		arrayUpdateStruct.viewIndex = viewIndex;
+
+		mainDictionary.textureHandles[textureStart] = twoDimageIndex;
 
 		DeviceHandleArrayUpdate update;
 
+		update.updateType = DeviceHandleArrayUpdateType::TEXTURE_VIEW_UPDATE;
 		update.resourceCount = 1;
 		update.resourceDstBegin = textureStart;
-		update.resourceHandles = mainDictionary.textureHandles.data() + textureStart;
+		update.resourceHandles = &arrayUpdateStruct;
 
 		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 	}

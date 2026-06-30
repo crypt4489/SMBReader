@@ -219,7 +219,7 @@ EntryHandle* VKSwapChain::CreateSwapchainViews()
 {
 	for (uint32_t i = 0; i < imageCount; i++) 
 	{
-		imageViews[i] = device->CreateImageView(images[i], 1, 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
+		imageViews[i] = device->CreateImageView(images[i], 0, 0, 1, 1, swapChainImageFormat.format, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
 	}
 
 	return imageViews;

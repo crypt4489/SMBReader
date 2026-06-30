@@ -124,7 +124,7 @@ struct ShaderResourceSetBuilder
 
 	}
 
-	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindImageResourceToShaderResource(ShaderResourceSetContext* context, int* index, int* views, int textureCount, int firstTexture, int bindingIndex)
 	{
 		ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
 
@@ -134,7 +134,10 @@ struct ShaderResourceSetBuilder
 		ShaderResourceImage* images = &header->resourceArray.images;
 
 		for (int i = 0; i < textureCount; i++)
-			images->textureHandles[firstTexture + i] = index[i];
+		{
+			images->textureDetails[firstTexture + i].textureHandle = index[i];
+			images->textureDetails[firstTexture + i].viewIndex = views[i];
+		}
 
 		if ((firstTexture + textureCount) > images->textureCount)
 			images->textureCount = (firstTexture + textureCount);
@@ -156,17 +159,21 @@ struct ShaderResourceSetBuilder
 			samplers->samplerCount = (firstSampler + samplerCount);
 	}
 
-	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int* index, int textureCount, int firstTexture, int bindingIndex)
+	void BindSampledImageToShaderResource(ShaderResourceSetContext* context, int* index, int* views, int* samplers, int textureCount, int firstTexture, int bindingIndex)
 	{
 		ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
 
 		if (header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE && header->type != ShaderResourceType::SAMPLER3D)
 			return;
 
-		ShaderResourceImage* images = &header->resourceArray.images;
+		ShaderResourceCombinedImage* images = &header->resourceArray.combinedImages;
 
 		for (int i = 0; i < textureCount; i++)
-			images->textureHandles[firstTexture + i] = index[i];
+		{
+			images->textureDetails[firstTexture + i].textureHandle = index[i];
+			images->textureDetails[firstTexture + i].viewIndex = views[i];
+			images->textureDetails[firstTexture + i].samplerHandle = samplers[i];
+		}
 
 		if ((firstTexture + textureCount) > images->textureCount)
 			images->textureCount = (firstTexture + textureCount);
