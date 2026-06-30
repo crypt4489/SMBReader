@@ -183,9 +183,7 @@ struct RenderInstance
 
 	EntryHandle CreateShaderResourceSet(ShaderResourceManager* descriptorManager, int deviceSelection, int descriptorSet);
 
-	void GenerateGraphicsDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
-
-	void GenerateComputeDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+	void GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
 
 	void GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* pipelineHandle);
 
@@ -263,6 +261,12 @@ struct RenderInstance
 	int CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
 	int CreateResourceStatusActions(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts);
+
+	void InitializeResourceStatus(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts, BarrierAction action, BarrierStage stage, ImageLayout imageLayout);
+
+	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+
+	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 

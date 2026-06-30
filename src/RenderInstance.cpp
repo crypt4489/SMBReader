@@ -1171,6 +1171,18 @@ int RenderInstance::CreateResourceStatusActions(ResourceStatus* status, int numb
 	return 0;
 }
 
+void RenderInstance::InitializeResourceStatus(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts, BarrierAction action, BarrierStage stage, ImageLayout imageLayout)
+{
+	for (int i = 0; i < numberOfCurrentActions; i++)
+		status->currAction[i] = action;
+
+	for (int i = 0; i < numberOfCurrentStages; i++)
+		status->currStage[i] = stage;
+
+	for (int i = 0; i < numberOfCurrentLayouts; i++)
+		status->currentLayout[i] = imageLayout;
+}
+
 int RenderInstance::CreateAttachmentResources(
 	int deviceSelection,
 	int graphIndex, int renderPassIndex, int imageCount, 
@@ -2488,15 +2500,17 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 	{
 		link = imageMemoryUpdateManager.PopLink(&region, link);
 
-		EntryHandle handle = textureResourceHandles[region.textureIndex].textureIndex;
+		RenderTextureDescription* desc = textureResourceHandles.Get(region.textureIndex);
+
+		EntryHandle handle = desc->textureIndex;
 
 		ResourceStatus* resourceStatus = resourceStatuses.Get(textureResourceHandles[region.textureIndex].resourceStatusIndex);
 
 		ImageLayout currentLayout = resourceStatus->currentLayout[0];
 
-		resourceStatus->currentLayout[0] = ImageLayout::TRANSFER_DEST_OPTIMAL;
-		resourceStatus->currStage[0] = BarrierStageBits::TRANSFER_BARRIER;
-		resourceStatus->currAction[0] = BarrierActionBits::TRANSFER_WRITE_DATA_RESOURCE;
+		int totalTrackedElements = desc->arrayLayers * desc->mipLayers;
+
+		InitializeResourceStatus(resourceStatus, totalTrackedElements, totalTrackedElements, totalTrackedElements, TRANSFER_WRITE_DATA_RESOURCE, TRANSFER_BARRIER, ImageLayout::TRANSFER_DEST_OPTIMAL);
 
 		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
 
@@ -2711,11 +2725,7 @@ int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, si
 
 	CreateResourceStatusActions(resourceStatus, copies, copies, 0);
 
-	for (int i = 0; i < copies; i++)
-	{
-		resourceStatus->currAction[i] = 0;
-		resourceStatus->currStage[i] = BEGINNING_OF_PIPE;
-	}
+	InitializeResourceStatus(resourceStatus, copies, copies, 0, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
 
 	return index;
 }
@@ -2782,11 +2792,7 @@ int RenderInstance::CreateSuballocation(int deviceSelection, int parentAllocatio
 
 	CreateResourceStatusActions(resourceStatus, copies, copies, 0);
 
-	for (int i = 0; i < copies; i++)
-	{
-		resourceStatus->currAction[i] = 0;
-		resourceStatus->currStage[i] = BEGINNING_OF_PIPE;
-	}
+	InitializeResourceStatus(resourceStatus, copies, copies, 0, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
 
 	return index;
 }
@@ -2844,10 +2850,11 @@ int RenderInstance::CreateImageHandle(
 
 	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
 
-	CreateResourceStatusActions(textureStatus, 1, 1, 1);
+	int totalTrackingLayers = mipLevels * arrayLayers;
 
-	textureStatus->currentLayout[0] = ImageLayout::UNDEFINED;
-	textureStatus->resourceType = ResourceStatusType::IMAGE_RESOURCE;
+	CreateResourceStatusActions(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers);
+
+	InitializeResourceStatus(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
 
 	return textureIndex;
 }
@@ -2902,10 +2909,11 @@ int RenderInstance::CreateStorageImage(
 
 	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
 
-	CreateResourceStatusActions(textureStatus, 1, 1, 1);
+	int totalTrackingLayers = mipLevels * 1;
 
-	textureStatus->currentLayout[0] = ImageLayout::UNDEFINED;
-	textureStatus->resourceType = ResourceStatusType::IMAGE_RESOURCE;
+	CreateResourceStatusActions(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers);
+
+	InitializeResourceStatus(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
 
 	return textureIndex;
 }
@@ -3375,8 +3383,6 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 
 		desc->format = mainBackBufferColorFormat;
 
-		//desc->textureIndex = vkSwcData->images[i];
-
 		int resourceIndex = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
 		ResourceStatus* status = resourceStatuses.Get(resourceIndex);
@@ -3655,7 +3661,6 @@ int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIn
 	}
 
 	posStruct->pushRangeCount = pushRangeCount;
-
 	posStruct->indexBufferHandle = info->indexBufferHandle;
 	posStruct->indexCount = info->indexCount;
 	posStruct->vertexBufferIndex = info->vertexBufferHandle;
@@ -3769,7 +3774,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 
 				EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[0];
 
-				GenerateComputeDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
+				GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
 
 				rcb.BindComputePipeline(pipelineTemp);
 
@@ -3863,7 +3868,7 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 					{
 						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
 
-						GenerateGraphicsDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
+						GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
 
 						GenerateDrawBindingsBarriers(deviceSelection, &rcb, handle);
 					}
@@ -4734,7 +4739,7 @@ int RenderInstance::CreateDescriptorHeap(int deviceSelection, DescriptorTypes* t
 	return descriptorManagerIndex;
 }
 
-void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
+void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -4763,60 +4768,13 @@ void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, Rec
 
 				int arrayCount = imageBarrier->textureCount;
 
-				if (header->action == ShaderResourceAction::SHADERREAD)
+				for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
 				{
-					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
-					{
-						int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
+					int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
 
-						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
+					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
 
-						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
-
-						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
-							continue;
-
-						if (status->currentLayout[0] != ImageLayout::SHADERREADABLE)
-						{
-							VkImageMemoryBarrier barrier{};
-
-							BarrierStage headerStageForBarrier = ConvertShaderStageToBarrierStage(header->stage);
-
-							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout[0]);
-							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByHandle(desc->textureIndex);
-
-							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-							barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[0]);
-							barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-
-							VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[0]);
-							VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(headerStageForBarrier);
-
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.levelCount = desc->mipLayers;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.layerCount = desc->arrayLayers;
-							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-							RBOPipelineBarrierArgs args{};
-
-							args.srcStageMask = sourceStage;
-							args.dstStageMask = destinationStage;
-
-							args.imageMemoryBarrierCount = 1;
-							args.pImageMemoryBarriers = &barrier;
-
-							rcb->BindPipelineBarrierCommand(&args);
-
-							status->currentLayout[0] = ImageLayout::SHADERREADABLE;
-							status->currAction[0] = BarrierActionBits::READ_SHADER_RESOURCE;
-							status->currStage[0] = BarrierStageBits::FRAGMENT_BARRIER;
-						}
-					}
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE);
 				}
 				break;
 			}
@@ -4826,61 +4784,31 @@ void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, Rec
 
 				int arrayCount = imageBarrier->textureCount;
 
-				if (header->action == ShaderResourceAction::SHADERREAD)
+				for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
 				{
-					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
-					{
-						int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
+					int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
 
-						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
+					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
 
-						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
-
-						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
-							continue;
-
-						if (status->currentLayout[0] != ImageLayout::SHADERREADABLE)
-						{
-							VkImageMemoryBarrier barrier{};
-
-							BarrierStage headerStageForBarrier = ConvertShaderStageToBarrierStage(header->stage);
-
-							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout[0]);
-							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByHandle(desc->textureIndex);
-
-							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-							barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[0]);
-							barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-
-							VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[0]);
-							VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(headerStageForBarrier);
-
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.levelCount = desc->mipLayers;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.layerCount = desc->arrayLayers;
-							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-							RBOPipelineBarrierArgs args{};
-
-							args.srcStageMask = sourceStage;
-							args.dstStageMask = destinationStage;
-
-							args.imageMemoryBarrierCount = 1;
-							args.pImageMemoryBarriers = &barrier;
-
-							rcb->BindPipelineBarrierCommand(&args);
-
-							status->currentLayout[0] = ImageLayout::SHADERREADABLE;
-							status->currAction[0] = BarrierActionBits::READ_SHADER_RESOURCE;
-							status->currStage[0] = BarrierStageBits::FRAGMENT_BARRIER;
-						}
-					}
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE);
 				}
+				break;
+			}
+			case ShaderResourceType::IMAGESTORE2D:
+			{
+				ShaderResourceImage* imageBarrier = &header->resourceArray.images;
+
+				int arrayCount = imageBarrier->textureCount;
+
+				for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
+				{
+					int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
+
+					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
+
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
+				}
+
 				break;
 			}
 			case ShaderResourceType::BUFFER_VIEW:
@@ -4895,408 +4823,11 @@ void RenderInstance::GenerateGraphicsDescriptorBarriers(int deviceSelection, Rec
 				{
 					int allocationIndex = bufferBarrier->allocationIndex[g];
 
-					size_t size = 0, offset = 0, align = 0;
-
-					int memIndex = -1, resourceStatusIndex = -1;
-
-					AllocationType allocType;
-
-					RenderAllocation* alloc = allocations.Get(allocationIndex);
-
-					memIndex = alloc->memIndex;
-
-					align = alloc->alignment;
-
-					size = ((alloc->requestedSize * alloc->structureCopies) + align - 1) & ~(align - 1);
-
-					offset = alloc->offset;
-
-					allocType = alloc->allocType;
-
-					resourceStatusIndex = alloc->resourceStatus;
-				
-					int bufferLastAccessFrame = 0;
-
-					if (allocType == AllocationType::PERFRAME)
-					{
-						size_t strideSize = size;
-
-						offset += (currentFrame * strideSize);
-
-						bufferLastAccessFrame = currentFrame;
-					}
-
-					ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
-
-					BarrierStage headerStageForBarrier = ConvertShaderStageToBarrierStage(header->stage);
-
-					if (((status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_SHADER_RESOURCE) ||
-						(status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_UNIFORM_BUFFER))
-						&&
-						(header->action == ShaderResourceAction::SHADERREAD))
-					{
-						status->currStage[bufferLastAccessFrame] = headerStageForBarrier;
-						status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
-						continue;
-					}
-				
-					VkBuffer buffer = dev->GetBufferHandle(bufferHandles[memIndex].bufferHandle);
-
-					VkBufferMemoryBarrier vkBarrier{};
-
-					vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					vkBarrier.pNext = nullptr;
-					vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
-
-					if (header->type == ShaderResourceType::UNIFORM_BUFFER)
-					{
-						vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_UNIFORM_BUFFER);
-						status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_UNIFORM_BUFFER;
-					}
-					else
-					{
-						vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-						status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
-					}
-
-					vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					vkBarrier.buffer = buffer;
-					vkBarrier.offset = offset;
-					vkBarrier.size = size;
-
-					RBOPipelineBarrierArgs args{};
-
-					args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[bufferLastAccessFrame]);
-					args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(headerStageForBarrier);
-
-					args.bufferMemoryBarrierCount = 1;
-					args.pBufferMemoryBarriers = &vkBarrier;
-
-					rcb->BindPipelineBarrierCommand(&args);
-
-					status->currStage[bufferLastAccessFrame] = headerStageForBarrier;
+					InsertBufferBarrier(dev, rcb, allocationIndex, ConvertShaderStageToBarrierStage(header->stage), header);
 
 					break;
 				}
 				}
-			}
-		}
-	}
-}
-
-void RenderInstance::GenerateComputeDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
-{
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
-
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
-
-	for (int i = 0; i < descriptorcount; i++)
-	{
-		ShaderResourceManager* manager = descriptorManagers.Get(descriptorid[i].descriptorManagerIndex);
-
-		ShaderResourceSet* set = manager->descriptorSets[descriptorid[i].descriptorSetIndex];
-
-		int counter = 0;
-		
-		int totalBindingCount = set->templateMetaData->bindingCount;
-
-		while (counter < totalBindingCount)
-		{
-			ShaderResourceArray* header = (ShaderResourceArray*)&set->resourceBindings[counter++];
-
-			switch (header->type)
-			{
-			case ShaderResourceType::SAMPLERCUBE:
-			case ShaderResourceType::SAMPLER2D:
-			case ShaderResourceType::SAMPLER3D:
-			{
-				ShaderResourceCombinedImage* imageBarrier = &header->resourceArray.combinedImages;
-
-				int arrayCount = imageBarrier->textureCount;
-
-				if (header->action == ShaderResourceAction::SHADERREAD || header->action == ShaderResourceAction::SHADERREADWRITE)
-				{
-					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
-					{
-						int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
-
-						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
-
-						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
-							continue;
-
-						if (status->currentLayout[0] != ImageLayout::SHADERREADABLE)
-						{
-							VkImageMemoryBarrier barrier{};
-
-							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout[0]);
-							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByHandle(desc->textureIndex);
-
-							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-							barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[0]);
-							barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-
-							VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[0]);
-							VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::COMPUTE_BARRIER);
-
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.levelCount = desc->mipLayers;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.layerCount = desc->arrayLayers;
-							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-							RBOPipelineBarrierArgs args{};
-
-							args.srcStageMask = sourceStage;
-							args.dstStageMask = destinationStage;
-
-							args.imageMemoryBarrierCount = 1;
-							args.pImageMemoryBarriers = &barrier;
-
-							rcb->BindPipelineBarrierCommand(&args);
-
-							status->currentLayout[0] = ImageLayout::SHADERREADABLE;
-							status->currAction[0] = BarrierActionBits::READ_SHADER_RESOURCE;
-							status->currStage[0] = BarrierStageBits::COMPUTE_BARRIER;
-						}
-					}
-				}
-				break;
-			}
-			case ShaderResourceType::IMAGE2D:
-			{
-				ShaderResourceImage* imageBarrier = &header->resourceArray.images;
-
-				int arrayCount = imageBarrier->textureCount;
-
-				if (header->action == ShaderResourceAction::SHADERREAD || header->action == ShaderResourceAction::SHADERREADWRITE)
-				{
-					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
-					{
-						int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
-
-						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
-
-						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
-							continue;
-
-						if (status->currentLayout[0] != ImageLayout::SHADERREADABLE)
-						{
-							VkImageMemoryBarrier barrier{};
-
-							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout[0]);
-							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::SHADERREADABLE);
-							barrier.image = dev->GetImageByHandle(desc->textureIndex);
-
-							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-							barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[0]);
-							barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-
-							VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[0]);
-							VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::COMPUTE_BARRIER);
-
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.levelCount = desc->mipLayers;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.layerCount = desc->arrayLayers;
-							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-							RBOPipelineBarrierArgs args{};
-
-							args.srcStageMask = sourceStage;
-							args.dstStageMask = destinationStage;
-
-							args.imageMemoryBarrierCount = 1;
-							args.pImageMemoryBarriers = &barrier;
-
-							rcb->BindPipelineBarrierCommand(&args);
-
-							status->currentLayout[0] = ImageLayout::SHADERREADABLE;
-							status->currAction[0] = BarrierActionBits::READ_SHADER_RESOURCE;
-							status->currStage[0] = BarrierStageBits::COMPUTE_BARRIER;
-						}
-					}
-				}
-				break;
-			}
-			case ShaderResourceType::IMAGESTORE2D:
-			{
-				ShaderResourceImage* imageBarrier = &header->resourceArray.images;
-
-				int arrayCount = imageBarrier->textureCount;
-
-				if (header->action == ShaderResourceAction::SHADERWRITE || header->action == ShaderResourceAction::SHADERREADWRITE)
-				{
-					for (int imageIndex = 0; imageIndex < arrayCount; imageIndex++)
-					{
-						int currImageIndex = imageBarrier->textureDetails[imageIndex].textureHandle;
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(currImageIndex);
-
-						ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
-
-						if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
-							continue;
-
-						if (status->currentLayout[0] != ImageLayout::WRITEABLE)
-						{
-							VkImageMemoryBarrier barrier{};
-
-							barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-							barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(status->currentLayout[0]);
-							barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(ImageLayout::WRITEABLE);
-							barrier.image = dev->GetImageByHandle(desc->textureIndex);
-
-							barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-							barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-							barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[0]);
-							barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::WRITE_SHADER_RESOURCE);
-
-							VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[0]);
-							VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::COMPUTE_BARRIER);
-
-							barrier.subresourceRange.baseMipLevel = 0;
-							barrier.subresourceRange.levelCount = desc->mipLayers;
-							barrier.subresourceRange.baseArrayLayer = 0;
-							barrier.subresourceRange.layerCount = desc->arrayLayers;
-							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-							RBOPipelineBarrierArgs args{};
-
-							args.srcStageMask = sourceStage;
-							args.dstStageMask = destinationStage;
-
-							args.imageMemoryBarrierCount = 1;
-							args.pImageMemoryBarriers = &barrier;
-
-							rcb->BindPipelineBarrierCommand(&args);
-
-							status->currentLayout[0] = ImageLayout::WRITEABLE;
-							status->currAction[0] = BarrierActionBits::WRITE_SHADER_RESOURCE;
-							status->currStage[0] = BarrierStageBits::COMPUTE_BARRIER;
-						}
-					}
-				}
-				break;
-			}
-			case ShaderResourceType::BUFFER_VIEW:
-			case ShaderResourceType::STORAGE_BUFFER:
-			case ShaderResourceType::UNIFORM_BUFFER:
-			{
-				ShaderResourceBuffer* bufferBarrier = (header->type == ShaderResourceType::BUFFER_VIEW) ? (ShaderResourceBuffer*)&header->resourceArray.views : (ShaderResourceBuffer*)&header->resourceArray.buffers;
-
-				int arrayCount = bufferBarrier->bufferCount;
-
-				for (int g = 0; g < arrayCount; g++)
-				{
-					int allocationIndex = bufferBarrier->allocationIndex[g];
-					
-					size_t size = 0, offset = 0, align = 0;
-
-					int memIndex = -1, resourceStatusIndex = -1, bufferLastAccessFrame = 0;
-
-					AllocationType allocType;
-
-					RenderAllocation* alloc = allocations.Get(allocationIndex);
-
-					memIndex = alloc->memIndex;
-
-					align = alloc->alignment;
-
-					size = ((alloc->requestedSize * alloc->structureCopies) + align - 1) & ~(align - 1);
-
-					offset = alloc->offset;
-
-					allocType = alloc->allocType;
-
-					resourceStatusIndex = alloc->resourceStatus;
-
-					if (allocType == AllocationType::PERFRAME)
-					{
-						size_t strideSize = size;
-
-						offset += (currentFrame * strideSize);
-
-						bufferLastAccessFrame = currentFrame;
-					}
-
-					ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
-
-					if (((status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_SHADER_RESOURCE) ||
-						(status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_UNIFORM_BUFFER))
-						&&
-						(header->action == ShaderResourceAction::SHADERREAD))
-					{
-						status->currStage[bufferLastAccessFrame] = COMPUTE_BARRIER;
-						status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
-						continue;
-					}
-			
-					VkBufferMemoryBarrier vkBarrier{};
-
-					VkBuffer buffer = dev->GetBufferHandle(bufferHandles[memIndex].bufferHandle);
-
-					vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-					vkBarrier.pNext = nullptr;
-					vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
-					
-					if (header->type == ShaderResourceType::UNIFORM_BUFFER)
-					{
-						vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_UNIFORM_BUFFER);
-						status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_UNIFORM_BUFFER;
-					}
-					else
-					{
-						if (header->action == ShaderResourceAction::SHADERWRITE)
-						{
-							vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::WRITE_SHADER_RESOURCE);
-							status->currAction[bufferLastAccessFrame] = BarrierActionBits::WRITE_SHADER_RESOURCE;
-						}
-						else if (header->action == ShaderResourceAction::SHADERREADWRITE)
-						{
-							vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE);
-							status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE;
-						}
-						else
-						{
-							vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-							status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
-						}
-					}
-
-					vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-					vkBarrier.buffer = buffer;
-					vkBarrier.offset = offset;
-					vkBarrier.size = size;
-
-					RBOPipelineBarrierArgs args{};
-
-					args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[bufferLastAccessFrame]);
-					args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::COMPUTE_BARRIER);
-
-					args.bufferMemoryBarrierCount = 1;
-					args.pBufferMemoryBarriers = &vkBarrier;
-
-					rcb->BindPipelineBarrierCommand(&args);
-
-					status->currStage[bufferLastAccessFrame] = COMPUTE_BARRIER;
-				}
-				break;
-			}
 			}
 		}
 	}
@@ -5483,3 +5014,217 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 	}
 }
 
+void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+{
+	RenderTextureDescription* desc = textureResourceHandles.Get(imageIndex);
+
+	ResourceStatus* status = resourceStatuses.Get(desc->resourceStatusIndex);
+
+	RenderImageViewDescription* viewDesc = textureViewsResourceHandles.Get(desc->viewIndex[perImageViewIndex]);
+
+	if (status->resourceType == ResourceStatusType::MANAGED_IMAGE_RESOURCE)
+		return;
+
+	int viewMipStart = viewDesc->firstMipLevel;
+	int viewMipCount = viewDesc->mipLevelCount;
+	int totalMipCount = desc->mipLayers;
+
+	int viewLayerStart = viewDesc->firstLayer;
+	int viewLayerCount = viewDesc->layerCount;
+	int totalLayerCount = desc->arrayLayers;
+
+	ImageLayout requestedLayout = viewDesc->desiredLayoutForView;
+
+	ImageLayout trackedLayout = ImageLayout::UNDEFINED;
+
+	BarrierAction trackedAction = 0;
+
+	BarrierStage trackedStage = 0;
+
+	VkImageMemoryBarrier barrier{};
+	RBOPipelineBarrierArgs args{};
+	
+	VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(destBarrierStage);
+	args.dstStageMask = destinationStage;
+	args.imageMemoryBarrierCount = 1;
+	args.pImageMemoryBarriers = &barrier;
+	
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.subresourceRange.aspectMask = API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(viewDesc->mask);
+
+	barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(destBarrierAction);
+	barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(requestedLayout);
+	barrier.image = dev->GetImageByHandle(desc->textureIndex);
+
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+	int trackedMipStart = 0, trackedMipCount = 0, trackedLayerStart = 0, trackedLayerCount = 0;
+
+	for (int j = viewLayerStart; j < viewLayerStart + viewLayerCount; j++)
+	{
+		for (int i = viewMipStart; i < viewMipStart + viewMipCount; i++)
+		{
+			int currentMipArrayIndex = (j * totalMipCount) + i;
+
+			BarrierAction currAction = status->currAction[currentMipArrayIndex];
+			BarrierStage currStage = status->currStage[currentMipArrayIndex];
+			ImageLayout currLayout = status->currentLayout[currentMipArrayIndex];
+
+			if (currLayout != requestedLayout)
+			{
+				if (currLayout != trackedLayout)
+				{
+					if (trackedLayerCount >= 1 && trackedMipCount >= 1)
+					{
+						barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
+						barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(trackedAction);
+
+						VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
+
+						args.srcStageMask = sourceStage;
+
+						barrier.subresourceRange.baseMipLevel = trackedMipStart;
+						barrier.subresourceRange.levelCount = trackedMipCount;
+						barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
+						barrier.subresourceRange.layerCount = trackedLayerCount;
+
+						rcb->BindPipelineBarrierCommand(&args);
+					}
+
+					trackedMipStart = i;
+					trackedLayerStart = j;
+					trackedLayout = currLayout;
+					trackedAction = 0;
+					trackedStage = 0;
+					trackedLayerCount = 0;
+					trackedMipCount = 0;
+				}
+
+				trackedAction |= currAction;
+				trackedStage |= currStage;
+
+				trackedLayerCount = (j - trackedLayerStart) + 1;
+				trackedMipCount = (i - trackedLayerStart) + 1;
+
+				status->currentLayout[currentMipArrayIndex] = requestedLayout;
+				status->currAction[currentMipArrayIndex] = destBarrierAction;
+				status->currStage[currentMipArrayIndex] = destBarrierStage;
+			}
+		}
+	}
+
+	if (trackedLayerCount >= 1 && trackedMipCount >= 1)
+	{
+		barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
+		barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(trackedAction);
+
+		VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
+
+		barrier.subresourceRange.baseMipLevel = trackedMipStart;
+		barrier.subresourceRange.levelCount = trackedMipCount;
+		barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
+		barrier.subresourceRange.layerCount = trackedLayerCount;
+		
+		args.srcStageMask = sourceStage;
+		
+		args.imageMemoryBarrierCount = 1;
+		args.pImageMemoryBarriers = &barrier;
+
+		rcb->BindPipelineBarrierCommand(&args);
+	}
+}
+
+void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header)
+{
+	size_t size = 0, offset = 0, align = 0;
+
+	int memIndex = -1, resourceStatusIndex = -1, bufferLastAccessFrame = 0;
+
+	AllocationType allocType;
+
+	RenderAllocation* alloc = allocations.Get(allocationIndex);
+
+	memIndex = alloc->memIndex;
+
+	align = alloc->alignment;
+
+	size = ((alloc->requestedSize * alloc->structureCopies) + align - 1) & ~(align - 1);
+
+	offset = alloc->offset;
+
+	allocType = alloc->allocType;
+
+	resourceStatusIndex = alloc->resourceStatus;
+
+	if (allocType == AllocationType::PERFRAME)
+	{
+		size_t strideSize = size;
+
+		offset += (currentFrame * strideSize);
+
+		bufferLastAccessFrame = currentFrame;
+	}
+
+	ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
+
+	if (((status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_SHADER_RESOURCE) ||
+		(status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_UNIFORM_BUFFER))
+		&&
+		(header->action == ShaderResourceAction::SHADERREAD))
+	{
+		status->currStage[bufferLastAccessFrame] = destBarrierStage;
+		status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
+		return;
+	}
+
+	VkBufferMemoryBarrier vkBarrier{};
+
+	VkBuffer buffer = dev->GetBufferHandle(bufferHandles[memIndex].bufferHandle);
+
+	vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	vkBarrier.pNext = nullptr;
+	vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
+
+	if (header->type == ShaderResourceType::UNIFORM_BUFFER)
+	{
+		vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_UNIFORM_BUFFER);
+		status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_UNIFORM_BUFFER;
+	}
+	else
+	{
+		if (header->action == ShaderResourceAction::SHADERWRITE)
+		{
+			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::WRITE_SHADER_RESOURCE);
+			status->currAction[bufferLastAccessFrame] = BarrierActionBits::WRITE_SHADER_RESOURCE;
+		}
+		else if (header->action == ShaderResourceAction::SHADERREADWRITE)
+		{
+			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE);
+			status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE;
+		}
+		else
+		{
+			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
+			status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
+		}
+	}
+
+	vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	vkBarrier.buffer = buffer;
+	vkBarrier.offset = offset;
+	vkBarrier.size = size;
+
+	RBOPipelineBarrierArgs args{};
+
+	args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[bufferLastAccessFrame]);
+	args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(destBarrierStage);
+
+	args.bufferMemoryBarrierCount = 1;
+	args.pBufferMemoryBarriers = &vkBarrier;
+
+	rcb->BindPipelineBarrierCommand(&args);
+
+	status->currStage[bufferLastAccessFrame] = destBarrierStage;
+}
