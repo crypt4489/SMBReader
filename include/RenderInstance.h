@@ -267,6 +267,8 @@ struct RenderInstance
 	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
 
 	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header);
+
+	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 

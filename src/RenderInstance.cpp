@@ -4839,14 +4839,6 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	size_t perFrameIndirectBufferOffset = -1, perFrameIndirectCountBufferOffset = -1, indirectBufferSize = -1, indirectCountBufferSize = -1;
-
-	size_t vertexOffset = -1, indexOffset = -1, indirectBufferBaseOffset = -1, indirectCountBufferBaseOffset = -1;
-
-	int vertexMemIndex = -1, indexMemIndex = -1, indirectBufferIndex = -1, indirectCountBufferIndex = -1;
-
-	int resourceIndex = -1;
-
 	/*
 
 	if (handle->vertexBufferIndex != -1)
@@ -4906,112 +4898,10 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 	*/
 
 	if (handle->indirectBufferHandle != -1)
-	{
-		RenderAllocation* indirectBufferAlloc = allocations.Get(handle->indirectBufferHandle);
-
-		size_t align = indirectBufferAlloc->alignment;
-
-		size_t copiesOfstruct = static_cast<size_t>(indirectBufferAlloc->structureCopies);
-
-		indirectBufferBaseOffset = indirectBufferAlloc->offset;
-
-		indirectBufferSize = indirectBufferAlloc->requestedSize;
-
-		perFrameIndirectBufferOffset = (((indirectBufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
-
-		indirectBufferIndex = indirectBufferAlloc->memIndex;
-
-		resourceIndex = indirectBufferAlloc->resourceStatus;
-	
-		perFrameIndirectBufferOffset *= currentFrame;
-
-		ResourceStatus* status = resourceStatuses.Get(resourceIndex);
-
-		if (status->currStage[currentFrame] != INDIRECT_DRAW_BARRIER &&
-			status->currAction[currentFrame] != READ_INDIRECT_COMMAND)
-		{
-			VkBufferMemoryBarrier vkBarrier{};
-
-			VkBuffer buffer = dev->GetBufferHandle(bufferHandles[indirectBufferIndex].bufferHandle);
-
-			vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			vkBarrier.pNext = nullptr;
-			vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[currentFrame]);
-			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_INDIRECT_COMMAND);
-			vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			vkBarrier.buffer = buffer;
-			vkBarrier.offset = perFrameIndirectBufferOffset + indirectBufferBaseOffset;
-			vkBarrier.size = indirectBufferSize;
-
-			RBOPipelineBarrierArgs args{};
-
-			args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[currentFrame]);
-			args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::INDIRECT_DRAW_BARRIER);
-
-			args.bufferMemoryBarrierCount = 1;
-			args.pBufferMemoryBarriers = &vkBarrier;
-
-			rcb->BindPipelineBarrierCommand(&args);
-
-			status->currAction[currentFrame] = BarrierActionBits::READ_INDIRECT_COMMAND;
-			status->currStage[currentFrame] = BarrierStageBits::INDIRECT_DRAW_BARRIER;
-		}
-	}
+		InsertBufferBarrier(dev, rcb, handle->indirectBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND);
 
 	if (handle->indirectCountBufferHandle != -1)
-	{
-		RenderAllocation* indirectCountBufferAlloc = allocations.Get(handle->indirectCountBufferHandle);
-
-		size_t align = indirectCountBufferAlloc->alignment;
-
-		size_t copiesOfstruct = static_cast<size_t>(indirectCountBufferAlloc->structureCopies);
-
-		indirectCountBufferSize = indirectCountBufferAlloc->requestedSize;
-
-		indirectCountBufferBaseOffset = indirectCountBufferAlloc->offset;
-
-		perFrameIndirectCountBufferOffset = (((indirectCountBufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
-
-		indirectCountBufferIndex = indirectCountBufferAlloc->memIndex;
-
-		resourceIndex = indirectCountBufferAlloc->resourceStatus;
-		
-		ResourceStatus* status = resourceStatuses.Get(resourceIndex);
-
-		perFrameIndirectCountBufferOffset *= currentFrame;
-
-		if (status->currStage[currentFrame] != INDIRECT_DRAW_BARRIER &&
-			status->currAction[currentFrame] != READ_INDIRECT_COMMAND)
-		{
-			VkBufferMemoryBarrier vkBarrier{};
-
-			VkBuffer buffer = dev->GetBufferHandle(bufferHandles[indirectCountBufferIndex].bufferHandle);
-
-			vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			vkBarrier.pNext = nullptr;
-			vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[currentFrame]);
-			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_INDIRECT_COMMAND);
-			vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			vkBarrier.buffer = buffer;
-			vkBarrier.offset = indirectCountBufferBaseOffset + perFrameIndirectCountBufferOffset;
-			vkBarrier.size = indirectCountBufferSize;
-
-			RBOPipelineBarrierArgs args{};
-
-			args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[currentFrame]);
-			args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(BarrierStageBits::INDIRECT_DRAW_BARRIER);
-
-			args.bufferMemoryBarrierCount = 1;
-			args.pBufferMemoryBarriers = &vkBarrier;
-
-			rcb->BindPipelineBarrierCommand(&args);
-
-			status->currAction[currentFrame] = BarrierActionBits::READ_INDIRECT_COMMAND;
-			status->currStage[currentFrame] = BarrierStageBits::INDIRECT_DRAW_BARRIER;
-		}
-	}
+		InsertBufferBarrier(dev, rcb, handle->indirectCountBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND);
 }
 
 void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction)
@@ -5227,4 +5117,67 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 	rcb->BindPipelineBarrierCommand(&args);
 
 	status->currStage[bufferLastAccessFrame] = destBarrierStage;
+}
+
+void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+{
+	RenderAllocation* bufferAlloc = allocations.Get(allocationIndex);
+
+	ResourceStatus* status = resourceStatuses.Get(bufferAlloc->resourceStatus);
+
+	int resourceIndexToUpdate = 0;
+
+	if (bufferAlloc->allocType == AllocationType::PERFRAME)
+		resourceIndexToUpdate = currentFrame;
+
+	if (status->currStage[resourceIndexToUpdate] != destBarrierStage &&
+		status->currAction[resourceIndexToUpdate] != destBarrierAction)
+	{
+
+		size_t align = bufferAlloc->alignment;
+
+		size_t copiesOfstruct = static_cast<size_t>(bufferAlloc->structureCopies);
+
+		size_t bufferSize = bufferAlloc->requestedSize;
+
+		size_t bufferBaseOffset = bufferAlloc->offset;
+
+		int bufferIndex = bufferAlloc->memIndex;
+
+		if (bufferAlloc->allocType == AllocationType::PERFRAME)
+		{
+			size_t perFrameBufferOffset = (((bufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+			perFrameBufferOffset *= currentFrame;
+
+			bufferBaseOffset += perFrameBufferOffset;
+		}
+
+		VkBufferMemoryBarrier vkBarrier{};
+
+		VkBuffer buffer = dev->GetBufferHandle(bufferHandles[bufferIndex].bufferHandle);
+
+		vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		vkBarrier.pNext = nullptr;
+		vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[resourceIndexToUpdate]);
+		vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(destBarrierAction);
+		vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		vkBarrier.buffer = buffer;
+		vkBarrier.offset = bufferBaseOffset;
+		vkBarrier.size = bufferSize;
+
+		RBOPipelineBarrierArgs args{};
+
+		args.srcStageMask = API::ConvertBarrierStageToVulkanPipelineStage(status->currStage[resourceIndexToUpdate]);
+		args.dstStageMask = API::ConvertBarrierStageToVulkanPipelineStage(destBarrierStage);
+
+		args.bufferMemoryBarrierCount = 1;
+		args.pBufferMemoryBarriers = &vkBarrier;
+
+		rcb->BindPipelineBarrierCommand(&args);
+
+		status->currAction[resourceIndexToUpdate] = destBarrierAction;
+		status->currStage[resourceIndexToUpdate] = destBarrierStage;
+	}
 }
