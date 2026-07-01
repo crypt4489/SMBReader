@@ -293,7 +293,7 @@ namespace API
 		return top;
 	}
 
-	VkAccessFlags ConvertResourceActionToVulkanAccessFlags(BarrierAction action)
+	VkAccessFlags ConvertBarrierActionToVulkanAccessFlags(BarrierAction action)
 	{
 		VkAccessFlags flags = 0;
 		flags |= (VK_ACCESS_SHADER_WRITE_BIT) * ((action & WRITE_SHADER_RESOURCE) != 0);
@@ -302,6 +302,7 @@ namespace API
 		flags |= (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT) * ((action & READ_VERTEX_INPUT) != 0);
 		flags |= (VK_ACCESS_INDIRECT_COMMAND_READ_BIT) * ((action & READ_INDIRECT_COMMAND) != 0);
 		flags |= (VK_ACCESS_TRANSFER_WRITE_BIT) * ((action & TRANSFER_WRITE_DATA_RESOURCE) != 0);
+		flags |= (VK_ACCESS_INDEX_READ_BIT) * ((action & READ_INDEX_INPUT) != 0);
 		return flags;
 	}
 
@@ -315,6 +316,7 @@ namespace API
 		flags |= (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT) * ((sourceStage & FRAGMENT_BARRIER) != 0);
 		flags |= (VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT) * ((sourceStage & INDIRECT_DRAW_BARRIER) != 0);
 		flags |= (VK_PIPELINE_STAGE_TRANSFER_BIT) * ((sourceStage & TRANSFER_BARRIER) != 0);
+		flags |= (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT) * ((sourceStage & INDEX_INPUT_BARRIER) != 0);
 		return flags;
 	}
 
@@ -2522,7 +2524,7 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 			region.width,
 			region.height,
 			region.mipLevels,
-			region.layers,
+			region.layerCount,
 			API::ConvertImageFormatToVulkanFormat(region.format),
 			API::ConvertImageLayoutToVulkanImageLayout(currentLayout),
 			currentImageOffsetInUploadArena,
@@ -2784,7 +2786,7 @@ int RenderInstance::CreateSuballocation(int deviceSelection, int parentAllocatio
 		subAlloc->viewIndex = dev->CreateBufferView(bufferHandles[alloc->memIndex].bufferHandle, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, alloc->offset + location, copies);
 	}
 
-	int resourceIndex = alloc->resourceStatus = resourceStatuses.Allocate();
+	int resourceIndex = subAlloc->resourceStatus = resourceStatuses.Allocate();
 
 	ResourceStatus* resourceStatus = resourceStatuses.Get(resourceIndex);
 
@@ -3663,7 +3665,7 @@ int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIn
 	posStruct->pushRangeCount = pushRangeCount;
 	posStruct->indexBufferHandle = info->indexBufferHandle;
 	posStruct->indexCount = info->indexCount;
-	posStruct->vertexBufferIndex = info->vertexBufferHandle;
+	posStruct->vertexBufferHandle = info->vertexBufferHandle;
 	posStruct->vertexCount = info->vertexCount;
 	posStruct->indirectBufferHandle = info->indirectAllocation;
 	posStruct->indirectCountBufferHandle = info->indirectCountAllocation;
@@ -3926,9 +3928,9 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 
 						int vertexMemIndex = -1, indexMemIndex = -1, indirectBufferIndex = -1, indirectCountBufferIndex = -1;
 
-						if (handle->vertexBufferIndex != -1)
+						if (handle->vertexBufferHandle != -1)
 						{		
-							RenderAllocation* vertexAlloc = allocations.Get(handle->vertexBufferIndex);
+							RenderAllocation* vertexAlloc = allocations.Get(handle->vertexBufferHandle);
 
 							vertexMemIndex = vertexAlloc->memIndex;
 
@@ -4284,7 +4286,7 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 	rducm->updateType = DriverUpdateType::MEMORYUPDATE;
 }
 
-void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageFormat format, ImageViewAspectMask mask)
 {
 	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
 
@@ -4293,10 +4295,13 @@ void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t tota
 	rduci->height = height;
 	rduci->mipLevels = mipLevels;
 	rduci->width = width;
-	rduci->layers = layers;
+	rduci->layersCount = layerCount;
 	rduci->textureIndex = textureIndex;
 	rduci->updateType = DriverUpdateType::IMAGEMEMORYUPDATE;
 	rduci->totalSize = totalSize;
+	rduci->mask = mask;
+	rduci->mipStart = mipStart;
+	rduci->layerStart = layerStart;
 }
 
 void RenderInstance::InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue)
@@ -4462,7 +4467,7 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::IMAGEMEMORYUPDATE:
 		{
 			RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)header;
-			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layers, rduci->format);
+			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layersCount, rduci->mipStart, rduci->layerStart, rduci->format, rduci->mask);
 			header = rduci->GetNext();
 			currentSize -= sizeof(RenderDriverUpdateCommandImage);
 			break;
@@ -4541,7 +4546,7 @@ void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocatio
 
 	if (handle->group == GRAPHICSO)
 	{
-		handle->vertexBufferIndex = allocationIndex;
+		handle->vertexBufferHandle = allocationIndex;
 		handle->vertexCount = vertexCount;
 	}
 }
@@ -4815,7 +4820,7 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 			case ShaderResourceType::STORAGE_BUFFER:
 			case ShaderResourceType::UNIFORM_BUFFER:
 			{
-				ShaderResourceBuffer* bufferBarrier = (header->type == ShaderResourceType::BUFFER_VIEW) ? (ShaderResourceBuffer*)&header->resourceArray.views :(ShaderResourceBuffer*)&header->resourceArray.buffers;
+				ShaderResourceBuffer* bufferBarrier = (header->type == ShaderResourceType::BUFFER_VIEW) ? (ShaderResourceBuffer*)&header->resourceArray.views : (ShaderResourceBuffer*)&header->resourceArray.buffers;
 
 				int arrayCount = bufferBarrier->bufferCount;
 
@@ -4825,9 +4830,11 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 
 					InsertBufferBarrier(dev, rcb, allocationIndex, ConvertShaderStageToBarrierStage(header->stage), header);
 
-					break;
+
 				}
-				}
+
+				break;
+			}
 			}
 		}
 	}
@@ -4839,63 +4846,11 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	/*
+	if (handle->vertexBufferHandle != -1)
+		InsertBufferBarrier(dev, rcb, handle->vertexBufferHandle, BarrierStageBits::VERTEX_INPUT_BARRIER, BarrierActionBits::READ_VERTEX_INPUT);
 
-	if (handle->vertexBufferIndex != -1)
-	{
-		if (CHECK_SUBALLOCATION_INDEX(handle->vertexBufferIndex))
-		{
-			int subAllocHandle = GET_SUBALLOCATION_INDEX(handle->vertexBufferIndex);
+	//if (handle->indexBufferHandle != -1)
 
-			RenderSubAllocation* vertexSubAlloc = subAllocations.Get(subAllocHandle);
-
-			RenderAllocation* vertexAlloc = allocations.Get(vertexSubAlloc->parentAllocation);
-
-			vertexMemIndex = vertexAlloc->memIndex;
-
-			vertexOffset = vertexAlloc->offset + vertexSubAlloc->offset;
-
-			resourceIndex = vertexSubAlloc->resourceStatus;
-		}
-		else
-		{
-			RenderAllocation* vertexAlloc = allocations.Get(handle->vertexBufferIndex);
-
-			vertexMemIndex = vertexAlloc->memIndex;
-
-			vertexOffset = vertexAlloc->offset;
-
-			resourceIndex = vertexAlloc->resourceStatus;
-		}
-
-		//ResourceStatus* status =
-	}
-
-	if (handle->indexBufferHandle != -1)
-	{
-		if (CHECK_SUBALLOCATION_INDEX(handle->indexBufferHandle))
-		{
-			int subAllocHandle = GET_SUBALLOCATION_INDEX(handle->indexBufferHandle);
-
-			RenderSubAllocation* indexSubAlloc = subAllocations.Get(subAllocHandle);
-
-			RenderAllocation* indexAlloc = allocations.Get(indexSubAlloc->parentAllocation);
-
-			indexMemIndex = indexAlloc->memIndex;
-
-			indexOffset = indexAlloc->offset + indexSubAlloc->offset;
-		}
-		else
-		{
-			RenderAllocation* indexAlloc = allocations.Get(handle->indexBufferHandle);
-
-			indexMemIndex = indexAlloc->memIndex;
-
-			indexOffset = indexAlloc->offset;
-		}
-	}
-
-	*/
 
 	if (handle->indirectBufferHandle != -1)
 		InsertBufferBarrier(dev, rcb, handle->indirectBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND);
@@ -4942,7 +4897,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.subresourceRange.aspectMask = API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(viewDesc->mask);
 
-	barrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(destBarrierAction);
+	barrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(destBarrierAction);
 	barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(requestedLayout);
 	barrier.image = dev->GetImageByHandle(desc->textureIndex);
 
@@ -4968,7 +4923,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 					if (trackedLayerCount >= 1 && trackedMipCount >= 1)
 					{
 						barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
-						barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(trackedAction);
+						barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(trackedAction);
 
 						VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
 
@@ -5007,7 +4962,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 	if (trackedLayerCount && trackedMipCount)
 	{
 		barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
-		barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(trackedAction);
+		barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(trackedAction);
 
 		VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
 
@@ -5035,6 +4990,22 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 
 	RenderAllocation* alloc = allocations.Get(allocationIndex);
 
+	resourceStatusIndex = alloc->resourceStatus;
+
+	allocType = alloc->allocType;
+
+	ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
+
+	if (allocType == AllocationType::PERFRAME)
+		bufferLastAccessFrame = currentFrame;
+
+	if ((status->currAction[bufferLastAccessFrame] & (BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::READ_UNIFORM_BUFFER))
+		&& (header->action == ShaderResourceAction::SHADERREAD)
+		&& (status->currStage[bufferLastAccessFrame] == destBarrierStage))
+	{
+		return;
+	}
+
 	memIndex = alloc->memIndex;
 
 	align = alloc->alignment;
@@ -5043,29 +5014,11 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 
 	offset = alloc->offset;
 
-	allocType = alloc->allocType;
-
-	resourceStatusIndex = alloc->resourceStatus;
-
 	if (allocType == AllocationType::PERFRAME)
 	{
 		size_t strideSize = size;
 
 		offset += (currentFrame * strideSize);
-
-		bufferLastAccessFrame = currentFrame;
-	}
-
-	ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
-
-	if (((status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_SHADER_RESOURCE) ||
-		(status->currAction[bufferLastAccessFrame] == BarrierActionBits::READ_UNIFORM_BUFFER))
-		&&
-		(header->action == ShaderResourceAction::SHADERREAD))
-	{
-		status->currStage[bufferLastAccessFrame] = destBarrierStage;
-		status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
-		return;
 	}
 
 	VkBufferMemoryBarrier vkBarrier{};
@@ -5074,29 +5027,35 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 
 	vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 	vkBarrier.pNext = nullptr;
-	vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
+	vkBarrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
+
+	BarrierAction newAction = 0;
 
 	if (header->type == ShaderResourceType::UNIFORM_BUFFER)
 	{
-		vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_UNIFORM_BUFFER);
-		status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_UNIFORM_BUFFER;
+		newAction = BarrierActionBits::READ_UNIFORM_BUFFER;
+		vkBarrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
+		status->currAction[bufferLastAccessFrame] = newAction;
 	}
 	else
 	{
 		if (header->action == ShaderResourceAction::SHADERWRITE)
 		{
-			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::WRITE_SHADER_RESOURCE);
-			status->currAction[bufferLastAccessFrame] = BarrierActionBits::WRITE_SHADER_RESOURCE;
+			newAction = BarrierActionBits::WRITE_SHADER_RESOURCE;
+			vkBarrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
+			status->currAction[bufferLastAccessFrame] = newAction;
 		}
 		else if (header->action == ShaderResourceAction::SHADERREADWRITE)
 		{
-			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE);
-			status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE;
+			newAction = BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE;
+			vkBarrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
+			status->currAction[bufferLastAccessFrame] = newAction;
 		}
 		else
 		{
-			vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(BarrierActionBits::READ_SHADER_RESOURCE);
-			status->currAction[bufferLastAccessFrame] = BarrierActionBits::READ_SHADER_RESOURCE;
+			newAction = BarrierActionBits::READ_SHADER_RESOURCE;
+			vkBarrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
+			status->currAction[bufferLastAccessFrame] = newAction;
 		}
 	}
 
@@ -5130,10 +5089,9 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 	if (bufferAlloc->allocType == AllocationType::PERFRAME)
 		resourceIndexToUpdate = currentFrame;
 
-	if (status->currStage[resourceIndexToUpdate] != destBarrierStage &&
+	if (status->currStage[resourceIndexToUpdate] != destBarrierStage ||
 		status->currAction[resourceIndexToUpdate] != destBarrierAction)
 	{
-
 		size_t align = bufferAlloc->alignment;
 
 		size_t copiesOfstruct = static_cast<size_t>(bufferAlloc->structureCopies);
@@ -5159,8 +5117,8 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 
 		vkBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 		vkBarrier.pNext = nullptr;
-		vkBarrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(status->currAction[resourceIndexToUpdate]);
-		vkBarrier.dstAccessMask = API::ConvertResourceActionToVulkanAccessFlags(destBarrierAction);
+		vkBarrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(status->currAction[resourceIndexToUpdate]);
+		vkBarrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(destBarrierAction);
 		vkBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		vkBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		vkBarrier.buffer = buffer;

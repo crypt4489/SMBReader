@@ -2322,8 +2322,11 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 				texture.width,
 				texture.height,
 				texture.miplevels,
+				0,
 				1,
-				format
+				0,
+				format,
+				COLOR_IMAGE_ASPECT
 			);
 		}
 
@@ -4540,8 +4543,11 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 			details.width,
 			details.height,
 			details.miplevels,
+			0,
 			details.arrayLayers,
-			details.type
+			0,
+			details.type,
+			COLOR_IMAGE_ASPECT
 		);
 	}
 	else
@@ -4645,8 +4651,11 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->width,
 			details->height,
 			details->miplevels,
+			0,
 			details->arrayLayers,
-			details->type
+			0,
+			details->type,
+			COLOR_IMAGE_ASPECT
 		);
 
 		DeviceHandleArrayUpdateTextureView arrayUpdateStruct{};

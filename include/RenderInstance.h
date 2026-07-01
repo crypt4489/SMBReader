@@ -21,7 +21,7 @@ namespace API
 
 	VkPrimitiveTopology ConvertTopology(PrimitiveType type);
 
-	VkAccessFlags ConvertResourceActionToVulkanAccessFlags(BarrierAction action);
+	VkAccessFlags ConvertBarrierActionToVulkanAccessFlags(BarrierAction action);
 
 	VkPipelineStageFlags ConvertBarrierStageToVulkanPipelineStage(BarrierStage sourceStage);
 
@@ -201,7 +201,7 @@ struct RenderInstance
 
 	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
 
-	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format);
+	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageFormat format, ImageViewAspectMask mask);
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue);
 

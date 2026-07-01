@@ -87,6 +87,7 @@ enum BarrierActionBits
 	READ_VERTEX_INPUT = 8,
 	READ_INDIRECT_COMMAND = 16,
 	TRANSFER_WRITE_DATA_RESOURCE = 32,
+	READ_INDEX_INPUT = 64,
 };
 
 enum BarrierStageBits
@@ -98,6 +99,7 @@ enum BarrierStageBits
 	BEGINNING_OF_PIPE = 16,
 	INDIRECT_DRAW_BARRIER = 32,
 	TRANSFER_BARRIER = 64,
+	INDEX_INPUT_BARRIER = 128,
 };
 
 typedef int BarrierAction;

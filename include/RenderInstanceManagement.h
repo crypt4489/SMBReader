@@ -114,8 +114,11 @@ struct TextureMemoryRegion
 	int width;
 	int height;
 	int mipLevels;
-	int layers;
+	int layerCount;
+	int layerStart;
+	int mipStart;
 	ImageFormat format;
+	ImageViewAspectMask transferMask;
 };
 
 struct TransferCommand
@@ -155,7 +158,7 @@ struct PipelineHandle
 	int pipelineIdentifierGroup;
 	ShaderResourceSetHandle resourceSets[16];
 	int resourceSetCount;
-	int vertexBufferIndex;
+	int vertexBufferHandle;
 	uint32_t vertexCount;
 	int indexBufferHandle;
 	uint32_t indexCount;
@@ -239,12 +242,15 @@ struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
 	int width; 
 	int height; 
 	int mipLevels; 
-	int layers; 
-	ImageFormat format;
-	void* data;
+	int layersCount;
 	int textureIndex;
+	int mipStart;
+	int layerStart;
+	ImageViewAspectMask mask;
+	ImageFormat format;
+	int pad1;
+	void* data;
 	size_t totalSize;
-	int pad[4];
 
 	RenderDriverUpdateCommandHeader* GetNext()
 	{
@@ -520,7 +526,7 @@ struct ImageMemoryUpdateManager
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layers, ImageFormat format)
+	int Create(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layerCount, int mipStart, int layerStart, ImageFormat format, ImageViewAspectMask mask)
 	{
 		int link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
@@ -542,7 +548,10 @@ struct ImageMemoryUpdateManager
 		region->mipLevels = mipLevels;
 		region->textureIndex = textureIndex;
 		region->format = format;
-		region->layers = layers;
+		region->layerCount = layerCount;
+		region->mipStart = mipStart;
+		region->layerStart = layerStart;
+		region->transferMask = mask;
 
 		Insert(regionAlloc);
 		
@@ -551,24 +560,14 @@ struct ImageMemoryUpdateManager
 
 	void Insert(int newlink)
 	{
-		int* test = &linkHead;
-		while (*test >= 0)
-		{
-			test = &(regionLinks[(*test)]);
-		}
-		regionLinks[newlink] = *test;
-		*test = newlink;
+		regionLinks[newlink] = linkHead;
+		linkHead = newlink;
 		linkCount++;
 	}
 
 	int Find(int textureIndex)
 	{
-		int link = linkHead;
-		while (link >= 0 && transferRegions[link].textureIndex != textureIndex)
-		{
-			link = regionLinks[link];
-		}
-		return (link);
+		return (-1);
 	}
 
 	int PopLink(TextureMemoryRegion* outputRegion, int link)
@@ -586,12 +585,14 @@ struct ImageMemoryUpdateManager
 		outputRegion->height = src->height;
 		outputRegion->mipLevels = src->mipLevels;
 		outputRegion->format = src->format;
-		outputRegion->layers = src->layers;
+		outputRegion->layerCount = src->layerCount;
+		outputRegion->transferMask = src->transferMask;
+		outputRegion->mipStart = src->mipStart;
+		outputRegion->layerStart = src->layerStart;
 
 		int linkRet = regionLinks[link];
 
 		linkCount--;
-
 
 		src->data = nullptr;
 		src->totalSize = 0;
@@ -600,7 +601,10 @@ struct ImageMemoryUpdateManager
 		src->height = 0;
 		src->mipLevels = 0;
 		src->format = {};
-		src->layers = -1;
+		src->layerCount = -1;
+		src->layerStart = -1;
+		src->mipStart = -1;
+		src->transferMask = 0;
 
 		regionLinks[link] = -1;
 
