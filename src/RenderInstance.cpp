@@ -4995,7 +4995,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 				trackedStage |= currStage;
 
 				trackedLayerCount = (j - trackedLayerStart) + 1;
-				trackedMipCount = (i - trackedLayerStart) + 1;
+				trackedMipCount = (i - trackedMipStart) + 1;
 
 				status->currentLayout[currentMipArrayIndex] = requestedLayout;
 				status->currAction[currentMipArrayIndex] = destBarrierAction;
@@ -5004,7 +5004,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 		}
 	}
 
-	if (trackedLayerCount >= 1 && trackedMipCount >= 1)
+	if (trackedLayerCount && trackedMipCount)
 	{
 		barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
 		barrier.srcAccessMask = API::ConvertResourceActionToVulkanAccessFlags(trackedAction);
