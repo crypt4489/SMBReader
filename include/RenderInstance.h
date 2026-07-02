@@ -201,7 +201,7 @@ struct RenderInstance
 
 	void UpdateDriverMemory(void* data, int allocationIndex, int size, int allocOffset, TransferType transferType);
 
-	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageFormat format, ImageViewAspectMask mask);
+	void UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageViewAspectMask mask);
 
 	void InsertTransferCommand(int allocationIndex, int size, int allocOffset, uint32_t fillValue);
 
@@ -265,6 +265,10 @@ struct RenderInstance
 	void InitializeResourceStatus(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts, BarrierAction action, BarrierStage stage, ImageLayout imageLayout);
 
 	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+
+	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, EntryHandle imageIndex, int mipStart, int mipCount, int totalMipCount, int layerStart, int layerCount,
+		ImageViewAspectMask mask, ImageLayout requestedLayout, ResourceStatus* status,
+		BarrierStage destBarrierStage, BarrierAction destBarrierAction);
 
 	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header);
 

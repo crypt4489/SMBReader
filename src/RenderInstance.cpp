@@ -2236,7 +2236,6 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 
 		bufferHandle = alloc->memIndex;
 		
-
 		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
 
 		void* data = region.data;
@@ -2508,11 +2507,10 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 
 		ResourceStatus* resourceStatus = resourceStatuses.Get(textureResourceHandles[region.textureIndex].resourceStatusIndex);
 
-		ImageLayout currentLayout = resourceStatus->currentLayout[0];
-
-		int totalTrackedElements = desc->arrayLayers * desc->mipLayers;
-
-		InitializeResourceStatus(resourceStatus, totalTrackedElements, totalTrackedElements, totalTrackedElements, TRANSFER_WRITE_DATA_RESOURCE, TRANSFER_BARRIER, ImageLayout::TRANSFER_DEST_OPTIMAL);
+		TransitionImageLayout(dev, rbo, handle, region.mipStart, region.mipLevels, 
+			desc->mipLayers, region.layerStart, region.layerCount, 
+			region.transferMask, ImageLayout::TRANSFER_DEST_OPTIMAL, 
+			resourceStatus, TRANSFER_BARRIER, TRANSFER_WRITE_DATA_RESOURCE);
 
 		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
 
@@ -2525,8 +2523,8 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 			region.height,
 			region.mipLevels,
 			region.layerCount,
-			API::ConvertImageFormatToVulkanFormat(region.format),
-			API::ConvertImageLayoutToVulkanImageLayout(currentLayout),
+			API::ConvertImageFormatToVulkanFormat(desc->format),
+			API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(region.transferMask),
 			currentImageOffsetInUploadArena,
 			rbo
 		);
@@ -2567,17 +2565,41 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 	{
 		link = driverDeviceMemoryUpdater.PopLink(&region, link, &linkprev);
 
-		int bufferHandle = -1;
+		int handle = region.allocationIndex;
 
-		size_t currentAllocOffset = -1;
+		size_t intSize = region.size;
 
-		RenderAllocation* alloc = allocations.Get(region.allocationIndex);
+		size_t rsize = 0, align = 0, intOffset = 0;
 
-		currentAllocOffset = alloc->offset + region.allocoffset;
+		int bufferHandle = -1, resourceStatusIndex = 0;
+
+		RenderAllocation* alloc = allocations.Get(handle);
+
+		rsize = alloc->requestedSize;
+		align = alloc->alignment;
+
+		rsize *= alloc->structureCopies;
+
+		rsize = (rsize + align - 1) & ~(align - 1);
+
+		if (alloc->allocType == AllocationType::PERFRAME)
+		{
+			intOffset = (currentFrame * rsize) + alloc->offset + region.allocoffset;
+			resourceStatusIndex = currentFrame;
+		}
+		else if (alloc->allocType == AllocationType::STATIC)
+		{
+			intOffset = alloc->offset + region.allocoffset;
+		}
 
 		bufferHandle = alloc->memIndex;
-		
+
 		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
+
+		ResourceStatus* status = resourceStatuses.Get(alloc->resourceStatus);
+
+		status->currAction[resourceStatusIndex] = BarrierActionBits::TRANSFER_WRITE_DATA_RESOURCE;
+		status->currStage[resourceStatusIndex] = BarrierStageBits::TRANSFER_BARRIER;
 	
 		if (index != previousBuffer)
 		{
@@ -2595,7 +2617,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 		uploadArenaOffset[batchCounter] = stagingAlloc->Allocate(region.size, 64);
 		batchSizes[batchCounter] = region.size;
 		batchData[batchCounter] = region.data;
-		batchOffsets[batchCounter] = currentAllocOffset;
+		batchOffsets[batchCounter] = intOffset;
 
 		batchCounter++;
 	}
@@ -3833,8 +3855,8 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 				int absoluteRenderTargetIndex = currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass;
 
 				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
-
-				VkClearValue* clears = (VkClearValue*)cacheAllocator->CAllocate(sizeof(VkClearValue) * rpInst->attachInstCount);
+#define MAX_ATTACHMENT_INSTANCE 10
+				VkClearValue clears[MAX_ATTACHMENT_INSTANCE];
 
 				AttachmentInstance* instances = rpInst->attachInst;
 
@@ -4286,12 +4308,11 @@ void RenderInstance::UpdateDriverMemory(void* data, int allocationIndex, int siz
 	rducm->updateType = DriverUpdateType::MEMORYUPDATE;
 }
 
-void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageFormat format, ImageViewAspectMask mask)
+void RenderInstance::UpdateImageMemory(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int mipStart, int layerCount, int layerStart, ImageViewAspectMask mask)
 {
 	RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)updateCommandBuffers[currentUpdateCommandBuffer]->Allocate(sizeof(RenderDriverUpdateCommandImage));
 
 	rduci->data = data;
-	rduci->format = format;
 	rduci->height = height;
 	rduci->mipLevels = mipLevels;
 	rduci->width = width;
@@ -4467,7 +4488,7 @@ void RenderInstance::SwapUpdateCommands()
 		case DriverUpdateType::IMAGEMEMORYUPDATE:
 		{
 			RenderDriverUpdateCommandImage* rduci = (RenderDriverUpdateCommandImage*)header;
-			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layersCount, rduci->mipStart, rduci->layerStart, rduci->format, rduci->mask);
+			imageMemoryUpdateManager.Create(rduci->data, rduci->textureIndex, rduci->totalSize, rduci->width, rduci->height, rduci->mipLevels, rduci->layersCount, rduci->mipStart, rduci->layerStart, rduci->mask);
 			header = rduci->GetNext();
 			currentSize -= sizeof(RenderDriverUpdateCommandImage);
 			break;
@@ -4829,8 +4850,6 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 					int allocationIndex = bufferBarrier->allocationIndex[g];
 
 					InsertBufferBarrier(dev, rcb, allocationIndex, ConvertShaderStageToBarrierStage(header->stage), header);
-
-
 				}
 
 				break;
@@ -4878,22 +4897,26 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 	int viewLayerCount = viewDesc->layerCount;
 	int totalLayerCount = desc->arrayLayers;
 
-	ImageLayout requestedLayout = viewDesc->desiredLayoutForView;
+	TransitionImageLayout(dev, rcb, desc->textureIndex, viewMipStart, viewMipCount, totalMipCount, viewLayerStart, viewLayerCount, viewDesc->mask, viewDesc->desiredLayoutForView, status, destBarrierStage, destBarrierAction);
+}
 
+void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, EntryHandle imageIndex, int mipStart, int mipCount, int totalMipCount, int layerStart, int layerCount,
+	ImageViewAspectMask mask, ImageLayout requestedLayout, ResourceStatus* status,
+	BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+{
 	VkImageMemoryBarrier barrier{};
 	RBOPipelineBarrierArgs args{};
-	
+
 	VkPipelineStageFlags destinationStage = API::ConvertBarrierStageToVulkanPipelineStage(destBarrierStage);
+
 	args.dstStageMask = destinationStage;
-	args.imageMemoryBarrierCount = 1;
-	args.pImageMemoryBarriers = &barrier;
-	
+
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.subresourceRange.aspectMask = API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(viewDesc->mask);
+	barrier.subresourceRange.aspectMask = API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(mask);
 
 	barrier.dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(destBarrierAction);
 	barrier.newLayout = API::ConvertImageLayoutToVulkanImageLayout(requestedLayout);
-	barrier.image = dev->GetImageByHandle(desc->textureIndex);
+	barrier.image = dev->GetImageByHandle(imageIndex);
 
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -4909,19 +4932,23 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 		struct MipArrayLevel* nextInLevel;
 	};
 
-	MipArrayLevel* arrayLevels = (MipArrayLevel*)cacheAllocator->CAllocate(sizeof(MipArrayLevel) * ((viewMipCount * viewLayerCount)));
+	MipArrayLevel* arrayLevels = (MipArrayLevel*)cacheAllocator->CAllocate(sizeof(MipArrayLevel) * (mipCount * layerCount));
 
-	MipArrayLevel** linkedListPtr = (MipArrayLevel**)cacheAllocator->CAllocate(sizeof(MipArrayLevel*) * viewLayerCount);
+	MipArrayLevel** linkedListPtr = (MipArrayLevel**)cacheAllocator->CAllocate(sizeof(MipArrayLevel*) * layerCount);
+
+	VkImageMemoryBarrier* barriers = (VkImageMemoryBarrier*)cacheAllocator->CAllocate(sizeof(VkImageMemoryBarrier) * (mipCount * layerCount));
+
+	int barrierCount = 0;
 
 	int nodeCount = 0;
 
-	for (int j = viewLayerStart; j < viewLayerStart + viewLayerCount; j++)
+	for (int j = layerStart; j < layerStart + layerCount; j++)
 	{
 		MipArrayLevel* curr = nullptr;
 
-		MipArrayLevel** next = &linkedListPtr[j-viewLayerStart];
+		MipArrayLevel** next = &linkedListPtr[j - layerStart];
 
-		for (int i = viewMipStart; i < viewMipStart + viewMipCount; i++)
+		for (int i = mipStart; i < mipStart + mipCount; i++)
 		{
 			int currentMipArrayIndex = (j * totalMipCount) + i;
 
@@ -4929,7 +4956,10 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 			BarrierStage currStage = status->currStage[currentMipArrayIndex];
 			ImageLayout currLayout = status->currentLayout[currentMipArrayIndex];;
 
-			if (currLayout != requestedLayout)
+			if ((currLayout != requestedLayout)
+				|| (currStage != destBarrierStage)
+				|| (currAction != destBarrierAction)
+				)
 			{
 				if (!curr || currLayout != curr->layout)
 				{
@@ -4982,7 +5012,7 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 
 	//attempt to merge square rectangles with same layout and mip start/count, no splitting
 
-	for (int i = 0; i < viewLayerCount; i++)
+	for (int i = 0; i < layerCount; i++)
 	{
 		MipArrayLevel* curr = linkedListPtr[i];
 
@@ -4997,9 +5027,9 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 			int trackedMipStart = curr->trackedMipStart;
 			int trackedMipCount = curr->trackedMipCount;
 			int trackedLayerCount = 1;
-			int trackedLayerStart = i + viewLayerStart;
+			int trackedLayerStart = i + layerStart;
 
-			for (int j = i + 1; j < viewLayerCount; j++)
+			for (int j = i + 1; j < layerCount; j++)
 			{
 				MipArrayLevel* candidate = linkedListPtr[j];
 				int extended = 0;
@@ -5027,26 +5057,32 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 					break;
 			}
 
+			VkImageMemoryBarrier* currentBarrier = &barriers[barrierCount++];
 
-			barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(curr->layout);
-			barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(curr->actions);
+			*currentBarrier = barrier;
+
+			currentBarrier->oldLayout = API::ConvertImageLayoutToVulkanImageLayout(curr->layout);
+			currentBarrier->srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(curr->actions);
 
 			VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(curr->stages);
 
-			barrier.subresourceRange.baseMipLevel = trackedMipStart;
-			barrier.subresourceRange.levelCount = trackedMipCount;
-			barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
-			barrier.subresourceRange.layerCount = trackedLayerCount;
+			currentBarrier->subresourceRange.baseMipLevel = trackedMipStart;
+			currentBarrier->subresourceRange.levelCount = trackedMipCount;
+			currentBarrier->subresourceRange.baseArrayLayer = trackedLayerStart;
+			currentBarrier->subresourceRange.layerCount = trackedLayerCount;
 
-			args.srcStageMask = sourceStage;
-
-			args.imageMemoryBarrierCount = 1;
-			args.pImageMemoryBarriers = &barrier;
-
-			rcb->BindPipelineBarrierCommand(&args);
+			args.srcStageMask |= sourceStage;
 
 			curr = curr->nextInLevel;
 		}
+	}
+
+	if (barrierCount)
+	{
+		args.imageMemoryBarrierCount = barrierCount;
+		args.pImageMemoryBarriers = barriers;
+
+		rcb->BindPipelineBarrierCommand(&args);
 	}
 }
 

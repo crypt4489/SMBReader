@@ -110,6 +110,7 @@ struct TextureMemoryRegion
 {
 	void* data;
 	size_t totalSize;
+	size_t currentPointerUpdate;
 	int textureIndex;
 	int width;
 	int height;
@@ -117,7 +118,6 @@ struct TextureMemoryRegion
 	int layerCount;
 	int layerStart;
 	int mipStart;
-	ImageFormat format;
 	ImageViewAspectMask transferMask;
 };
 
@@ -247,8 +247,7 @@ struct RenderDriverUpdateCommandImage : public RenderDriverUpdateCommandHeader
 	int mipStart;
 	int layerStart;
 	ImageViewAspectMask mask;
-	ImageFormat format;
-	int pad1;
+	int pad1[2];
 	void* data;
 	size_t totalSize;
 
@@ -526,7 +525,7 @@ struct ImageMemoryUpdateManager
 		regionLinks = (int*)(transferRegions + ddsRegionSize);
 	}
 
-	int Create(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layerCount, int mipStart, int layerStart, ImageFormat format, ImageViewAspectMask mask)
+	int Create(void* data, int textureIndex, size_t totalSize, int width, int height, int mipLevels, int layerCount, int mipStart, int layerStart, ImageViewAspectMask mask)
 	{
 		int link = Find(textureIndex);
 		TextureMemoryRegion* region = nullptr;
@@ -547,7 +546,7 @@ struct ImageMemoryUpdateManager
 		region->totalSize = totalSize;
 		region->mipLevels = mipLevels;
 		region->textureIndex = textureIndex;
-		region->format = format;
+		region->currentPointerUpdate = 0;
 		region->layerCount = layerCount;
 		region->mipStart = mipStart;
 		region->layerStart = layerStart;
@@ -584,7 +583,7 @@ struct ImageMemoryUpdateManager
 		outputRegion->width = src->width;
 		outputRegion->height = src->height;
 		outputRegion->mipLevels = src->mipLevels;
-		outputRegion->format = src->format;
+		outputRegion->currentPointerUpdate = src->currentPointerUpdate;
 		outputRegion->layerCount = src->layerCount;
 		outputRegion->transferMask = src->transferMask;
 		outputRegion->mipStart = src->mipStart;
@@ -596,11 +595,11 @@ struct ImageMemoryUpdateManager
 
 		src->data = nullptr;
 		src->totalSize = 0;
-		src->textureIndex = {};
+		src->textureIndex = 0;
 		src->width = 0;
 		src->height = 0;
 		src->mipLevels = 0;
-		src->format = {};
+		src->currentPointerUpdate = 0;
 		src->layerCount = -1;
 		src->layerStart = -1;
 		src->mipStart = -1;

@@ -1,5 +1,4 @@
 #include "ShaderResourceSet.h"
-#include <stdexcept>
 #include <cctype>
 
 #define MAX_ATTRIBUTE_LEN 50

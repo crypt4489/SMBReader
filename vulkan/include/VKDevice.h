@@ -700,16 +700,10 @@ struct VKDevice
 	int ReadHostBuffer(void* dest, EntryHandle hostIndex, size_t size, size_t offset);
 
 	int UploadImageData(EntryHandle imageIndex,
-		char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex,
-		int width, int height, int layers,
-		int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, EntryHandle queueManagerIndex
-	);
-
-	int UploadImageData(EntryHandle imageIndex,
 		char* imageData, size_t totalImageDataSize,
 		EntryHandle stagingBufferIndex,
 		int width, int height, int layers,
-		int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, RecordingBufferObject* rbo
+		int mipLevels, VkFormat format, VkImageAspectFlags aspectMask, size_t stagingOffsetStart, RecordingBufferObject* rbo
 	);
 
 	int WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stagingBufferIndex, void** data, size_t* sizes, size_t* destOffsets, size_t cumulativesize, size_t* stagingOffsets, int entries, RecordingBufferObject* rbo);

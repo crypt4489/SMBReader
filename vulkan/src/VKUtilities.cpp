@@ -471,14 +471,14 @@ namespace VK {
 
 			void CopyBufferToImage(VkCommandBuffer commandBuffer, VkBuffer buffer, VkImage image,
 				uint32_t width, uint32_t height, uint32_t mip, VkDeviceSize bufferOffset,
-				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount) {
+				VkOffset3D offset, uint32_t baseLayer, uint32_t layerCount, VkImageAspectFlags aspectMask) {
 
 				VkBufferImageCopy region{};
 				region.bufferOffset = bufferOffset;
 				region.bufferRowLength = 0;
 				region.bufferImageHeight = 0;
 
-				region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				region.imageSubresource.aspectMask = aspectMask;
 				region.imageSubresource.mipLevel = mip;
 				region.imageSubresource.baseArrayLayer = baseLayer;
 				region.imageSubresource.layerCount = layerCount;

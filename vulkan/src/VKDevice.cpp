@@ -3785,70 +3785,12 @@ int VKDevice::WriteToDeviceBufferBatch(EntryHandle deviceIndex, EntryHandle stag
 	return 0;
 }
 
-int VKDevice::UploadImageData(EntryHandle imageIndex, 
-	char* imageData, size_t totalImageDataSize, EntryHandle stagingBufferIndex, 
-	int width, int height, int layers,
-	int mipLevels, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, EntryHandle queueManagerIndex
-)
-{
-	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
-
-	BufferAlloc* stagingBufferAlloc = GetBufferAlloc(stagingBufferIndex);
-
-	if (!stagingBufferAlloc)
-		return -1;
-
-	VkImage image = GetImageByHandle(imageIndex);
-
-	if (!image)
-		return -1;
-		
-	VkBuffer stagingBuffer = stagingBufferAlloc->buffer;
-	VkDeviceMemory stagingMemory = stagingBufferAlloc->memory;
-	VkDeviceSize offsetAlloc = stagingOffsetStart;
-
-	VKDevice::QueueDetails queueDetails = GetQueueHandle(queueManagerIndex);
-
-	VkCommandPool pool = GetCommandPool(queueDetails.poolIndex);
-
-	VkQueue queue;
-	vkGetDeviceQueue(device, queueDetails.queueFamilyIndex, queueDetails.queueIndex, &queue);
-
-	char* data;
-	char* pixels = imageData;
-	vkMapMemory(device, stagingMemory, offsetAlloc, imagesSize, 0, reinterpret_cast<void**>(&data));
-
-	memcpy(data, pixels, imagesSize);
-
-	vkUnmapMemory(device, stagingMemory);
-
-	VkCommandBuffer cb = VK::Utils::BeginOneTimeCommands(device, pool);
-
-	VK::Utils::MultiCommands::TransitionImageLayout(cb, image, format, startingLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, 1);
-
-	VkDeviceSize offset = 0UL;
-
-	for (int i = 0; i < mipLevels; i++) 
-	{
-		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
-
-		VK::Utils::MultiCommands::CopyBufferToImage(cb, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
-
-		offset += individualSize;
-	}
-
-	VK::Utils::EndOneTimeCommands(device, queue, pool, cb);
-
-	ReturnQueueToManager(queueManagerIndex, queueDetails.queueIndex);
-
-	return 0;
-}
 
 int VKDevice::UploadImageData(EntryHandle imageIndex,
 	char* imageData, size_t totalImageDataSize,
 	EntryHandle stagingBufferIndex,
 	int width, int height,
-	int mipLevels, int layers, VkFormat format, VkImageLayout startingLayout, size_t stagingOffsetStart, RecordingBufferObject* rbo
+	int mipLevels, int layers, VkFormat format, VkImageAspectFlags aspectMask, size_t stagingOffsetStart, RecordingBufferObject* rbo
 )
 {
 	VkDeviceSize imagesSize = static_cast<VkDeviceSize>(totalImageDataSize);
@@ -3871,8 +3813,6 @@ int VKDevice::UploadImageData(EntryHandle imageIndex,
 	vkUnmapMemory(device, stagingMemory);
 
 	VkImage image = GetImageByHandle(imageIndex);
-
-	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, startingLayout, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels, layers);
 
 	VkDeviceSize offset = offsetAlloc;
 
@@ -3880,12 +3820,10 @@ int VKDevice::UploadImageData(EntryHandle imageIndex,
 	{
 		VkDeviceSize individualSize = VK::Utils::GetRawImageSizeFromFormat(format, width >> i, height >> i);
 
-		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers);
+		VK::Utils::MultiCommands::CopyBufferToImage(rbo->cbBufferHandler.buffer, stagingBuffer, image, width >> i, height >> i, i, offset, { 0, 0, 0 }, 0, layers, aspectMask);
 
 		offset += individualSize;
 	}
-	
-//	VK::Utils::MultiCommands::TransitionImageLayout(rbo->cbBufferHandler.buffer, image, format, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels, layers);
 
 	return 0;
 }

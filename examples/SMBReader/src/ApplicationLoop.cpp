@@ -2325,7 +2325,6 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 				0,
 				1,
 				0,
-				format,
 				COLOR_IMAGE_ASPECT
 			);
 		}
@@ -4546,7 +4545,6 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 			0,
 			details.arrayLayers,
 			0,
-			details.type,
 			COLOR_IMAGE_ASPECT
 		);
 	}
@@ -4654,7 +4652,6 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			0,
 			details->arrayLayers,
 			0,
-			details->type,
 			COLOR_IMAGE_ASPECT
 		);
 
