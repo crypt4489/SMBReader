@@ -54,7 +54,7 @@ enum class ImageLayout
 	STENCILATTACHMENT = 7,
 	GENERAL = 8,
 	TRANSFER_DEST_OPTIMAL = 9,
-	TRANSFER_SRC_OPTIMAL = 10,
+	TRANSFER_SRC_OPTIMAL = 10
 };
 
 enum class ImageUsage

@@ -4880,12 +4880,6 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 
 	ImageLayout requestedLayout = viewDesc->desiredLayoutForView;
 
-	ImageLayout trackedLayout = ImageLayout::UNDEFINED;
-
-	BarrierAction trackedAction = 0;
-
-	BarrierStage trackedStage = 0;
-
 	VkImageMemoryBarrier barrier{};
 	RBOPipelineBarrierArgs args{};
 	
@@ -4904,79 +4898,155 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 
-	int trackedMipStart = 0, trackedMipCount = 0, trackedLayerStart = 0, trackedLayerCount = 0;
+	struct MipArrayLevel
+	{
+		int trackedMipStart;
+		int trackedMipCount;
+		BarrierAction actions;
+		BarrierStage stages;
+		ImageLayout layout;
+		int coalesced;
+		struct MipArrayLevel* nextInLevel;
+	};
+
+	MipArrayLevel* arrayLevels = (MipArrayLevel*)cacheAllocator->CAllocate(sizeof(MipArrayLevel) * ((viewMipCount * viewLayerCount)));
+
+	MipArrayLevel** linkedListPtr = (MipArrayLevel**)cacheAllocator->CAllocate(sizeof(MipArrayLevel*) * viewLayerCount);
+
+	int nodeCount = 0;
 
 	for (int j = viewLayerStart; j < viewLayerStart + viewLayerCount; j++)
 	{
+		MipArrayLevel* curr = nullptr;
+
+		MipArrayLevel** next = &linkedListPtr[j-viewLayerStart];
+
 		for (int i = viewMipStart; i < viewMipStart + viewMipCount; i++)
 		{
 			int currentMipArrayIndex = (j * totalMipCount) + i;
 
 			BarrierAction currAction = status->currAction[currentMipArrayIndex];
 			BarrierStage currStage = status->currStage[currentMipArrayIndex];
-			ImageLayout currLayout = status->currentLayout[currentMipArrayIndex];
+			ImageLayout currLayout = status->currentLayout[currentMipArrayIndex];;
 
 			if (currLayout != requestedLayout)
 			{
-				if (currLayout != trackedLayout)
+				if (!curr || currLayout != curr->layout)
 				{
-					if (trackedLayerCount >= 1 && trackedMipCount >= 1)
+					if (curr && curr->trackedMipCount)
 					{
-						barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
-						barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(trackedAction);
-
-						VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
-
-						args.srcStageMask = sourceStage;
-
-						barrier.subresourceRange.baseMipLevel = trackedMipStart;
-						barrier.subresourceRange.levelCount = trackedMipCount;
-						barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
-						barrier.subresourceRange.layerCount = trackedLayerCount;
-
-						rcb->BindPipelineBarrierCommand(&args);
+						*next = curr;
+						next = &curr->nextInLevel;
 					}
 
-					trackedMipStart = i;
-					trackedLayerStart = j;
-					trackedLayout = currLayout;
-					trackedAction = 0;
-					trackedStage = 0;
-					trackedLayerCount = 0;
-					trackedMipCount = 0;
+					MipArrayLevel* newLevel = &arrayLevels[nodeCount++];
+
+					newLevel->trackedMipStart = i;
+					newLevel->layout = currLayout;
+					newLevel->trackedMipCount = 1;
+					newLevel->nextInLevel = nullptr;
+					newLevel->actions = currAction;
+					newLevel->stages = currStage;
+					newLevel->coalesced = 0;
+
+					curr = newLevel;
 				}
-
-				trackedAction |= currAction;
-				trackedStage |= currStage;
-
-				trackedLayerCount = (j - trackedLayerStart) + 1;
-				trackedMipCount = (i - trackedMipStart) + 1;
+				else
+				{
+					curr->actions |= currAction;
+					curr->stages |= currStage;
+					curr->trackedMipCount++;
+				}
 
 				status->currentLayout[currentMipArrayIndex] = requestedLayout;
 				status->currAction[currentMipArrayIndex] = destBarrierAction;
 				status->currStage[currentMipArrayIndex] = destBarrierStage;
 			}
+			else
+			{
+				if (curr && curr->trackedMipCount)
+				{
+					*next = curr;
+					next = &curr->nextInLevel;
+				}
+
+				curr = nullptr;
+			}
+		}
+
+		if (curr && curr->trackedMipCount)
+		{
+			*next = curr;
 		}
 	}
 
-	if (trackedLayerCount && trackedMipCount)
+	//attempt to merge square rectangles with same layout and mip start/count, no splitting
+
+	for (int i = 0; i < viewLayerCount; i++)
 	{
-		barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(trackedLayout);
-		barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(trackedAction);
+		MipArrayLevel* curr = linkedListPtr[i];
 
-		VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(trackedStage);
+		while (curr)
+		{
+			if (curr->coalesced)
+			{
+				curr = curr->nextInLevel;
+				continue;
+			}
 
-		barrier.subresourceRange.baseMipLevel = trackedMipStart;
-		barrier.subresourceRange.levelCount = trackedMipCount;
-		barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
-		barrier.subresourceRange.layerCount = trackedLayerCount;
-		
-		args.srcStageMask = sourceStage;
-		
-		args.imageMemoryBarrierCount = 1;
-		args.pImageMemoryBarriers = &barrier;
+			int trackedMipStart = curr->trackedMipStart;
+			int trackedMipCount = curr->trackedMipCount;
+			int trackedLayerCount = 1;
+			int trackedLayerStart = i + viewLayerStart;
 
-		rcb->BindPipelineBarrierCommand(&args);
+			for (int j = i + 1; j < viewLayerCount; j++)
+			{
+				MipArrayLevel* candidate = linkedListPtr[j];
+				int extended = 0;
+				while (candidate)
+				{
+					if (!candidate->coalesced)
+					{
+						if (candidate->trackedMipStart == trackedMipStart &&
+							candidate->trackedMipCount == trackedMipCount &&
+							candidate->layout == curr->layout)
+						{
+							trackedLayerCount++;
+							extended = 1;
+							candidate->coalesced = 1;
+
+							curr->stages |= candidate->stages;
+							curr->actions |= candidate->actions;
+
+							break;
+						}
+					}
+					candidate = candidate->nextInLevel;
+				}
+				if (!extended)
+					break;
+			}
+
+
+			barrier.oldLayout = API::ConvertImageLayoutToVulkanImageLayout(curr->layout);
+			barrier.srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(curr->actions);
+
+			VkPipelineStageFlags sourceStage = API::ConvertBarrierStageToVulkanPipelineStage(curr->stages);
+
+			barrier.subresourceRange.baseMipLevel = trackedMipStart;
+			barrier.subresourceRange.levelCount = trackedMipCount;
+			barrier.subresourceRange.baseArrayLayer = trackedLayerStart;
+			barrier.subresourceRange.layerCount = trackedLayerCount;
+
+			args.srcStageMask = sourceStage;
+
+			args.imageMemoryBarrierCount = 1;
+			args.pImageMemoryBarriers = &barrier;
+
+			rcb->BindPipelineBarrierCommand(&args);
+
+			curr = curr->nextInLevel;
+		}
 	}
 }
 
