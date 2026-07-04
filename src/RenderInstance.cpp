@@ -768,7 +768,7 @@ int RenderInstance::RecreateSwapChain(int deviceSelection, int swapChainIndex, u
 	return ret;
 }
 
-int RenderInstance::CreateFrameGraphInstance(int deviceSelection, AttachmentGraph* graph)
+int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, AttachmentGraph* graph)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -3182,7 +3182,7 @@ int RenderInstance::CreateAttachmentGraph(int deviceSelection, StringView* attac
 
 	CreateAttachmentGraphFromFile(*attachmentLayout, graph, cacheAllocator, internalRendererLogger);
 
-	int currentGraphInstance = CreateFrameGraphInstance(deviceSelection, graph);
+	int currentGraphInstance = CreateAttachmentGraphInstance(deviceSelection, graph);
 	
 	int currentRenderPassCount = CreateRenderPass(deviceSelection, attachmentGraphsInstances.Get(currentGraphInstance));
 

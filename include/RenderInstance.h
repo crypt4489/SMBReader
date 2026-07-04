@@ -115,7 +115,7 @@ struct RenderInstance
 
 	int CreatePerFrameAttachment(int deviceSelection, int graphIndex, int renderPassIndex, int imageCount, uint32_t width, uint32_t height, AttachmentClear* clears, DeviceSlabAllocator* rsvAllocator, DeviceSlabAllocator* dsvAllocator, int rsvPoolIndex, int dsvPoolIndex);
 
-	int CreateFrameGraphInstance(int deviceSelection, AttachmentGraph* graph);
+	int CreateAttachmentGraphInstance(int deviceSelection, AttachmentGraph* graph);
 
 	int CreateRenderPass(int deviceSelection, AttachmentGraphInstance* graph);
 
