@@ -358,7 +358,7 @@ int VKInstance::CreateRenderInstance(void* dataHead, uint32_t storageSize, uint3
 	instanceTempSize = cacheSize;
 	instanceTempOffset = 0;
 
-	TLSFInitialize(&permanentInstanceMemory, (void*)(instanceTempMemory + cacheSize), storageSize, 5);
+	TLSFInitialize(&permanentInstanceMemory, (void*)(instanceTempMemory + cacheSize), storageSize);
 
 	VkApplicationInfo appInfoStruct{};
 
@@ -863,7 +863,7 @@ void VKInstance::SetInstanceDataAndSize(void* dataHead, size_t totalDataSize, si
 
 	tempMemoryHead += cacheSize;
 
-	TLSFInitialize(&allocator->tlsfMain, (void*)tempMemoryHead, totalDataSize - (sizeof(VKAllocationCB)+cacheSize), 5);
+	TLSFInitialize(&allocator->tlsfMain, (void*)tempMemoryHead, totalDataSize - (sizeof(VKAllocationCB)+cacheSize));
 }
 
 

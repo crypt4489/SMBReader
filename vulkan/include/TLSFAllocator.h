@@ -26,7 +26,7 @@ typedef struct tlsf_main_t
 } TLSFMain;
 
 
-int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secondLevelIndex);
+int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize);
 void TLSFDestroy(TLSFMain* tlsf_struct);
 void* TLSFAllocate(TLSFMain* tlsf_struct, unsigned int size);
 void* TLSFAllocate(TLSFMain* tlsf_struct, unsigned int size, unsigned int alignment);

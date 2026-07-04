@@ -43,7 +43,7 @@ static BlockHeader* Split(BlockHeader* initial, unsigned int oldSize, unsigned i
 static void ComputeBlockChecksum(BlockHeader* block);
 static int ValidateCheckSum(BlockHeader* block);
 
-int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int secondLevelIndex)
+int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize)
 {
 	uintptr_t memStart;
 	uintptr_t memHead = (uintptr_t)mem;
@@ -60,8 +60,8 @@ int TLSFInitialize(TLSFMain* tlsf_struct, void* mem, unsigned int memSize, int s
 	unsigned int minimumBlockSize = MIN_TLSF_BLOCK_SIZE_IN_BYTES;
 	unsigned int minimumBlockBits = findMSB(minimumBlockSize);
 	tlsf_struct->numberofFLILevelBitmaps = (fli - minimumBlockBits) + 1;
-	tlsf_struct->numberofBlockPerFLILevel = (1 << secondLevelIndex);
-	tlsf_struct->sliBits = (secondLevelIndex);
+	tlsf_struct->numberofBlockPerFLILevel = (1 << minimumBlockBits);
+	tlsf_struct->sliBits = (minimumBlockBits);
 	tlsf_struct->fliBitmap = 0;
 	tlsf_struct->totalMemPoolSize = memSize;
 

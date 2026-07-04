@@ -1487,7 +1487,7 @@ int VKDevice::CreateLogicalDevice(
 
 	tempDriverHead += driverPerCache;
 
-	TLSFInitialize(&deviceDriverAllocator->tlsfMain, (void*)tempDriverHead, (driverPerSize), 5);
+	TLSFInitialize(&deviceDriverAllocator->tlsfMain, (void*)tempDriverHead, (driverPerSize));
 
 	deviceCacheAlloc.size = perCacheSize;
 	deviceCacheAlloc.memHead = tempDeviceHead;
@@ -1500,7 +1500,7 @@ int VKDevice::CreateLogicalDevice(
 
 	tempDeviceHead += sizeof(TLSFMain);
 
-	TLSFInitialize(permanentDeviceAlloc, (void*)tempDeviceHead, devicePermAllocSize, 5);
+	TLSFInitialize(permanentDeviceAlloc, (void*)tempDeviceHead, devicePermAllocSize);
 
 	tempDeviceHead += devicePermAllocSize;
 
