@@ -106,8 +106,7 @@ Finish render instance based on minimum specs for both Vulkan and DX12
 - Correct staging buffer uploads and make it use optimal alignment and make it so that big uploads via memory tag can be chunked and do batching control there (moved to later). 
 - Fix all transfer/update command generation structures to be quicker and remove O(n) search (done).
 - Remove texture from vulkan layer and make the image views attachable to the render texture resource (done).
-- Make transitions and barrier view dependent and make it integrated so all subresources can be tracked (done).
-  
+- Make transitions and barrier view dependent and make it integrated so all subresources can be tracked (done). 
 - Create separate GPU command streams and have them be selectable for submission.
 - Finish logging and error tracking in shader resource binding.
 - Add destructor functions for various different handle creation and make use of the pool allocators.
