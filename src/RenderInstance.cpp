@@ -3246,6 +3246,25 @@ int RenderInstance::CreatePhysicalDeviceAdapter(GPUFeatureRequest* requestedPhys
 	return physicalEntryIndex;
 }
 
+int RenderInstance::OpenPhysicalDevicePicker()
+{
+	int gpuCount = vkInstance->GetNumberOfGPUDevices();
+
+	if (gpuCount <= 0)
+	{
+		return -1;
+	}
+
+	physicalDevicesOnComputerPerDriver = gpuCount;
+
+	return 0;
+}
+
+void RenderInstance::ClosePhysicalDevicePicker()
+{
+	vkInstance->FreePotentialGPUs();
+}
+
 int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
 {
 	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(requestedDeviceFeatures);
@@ -3253,13 +3272,6 @@ int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* r
 	const char** deviceFeatureNames = (const char**)cacheAllocator->Allocate(sizeof(char*) * deviceExtNameCount);
 
 	vkInstance->GetLogicalDeviceExtensions(requestedDeviceFeatures, deviceFeatureNames);
-
-	int gpuCount = vkInstance->GetNumberOfGPUDevices();
-
-	if (gpuCount <= 0)
-	{
-		return -1;
-	}
 
 	int gpuIndex = 0;
 
@@ -3281,7 +3293,7 @@ int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* r
 
 	char topLineMessageBuffer[64];
 
-	for (; gpuIndex < gpuCount; gpuIndex++)
+	for (; gpuIndex < physicalDevicesOnComputerPerDriver; gpuIndex++)
 	{
 		bool alreadyUsed = false;
 
@@ -3385,15 +3397,13 @@ int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* r
 		}
 	}
 
-	if (gpuIndex == gpuCount)
+	if (gpuIndex == physicalDevicesOnComputerPerDriver)
 	{
 		internalRendererLogger->ProcessMessage();
 		return -1;
 	}
 
 	EntryHandle physicalIndex = vkInstance->CreateGPUFromIndex(gpuIndex);
-
-	vkInstance->FreePotentialGPUs();
 
 	int physicalEntryIndex = physicalDeviceCounter++;
 

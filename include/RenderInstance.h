@@ -256,7 +256,11 @@ struct RenderInstance
 
 	int CreatePhysicalDeviceAdapter(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
 
+	int OpenPhysicalDevicePicker();
+
 	int CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
+	
+	void ClosePhysicalDevicePicker();
 
 	int CreatePerFrameStagingBuffers(int deviceSelection, uint32_t bufferSize);
 
@@ -355,8 +359,9 @@ struct RenderInstance
 	uint32_t previousFrame = ~0U;
 	uint32_t physicalDeviceCounter = 0;
 	uint32_t logicalDeviceCounter = 0;
-	uint32_t maxLogicalDevices;
-	uint32_t maxPhysicalDevices;
+	uint32_t maxLogicalDevices = 0;
+	uint32_t maxPhysicalDevices = 0;
+	uint32_t physicalDevicesOnComputerPerDriver = 0;
 };
 
 namespace GlobalRenderer 

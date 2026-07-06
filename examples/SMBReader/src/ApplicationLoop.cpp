@@ -3579,7 +3579,11 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainPresentationWindow = GlobalRenderer::gRenderInstance.CreateWindowedSurface(&internalWindowData);
 
+	int foundPhysicalDevice = GlobalRenderer::gRenderInstance.OpenPhysicalDevicePicker();
+
 	mainGPU = GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapterWithQuerying(&request, &deviceFeatures);
+
+	GlobalRenderer::gRenderInstance.ClosePhysicalDevicePicker();
 
 	LogicalDeviceCreateInfo lDeviceCreateInfo{};
 
