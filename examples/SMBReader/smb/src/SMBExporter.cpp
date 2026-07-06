@@ -5,8 +5,6 @@
 #include "imageutils/DXTCompression.h"
 #include "SMBTexture.h"
 
-#include <iostream>
-
 #include <string.h>
 
 void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
@@ -26,7 +24,6 @@ void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 		case Joints:
 			break;
 		default:
-			std::cerr << "Unprocessed chunkType\n";
 			break;
 		}
 	}
@@ -58,6 +55,8 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 	for (uint32_t i = 0; i < tex.miplevels; i++)
 	{
+		uint64_t writeOutSize;
+
 		std::string writeFileName = std::string(imageName.stringData, imageName.charCount) + std::to_string(i + 1) + ".bmp";
 
 		auto writePath = pathToTextures / writeFileName;
@@ -69,7 +68,14 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 		OSOpenFile(writePath.string().c_str(), writePath.string().size(), CREATE_IF_NOT_EXIST | WRITE, &handle);
 
-		TexUtils::BMP::WriteOutBMPHeaders(&handle, writeWidth, writeHeight);
+		TexUtils::BMP::BitmapFileHeader fileheader{};
+		TexUtils::BMP::BitmapInfoHeader infoheader{};
+
+		TexUtils::BMP::WriteOutBMPHeaders(&fileheader, &infoheader, writeWidth, writeHeight);
+
+		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType), &writeOutSize);
+
+		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize), &writeOutSize);
 
 		char* bgra = ptr;
 
@@ -80,7 +86,6 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 		switch (tex.type)
 		{
 		case SMBImageFormat::SMB_X8L8U8V8:
-			std::cerr << "X8L8U8V8 format is not exportable\n";
 			return;
 		case SMBImageFormat::SMB_DXT1:
 			individualSize = DXTCompression::DXT1CompressedSize(writeWidth, writeHeight);
@@ -97,7 +102,6 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 			memcpy(input, ptr, individualSize);
 			break;
 		default:
-			std::cerr << "Unsupported/Unknown texture type " << tex.type << "\n";
 			OSCloseFile(&handle);
 			return;
 		}
@@ -105,8 +109,6 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 		uint32_t bpr = writeWidth * 4;
 
 		uint32_t offset = (writeHeight - 1) * bpr;
-
-		uint64_t writeOutSize;
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{

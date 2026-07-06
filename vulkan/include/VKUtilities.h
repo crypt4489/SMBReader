@@ -1,7 +1,6 @@
 #pragma once
 
 #include "vulkan/vulkan.h"
-#include <iostream>
 
 namespace VK 
 {
@@ -23,12 +22,6 @@ namespace VK
 		int querySwapChainSupportCount(VkPhysicalDevice device, VkSurfaceKHR surface, uint32_t* formatsDataSpaceCount, uint32_t* presentModesDataSpaceCount, VkResult results[2]);
 
 		SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface, VkSurfaceFormatKHR* formatsDataSpace, VkPresentModeKHR* presentModesDataSpace);
-
-		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceProperties& props);
-
-		std::ostream& operator<<(std::ostream& os, const VkPhysicalDeviceMemoryProperties& props);
-
-		std::ostream& operator<<(std::ostream& os, const VkQueueFamilyProperties& props);
 
 		uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 

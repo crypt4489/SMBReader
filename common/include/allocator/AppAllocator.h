@@ -98,6 +98,7 @@ struct RingAllocator : public Allocator
 	{
 
 	}
+
 	void* Allocate(int _allocSize);
 	void* Allocate(int _allocSize, int alignment);
 	void Reset();

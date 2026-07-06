@@ -8,6 +8,8 @@
 //constexpr float bx = 0.0019550342f;
 #define MAX_STRING_SIZE 250
 
+#define SMB_FILE_MIN(a, b) ((a) > (b) ? (b) : (a))
+
 SMBFile::~SMBFile()
 {
 	OSCloseFile(&fileHandle);
@@ -531,7 +533,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* fi
 
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
 	
-	int iCount = std::min(geoDefinition->indicesCount[renderableIndex], 65535);
+	int iCount = SMB_FILE_MIN(geoDefinition->indicesCount[renderableIndex], 65535);
 
 	OSFileHandle* handle = &file->fileHandle;
 

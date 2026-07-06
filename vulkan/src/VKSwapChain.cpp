@@ -6,6 +6,9 @@
 
 #include <algorithm>
 
+#define VK_SWC_MIN(a, b) ((a) > (b) ? (b) : (a))
+#define VK_SWC_MAX(a, b) ((a) < (b) ? (b) : (a))
+
 static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount, VkFormat requestedFormat) 
 {
 	for (uint32_t i = 0; i < formatCount; i++)
@@ -37,7 +40,7 @@ static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresent
 
 static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) 
 {	
-	if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+	if (capabilities.currentExtent.width != UINT_MAX) 
 	{
 		return capabilities.currentExtent;
 	}
@@ -103,7 +106,7 @@ void VKSwapChain::SetSwapChainProperties(VK::Utils::SwapChainSupportDetails& swa
 	}
 	else 
 	{
-		imageCount = std::min(std::max(_imageCount, swapChainSupport.capabilities.minImageCount), swapChainSupport.capabilities.maxImageCount);
+		imageCount = VK_SWC_MIN(VK_SWC_MAX(_imageCount, swapChainSupport.capabilities.minImageCount), swapChainSupport.capabilities.maxImageCount);
 	}
 }
 

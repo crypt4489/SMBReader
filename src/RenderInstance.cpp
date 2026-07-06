@@ -1,15 +1,12 @@
 #include "RenderInstance.h"
 
-#include <algorithm>
-#include <bit>
-#include <limits>
+#include <memory>
 
 #include <string.h>
 #include <assert.h>
 
 #include "FileManager.h"
 #include "ShaderResourceSet.h"
-#include "ThreadManager.h"
 
 #include "VKInstance.h"
 #include "VKDevice.h"
@@ -570,7 +567,8 @@ namespace API
 
 }
 
-
+#define RENDER_MIN(a, b) ((a) > (b) ? (b) : (a))
+#define RENDER_MAX(a, b) ((a) < (b) ? (b) : (a))
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -583,11 +581,41 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 		return VK_FALSE;
 	}
 
-	std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+	Logger* logger = (Logger*)pUserData;
+
+	logger->AddLogMessage(LOGERROR, pCallbackData->pMessage, strlen(pCallbackData->pMessage));
 
 	return VK_FALSE;
 }
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
+int findLSB(unsigned int input)
+{
+	if (!input) return -1;
+#ifdef _MSC_VER
+	unsigned long index;
+	_BitScanForward(&index, input);
+	return index;
+#else
+	return __builtin_ctz(input);
+#endif
+}
+
+int findMSB(unsigned int input)
+{
+	if (!input) return -1;
+
+#ifdef _MSC_VER
+	unsigned long index;
+	_BitScanReverse(&index, input);
+	return index;
+#else
+	return 31 - __builtin_clz(input);
+#endif
+}
 
 void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
@@ -622,6 +650,7 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 	
 	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
 	internalRendererLogger->InitLogger((char*)instanceStorageAllocator->Allocate(info->internalLoggerRingSize, 64), info->internalLoggerRingSize);
+	internalRendererLogger->fileHandle = info->internalRendererHandle;
 
 	bufferHandles.Create(instanceStorageAllocator, info->maxBufferPoolsCount);
 
@@ -814,11 +843,9 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 			int sampleCountLo = (resDesc->msaa ? 2 : 1);
 
-			int sampleCountHi = (resDesc->msaa ? (1 << deviceContainer->relatedPhysDeviceInfo->maxMSAALevels) : 1);
+			int sampleCountHi = (resDesc->msaa ? (1 << (deviceContainer->relatedPhysDeviceInfo->maxMSAALevels)) : 1);
 
-			sampHi = std::max(sampleCountHi, sampHi);
-
-			sampLo = std::max(sampleCountLo, sampLo);
+			sampHi = RENDER_MAX(sampleCountHi, sampHi);
 
 			currResource->attachmentImage = currResource->attachmentImageView = nullptr;
 
@@ -846,7 +873,7 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 		}
 
 	
-		int renderPassSampleCount = std::max((int)std::bit_width((uint32_t)sampHi)-1, 1);
+		int renderPassSampleCount = RENDER_MAX(findMSB(sampHi), 1);
 
 		rpInst->maxSampleCount = renderPassSampleCount;
 
@@ -914,7 +941,7 @@ int RenderInstance::CreateRenderPass(int deviceSelection, AttachmentGraphInstanc
 
 			VkSampleCountFlags vkSampleCountLo = (resDesc->msaa ? VK_SAMPLE_COUNT_2_BIT : VK_SAMPLE_COUNT_1_BIT);
 
-			sampLo = std::max((int)vkSampleCountLo, sampLo);
+			sampLo = RENDER_MAX((int)vkSampleCountLo, sampLo);
 
 			uint32_t vkRenderPassMappedIdx = 0;
 
@@ -1089,7 +1116,7 @@ int RenderInstance::SubmitFrame(int deviceSelection, int swapChainIndex, uint32_
 
 	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
 
-	std::array<VkPipelineStageFlags, 2> waitStages = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	VkPipelineStageFlags waitStages[2] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
 	int res = -1;
 	
@@ -1099,17 +1126,17 @@ int RenderInstance::SubmitFrame(int deviceSelection, int swapChainIndex, uint32_
 	}
 	else
 	{
-		std::array<uint64_t, 2> waitCount = { 0, deviceContainer->deviceTimelineSyncObject.currentValue };
+		uint64_t waitCount[2] = {0, deviceContainer->deviceTimelineSyncObject.currentValue};
 
-		std::array<uint64_t, 2> signalCount = {0, deviceContainer->deviceTimelineSyncObject.currentValue + 1 };
+		uint64_t signalCount[2] = {0, deviceContainer->deviceTimelineSyncObject.currentValue + 1};
 
 		res = dev->SubmitCommandBuffer(
-			&swcData->rendererWaitSemaphores[currentFrame], waitStages.data(), 1,
-			&deviceContainer->deviceTimelineSyncObject.driverTimelineObject, 1, waitCount.data(),
+			&swcData->rendererWaitSemaphores[currentFrame], waitStages, 1,
+			&deviceContainer->deviceTimelineSyncObject.driverTimelineObject, 1, waitCount,
 			&swcData->rendererFinishedSemaphores[imageIndex], 1,
 			&deviceContainer->deviceTimelineSyncObject.driverTimelineObject,
 			1,
-			signalCount.data(),
+			signalCount,
 			deviceContainer->currentCommandBufferIndex[currentFrame]
 		);
 		
@@ -1229,7 +1256,7 @@ int RenderInstance::CreateAttachmentResources(
 		int sampHi = resourceInst->sampHi;
 		int sampLo = resourceInst->sampLo;
 
-		int sampleCount = std::max((int)std::bit_width((unsigned int)sampHi)-1, 1);
+		int sampleCount = RENDER_MAX(findMSB(sampHi), 1);
 
 		int imageWidth = width;
 		int imageHeight = height;
@@ -2050,12 +2077,12 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 		globalPushOffset += pushConstantsSizes[i];
 	}
 	
-	std::array<VkDynamicState, 2> dynamicStates = {
+	VkDynamicState dynamicStates[2] = {
 		VK_DYNAMIC_STATE_VIEWPORT,
 		VK_DYNAMIC_STATE_SCISSOR
 	};
 
-	pipelineBuilder->CreateDynamicStateInfo(dynamicStates.data(), 2);
+	pipelineBuilder->CreateDynamicStateInfo(dynamicStates, 2);
 
 	VkVertexInputBindingDescription* bindingDescriptions = (VkVertexInputBindingDescription*)cacheAllocator->Allocate(sizeof(VkVertexInputBindingDescription) * (stateInfo->vertexBufferDescCount));
 
@@ -2257,8 +2284,8 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 
 		batchCounter++;
 
-		previousMin = std::min(intOffset, previousMin);
-		previousMax = std::max(intOffset + rsize, previousMax);
+		previousMin = RENDER_MIN(intOffset, previousMin);
+		previousMax = RENDER_MAX(intOffset + rsize, previousMax);
 	}
 
 	dev->WriteToHostBufferBatch(previousBuffer, batchAddresses, batchSizes, batchOffsets, previousMax - previousMin, previousMin, batchCounter);
@@ -2325,7 +2352,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
 					samplerHeader->samplerHandles[iter + update->resourceDstBegin] = samplerHandlesFromUpdate[iter];
-					samplerHeader->samplerCount = std::max(samplerHeader->samplerCount, (iter + update->resourceDstBegin) + 1);
+					samplerHeader->samplerCount = RENDER_MAX(samplerHeader->samplerCount, (iter + update->resourceDstBegin) + 1);
 				}
 
 			}
@@ -2353,7 +2380,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 				{
 					imageResource->textureDetails[iter + update->resourceDstBegin].textureHandle = texViews[iter].imageHandle;
 					imageResource->textureDetails[iter + update->resourceDstBegin].viewIndex = texViews[iter].viewIndex;
-					imageResource->textureCount = std::max(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
+					imageResource->textureCount = RENDER_MAX(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
 				}
 			}
 			break;
@@ -2385,7 +2412,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 					imageResource->textureDetails[iter + update->resourceDstBegin].textureHandle = texViews[iter].imageHandle;
 					imageResource->textureDetails[iter + update->resourceDstBegin].viewIndex = texViews[iter].viewIndex;
 					imageResource->textureDetails[iter + update->resourceDstBegin].samplerHandle = texViews[iter].samplerHandle;
-					imageResource->textureCount = std::max(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
+					imageResource->textureCount = RENDER_MAX(imageResource->textureCount, (iter + update->resourceDstBegin) + 1);
 				}
 			}
 			break;
@@ -2411,7 +2438,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
 					bufferResource->allocationIndex[j + update->resourceDstBegin] = update->allocationIndices[j];
-					bufferResource->bufferCount = std::max(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
+					bufferResource->bufferCount = RENDER_MAX(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
 				}
 			}
 			break;
@@ -2437,7 +2464,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
 					bufferResource->allocationIndex[j + update->resourceDstBegin] = update->allocationIndices[j];
-					bufferResource->bufferCount = std::max(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
+					bufferResource->bufferCount = RENDER_MAX(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
 				}
 			}
 			break;
@@ -2473,7 +2500,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 				if (region.copyCount == (MAX_FRAMES_IN_FLIGHT))
 				{
 					bufferResource->allocationIndex[j + update->resourceDstBegin] = update->allocationIndices[j];
-					bufferResource->bufferCount = std::max(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
+					bufferResource->bufferCount = RENDER_MAX(bufferResource->bufferCount, (j + update->resourceDstBegin) + 1);
 				}
 			}
 			break;
@@ -2512,7 +2539,7 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 			region.transferMask, ImageLayout::TRANSFER_DEST_OPTIMAL, 
 			resourceStatus, TRANSFER_BARRIER, TRANSFER_WRITE_DATA_RESOURCE);
 
-		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, 256);
+		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, deviceContainer->relatedPhysDeviceInfo->optimalImageCopyOffsetAlignment);
 
 		dev->UploadImageData(
 			handle,
@@ -3192,7 +3219,7 @@ int RenderInstance::CreateAttachmentGraph(int deviceSelection, StringView* attac
 	return currentGraphInstance;
 }
 
-int RenderInstance::CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
+int RenderInstance::CreatePhysicalDeviceAdapter(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
 {
 	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(requestedDeviceFeatures);
 
@@ -3200,20 +3227,185 @@ int RenderInstance::CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureReque
 
 	vkInstance->GetLogicalDeviceExtensions(requestedDeviceFeatures, deviceFeatureNames);
 
-	VkPhysicalDeviceVulkan12Features features12{};
-	VkPhysicalDeviceFeatures2 features2{};
+	int driverGpuIndex = -1;
+
+	EntryHandle physicalIndex = vkInstance->CreatePhysicalDevice(requestedPhysicalFeatures, deviceFeatureNames, deviceExtNameCount, &driverGpuIndex);
 
 	int physicalEntryIndex = physicalDeviceCounter++;
-
-	EntryHandle physicalIndex = vkInstance->CreatePhysicalDevice(windowsSurfaces.pool[windowIndex](), requestedPhysicalFeatures, deviceFeatureNames, deviceExtNameCount);
 
 	RenderPhysicalDeviceContainer* container = &physicalDeviceIndices[physicalEntryIndex];
 
 	container->physicalDeviceIndex = physicalIndex;
 	container->information.minUniformAlignment = vkInstance->GetMinimumUniformBufferAlignment(physicalIndex);
 	container->information.minStorageAlignment = vkInstance->GetMinimumStorageBufferAlignment(physicalIndex);
-	container->information.maxMSAALevels = std::max((int)std::bit_width((uint32_t)vkInstance->GetMaxMSAALevels(physicalIndex)) - 1, 1);
+	container->information.maxMSAALevels = findMSB(vkInstance->GetMaxMSAALevels(physicalIndex));
 	container->information.deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
+	container->information.optimalImageCopyOffsetAlignment = vkInstance->GetOptimalImageCopyOffsetAlignment(physicalIndex);
+	container->internalDriverDeviceListIdentifier = driverGpuIndex;
+
+	return physicalEntryIndex;
+}
+
+int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures)
+{
+	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(requestedDeviceFeatures);
+
+	const char** deviceFeatureNames = (const char**)cacheAllocator->Allocate(sizeof(char*) * deviceExtNameCount);
+
+	vkInstance->GetLogicalDeviceExtensions(requestedDeviceFeatures, deviceFeatureNames);
+
+	int gpuCount = vkInstance->GetNumberOfGPUDevices();
+
+	if (gpuCount <= 0)
+	{
+		return -1;
+	}
+
+	int gpuIndex = 0;
+
+	uint64_t expectedDeviceExtMask = (1ULL << deviceExtNameCount) - 1;
+
+	int* physicalDeviceExlusionList = nullptr;
+
+	if (physicalDeviceCounter)
+	{
+		physicalDeviceExlusionList = (int*)cacheAllocator->Allocate(sizeof(int) * physicalDeviceCounter);
+
+		for (int i = 0; i < physicalDeviceCounter; i++)
+		{
+			RenderPhysicalDeviceContainer* container = &physicalDeviceIndices[i];
+
+			physicalDeviceExlusionList[i] = container->internalDriverDeviceListIdentifier;
+		}
+	}
+
+	char topLineMessageBuffer[64];
+
+	for (; gpuIndex < gpuCount; gpuIndex++)
+	{
+		bool alreadyUsed = false;
+
+		for (int i = 0; i < physicalDeviceCounter; i++)
+		{
+			if (physicalDeviceExlusionList[i] == gpuIndex)
+			{
+				alreadyUsed = true;
+				break;
+			}
+		}
+
+		if (alreadyUsed) continue;
+
+		GPUFeatureRequest currentRequest{};
+		uint64_t currentDeviceExtMask = 0;
+		
+		if (vkInstance->QuerySpecificPhysicalDeviceFeatures(requestedPhysicalFeatures, &currentRequest, deviceFeatureNames, deviceExtNameCount, gpuIndex, &currentDeviceExtMask))
+			break;
+
+		int size = snprintf(topLineMessageBuffer, sizeof(topLineMessageBuffer), "GPU at index %d has mismatched values\n", gpuIndex);
+
+		internalRendererLogger->AddLogMessage(LOGINFO, topLineMessageBuffer, size);
+
+		if (!(currentRequest.deviceType & requestedPhysicalFeatures->deviceType))
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Desired GPU type is not what was requested\n"));
+
+		if (currentRequest.desiredMaxImageWidth < requestedPhysicalFeatures->desiredMaxImageWidth)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Desired Max Image Width is less than requested\n"));
+
+		if (currentRequest.desiredMaxImageHeight < requestedPhysicalFeatures->desiredMaxImageHeight)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Desired Max Image Height is less than requested\n"));
+
+		if (requestedPhysicalFeatures->requireDescriptorBindingPartiallyBound &&
+			!currentRequest.requireDescriptorBindingPartiallyBound)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Descriptor Binding Partially Bound is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireDescriptorBindingSampledImageUpdateAfterBind &&
+			!currentRequest.requireDescriptorBindingSampledImageUpdateAfterBind)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Descriptor Binding Sampled Image Update After Bind is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireDescriptorBindingUpdateUnusedWhilePending &&
+			!currentRequest.requireDescriptorBindingUpdateUnusedWhilePending)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Descriptor Binding Update Unused While Pending is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireDescriptorBindingVariableDescriptorCount &&
+			!currentRequest.requireDescriptorBindingVariableDescriptorCount)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Descriptor Binding Variable Descriptor Count is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireShaderSampledImageArrayNonUniformIndexing &&
+			!currentRequest.requireShaderSampledImageArrayNonUniformIndexing)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Shader Sampled Image Array Non Uniform Indexing is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireStorageBuffer8BitAccess &&
+			!currentRequest.requireStorageBuffer8BitAccess)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Storage Buffer 8 Bit Access is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireDrawIndirectCount &&
+			!currentRequest.requireDrawIndirectCount)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Draw Indirect Count is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireRuntimeDescriptorArray &&
+			!currentRequest.requireRuntimeDescriptorArray)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Runtime Descriptor Array is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireGeometryShader &&
+			!currentRequest.requireGeometryShader)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Geometry Shader is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireTextureCompressionBC &&
+			!currentRequest.requireTextureCompressionBC)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Texture Compression BC is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireTessellationShader &&
+			!currentRequest.requireTessellationShader)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Tessellation Shader is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireSamplerAnisotropy &&
+			!currentRequest.requireSamplerAnisotropy)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Sampler Anisotropy is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireMultiDrawIndirect &&
+			!currentRequest.requireMultiDrawIndirect)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Multi Draw Indirect is not supported\n"));
+
+		if (requestedPhysicalFeatures->requireWideLines &&
+			!currentRequest.requireWideLines)
+			internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Wide Lines is not supported\n"));
+
+		if (currentDeviceExtMask != expectedDeviceExtMask)
+		{
+			for (uint32_t i = 0; i < deviceExtNameCount; i++)
+			{
+				if (!(currentDeviceExtMask & (1ull << i)))
+				{
+					internalRendererLogger->AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Device extenstion not supported : "));
+					internalRendererLogger->AddLogMessage(LOGINFO, deviceFeatureNames[i], strlen(deviceFeatureNames[i]));
+					internalRendererLogger->AddLogMessage(LOGINFO, "\n", 1);
+				}
+			}
+		}
+	}
+
+	if (gpuIndex == gpuCount)
+	{
+		internalRendererLogger->ProcessMessage();
+		return -1;
+	}
+
+	EntryHandle physicalIndex = vkInstance->CreateGPUFromIndex(gpuIndex);
+
+	vkInstance->FreePotentialGPUs();
+
+	int physicalEntryIndex = physicalDeviceCounter++;
+
+	RenderPhysicalDeviceContainer* container = &physicalDeviceIndices[physicalEntryIndex];
+
+	container->physicalDeviceIndex = physicalIndex;
+	container->information.minUniformAlignment = vkInstance->GetMinimumUniformBufferAlignment(physicalIndex);
+	container->information.minStorageAlignment = vkInstance->GetMinimumStorageBufferAlignment(physicalIndex);
+	container->information.maxMSAALevels = findMSB(vkInstance->GetMaxMSAALevels(physicalIndex));
+	container->information.deviceTimeStampPeriodNS = vkInstance->GetTimeStampPeriod(physicalIndex);
+	container->information.optimalImageCopyOffsetAlignment = vkInstance->GetOptimalImageCopyOffsetAlignment(physicalIndex);
+	container->internalDriverDeviceListIdentifier = gpuIndex;
 
 	return physicalEntryIndex;
 }
@@ -3267,8 +3459,8 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 
 	VkQueueFamilyProperties* famPropsContainer = (VkQueueFamilyProperties*)cacheAllocator->CAllocate(totalQueueFamilyCount * sizeof(VkQueueFamilyProperties));
 
-	std::array<QueueIndex, 2> queueIndices{};
-	std::array<uint32_t, 2> queueCounts{};
+	QueueIndex queueIndices[2]{};
+	uint32_t queueCounts[2]{};
 
 	uint32_t queueCount = 0, totalQueuePrios = 0;
 
@@ -3311,8 +3503,8 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 		deviceFeatureNames, 
 		deviceExtNameCount,
 		&features2,
-		queueIndices.data(),
-		queueCounts.data(),
+		queueIndices,
+		queueCounts,
 		queuePriorites,
 		queueCount, 
 		createInfo->deviceInstPermanentSize,
@@ -4661,7 +4853,7 @@ int RenderInstance::CreateHighLevelInstance(uint32_t vkDriverSpecificMemory, uin
 	VKInstanceDebugData vkDebugData{};
 
 	vkDebugData.userCallback = vulkanDebugCallback;
-	vkDebugData.userData = nullptr;
+	vkDebugData.userData = internalRendererLogger;
 	vkDebugData.flags = 0;
 	vkDebugData.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 	vkDebugData.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT; // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;

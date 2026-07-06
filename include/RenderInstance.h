@@ -1,6 +1,5 @@
 #pragma once
 
-#include <functional>
 #include <vulkan/vulkan.h>
 
 #include "allocator/AppAllocator.h"
@@ -80,6 +79,7 @@ struct RenderInstanceCreateInfo
 	uint32_t numberOfResourceUpdateAllocations;
 	uint32_t numberOfDriverDeviceAllocations;
 	uint32_t numberOfImageMemoryAllocations;
+	OSFileHandle internalRendererHandle;
 };
 
 struct LogicalDeviceCreateInfo
@@ -254,7 +254,9 @@ struct RenderInstance
 
 	int CreateHighLevelInstance(uint32_t vkDriverSpecificMemory, uint32_t vkDriverCacheSize, uint32_t instancePermanentSpecificMemory, uint32_t instanceCacheMemory);
 
-	int CreatePhysicalDeviceAdapter(int windowIndex, GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
+	int CreatePhysicalDeviceAdapter(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
+
+	int CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* requestedPhysicalFeatures, LogicalDeviceFeatures* requestedDeviceFeatures);
 
 	int CreatePerFrameStagingBuffers(int deviceSelection, uint32_t bufferSize);
 

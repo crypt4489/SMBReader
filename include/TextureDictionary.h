@@ -5,7 +5,6 @@
 #include "allocator/AppAllocator.h"
 #include "imageutils/TextureIO.h"
 #include "IndexTypes.h"
-#include "ThreadManager.h"
 
 struct TextureDictionary
 {

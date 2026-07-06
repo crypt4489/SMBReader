@@ -27,16 +27,6 @@ public:
 	int CreateTextureDetails(SMBFile* smb, const SMBChunk& chunk);
 
 	int ReadTextureData(SMBFile* smb);
-
-	friend std::ostream& operator<<(std::ostream& os, SMBTexture& tex)
-	{
-		os  << tex.type << "\n"
-			<< tex.width << "\n"
-			<< tex.height << "\n"
-			<< tex.miplevels << "\n"
-			<< "------------------" << "\n";
-		return os;
-	}
 };
 
 

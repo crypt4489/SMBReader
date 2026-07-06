@@ -24,6 +24,5 @@ struct VKGraphicsPipelineBuilder;
 struct VKComputePipelineBuilder;
 struct VKAllocationCB;
 struct DeviceOwnedAllocator;
-struct tlsf_main_t;
 
 

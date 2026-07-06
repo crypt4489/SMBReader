@@ -781,7 +781,8 @@ struct RenderPhysicalDeviceInformation
 {
 	int minUniformAlignment;
 	int minStorageAlignment;
-	int minCopyAlignment;
+	int optimalImageCopyOffsetAlignment;
+	int optimalImageCopyRowPitch;
 	int maxMSAALevels;
 	double deviceTimeStampPeriodNS;
 };
@@ -790,6 +791,7 @@ struct RenderPhysicalDeviceContainer
 {
 	EntryHandle physicalDeviceIndex;
 	RenderPhysicalDeviceInformation information;
+	int internalDriverDeviceListIdentifier;
 };
 
 struct RenderLogicalDeviceContainer

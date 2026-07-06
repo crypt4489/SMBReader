@@ -28,7 +28,6 @@ inline float DegToRad(float Deg)
 
 struct LTM;
 
-PACKED_BEGIN
 struct Vector2f
 {
 	union {
@@ -357,7 +356,6 @@ struct Vector4ull
 	};
 };
 
-PACKED_END
 
 
 static_assert(sizeof(Vector2f) == 8, "Vector2f size mismatch");
@@ -824,7 +822,6 @@ Vector4us operator*(Vector4us v, unsigned short s);
 Vector4us operator/(Vector4us v, unsigned short s);
 
 
-PACKED_BEGIN
 struct Matrix2f
 {
 	Matrix2f() = default;
@@ -898,7 +895,6 @@ struct Matrix4f
 		float comp[16];
 	};
 };
-PACKED_END
 
 Matrix2f Add(Matrix2f a, Matrix2f b);
 Matrix2f Sub(Matrix2f a, Matrix2f b);
@@ -979,7 +975,7 @@ void LookAt(LTM* ltm, const Vector3f& pos, const Vector3f& target, const Vector3
 
 Matrix4f CreateViewMatrix(LTM* ltm);
 
-PACKED_BEGIN
+
 struct Plane
 {
 	Vector4f pointInPlane;
@@ -998,7 +994,6 @@ struct Frustum
 	float nearDistance;
 	void CreateFrustumPlanes(const Vector4f& forward, const Vector4f& up, const Vector4f& right, float _nearwidth, float _nearheight, float near, float _far);
 };
-PACKED_END
 
 struct AxisBox
 {

@@ -1,16 +1,13 @@
 #pragma once
 #include "CommonRenderTypes.h"
 #include "IndexTypes.h"
-#include "TLSFAllocator.h"
+#include "allocator/TLSFAllocator.h"
 #include "VKTypes.h"
 #include "VKUtilities.h"
 
 #ifdef _MSC_VER
 #include <Windows.h>
 #endif
-
-#undef min
-#undef max
 
 #define MAX_TYPED_HANDLES 15
 
@@ -160,13 +157,15 @@ struct VKInstance
 
 	int CreateRenderInstance(void* dataHead, uint32_t storageSize, uint32_t cacheSize, VKInstanceDebugData* debugData, RenderingInstanceFeatures* featuresRequest);
 
-	EntryHandle CreatePhysicalDevice(EntryHandle renderSurface, GPUFeatureRequest* featureRequest, const char** deviceExtensions, uint32_t deviceExtCount);
+	EntryHandle CreatePhysicalDevice(GPUFeatureRequest* featureRequest, const char** deviceExtensions, uint32_t deviceExtCount, int* driverGpuIndex);
 
 	VkSampleCountFlagBits GetMaxMSAALevels(EntryHandle gpuIndex);
 
 	void GetPhysicalDevicePropertiesandFeatures(VkPhysicalDevice device, VkPhysicalDeviceProperties* deviceProperties, VkPhysicalDeviceFeatures* deviceFeatures);
 
 	bool isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount);
+
+	bool isDeviceSuitable(VkPhysicalDevice device, const char** deviceExtensions, uint32_t deviceExtCount, uint64_t* outPutBitField);
 
 	EntryHandle CreateLogicalDevice(EntryHandle gpuIndex);
 
@@ -183,6 +182,9 @@ struct VKInstance
 	int GetMinimumStorageBufferAlignment(EntryHandle gpuIndex);
 
 	int GetMinimumUniformBufferAlignment(EntryHandle gpuIndex);
+
+	int GetOptimalImageCopyOffsetAlignment(EntryHandle gpuIndex);
+
 #if defined (_WIN32) || defined(_WIN64)
 	EntryHandle CreateWindowedSurface(HINSTANCE hInst, HWND hWnd);
 #endif
@@ -208,6 +210,14 @@ struct VKInstance
 
 	void GetLogicalDeviceExtensions(LogicalDeviceFeatures* requestedFeatures, const char** actualHandles);
 
+	int GetNumberOfGPUDevices();
+
+	bool QuerySpecificPhysicalDeviceFeatures(GPUFeatureRequest* featureRequest, GPUFeatureRequest* closestFeatures, const char** deviceExtensions, uint32_t deviceExtCount, uint32_t physicalDeviceIndex, uint64_t* logicalDeviceBitFields);
+
+	void FreePotentialGPUs();
+
+	EntryHandle CreateGPUFromIndex(uint32_t gpuIndex);
+
 	VkInstance instance = VK_NULL_HANDLE;
 	
 	const char** instanceLayers;
@@ -219,7 +229,11 @@ struct VKInstance
 
 	VKAllocationCB *allocator;
 
+	VkPhysicalDevice* potentialGPUs;
+
 	InstanceHandlePoolObject handles[MAX_TYPED_HANDLES];
+
+	TLSFMain permanentInstanceMemory;
 	
 	static const uint32_t errorCodeWrapSize = 16;
 	InstanceErrorCodeStruct errorCodes[errorCodeWrapSize];
@@ -230,6 +244,7 @@ struct VKInstance
 	uint32_t instanceLayerCount;
 	uint32_t handleBumpCounter;
 
-	TLSFMain permanentInstanceMemory;
+	uint32_t physicalDeviceCount;
+	
 };
 

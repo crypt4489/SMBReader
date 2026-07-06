@@ -783,8 +783,6 @@ void ApplicationLoop::Execute()
 
 	if (args.justexport)
 	{
-		const int MAX_SMB_STRING_NAME = 150;
-
 		SMBFile mainSMB{};
 
 		int fileSize = mainSMB.OpenFile(mainInputString);
@@ -809,13 +807,13 @@ void ApplicationLoop::Execute()
 
 		StringView fileName{};
 
-		char* strBuf = (char*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(MAX_SMB_STRING_NAME);
+		char* strBuf = (char*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(mainInputString.charCount);
 
 		FileManager::ExtractFileNameFromPath(&mainInputString, &fileName, strBuf);
 
 		FileManager::SetFileCurrentDirectory(&fileName);
 
-		ExportChunksFromFile(&mainSMB, &SMBThreadedFileInputAllocators[arenaIndex]);
+		ExportChunksFromFile(&mainSMB, &GlobalInputScratchAllocator);
 
 		ReturnSMBArena(arenaIndex);
 	}
@@ -844,7 +842,7 @@ void ApplicationLoop::Execute()
 		uint64_t frameCounter = 0;
 		double FPS = 60.0f;
 
-		char windowText[30];
+		char windowText[32];
 
 		StringView view { windowText, 0 };
 
@@ -858,7 +856,7 @@ void ApplicationLoop::Execute()
 				if (elapsed >= 1.0) {
 					FPS = static_cast<double>(frameCounter) / elapsed;
 			
-					view.charCount = snprintf(windowText, 30, "FPS : %.2f", FPS);
+					view.charCount = snprintf(windowText, sizeof(windowText), "FPS : %.2f", FPS);
 
 					mainWindow.SetWindowTitle(view);
 				
@@ -3537,6 +3535,8 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxGPUS = 1;
 	riCreateInfo.maxLogicalDevices = 1;
 
+	OSGetSTDOutput(&riCreateInfo.internalRendererHandle);
+
 	GPUFeatureRequest request{};
 
 	request.desiredMaxImageWidth = 4096;
@@ -3575,7 +3575,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainPresentationWindow = GlobalRenderer::gRenderInstance.CreateWindowedSurface(&internalWindowData);
 
-	mainGPU = GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapter(mainPresentationWindow, &request, &deviceFeatures);
+	mainGPU = GlobalRenderer::gRenderInstance.CreatePhysicalDeviceAdapterWithQuerying(&request, &deviceFeatures);
 
 	LogicalDeviceCreateInfo lDeviceCreateInfo{};
 

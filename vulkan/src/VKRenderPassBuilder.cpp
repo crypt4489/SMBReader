@@ -11,11 +11,11 @@ VKRenderPassBuilder::VKRenderPassBuilder(VKDevice* d, uint32_t numberofattachmen
 	subpassdepcounter(0),
 	subpassdesccounter(0),
 	attachmentCounter(0),
-	attachments(reinterpret_cast<VkAttachmentDescription*>(d->AllocFromDeviceCache((sizeof(VkAttachmentDescription) * numberofattachments) + (sizeof(VkAttachmentReference) * numberofattachments)))),
+	attachments(reinterpret_cast<VkAttachmentDescription*>(d->AllocFromDeviceCache(sizeof(VkAttachmentDescription) * numberofattachments))),
+	references(reinterpret_cast<VkAttachmentReference*>(d->AllocFromDeviceCache(sizeof(VkAttachmentReference)* numberofattachments))),
 	subpassDependencies(reinterpret_cast<VkSubpassDependency*>(d->AllocFromDeviceCache(sizeof(VkSubpassDependency) * numberofsubpassdependency))),
 	subpassDescription(reinterpret_cast<VkSubpassDescription*>(d->AllocFromDeviceCache(sizeof(VkSubpassDescription) * numberofsubpassdescriptions)))
 {
-	references = (VkAttachmentReference*)std::next(attachments, numberofattachments);
 }
 
 void VKRenderPassBuilder::SetSampleCount(uint32_t attachmentIndex, VkSampleCountFlagBits sampleFlags)

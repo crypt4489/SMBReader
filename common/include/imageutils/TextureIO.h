@@ -1,8 +1,5 @@
 #pragma once
 #include "CommonRenderTypes.h"
-#include "OSFile.h"
-
-#include <utility>
 
 namespace TexUtils
 {
@@ -10,7 +7,9 @@ namespace TexUtils
 	{
 		for (int i = 0; i < width * height * stride; i += stride)
 		{
-			std::swap(image[i], image[i + 2]);
+			char temp = image[i];
+			image[i] = image[i + 2];
+			image[i+2] = temp;
 		}
 	}
 
@@ -45,17 +44,10 @@ namespace TexUtils
 		static_assert(sizeof(BitmapFileHeader) == 14);
 		static_assert(sizeof(BitmapInfoHeader) == 40);
 
-		inline void WriteOutBMPHeaders(OSFileHandle* handle, uint32_t width, uint32_t height)
+		inline void WriteOutBMPHeaders(BitmapFileHeader *fileheader, BitmapInfoHeader *infoheader, uint32_t width, uint32_t height)
 		{
-			BitmapFileHeader fileheader{ 0x4d42, sizeof(BitmapFileHeader) + sizeof(BitmapInfoHeader) + (width * height * 4), 0, 0, 0x36 };
-			BitmapInfoHeader infoheader{ sizeof(BitmapInfoHeader), width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
-
-			uint64_t writeOutSize;
-
-			OSWriteFile(handle, sizeof(BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType), &writeOutSize);
-			
-			OSWriteFile(handle, sizeof(BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize), &writeOutSize);
-	
+			*fileheader = { 0x4d42, (40 + 14 + (width * height * 4)), 0, 0, 0x36 };
+			*infoheader = { sizeof(BitmapInfoHeader), width, height, 1, 32, 0, 0, 0, 0, 0, 0 };
 		}
 	}
 }

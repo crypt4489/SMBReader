@@ -151,7 +151,7 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 
 	VkDescriptorSetLayout* layouts = reinterpret_cast<VkDescriptorSetLayout*>(majorDev->AllocFromDeviceCache(sizeof(VkDescriptorSetLayout) * descriptorSetCount));
 
-	for (std::size_t i = 0; i < descriptorSetCount; i++)
+	for (size_t i = 0; i < descriptorSetCount; i++)
 	{
 		co.descLayout[i] = descriptorlaysids[i];
 		layouts[i] = majorDev->GetDescriptorSetLayout(descriptorlaysids[i]);
@@ -163,7 +163,7 @@ EntryHandle VKGraphicsPipelineBuilder::CreateGraphicsPipeline(EntryHandle* descr
 	ShaderHandle** shaders = reinterpret_cast<ShaderHandle**>(
 		majorDev->AllocFromDeviceCache(sizeof(ShaderHandle*) * shaderCount));
 
-	for (std::size_t i = 0; i < shaderCount; i++)
+	for (size_t i = 0; i < shaderCount; i++)
 	{
 		shaders[i] = majorDev->GetShader(shaderHandles[i]);
 	}

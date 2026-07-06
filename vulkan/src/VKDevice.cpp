@@ -3,7 +3,6 @@
 #include "VKDevice.h"
 
 #include "GlslangCompiler.h"
-
 #include "VKInstance.h"
 #include "VKRenderPassBuilder.h"
 #include "VKDescriptorLayoutBuilder.h"
@@ -11,6 +10,8 @@
 #include "VKPipelineBuilder.h"
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
+
+#include <memory>
 
 #include <assert.h>
 #include <stdio.h>

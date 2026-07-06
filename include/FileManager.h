@@ -1,8 +1,8 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
+
 #include <filesystem>
-#include <regex>
 #include <utility>
 
 #include "StringUtils.h"
@@ -24,7 +24,6 @@ struct FileManager
 
 	static bool FileExists(StringView* nameView);
 
-	static std::filesystem::path currDir;
-	static std::regex filenamePattern;
+	static std::filesystem::path currDir;;
 };
 

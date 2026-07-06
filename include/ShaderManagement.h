@@ -2,7 +2,6 @@
 
 #include "allocator/AppAllocator.h"
 #include "CommonRenderTypes.h"
-#include <array>
 
 #define SHADER_NAME_SIZE 64
 #define MAX_SHADER_MAPS 4

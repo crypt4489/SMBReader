@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cstdint>
-#include <ostream>
+#include <stdint.h>
+#include <stddef.h>
+
 #include "allocator/AppAllocator.h"
 #include "logger/Logger.h"
 #include "math/MathTypes.h"
@@ -214,25 +215,8 @@ struct SMBChunk
 	uint32_t chunkIdCopy;
 	uint32_t stringsize;
 	StringView fileName;
-	std::size_t offsetInHeader;
-	std::size_t headerSize;
-
-	friend std::ostream& operator<<(std::ostream& os, const SMBChunk& chunk)
-	{
-		os << "File Reference Name ";
-		os.write(chunk.fileName.stringData, chunk.fileName.charCount) << std::hex << "\n"
-		<< "Offset in header " << chunk.offsetInHeader << "\n"
-			<< "File SMB Offset "  << chunk.fileOffset << "\n"
-		<< "File SMB Number of Bytes after tag " << chunk.numOfBytesAfterTag << "\n"
-		<< "Chunk Id number " << chunk.chunkId << "\n"
-		<< "Chunk Id type " << chunk.chunkType << "\n"
-		<< "Chunk Continguos Offset " << chunk.contigOffset << "\n"
-			<< chunk.tag << "\n"
-			<< chunk.pad3 << " " << chunk.pad4 << "\n"
-			<< "------------------" << "\n";
-
-		return os;
-	}
+	size_t offsetInHeader;
+	size_t headerSize;
 };
 
 struct SMBFile
@@ -260,16 +244,6 @@ public:
 	int OpenFile(StringView name);
 
 	int LoadFile(Allocator* inputDataAllocator, Logger* scratch);
-
-	friend std::ostream& operator<<(std::ostream& os, const SMBFile& file)
-	{
-		os << std::hex << "File Offset (where real data begins) " << file.fileOffset << "\n"
-			<< "File Header Ends " << file.headerStreamEnd << "\n"
-			<< "Something " << file.numContiguousBytes << "\n"
-			<< "Number of Resources " << file.numResources << "\n"
-			<< "------------------" << "\n";
-		return os;
-	}
 
 	int ReadHeader(Allocator* inputDataAllocator, Logger* scratch);
 

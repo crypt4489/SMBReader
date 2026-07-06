@@ -1,6 +1,6 @@
 #include "Camera.h"
 
-#include <cmath>
+#include <math.h>
 
 void Camera::CamLookAt(const Vector3f& pos, const Vector3f& target, const Vector3f& up)
 {

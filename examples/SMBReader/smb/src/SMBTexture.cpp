@@ -30,7 +30,6 @@ int SMBTexture::CreateTextureDetails(SMBFile* smb, const SMBChunk& chunk)
 
 	for (uint32_t i = 0; i < miplevels; i++)
 	{
-
 		switch (type)
 		{
 		case SMBImageFormat::SMB_DXT1:
@@ -44,7 +43,6 @@ int SMBTexture::CreateTextureDetails(SMBFile* smb, const SMBChunk& chunk)
 			size = writeWidth * writeHeight * 4;
 			break;
 		default:
-			//std::cerr << type << "\n";
 			return -1;
 		}
 
@@ -88,13 +86,11 @@ int SMBTexture::ReadTextureData(SMBFile* smb)
 			size = writeWidth * writeHeight * 4;
 			break;
 		default:
-			//std::cerr << type << "\n";
 			return -1;
 		}
 
 		writeWidth >>= 1;
 		writeHeight >>= 1;
-
 
 		OSReadFile(fileHandle, size, (char*)readHead, &readCount);
 

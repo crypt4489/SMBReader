@@ -1,5 +1,8 @@
 #include "ShaderResourceSet.h"
-#include <cctype>
+#include <ctype.h>
+
+
+#define INPUT_MANAGEMENT_MAX(a, b) ((a) < (b) ? (b) : (a))
 
 #define MAX_ATTRIBUTE_LEN 50
 #define MAX_VALUE_LEN 50
@@ -287,7 +290,7 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 			{
 				resource->binding = ~0;
 				setLay->constantsCount++;
-				setLay->constantStageCount = std::max(setLay->constantStageCount, tag->pushRangeStage + 1);
+				setLay->constantStageCount = INPUT_MANAGEMENT_MAX(setLay->constantStageCount, tag->pushRangeStage + 1);
 			}
 			else
 			{
@@ -348,7 +351,7 @@ int ProcessTag(char* fileData, int size, int currentLocation, unsigned long *has
 
 		char readChar = data[charCount];
 
-		if (std::isspace(readChar))
+		if (isspace(readChar))
 		{
 			if (hashl == 5381)
 			{	
@@ -427,7 +430,7 @@ int ReadValue(char* fileData, int size, int currentLocation, char* str, int* len
 
 		charCount++;
 
-		if (std::isspace(readChar))
+		if (isspace(readChar))
 			continue;
 
 		str[memCounter++] = readChar;
@@ -472,7 +475,7 @@ int ReadAttributeName(char* fileData, int size, int currentLocation, unsigned lo
 		if (readChar == '=')
 			break;
 
-		if (std::isspace(readChar))
+		if (isspace(readChar))
 			continue;
 
 		hashl = ((hashl << 5) + hashl) + readChar;
@@ -512,7 +515,7 @@ int ReadAttributeValueHash(char* fileData, int size, int currentLocation, unsign
 
 		charCount++;
 
-		if (std::isspace(readChar))
+		if (isspace(readChar))
 		{
 			if (hashl == 5381)
 				continue;
@@ -567,7 +570,7 @@ int ReadAttributeValueVal(char* fileData, int size, int currentLocation, unsigne
 
 		charCount++;
 
-		if (std::isspace(readChar))
+		if (isspace(readChar))
 		{
 			if (readingVal)
 			{
