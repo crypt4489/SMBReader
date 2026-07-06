@@ -1,5 +1,8 @@
 #include "logger/Logger.h"
 #include <string.h>
+
+#define SENTINEL_VALUE 0xFFFFFFFF
+
 static size_t RoundDownPower2(size_t _inSize)
 {
 	size_t v = _inSize - 1;
@@ -7,6 +10,7 @@ static size_t RoundDownPower2(size_t _inSize)
 	v |= v >> 8; v |= v >> 16; v |= v >> 32;
 	return  (v + 1) >> 1;
 }
+
 
 
 void Logger::InitLogger(char* _buffer, size_t _bufferSize) {
@@ -83,6 +87,12 @@ int Logger::ProcessMessage()
 	{
 		LogMessage* currentMessage = (LogMessage*)(structuredLogBuffer + (currentHead & (size - 1)));
 
+		if (currentMessage->charCount < 0)
+		{
+			currentHead = (currentHead + (size - 1)) & ~(size - 1);
+			continue;
+		}
+
 		char* string = currentMessage->GetString();
 
 		const char* prefixFormat = "[INFO]:";
@@ -97,6 +107,11 @@ int Logger::ProcessMessage()
 		case LOGWARNING:
 			prefixFormat = "[WARNING]:";
 			prefixLen = 10;
+			break;
+		case LOGINFO:
+			break;
+		default:
+			prefixLen = 0;
 			break;
 		}
 
@@ -125,10 +140,17 @@ void* Logger::Allocate(size_t allocSize, uint64_t allocAlignment)
 
 	uint64_t maskedOut = out & (size - 1);
 
-	if (maskedOut + allocSize > size)
+	if ((maskedOut + allocSize) > size)
 	{
-		out = (out + size - maskedOut);
+		uint32_t* sentinelPtr = (uint32_t*)(structuredLogBuffer + maskedOut);
+
+		*sentinelPtr = SENTINEL_VALUE;
+
+		uint32_t makeUpStride = size - maskedOut;
+
 		maskedOut = 0;
+		
+		out += makeUpStride;
 	}
 
 	tail = out + allocSize;

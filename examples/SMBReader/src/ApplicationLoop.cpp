@@ -480,13 +480,10 @@ static GPULightSource mainSpotLight =
 };
 
 
-static ArrayAllocator<int, MAX_MESH_TEXTURES> meshTextureHandles{};
-static ArrayAllocator<MeshCPUData, globalMeshCountMax> meshCPUData{};
-static ArrayAllocator<GeometryCPUData, globalGeometryDescriptionsCountMax> geometryCPUData{};
-static ArrayAllocator<RenderableGeomCPUData, globalGeometryRenderableCountMax> renderablesGeomObjects{};
-static ArrayAllocator<RenderableMeshCPUData, globalRenderableMax> renderablesMeshObjects{};
-
-
+static PoolAllocator<MeshCPUData> meshCPUData{};
+static PoolAllocator<GeometryCPUData> geometryCPUData{};
+static PoolAllocator<RenderableGeomCPUData> renderablesGeomObjects{};
+static PoolAllocator<RenderableMeshCPUData> renderablesMeshObjects{};
 
 static UniformGrid mainGrid = {	
 	.max = Vector4f(100.0f, 50.0f, 100.0f, 0.0),
@@ -550,7 +547,7 @@ static char LoggerMessageMemory[64 * KiB];
 static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
 static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
 static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
-static SlabAllocator GlobalInputScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
+static SlabAllocator GlobaScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
 static MessageQueue ThreadSharedMessageQueue{ PollingThreadSharedCmdMemory, sizeof(PollingThreadSharedCmdMemory) };
 static RingAllocator ThreadSharedStringViewAllocator{ PollingThreadStringViewMemory, sizeof(PollingThreadStringViewMemory) };
 
@@ -649,7 +646,7 @@ static void LoadThreadedWrapper(StringView& file);
 static int FindWords(const char* words, int charCount);
 static void CreateTexturePools();
 static void ProcessSMBFile(SMBFile* file, int arenaIndex);
-static void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex);
+static void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int textureBase, int arenaIndex);
 static bool ProcessCommands();
 static void AddCommandTS(int wordCount);
 static int ReadDeferredMessageQueue(CircularMessageQueueMPSC* queue);
@@ -658,7 +655,7 @@ static void ProcessKeys(GenericKeyAction keyActions[KC_COUNT]);
 static int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
-	int* texturesIDs,
+	int texturesIDs,
 	int textureCount,
 	const Vector4f& color
 );
@@ -666,7 +663,7 @@ static int CreateMaterial(
 static int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
-	int* texturesIDs,
+	int texturesIDs,
 	int textureCount,
 	const Vector4f& diffuseColor,
 	const Vector4f& specularColor,
@@ -813,13 +810,21 @@ void ApplicationLoop::Execute()
 
 		FileManager::SetFileCurrentDirectory(&fileName);
 
-		ExportChunksFromFile(&mainSMB, &GlobalInputScratchAllocator);
+		ExportChunksFromFile(&mainSMB, &GlobaScratchAllocator);
 
 		ReturnSMBArena(arenaIndex);
 	}
 	else
 	{
 		InitializeRuntime();
+
+		meshCPUData.Create(&GlobaScratchAllocator, globalMeshCountMax);
+
+		geometryCPUData.Create(&GlobaScratchAllocator, globalGeometryDescriptionsCountMax);
+
+		renderablesGeomObjects.Create(&GlobaScratchAllocator, globalGeometryRenderableCount);
+
+		renderablesMeshObjects.Create(&GlobaScratchAllocator, globalRenderableMax);
 
 		cleaned = false;
 
@@ -1044,13 +1049,15 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
+
+				
 			}
 			else
 			{
 				mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Missed image handle during drawing, closing app"));
 				running = false;
 			}
-			
+
 			GlobalRenderer::gRenderInstance.EndFrame(mainLogicalDevice);
 
 			running = ProcessCommands();
@@ -1375,11 +1382,11 @@ void CreateCornerWall(float width, float height, float xDiv, float yDiv)
 	rendInst.UpdateDriverMemory(compPoses, globalVertexBuffer, vertexCount * compressedSize, vertexAlloc, TransferType::CACHED);
 	rendInst.UpdateDriverMemory(indices, globalIndexBuffer, indexCount * 2, indexAlloc, TransferType::CACHED);
 
-	CreateMaterial(materialHandleIndex, VERTEXNORMAL, nullptr, 0, Vector4f(1.0, 0.0, 0.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0));
+	CreateMaterial(materialHandleIndex, VERTEXNORMAL, -1, 0, Vector4f(1.0, 0.0, 0.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0));
 
 	CreateMaterialRange(materialRangeIndex, 1, &materialHandleIndex);
 
-	RenderableGeomCPUData* geomRendCPUData = renderablesGeomObjects.Update(geomRenderableCPUDataIndex);
+	RenderableGeomCPUData* geomRendCPUData = renderablesGeomObjects.Get(geomRenderableCPUDataIndex);
 
 	geomRendCPUData->renderableMeshStart = gpuMeshRendrables;
 
@@ -1767,9 +1774,9 @@ void CreateCrateObject()
 
 	std::array textureHandles = { albedoMapped, normalMapped, skymapped };
 
-	CreateMaterial(materialHandleIndex, ALBEDOMAPPED | TANGENTNORMALMAPPED, textureHandles.data(), 2, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0));
+	CreateMaterial(materialHandleIndex, ALBEDOMAPPED | TANGENTNORMALMAPPED, albedoMapped, 2, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.25, .25, .25, 1.0), 3.0, Vector4f(.04, .06, 0.08, 1.0));
 
-	CreateMaterial(materialHandleIndex + 1, ALBEDOMAPPED, textureHandles.data() + 2, 1, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.80, .80, .80, 1.0), 256.0, Vector4f(.04, .06, 0.08, 1.0));
+	CreateMaterial(materialHandleIndex + 1, ALBEDOMAPPED, skymapped, 1, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(.80, .80, .80, 1.0), 256.0, Vector4f(.04, .06, 0.08, 1.0));
 
 	std::array<int, 2> materialIDs = { materialHandleIndex, materialHandleIndex + 1 };
 
@@ -1787,7 +1794,7 @@ void CreateCrateObject()
 		-1, -1
 	);
 
-	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Update(cpuGeomRenderable);
+	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Get(cpuGeomRenderable);
 
 	rendGeomCPUData->renderableMeshStart = gpuMeshRenderable;
 
@@ -1805,7 +1812,7 @@ void CreateCrateObject()
 	mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Created Crate Object"));
 }
 
-void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandles, int textureBase, int arenaIndex)
+void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int textureBase, int arenaIndex)
 {
 	auto& rendInst = GlobalRenderer::gRenderInstance;
 
@@ -1860,7 +1867,7 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 
 	CreateGPUGeometryDetails(geomDetailsIndex, geoDef->axialBox);
 
-	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Update(cpuGeomRenderable);
+	RenderableGeomCPUData* rendGeomCPUData = renderablesGeomObjects.Get(cpuGeomRenderable);
 
 	rendGeomCPUData->renderableMeshStart = gpuMeshRenderable;
 	
@@ -1868,7 +1875,7 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 
 	rendGeomCPUData->geomIndex = gpuGeomRenderable;
 
-	int base = 0;
+	int base = textureBase;
 
 	Matrix4f geomSpecificData;
 
@@ -1963,20 +1970,15 @@ void SMBGeometricalObject(SMBGeoChunk* geoDef, SMBFile* file, int* textureHandle
 
 		rendInst.UpdateDriverMemory(vertexData, globalVertexBuffer, vertexSize * vertexCount,  vertexAlloc, TransferType::MEMORY);
 		
-		int textureStart = meshTextureHandles.AllocateN(geoDef->materialsCount[i]);
+		int textureStart = base;
 		int textureCount = geoDef->materialsCount[i];
-
-		for (int j = 0; j < textureCount; j++)
-		{
-			meshTextureHandles.Update(textureStart + j, textureHandles[base+j] + textureBase);
-		}
 
 		base += textureCount;
 
 		CreateMaterial(
 			materialHandleIndex + i,
 			ALBEDOMAPPED | ((textureCount > 1) ? WORLDNORMALMAPPED : type == PosPack6_C16Tex1_Bone2 ? 0 : VERTEXNORMAL), 
-			&meshTextureHandles.dataArray[textureStart], 
+			textureStart, 
 			textureCount, 
 			Vector4f(1.0, 1.0, 1.0, 1.0), 
 			Vector4f(.1, .1, .1, 1.0), 1.5, 
@@ -2271,35 +2273,70 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 	int globalTextureStartIndex = 0;
 
-	if (totalTextureCount)
+
+	for (int i = 0; i < totalMeshCount; i++) 
 	{
-		TextureDetails** details = (TextureDetails**)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(TextureDetails*) * totalTextureCount);
+		SMBGeoChunk* geoDef = &geoDefs[i];
 
-		globalTextureStartIndex = mainDictionary.AllocateNTextureHandles(totalTextureCount, details);
+		int* flattenMatHandles = (int*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(int) * geoDef->numMaterials);
 
-		for (int ii = 0; ii < totalTextureCount; ii++)
+		int uploadedTextureCount = 0;
+
+		for (int jj = 0; jj < geoDef->numRenderables; jj++)
 		{
-			SMBTexture& texture = textures[ii];
+			int count = geoDef->materialsCount[jj];
+			for (int hh = 0; hh < count; hh++)
+			{
+				uint32_t id = geoDef->materialsId[hh + uploadedTextureCount];
+				int gg = 0;
+				for (; gg < totalTextureCount; gg++)
+				{
+					if (id == textures[gg].id)
+					{
+						flattenMatHandles[hh + uploadedTextureCount] = gg;
+						break;
+					}
+				}
 
-			ImageFormat format = ConvertSMBImageToAppImage(texture.type);
+				if (gg == totalTextureCount)
+				{
+					flattenMatHandles[hh + uploadedTextureCount] = 0;
+					mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled Mesh Material Image"));
+				}
+			}
+			uploadedTextureCount += count;
+		}
 
-			texture.data = (char*)mainDictionary.AllocateImageCache(texture.cumulativeSize);
 
-			texture.ReadTextureData(file);
+		if (uploadedTextureCount)
+		{
+			TextureDetails** details = (TextureDetails**)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(TextureDetails*) * uploadedTextureCount);
 
-			DeviceSlabAllocator* perFormatAllocator = nullptr;
+			globalTextureStartIndex = mainDictionary.AllocateNTextureHandles(uploadedTextureCount, details);
 
-			int poolIndex = GetPoolIndexByFormat(format, &perFormatAllocator);
+			for (int ii = 0; ii < uploadedTextureCount; ii++)
+			{
+				SMBTexture& texture = textures[flattenMatHandles[ii]];
 
-			size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
+				ImageFormat format = ConvertSMBImageToAppImage(texture.type);
 
-			GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
-				texture.width, texture.height, texture.miplevels, 1, format, &actualMemorySize, &actualMemoryAlignment
-			);
+				texture.data = (char*)mainDictionary.AllocateImageCache(texture.cumulativeSize);
 
-			actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
+				texture.ReadTextureData(file);
 
-			int smbImageIndex = mainDictionary.textureHandles[ii + globalTextureStartIndex] =
+				DeviceSlabAllocator* perFormatAllocator = nullptr;
+
+				int poolIndex = GetPoolIndexByFormat(format, &perFormatAllocator);
+
+				size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
+
+				GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
+					texture.width, texture.height, texture.miplevels, 1, format, &actualMemorySize, &actualMemoryAlignment
+				);
+
+				actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
+
+				int smbImageIndex = mainDictionary.textureHandles[ii + globalTextureStartIndex] =
 					GlobalRenderer::gRenderInstance.CreateImageHandle(mainLogicalDevice,
 						actualMemoryAddress,
 						texture.width,
@@ -2311,74 +2348,41 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 						poolIndex
 					);
 
-			int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, smbImageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+				int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, smbImageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
 
-			GlobalRenderer::gRenderInstance.UpdateImageMemory(
-				texture.data,
-				mainDictionary.textureHandles[ii + globalTextureStartIndex],
-				texture.cumulativeSize,
-				texture.width,
-				texture.height,
-				texture.miplevels,
-				0,
-				1,
-				0,
-				COLOR_IMAGE_ASPECT
-			);
-		}
-
-		DeviceHandleArrayUpdateTextureView* texViews = (DeviceHandleArrayUpdateTextureView*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(DeviceHandleArrayUpdateTextureView) * totalTextureCount);
-
-		for (int imageIndex = 0; imageIndex < totalTextureCount; imageIndex++)
-		{
-			texViews[imageIndex].imageHandle = mainDictionary.textureHandles[globalTextureStartIndex + imageIndex];
-			texViews[imageIndex].viewIndex = 0;
-		}
-
-		DeviceHandleArrayUpdate update;
-
-		update.updateType = DeviceHandleArrayUpdateType::TEXTURE_VIEW_UPDATE;
-		update.resourceCount = totalTextureCount;
-		update.resourceDstBegin = globalTextureStartIndex;
-		update.resourceHandles = texViews;
-
-		GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
-	}
-
-	for (int i = 0; i < totalMeshCount; i++) 
-	{
-		SMBGeoChunk* geoDef = &geoDefs[i];
-
-		int* flattenMatHandles = (int*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(int) * geoDef->numMaterials);
-
-		int base = 0;
-
-		for (int jj = 0; jj < geoDef->numRenderables; jj++)
-		{
-			int count = geoDef->materialsCount[jj];
-			for (int hh = 0; hh < count; hh++)
-			{
-				uint32_t id = geoDef->materialsId[hh + base];
-				int gg = 0;
-				for (; gg < totalTextureCount; gg++)
-				{
-					if (id == textures[gg].id)
-					{
-						flattenMatHandles[hh + base] = gg;
-						break;
-					}
-				}
-
-				if (gg == totalTextureCount)
-				{
-					flattenMatHandles[hh + base] = 0;
-					mainAppLogger.AddLogMessage(LogMessageType::LOGERROR, STRING_VIEW_FROM_LITERAL("Unhandled Mesh Material Image"));
-				}
+				GlobalRenderer::gRenderInstance.UpdateImageMemory(
+					texture.data,
+					mainDictionary.textureHandles[ii + globalTextureStartIndex],
+					texture.cumulativeSize,
+					texture.width,
+					texture.height,
+					texture.miplevels,
+					0,
+					1,
+					0,
+					COLOR_IMAGE_ASPECT
+				);
 			}
-			base += count;
+
+			DeviceHandleArrayUpdateTextureView* texViews = (DeviceHandleArrayUpdateTextureView*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(sizeof(DeviceHandleArrayUpdateTextureView) * uploadedTextureCount);
+
+			for (int imageIndex = 0; imageIndex < uploadedTextureCount; imageIndex++)
+			{
+				texViews[imageIndex].imageHandle = mainDictionary.textureHandles[globalTextureStartIndex + imageIndex];
+				texViews[imageIndex].viewIndex = 0;
+			}
+
+			DeviceHandleArrayUpdate update;
+
+			update.updateType = DeviceHandleArrayUpdateType::TEXTURE_VIEW_UPDATE;
+			update.resourceCount = uploadedTextureCount;
+			update.resourceDstBegin = globalTextureStartIndex;
+			update.resourceHandles = texViews;
+
+			GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalTexturesDescriptor, 3, ShaderResourceType::IMAGE2D, &update);
 		}
 
-		SMBGeometricalObject(geoDef, file, flattenMatHandles, globalTextureStartIndex, arenaIndex);
+		SMBGeometricalObject(geoDef, file, globalTextureStartIndex, arenaIndex);
 	}
 
 	SMBThreadedFileInputAllocators[arenaIndex].Reset();
@@ -3930,7 +3934,7 @@ int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, con
 {
 	RenderableMeshCPUData* meshCpuRenderable = nullptr;
 
-	meshCpuRenderable = renderablesMeshObjects.Update(meshCPURenderableIndex);
+	meshCpuRenderable = renderablesMeshObjects.Get(meshCPURenderableIndex);
 
 	if (materialStart < 0 ||
 		materialCount < 0 || materialCount > MAX_GPU_MATERIALS ||
@@ -3961,7 +3965,7 @@ int CreateRenderable(int meshCPURenderableIndex, int meshGPURenderableIndex, con
 int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
-	int* texturesIDs,
+	int texturesIDs,
 	int textureCount,
 	const Vector4f& color
 )
@@ -3976,7 +3980,7 @@ int CreateMaterial(
 
 	for (int i = 0; i < textureCount; i++)
 	{
-		ptr[i] = texturesIDs[i];
+		ptr[i] = texturesIDs + i;
 	}
 
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(GPUMaterial), sizeof(GPUMaterial) * gpuMaterialID, TransferType::CACHED);
@@ -3987,7 +3991,7 @@ int CreateMaterial(
 int CreateMaterial(
 	int gpuMaterialID,
 	int flags,
-	int* texturesIDs,
+	int texturesIDs,
 	int textureCount,
 	const Vector4f& diffuseColor,
 	const Vector4f& specularColor,
@@ -4008,7 +4012,7 @@ int CreateMaterial(
 
 	for (int i = 0; i < textureCount; i++)
 	{
-		ptr[i] = texturesIDs[i];
+		ptr[i] = texturesIDs + i;
 	}
 
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&material, globalMaterialsLocation, sizeof(GPUMaterial), sizeof(GPUMaterial) * gpuMaterialID, TransferType::CACHED);
@@ -4028,7 +4032,7 @@ int CreateMeshHandle(
 {
 	MeshCPUData* mesh = nullptr;
 
-	mesh = meshCPUData.Update(meshCPUDataIndex);
+	mesh = meshCPUData.Get(meshCPUDataIndex);
 
 	if (indexCount <= 0 || 
 		vertexCount <= 0 || 
@@ -4084,13 +4088,13 @@ void SetPositionOfGeometry(int geomIndex, const Vector3f& pos)
 	
 	RenderableGeomCPUData* geom = nullptr;
 
-	if (geomIndex >= renderablesGeomObjects.allocatorPtr.load())
+	if (geomIndex >= renderablesGeomObjects.count)
 	{
 		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Incorrect Geometry Location"));
 		return;
 	}
 
-	geom = &renderablesGeomObjects.dataArray[geomIndex];
+	geom = renderablesGeomObjects.Get(geomIndex);
 
 	int geomRenderable = geom->geomIndex;
 
@@ -4443,7 +4447,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	int size = outHandle.fileLength;
 
-	void* fileData = GlobalInputScratchAllocator.Allocate(size);
+	void* fileData = GlobaScratchAllocator.Allocate(size);
 
 	uint64_t readCount = 0;
 
@@ -4478,7 +4482,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 		size = outHandle.fileLength;
 
-		fileData = GlobalInputScratchAllocator.Allocate(size);
+		fileData = GlobaScratchAllocator.Allocate(size);
 
 		nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
 
@@ -4582,7 +4586,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 		int size = outHandle.fileLength;
 
-		void* fileData = GlobalInputScratchAllocator.Allocate(size);
+		void* fileData = GlobaScratchAllocator.Allocate(size);
 		
 		uint64_t readCount = 0;
 
@@ -4753,7 +4757,7 @@ void PrintDebugMemoryAllocation()
 
 	mainAppLogger.AddLogMessage(LOGINFO, StringBuffer, actualSize);
 
-	allocDetails = GlobalInputScratchAllocator.GetUsageAndCapacity();
+	allocDetails = GlobaScratchAllocator.GetUsageAndCapacity();
 
 	actualSize = snprintf(StringBuffer, 512, "Global Input memory allocation %d/%d", allocDetails.first, allocDetails.second);
 
@@ -4819,7 +4823,7 @@ int AllocateCPUMeshDetails(int numberOfDetails)
 {	
 	int meshIndex = -1;
 
-	meshIndex = meshCPUData.AllocateN(numberOfDetails);
+	meshIndex = meshCPUData.Allocate(numberOfDetails);
 
 	if (meshIndex < 0)
 	{
@@ -4846,7 +4850,7 @@ int AllocateCPUMeshRenderable(int numberOfRenderables)
 {
 	int meshRenderableIndex = -1;
 
-	meshRenderableIndex = renderablesMeshObjects.AllocateN(numberOfRenderables);
+	meshRenderableIndex = renderablesMeshObjects.Allocate(numberOfRenderables);
 
 	if (meshRenderableIndex < 0)
 	{
@@ -4877,7 +4881,7 @@ int AllocateCPUGeometryInstances(int numberOfInstances)
 {	
 	int geomRendCPUCode = 0;
 
-	geomRendCPUCode = renderablesGeomObjects.AllocateN(numberOfInstances);
+	geomRendCPUCode = renderablesGeomObjects.Allocate(numberOfInstances);
 
 	if (geomRendCPUCode < 0)
 	{
@@ -5129,7 +5133,7 @@ void CreateGPUGenericObjects()
 
 	CreateBlendRange(blendRangesIndex, &blendDetailsIndex, 1);
 
-	CreateMaterial(materialHandleIndex, 0, nullptr, 0, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 1.0, 1.0, 1.0), 1.0, Vector4f(1.0, 1.0, 1.0, 1.0));
+	CreateMaterial(materialHandleIndex, 0, -1, 0, Vector4f(1.0, 1.0, 1.0, 1.0), Vector4f(1.0, 1.0, 1.0, 1.0), 1.0, Vector4f(1.0, 1.0, 1.0, 1.0));
 
 	CreateMaterialRange(materialRangeIndex, 1, &materialHandleIndex);
 
