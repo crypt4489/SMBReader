@@ -765,6 +765,7 @@ struct RenderSwapchainData
 	EntryHandle* rendererWaitSemaphores;
 	EntryHandle* rendererFinishedSemaphores;
 	int* textureIds;
+	uint32_t imageCount;
 };
 
 struct RenderWindowSpecificData
@@ -831,7 +832,6 @@ struct RenderTextureDescription
 	uint32_t imageWidth;
 	uint32_t mipLayers;
 	uint32_t arrayLayers;
-	uint32_t samplerCount;
 	uint32_t viewCount;
 };
 

@@ -1049,8 +1049,6 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
-
-				
 			}
 			else
 			{
@@ -2345,6 +2343,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 						1,
 						format,
 						ImageType::IMAGE_2D,
+						ImageUsageFlagBits::SAMPLED,
 						poolIndex
 					);
 
@@ -4535,6 +4534,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 			6,
 			details.type,
 			ImageType::IMAGE_CUBE,
+			ImageUsageFlagBits::SAMPLED,
 			poolIndex
 		);
 
@@ -4640,14 +4640,12 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->arrayLayers,
 			details->type,
 			ImageType::IMAGE_2D,
+			ImageUsageFlagBits::SAMPLED,
 			poolIndex
 		);
 
-	
-
 	if (twoDimageIndex >= 0)
 	{
-
 		int viewIndex = GlobalRenderer::gRenderInstance.CreateImageView(mainLogicalDevice, twoDimageIndex, 0, IMAGE_VIEW_ALL_MIPS, 0, IMAGE_VIEW_ALL_LAYERS, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
 
 		GlobalRenderer::gRenderInstance.UpdateImageMemory(

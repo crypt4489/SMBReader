@@ -564,7 +564,21 @@ namespace API
 		return result;
 	}
 
+	VkImageUsageFlags ConvertImageUsageFlagsToVulkanImageUsageFlags(ImageUsageFlags flags)
+	{
+		VkImageUsageFlags vkFlags = 0;
 
+		vkFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT * ((flags & TRANSFER_SRC) != 0);
+		vkFlags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT * ((flags & TRANSFER_DEST) != 0);
+		vkFlags |= VK_IMAGE_USAGE_SAMPLED_BIT * ((flags & SAMPLED) != 0);
+		vkFlags |= VK_IMAGE_USAGE_STORAGE_BIT * ((flags & STORAGE) != 0);
+		vkFlags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT * ((flags & DEPTH_ATTACHMENT) != 0);
+		vkFlags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT * ((flags & STENCIL_ATTACHMENT) != 0);
+		vkFlags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT * ((flags & COLOR_ATTACHMENT) != 0);
+		vkFlags |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT * ((flags & TRANSIENT_ATTACHMENT) != 0);
+
+		return vkFlags;
+	}
 }
 
 #define RENDER_MIN(a, b) ((a) > (b) ? (b) : (a))
@@ -584,6 +598,8 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(
 	Logger* logger = (Logger*)pUserData;
 
 	logger->AddLogMessage(LOGERROR, pCallbackData->pMessage, strlen(pCallbackData->pMessage));
+
+	logger->ProcessMessage();
 
 	return VK_FALSE;
 }
@@ -747,10 +763,12 @@ void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandl
 			{
 				for (uint32_t d = 0; d < inst->imageCount; d++)
 				{
-					dev->DestroyImage(inst->attachmentImage[sampIndex][d]);
-					dev->DestroyImageView(inst->attachmentImageView[sampIndex][d]);
-
 					RenderTextureDescription* texDesc = textureResourceHandles.Get(inst->textureIds[sampIndex][d]);
+
+					RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(texDesc->viewIndex[0]);
+
+					dev->DestroyImage(texDesc->textureIndex);
+					dev->DestroyImageView(imageViewDesc->viewIndex);
 
 					resourceStatuses.Free(texDesc->resourceStatusIndex);
 
@@ -777,15 +795,24 @@ int RenderInstance::RecreateSwapChain(int deviceSelection, int swapChainIndex, u
 
 	RenderSwapchainData* data = swapChains.Get(swapChainIndex);
 
-	VKSwapChain* swc = dev->GetSwapChain(data->swapChainIdx);
-
 	if (width && height) 
 	{
+		VKSwapChain* swc = dev->GetSwapChain(data->swapChainIdx);
+		
 		swc->Wait();
 
 		DestroySwapChainAttachments(deviceSelection, data->swapChainIdx);
 
 		CreateSwapChainData(deviceSelection, data->swapChainIdx, width, height, true);
+
+		for (uint32_t i = 0; i < swc->imageCount; i++)
+		{
+			RenderTextureDescription* desc = textureResourceHandles.Get(data->textureIds[i]);
+
+			RenderImageViewDescription* viewDesc = textureViewsResourceHandles.Get(desc->viewIndex[0]);
+
+			viewDesc->viewIndex = swc->imageViews[i];
+		}
 
 		data->width = width;
 
@@ -847,7 +874,7 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 			sampHi = RENDER_MAX(sampleCountHi, sampHi);
 
-			currResource->attachmentImage = currResource->attachmentImageView = nullptr;
+			currResource->textureIds = nullptr;
 
 			switch (desc->attachType)
 			{
@@ -947,7 +974,7 @@ int RenderInstance::CreateRenderPass(int deviceSelection, AttachmentGraphInstanc
 
 			AttachmentResourceInstance* currResource = &graphInstance->resources[desc->resourceIndex];
 
-			currResource->attachmentImage = currResource->attachmentImageView = nullptr;
+			currResource->textureIds = nullptr;
 
 			switch (desc->attachType)
 			{
@@ -1212,6 +1239,104 @@ void RenderInstance::InitializeResourceStatus(ResourceStatus* status, int number
 		status->currentLayout[i] = imageLayout;
 }
 
+int RenderInstance::CreateAttachmentImage(
+	uint32_t width, uint32_t height, 
+	uint32_t arrayLayers, uint32_t mipCount,
+	ImageType imageType, int sampleCount, 
+	ImageFormat format, ImageUsageFlags usageFlags, 
+	DeviceSlabAllocator* attachmentAllocator, ImageLayout initialLayout,
+	VKDevice* dev, int imageMemoryPoolIndex, ResourceStatusType resourceType)
+{
+
+	VkFormat vkAttachmentFormat = API::ConvertImageFormatToVulkanFormat(format);
+
+	VkImageType vkImageType = API::ConvertImageTypeToVulkanImageType(imageType);
+
+	VkImageUsageFlags vkUsageFlags = API::ConvertImageUsageFlagsToVulkanImageUsageFlags(usageFlags);
+
+	VkImageLayout vkInitialLayot = API::ConvertImageLayoutToVulkanImageLayout(initialLayout);
+
+	size_t actualImageSize = 0, actualImageAlignment = 0;
+
+	dev->GetImageMemorySizeAndAlignment(width, height,
+		mipCount, vkAttachmentFormat, arrayLayers,
+		vkUsageFlags,
+		sampleCount,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		vkInitialLayot,
+		VK_IMAGE_TILING_OPTIMAL, 0,
+		vkImageType, &actualImageSize, &actualImageAlignment);
+
+	size_t actualMemAddr = attachmentAllocator->Allocate(actualImageSize, actualImageAlignment);
+
+	EntryHandle imageHandle = dev->CreateImage(
+		width, height,
+		mipCount, vkAttachmentFormat, arrayLayers,
+		vkUsageFlags,
+		sampleCount, actualMemAddr,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		vkInitialLayot,
+		VK_IMAGE_TILING_OPTIMAL, 0,
+		vkImageType, imagePools[imageMemoryPoolIndex]
+	);
+
+	int textureIndex = textureResourceHandles.Allocate();
+
+	RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+	int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
+
+	desc->arrayLayers = arrayLayers;
+	desc->mipLayers = mipCount;
+	desc->imageHeight = height;
+	desc->imageWidth = width;
+	desc->format = format;
+	desc->textureIndex = imageHandle;
+	desc->imageType = imageType;
+	desc->viewCount = 0;
+
+	ResourceStatus* status = resourceStatuses.Get(resourceStatus);
+
+	uint32_t totalResourceCount = mipCount * arrayLayers;
+
+	CreateResourceStatusActions(status, totalResourceCount, totalResourceCount, totalResourceCount);
+
+	status->resourceType = resourceType;
+
+	InitializeResourceStatus(status, totalResourceCount, totalResourceCount, totalResourceCount, 0, BEGINNING_OF_PIPE, initialLayout);
+
+	return textureIndex;
+}
+
+int RenderInstance::CreateAttachmentImageView(int textureIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout, VKDevice* dev)
+{
+	RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
+
+	VkFormat vkAttachmentFormat = API::ConvertImageFormatToVulkanFormat(desc->format);
+
+	VkImageViewType vkImageViewType = API::ConvertImageTypeToVulkanImageViewType(desc->imageType);
+
+	VkImageAspectFlags aspectFlags = API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(mask);
+
+	EntryHandle imageViewHandle = dev->CreateImageView(desc->textureIndex, firstMip, firstArrayLayer, mipCount, arrayLayerCount, vkAttachmentFormat, aspectFlags, vkImageViewType);
+
+	int viewIndex = desc->viewIndex[desc->viewCount] = textureViewsResourceHandles.Allocate();
+
+	desc->viewCount++;
+
+	RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
+
+	imageViewDesc->firstLayer = firstMip;
+	imageViewDesc->firstMipLevel = firstArrayLayer;
+	imageViewDesc->layerCount = arrayLayerCount;
+	imageViewDesc->mipLevelCount = mipCount;
+	imageViewDesc->mask = mask;
+	imageViewDesc->viewIndex = imageViewHandle;
+	imageViewDesc->desiredLayoutForView = desiredLayout;
+
+	return viewIndex;
+}
+
 int RenderInstance::CreateAttachmentResources(
 	int deviceSelection,
 	int graphIndex, int renderPassIndex, int imageCount, 
@@ -1268,42 +1393,22 @@ int RenderInstance::CreateAttachmentResources(
 
 		if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
 		{
-			resourceInst->attachmentImageView = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * 1);
 			resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * 1);
-			
-			resourceInst->attachmentImageView[0] = backBufferViews;
 			resourceInst->textureIds[0] = backBufferTexturesIds;
 		}
 		else
 		{
-			if (!resourceInst->attachmentImage)
+			if (!resourceInst->textureIds)
 			{
-				resourceInst->attachmentImage = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * sampleCount);
-
 				resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * sampleCount);
 
 				for (int c = 0; c<sampleCount; c++)
 				{ 
-					resourceInst->attachmentImage[c] = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
 					resourceInst->textureIds[c] = (int*)storageAllocator->Allocate(sizeof(int) * imageCount);
 				}
 			}
 
-			if (!resourceInst->attachmentImageView)
-			{
-				resourceInst->attachmentImageView = (EntryHandle**)storageAllocator->Allocate(sizeof(EntryHandle*) * sampleCount);
-
-				for (int c = 0; c < sampleCount; c++)
-				{
-					resourceInst->attachmentImageView[c] = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
-				}
-			}
-
-			VkFormat attachmentFormat = API::ConvertImageFormatToVulkanFormat(resourceTempl->format);
-
 			resourceInst->imageCount = imageCount;
-
-			size_t actualImageSize = 0, actualImageAlignment = 0, actualMemAddr = 0;
 
 			switch (resourceInst->usage)
 			{
@@ -1314,67 +1419,11 @@ int RenderInstance::CreateAttachmentResources(
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
+						int textureIndex = resourceInst->textureIds[v][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
+							ImageType::IMAGE_2D, sampLo, resourceTempl->format,
+							ImageUsageFlagBits::TRANSIENT_ATTACHMENT | ImageUsageFlagBits::COLOR_ATTACHMENT, rtvAllocator, ImageLayout::UNDEFINED, dev, rtvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
-						dev->GetImageMemorySizeAndAlignment(imageWidth, imageHeight,
-							1, attachmentFormat, 1,
-							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-							sampLo,
-							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-							VK_IMAGE_LAYOUT_UNDEFINED,
-							VK_IMAGE_TILING_OPTIMAL, 0,
-							VK_IMAGE_TYPE_2D, &actualImageSize, &actualImageAlignment);
-
-						actualMemAddr = rtvAllocator->Allocate(actualImageSize, actualImageAlignment);
-
-						resourceInst->attachmentImage[v][g] = dev->CreateImage(
-							imageWidth, imageHeight,
-							1, attachmentFormat, 1,
-							VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |
-							VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-							sampLo, actualMemAddr,
-							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-							VK_IMAGE_LAYOUT_UNDEFINED,
-							VK_IMAGE_TILING_OPTIMAL, 0,
-							VK_IMAGE_TYPE_2D, imagePools[rtvPoolIndex]
-						);
-
-						resourceInst->attachmentImageView[v][g]
-							=
-							dev->CreateImageView(resourceInst->attachmentImage[v][g], 0, 0, 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
-
-						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
-
-						RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
-
-						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
-
-						desc->arrayLayers = 1;
-						desc->mipLayers = 1;
-						desc->imageHeight = imageHeight;
-						desc->imageWidth = imageWidth;
-						desc->format = resourceTempl->format;
-						desc->textureIndex = resourceInst->attachmentImage[v][g];
-
-						imageViewDesc->firstLayer = 0;
-						imageViewDesc->firstMipLevel = 0;
-						imageViewDesc->layerCount = 1;
-						imageViewDesc->mipLevelCount = 1;
-						imageViewDesc->mask = COLOR_IMAGE_ASPECT;
-						imageViewDesc->viewIndex = resourceInst->attachmentImageView[v][g];
-						imageViewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
-
-						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
-
-						CreateResourceStatusActions(status, 1, 1, 1);
-
-						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
-
-						status->currentLayout[0] = ImageLayout::UNDEFINED;
+						CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE, dev);
 					}
 
 					sampLo <<= 1;
@@ -1385,61 +1434,11 @@ int RenderInstance::CreateAttachmentResources(
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
-						dev->GetImageMemorySizeAndAlignment(
-							imageWidth, imageHeight,
-							1, attachmentFormat, 1,
-							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-							sampLo,
-							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, 
-							VK_IMAGE_TILING_OPTIMAL, 0, 
-							VK_IMAGE_TYPE_2D, 
-							&actualImageSize, &actualImageAlignment
-						);
+						int textureIndex = resourceInst->textureIds[v][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
+							ImageType::IMAGE_2D, sampLo, resourceTempl->format,
+							ImageUsageFlagBits::DEPTH_ATTACHMENT | ImageUsageFlagBits::STENCIL_ATTACHMENT, dsvAllocator, ImageLayout::UNDEFINED, dev, dsvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
-						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
-
-						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(imageWidth, imageHeight,
-								1, attachmentFormat, 1,
-								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-								sampLo, actualMemAddr,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
-
-						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 0, 0, 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
-
-						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
-
-						RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
-
-						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
-
-						desc->arrayLayers = 1;
-						desc->mipLayers = 1;
-						desc->imageHeight = imageHeight;
-						desc->imageWidth = imageWidth;
-						desc->format = resourceTempl->format;
-						desc->textureIndex = resourceInst->attachmentImage[v][g];
-
-						imageViewDesc->firstLayer = 0;
-						imageViewDesc->firstMipLevel = 0;
-						imageViewDesc->layerCount = 1;
-						imageViewDesc->mipLevelCount = 1;
-						imageViewDesc->mask = DEPTH_IMAGE_ASPECT | STENCIL_IMAGE_ASPECT;
-						imageViewDesc->viewIndex = resourceInst->attachmentImageView[v][g];
-						imageViewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
-
-						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
-
-						CreateResourceStatusActions(status, 1, 1, 1);
-
-						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
-
-						status->currentLayout[0] = ImageLayout::UNDEFINED;
-
+						CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, DEPTH_IMAGE_ASPECT | STENCIL_IMAGE_ASPECT, ImageLayout::SHADERREADABLE, dev);
 					}
 
 					sampLo <<= 1;
@@ -1450,61 +1449,13 @@ int RenderInstance::CreateAttachmentResources(
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
-						dev->GetImageMemorySizeAndAlignment(
-							imageWidth, imageHeight,
-							1, attachmentFormat, 1,
-							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-							sampLo,
-							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D,
-							&actualImageSize, &actualImageAlignment
-						);
+						int textureIndex = resourceInst->textureIds[v][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
+							ImageType::IMAGE_2D, sampLo, resourceTempl->format,
+							ImageUsageFlagBits::DEPTH_ATTACHMENT | ImageUsageFlagBits::SAMPLED, dsvAllocator, ImageLayout::UNDEFINED, dev, dsvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
-						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
-
-						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(imageWidth, imageHeight,
-								1, attachmentFormat, 1,
-								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-								sampLo, actualMemAddr,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
-
-						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 0, 0, 1, 1, attachmentFormat, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
-
-						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
-
-						RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
-
-						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
-
-						desc->arrayLayers = 1;
-						desc->mipLayers = 1;
-						desc->imageHeight = imageHeight;
-						desc->imageWidth = imageWidth;
-						desc->format = resourceTempl->format;
-						desc->textureIndex = resourceInst->attachmentImage[v][g];
-
-						imageViewDesc->firstLayer = 0;
-						imageViewDesc->firstMipLevel = 0;
-						imageViewDesc->layerCount = 1;
-						imageViewDesc->mipLevelCount = 1;
-						imageViewDesc->mask = DEPTH_IMAGE_ASPECT;
-						imageViewDesc->viewIndex = resourceInst->attachmentImageView[v][g];
-						imageViewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
-
-						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
-
-						CreateResourceStatusActions(status, 1, 1, 1);
-
-						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
-
-						status->currentLayout[0] = ImageLayout::UNDEFINED;
+						CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, DEPTH_IMAGE_ASPECT, ImageLayout::SHADERREADABLE, dev);
 					}
 					sampLo <<= 1;
-
 				}
 				break;
 
@@ -1513,59 +1464,11 @@ int RenderInstance::CreateAttachmentResources(
 				{
 					for (int g = 0; g < imageCount; g++)
 					{
-						dev->GetImageMemorySizeAndAlignment(
-							imageWidth, imageHeight,
-							1, attachmentFormat, 1,
-							VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-							sampLo,
-							VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D,
-							&actualImageSize, &actualImageAlignment
-						);
+						int textureIndex = resourceInst->textureIds[v][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
+							ImageType::IMAGE_2D, sampLo, resourceTempl->format,
+							ImageUsageFlagBits::STENCIL_ATTACHMENT, dsvAllocator, ImageLayout::UNDEFINED, dev, dsvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
-						actualMemAddr = dsvAllocator->Allocate(actualImageSize, actualImageAlignment);
-
-						resourceInst->attachmentImage[v][g] =
-							dev->CreateImage(imageWidth, imageHeight,
-								1, attachmentFormat, 1,
-								VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-								sampLo, actualMemAddr,
-								VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_TILING_OPTIMAL, 0, VK_IMAGE_TYPE_2D, imagePools[dsvPoolIndex]);
-
-						resourceInst->attachmentImageView[v][g] = dev->CreateImageView(resourceInst->attachmentImage[v][g], 0, 0, 1, 1, attachmentFormat, VK_IMAGE_ASPECT_STENCIL_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-						int textureIndex = resourceInst->textureIds[v][g] = textureResourceHandles.Allocate();
-
-						RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
-
-						int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
-
-						RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
-
-						int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
-
-						desc->arrayLayers = 1;
-						desc->mipLayers = 1;
-						desc->imageHeight = imageHeight;
-						desc->imageWidth = imageWidth;
-						desc->format = resourceTempl->format;
-						desc->textureIndex = resourceInst->attachmentImage[v][g];
-
-						imageViewDesc->firstLayer = 0;
-						imageViewDesc->firstMipLevel = 0;
-						imageViewDesc->layerCount = 1;
-						imageViewDesc->mipLevelCount = 1;
-						imageViewDesc->mask = STENCIL_IMAGE_ASPECT;
-						imageViewDesc->viewIndex = resourceInst->attachmentImageView[v][g];
-						imageViewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
-
-						ResourceStatus* status = resourceStatuses.Get(resourceStatus);
-
-						CreateResourceStatusActions(status, 1, 1, 1);
-
-						status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
-
-						status->currentLayout[0] = ImageLayout::UNDEFINED;
-
+						CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, STENCIL_IMAGE_ASPECT, ImageLayout::SHADERREADABLE, dev);
 					}
 					sampLo <<= 1;
 
@@ -1575,71 +1478,11 @@ int RenderInstance::CreateAttachmentResources(
 			case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
 				for (int g = 0; g < imageCount; g++)
 				{
+					int textureIndex = resourceInst->textureIds[0][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
+						ImageType::IMAGE_2D, sampLo, resourceTempl->format,
+						ImageUsageFlagBits::COLOR_ATTACHMENT | ImageUsageFlagBits::SAMPLED, rtvAllocator, ImageLayout::UNDEFINED, dev, rtvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
-					dev->GetImageMemorySizeAndAlignment(
-						imageWidth, imageHeight,
-						1, attachmentFormat, 1,
-						VK_IMAGE_USAGE_SAMPLED_BIT |
-						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-						sampLo,
-						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-						VK_IMAGE_LAYOUT_UNDEFINED,
-						VK_IMAGE_TILING_OPTIMAL, 0,
-						VK_IMAGE_TYPE_2D,
-						&actualImageSize, &actualImageAlignment
-					);
-
-					actualMemAddr = rtvAllocator->Allocate(actualImageSize, actualImageAlignment);
-
-					resourceInst->attachmentImage[0][g] = dev->CreateImage(
-						imageWidth, imageHeight,
-						1, attachmentFormat, 1,
-						VK_IMAGE_USAGE_SAMPLED_BIT |
-						VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-						sampLo, actualMemAddr,
-						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-						VK_IMAGE_LAYOUT_UNDEFINED,
-						VK_IMAGE_TILING_OPTIMAL, 0,
-						VK_IMAGE_TYPE_2D, imagePools[rtvPoolIndex]
-					);
-
-					resourceInst->attachmentImageView[0][g]
-						=
-						dev->CreateImageView(resourceInst->attachmentImage[0][g], 0, 0, 1, 1, attachmentFormat, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_VIEW_TYPE_2D);
-
-					int textureIndex = resourceInst->textureIds[0][g] = textureResourceHandles.Allocate();
-
-					RenderTextureDescription* desc = textureResourceHandles.Get(textureIndex);
-
-					int viewIndex = desc->viewIndex[0] = textureViewsResourceHandles.Allocate();
-
-					RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
-
-					int resourceStatus = desc->resourceStatusIndex = resourceStatuses.Allocate();
-
-					desc->arrayLayers = 1;
-					desc->mipLayers = 1;
-					desc->imageHeight = imageHeight;
-					desc->imageWidth = imageWidth;
-					desc->format = resourceTempl->format;
-					desc->textureIndex = resourceInst->attachmentImage[0][g];
-
-					imageViewDesc->firstLayer = 0;
-					imageViewDesc->firstMipLevel = 0;
-					imageViewDesc->layerCount = 1;
-					imageViewDesc->mipLevelCount = 1;
-					imageViewDesc->mask = COLOR_IMAGE_ASPECT;
-					imageViewDesc->viewIndex = resourceInst->attachmentImageView[0][g];
-					imageViewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
-
-					ResourceStatus* status = resourceStatuses.Get(resourceStatus);
-
-					CreateResourceStatusActions(status, 1, 1, 1);
-
-					status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
-
-					status->currentLayout[0] = ImageLayout::UNDEFINED;
-
+					CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE, dev);
 				}
 				break;
 
@@ -1687,7 +1530,13 @@ int RenderInstance::CreateAttachmentResources(
 					sampleIndex = std::bit_width((unsigned)resourceInst->sampHi) - 1;
 				}
 
-				attachmentViews[e] = resourceInst->attachmentImageView[sampleIndex][d];
+				int textureIndex = resourceInst->textureIds[sampleIndex][d];
+
+				RenderTextureDescription* texDesc = textureResourceHandles.Get(textureIndex);
+
+				RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(texDesc->viewIndex[0]);
+
+				attachmentViews[e] = imageViewDesc->viewIndex;
 			}
 
 			renderTarget->framebufferIndices[d] =
@@ -2852,7 +2701,7 @@ int RenderInstance::CreateImageHandle(
 	int deviceSelection,
 	size_t gpuMemAddress,
 	uint32_t width, uint32_t height,
-	uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, int poolIndex)
+	uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, ImageUsageFlags usageFlags, int poolIndex)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -2866,9 +2715,7 @@ int RenderInstance::CreateImageHandle(
 		mipLevels, 
 		actualFormat, 
 		arrayLayers,
-	    VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT, 
+	    API::ConvertImageUsageFlagsToVulkanImageUsageFlags(usageFlags | ImageUsageFlagBits::TRANSFER_DEST),
 		1, 
 		gpuMemAddress, 
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
@@ -2902,65 +2749,6 @@ int RenderInstance::CreateImageHandle(
 	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
 
 	int totalTrackingLayers = mipLevels * arrayLayers;
-
-	CreateResourceStatusActions(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers);
-
-	InitializeResourceStatus(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
-
-	return textureIndex;
-}
-
-int RenderInstance::CreateStorageImage(
-	int deviceSelection,
-	size_t gpuMemAddress,
-	uint32_t width, uint32_t height,
-	uint32_t mipLevels, ImageFormat format, int poolIndex)
-{
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
-
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
-
-	EntryHandle textureHandle = dev->CreateImage(
-		width,
-		height,
-		mipLevels,
-		API::ConvertImageFormatToVulkanFormat(format),
-		1,
-		VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-		VK_IMAGE_USAGE_SAMPLED_BIT |
-		VK_IMAGE_USAGE_STORAGE_BIT,
-		1,
-		gpuMemAddress,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		VK_IMAGE_LAYOUT_UNDEFINED,
-		VK_IMAGE_TILING_OPTIMAL,
-		0,
-		VK_IMAGE_TYPE_2D,
-		imagePools[poolIndex]
-	);
-
-	int textureIndex = textureResourceHandles.Allocate();
-
-	RenderTextureDescription* renderTexDesc = textureResourceHandles.Get(textureIndex);
-
-	renderTexDesc->arrayLayers = 1;
-	renderTexDesc->mipLayers = mipLevels;
-	renderTexDesc->imageWidth = width;
-	renderTexDesc->imageHeight = height;
-	renderTexDesc->format = format;
-	renderTexDesc->textureIndex = textureHandle;
-
-	for (int i = 0; i < MAX_VIEWS_ATTACHED_TO_TEXTURE; i++)
-	{
-		renderTexDesc->viewIndex[i] = -1;
-	}
-
-	int resourceIndex = renderTexDesc->resourceStatusIndex = resourceStatuses.Allocate();
-
-	ResourceStatus* textureStatus = resourceStatuses.Get(resourceIndex);
-
-	int totalTrackingLayers = mipLevels * 1;
 
 	CreateResourceStatusActions(textureStatus, totalTrackingLayers, totalTrackingLayers, totalTrackingLayers);
 
@@ -3584,15 +3372,22 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 	swcData->height = _height;
 	swcData->width = _width;
 
-	swcData->rendererWaitSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
-	swcData->rendererFinishedSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
+	uint32_t imageCount = swcData->imageCount = vkSwcData->imageCount;
 
-	swcData->textureIds = (int*)storageAllocator->Allocate(sizeof(int) * MAX_FRAMES_IN_FLIGHT);
+	swcData->rendererWaitSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
+	swcData->rendererFinishedSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
+
+	swcData->textureIds = (int*)storageAllocator->Allocate(sizeof(int) * imageCount);
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
 		swcData->rendererWaitSemaphores[i] = *dev->CreateSemaphores(1);
+
 		
+	}
+
+	for (uint32_t i = 0; i < imageCount; i++)
+	{
 		swcData->rendererFinishedSemaphores[i] = *dev->CreateSemaphores(1);
 
 		int textureID = swcData->textureIds[i] = textureResourceHandles.Allocate();
@@ -3609,11 +3404,26 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 
 		desc->format = mainBackBufferColorFormat;
 
+		desc->viewCount = 0;
+
 		int resourceIndex = desc->resourceStatusIndex = resourceStatuses.Allocate();
 
 		ResourceStatus* status = resourceStatuses.Get(resourceIndex);
 
 		status->resourceType = ResourceStatusType::MANAGED_IMAGE_RESOURCE;
+
+		int viewIndex = desc->viewIndex[desc->viewCount++] = textureViewsResourceHandles.Allocate();
+
+		RenderImageViewDescription* viewDesc = textureViewsResourceHandles.Get(viewIndex);
+
+		viewDesc->viewIndex = vkSwcData->imageViews[i];
+
+		viewDesc->mask = COLOR_IMAGE_ASPECT;
+
+		viewDesc->firstLayer = viewDesc->firstMipLevel = 0;
+		viewDesc->layerCount = viewDesc->mipLevelCount = 1;
+
+		viewDesc->desiredLayoutForView = ImageLayout::SHADERREADABLE;
 	}
 
 	return swapChainInternalIndex;

@@ -43,6 +43,8 @@ namespace API
 	VkImageAspectFlags ConvertImageViewAspectMaskToVulkanImageAspectFlags(ImageViewAspectMask aspectMask);
 
 	VkImageViewType ConvertImageTypeToVulkanImageViewType(ImageType imageType);
+
+	VkImageUsageFlags ConvertImageUsageFlagsToVulkanImageUsageFlags(ImageUsageFlags flags);
 }
 
 struct RenderInstanceCreateInfo
@@ -147,13 +149,7 @@ struct RenderInstance
 		int deviceSelection,
 		size_t gpuMemAddress,
 		uint32_t width, uint32_t height,
-		uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, int poolIndex);
-
-	int CreateStorageImage(
-		int deviceSelection,
-		size_t gpuMemAddress,
-		uint32_t width, uint32_t height,
-		uint32_t mipLevels, ImageFormat format, int poolIndex);
+		uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, ImageUsageFlags usageFlags, int poolIndex);
 
 	int CreateImageView(int deviceSelection, int imageHandle, int firstMip, int mipCount, int firstLayer, int layerCount, ImageViewAspectMask imageAspect, ImageLayout desiredImageLayoutUsage);
 
@@ -279,6 +275,16 @@ struct RenderInstance
 	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header);
 
 	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+
+	int CreateAttachmentImage(
+		uint32_t width, uint32_t height,
+		uint32_t arrayLayers, uint32_t mipCount,
+		ImageType imageType, int sampleCount,
+		ImageFormat format, ImageUsageFlags usageFlags,
+		DeviceSlabAllocator* attachmentAllocator, ImageLayout initialLayout,
+		VKDevice* dev, int imageMemoryPoolIndex, ResourceStatusType resourceType);
+
+	int CreateAttachmentImageView(int textureIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout, VKDevice* dev);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 

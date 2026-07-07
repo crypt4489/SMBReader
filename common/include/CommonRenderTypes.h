@@ -427,8 +427,6 @@ enum class AttachmentResourceInstanceUsage
 
 struct AttachmentResourceInstance
 {
-	EntryHandle** attachmentImage;
-	EntryHandle** attachmentImageView;
 	int** textureIds;
 	AttachmentResourceInstanceUsage usage;
 	int sampLo;
@@ -603,3 +601,18 @@ enum class ImageType
 	IMAGE_3D = 3,
 	IMAGE_CUBE = 4,
 };
+
+typedef int ImageUsageFlags;
+
+enum ImageUsageFlagBits
+{
+	TRANSFER_SRC = 1,
+	TRANSFER_DEST = 2,
+	SAMPLED = 4,
+	STORAGE = 8,
+	DEPTH_ATTACHMENT = 16,
+	STENCIL_ATTACHMENT = 32,
+	COLOR_ATTACHMENT = 64,
+	TRANSIENT_ATTACHMENT = 128,
+};
+

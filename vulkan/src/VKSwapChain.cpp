@@ -277,8 +277,6 @@ void VKSwapChain::DestroySwapChain()
 		device->DestroyImageView(imageViews[i]);
 	}
 
-	
-
 	DestroySyncObject();
 
 	device->FreeFromPerDeviceData(imageViews);
