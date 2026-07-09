@@ -621,6 +621,8 @@ static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManageme
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
 static SlabAllocator geometryObjectSpecificAlloc(geometryObjectSpecificMemory, sizeof(geometryObjectSpecificMemory));
 
+static ShaderResourceSetHandle mainFullScreen;
+
 static bool ExecuteCommands(const StringView& command, int argCount);
 static void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
 static void CreateCrateObject();
@@ -1467,6 +1469,8 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 		return;
 	}
 
+	ShaderResourceSetContext lContext{ &mainAppLogger, false };
+
 	int jointIndex = jointMeshPipelinesCount++;
 
 	jointMeshStaringLocations[jointIndex] = startingLocation;
@@ -1474,10 +1478,16 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 	ShaderResourceSetBuilder camJointData = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, JOINTVISUAL, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	ShaderResourceSetBuilder JointDesc = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, JOINTVISUAL, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	camJointData.BindBufferToShaderResource(nullptr, &globalBufferLocation, 0, 1, 0);
-	JointDesc.UploadConstant(nullptr, &jointMeshStaringLocations[jointIndex], 0);
-	JointDesc.BindBufferToShaderResource(nullptr,  &jointMeshWorldMatrix, 0, 1, 0);
-	JointDesc.BindBufferView(nullptr, &jointMeshParentIndices, 0, 1, 1);
+	camJointData.BindBufferToShaderResource(&lContext, &globalBufferLocation, 0, 1, 0);
+	JointDesc.UploadConstant(&lContext, &jointMeshStaringLocations[jointIndex], 0);
+	JointDesc.BindBufferToShaderResource(&lContext,  &jointMeshWorldMatrix, 0, 1, 0);
+	JointDesc.BindBufferView(&lContext, &jointMeshParentIndices, 0, 1, 1);
+
+	if (lContext.contextFailed)
+	{
+		lContext.contextLogger->ProcessMessage();
+		return;
+	}
 
 	std::array<ShaderResourceSetHandle, 2> Descs = { camJointData(),
 													JointDesc() };
@@ -2553,7 +2563,9 @@ int CreateGenericMeshCommandBuffers(int count)
 
 	shadowMapIndex = mainDictionary.AllocateNTextureHandles(GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, nullptr);
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAShadowMapping, 1, globalTexturesDescriptor, 3, shadowMapIndex);
+	int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAShadowMapping, 1, 0, 1, 0, 1, DEPTH_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, viewIndex, globalTexturesDescriptor, 3, shadowMapIndex);
 
 	indirectDrawBuilder.UploadConstant(&genericMeshRSContext, &shadowMapIndex, 0);
 	indirectDrawBuilder.UploadConstant(&genericMeshRSContext, &GlobalRenderer::gRenderInstance.currentFrame, 1);
@@ -3259,7 +3271,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 
 	smdpd.fullScreenDescriptorSet = fullScreenBuilder();
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAShadowMapping, 1, smdpd.fullScreenDescriptorSet, 0, 0);
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, 1, smdpd.fullScreenDescriptorSet, 0, 0);
 	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(smdpd.fullScreenDescriptorSet, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 	fullScreenBuilder.UploadConstant(&genericMainShadowMapRSContext, &GlobalRenderer::gRenderInstance.currentFrame, 0);
@@ -3313,13 +3325,19 @@ void RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 	{
 		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAPost, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAPost, 1, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAPost, 1, viewIndex, mainFullScreen, 0, 0);
 	}
 	
 	if (MSAAShadowMapping >= 0)
 	{
 		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, 3, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, globalTexturesDescriptor, 3, shadowMapIndex);
+
+		int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAShadowMapping, 1, 0, 1, 0, 1, DEPTH_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, viewIndex, globalTexturesDescriptor, 3, shadowMapIndex);
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, viewIndex, smdpd.fullScreenDescriptorSet, 0, 0);
 	}
 }
 
@@ -3336,9 +3354,11 @@ int CreateMSAAPostFullScreen()
 
 	ShaderResourceSetBuilder mainFullScreenB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, FULLSCREEN, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 
-	ShaderResourceSetHandle mainFullScreen = mainFullScreenB();
+	mainFullScreen = mainFullScreenB();
 
-	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource( MSAAPost, 1, mainFullScreen, 0, 0);
+	int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAPost, 1, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+
+	GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAPost, 1, viewIndex, mainFullScreen, 0, 0);
 	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(mainFullScreen, 1, ShaderResourceType::SAMPLERSTATE, &samplerUpdate);
 
 	mainFullScreenB.UploadConstant(&genericMSAARSContext, &GlobalRenderer::gRenderInstance.currentFrame, 0);

@@ -232,7 +232,7 @@ struct RenderInstance
 
 	void AddCommandQueue(int index, GPUCommandStreamType type);
 
-	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart);
+	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int perTextureViewIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart);
 
 	void PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex);
 	void PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount);
@@ -285,6 +285,8 @@ struct RenderInstance
 		VKDevice* dev, int imageMemoryPoolIndex, ResourceStatusType resourceType);
 
 	int CreateAttachmentImageView(int textureIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout, VKDevice* dev);
+
+	int CreateAttachmentImageView(int deviceSelection, int attachmentGraphInstance, int attachmentResourceIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 

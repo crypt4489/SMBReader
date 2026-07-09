@@ -2259,3 +2259,241 @@ int ReadAttributesAttachments(char* fileData, int size, int currentLocation, uns
 
 	return charCount;
 }
+
+
+ShaderResourceSetBuilder::ShaderResourceSetBuilder(int _descriptorManagerIndex, int _descriptorSetIndex, ShaderResourceSet* _setPtr)
+	:
+	set(_setPtr), handle(_descriptorManagerIndex, _descriptorSetIndex)
+{
+
+}
+
+ShaderResourceSetHandle ShaderResourceSetBuilder::operator()()
+{
+	return handle;
+}
+
+void ShaderResourceSetBuilder::SetVariableArrayCount(ShaderResourceSetContext* context, int bindingIndex, int varArrayCount)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (!(header->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY))
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a variable array count!\n"));
+		return;
+	}
+
+	header->arrayCount = (header->arrayCount & UNBOUNDED_DESCRIPTOR_ARRAY) | (varArrayCount & DESCRIPTOR_COUNT_MASK);
+}
+
+void ShaderResourceSetBuilder::BindBufferToShaderResource(ShaderResourceSetContext* context, int* allocationIndex, int firstBuffer, int bufferCount, int bindingIndex)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (header->type != ShaderResourceType::UNIFORM_BUFFER && header->type != ShaderResourceType::STORAGE_BUFFER)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a uniform or storage buffer!\n"));
+		return;
+	}
+
+	ShaderResourceBuffer* buffer = &header->resourceArray.buffers;
+
+	if ((firstBuffer + bufferCount) > header->arrayCount)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Buffer count is greater than allocated array count!\n"));
+		return;
+	}
+
+	for (int i = 0; i < bufferCount; i++)
+		buffer->allocationIndex[firstBuffer + i] = allocationIndex[i];
+
+	if ((firstBuffer + bufferCount) > buffer->bufferCount)
+		buffer->bufferCount = (firstBuffer + bufferCount);
+
+}
+
+void ShaderResourceSetBuilder::BindImageResourceToShaderResource(ShaderResourceSetContext* context, int* index, int* views, int textureCount, int firstTexture, int bindingIndex)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (header->type != ShaderResourceType::IMAGESTORE2D && header->type != ShaderResourceType::IMAGE2D)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a image resource array!\n"));
+		return;
+	}
+
+	if ((firstTexture + textureCount) > header->arrayCount)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Texture count is greater than allocated array count!\n"));
+		return;
+	}
+
+	ShaderResourceImage* images = &header->resourceArray.images;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		images->textureDetails[firstTexture + i].textureHandle = index[i];
+		images->textureDetails[firstTexture + i].viewIndex = views[i];
+	}
+
+	if ((firstTexture + textureCount) > images->textureCount)
+		images->textureCount = (firstTexture + textureCount);
+}
+
+void ShaderResourceSetBuilder::BindSamplerResourceToShaderResource(ShaderResourceSetContext* context, int* indices, int samplerCount, int firstSampler, int bindingIndex)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (header->type != ShaderResourceType::SAMPLERSTATE)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a sampler array!\n"));
+		return;
+	}
+
+	if ((firstSampler + samplerCount) > header->arrayCount)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Sampler count is greater than allocated array count!\n"));
+		return;
+	}
+
+	ShaderResourceSampler* samplers = &header->resourceArray.samplers;
+
+	for (int i = 0; i < samplerCount; i++)
+		samplers->samplerHandles[firstSampler + i] = indices[i];
+
+	if ((firstSampler + samplerCount) > samplers->samplerCount)
+		samplers->samplerCount = (firstSampler + samplerCount);
+}
+
+void ShaderResourceSetBuilder::BindSampledImageToShaderResource(ShaderResourceSetContext* context, int* index, int* views, int* samplers, int textureCount, int firstTexture, int bindingIndex)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (header->type != ShaderResourceType::SAMPLER2D && header->type != ShaderResourceType::SAMPLERCUBE && header->type != ShaderResourceType::SAMPLER3D)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a combined sampler/texture array!\n"));
+		return;
+	}
+
+	if ((firstTexture + textureCount) > header->arrayCount)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Texture count is greater than allocated array count!\n"));
+		return;
+	}
+
+	ShaderResourceCombinedImage* images = &header->resourceArray.combinedImages;
+
+	for (int i = 0; i < textureCount; i++)
+	{
+		images->textureDetails[firstTexture + i].textureHandle = index[i];
+		images->textureDetails[firstTexture + i].viewIndex = views[i];
+		images->textureDetails[firstTexture + i].samplerHandle = samplers[i];
+	}
+
+	if ((firstTexture + textureCount) > images->textureCount)
+		images->textureCount = (firstTexture + textureCount);
+}
+
+void ShaderResourceSetBuilder::BindBufferView(ShaderResourceSetContext* context, int* allocationIndex, int firstView, int viewCount, int bindingIndex)
+{
+	ShaderResourceArray* header = &set->resourceBindings[bindingIndex];
+
+	if (header->type != ShaderResourceType::BUFFER_VIEW)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Binding is not a structured buffer array!\n"));
+		return;
+	}
+
+	if ((firstView + viewCount) > header->arrayCount)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("View count is greater than allocated array count!\n"));
+		return;
+	}
+
+	ShaderResourceBuffer* bufferView = &header->resourceArray.views;
+
+	for (int i = 0; i < viewCount; i++)
+	{
+		bufferView->allocationIndex[firstView + i] = allocationIndex[i];
+	}
+
+	if ((firstView + viewCount) > bufferView->bufferCount)
+		bufferView->bufferCount = (firstView + viewCount);
+
+}
+
+ShaderResourceConstantBuffer* ShaderResourceSetBuilder::GetConstantBuffer(int constantBuffer)
+{
+	ShaderResourceConstantBuffer* ret = &set->constantBuffers[constantBuffer];
+
+	if (ret->type != ShaderResourceType::CONSTANT_BUFFER)
+		return nullptr;
+
+	return ret;
+}
+
+int ShaderResourceSetBuilder::GetConstantBufferCount()
+{
+	return set->templateMetaData->constantsCount;
+}
+
+void ShaderResourceSetBuilder::UploadConstant(ShaderResourceSetContext* context, void* data, int bufferLocation)
+{
+	ShaderResourceConstantBuffer* header = (ShaderResourceConstantBuffer*)GetConstantBuffer(bufferLocation);
+
+	if (!header)
+	{
+		context->contextFailed = true;
+		context->contextLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Not a push constant index!\n"));
+		return;
+	}
+
+	header->data = data;
+}
+
+void ShaderResourceManager::Create(Allocator* shaderResourceMemoryAllocator, uint32_t maxDescriptorSets)
+{
+	descriptorSetHandles.Create(shaderResourceMemoryAllocator, maxDescriptorSets);
+	memset(descriptorSetHandles.pool, 0xFF, sizeof(EntryHandle) * maxDescriptorSets);
+	descriptorSets = (ShaderResourceSet**)shaderResourceMemoryAllocator->Allocate(sizeof(ShaderResourceSet*) * maxDescriptorSets, alignof(ShaderResourceSet*));
+}
+
+int ShaderResourceManager::AddShaderToSets(ShaderResourceSet* location)
+{
+	int indexRet = descriptorSetHandles.Allocate();
+
+	descriptorSets[indexRet] = location;
+
+	return indexRet;
+}
+
+int ShaderResourceManager::GetConstantBufferCount(int descriptorSet)
+{
+	ShaderResourceSet* set = descriptorSets[descriptorSet];
+
+	return set->templateMetaData->constantsCount;
+}
+
+ShaderResourceHeader* ShaderResourceManager::GetConstantBuffer(int descriptorSet, int constantBuffer)
+{
+	ShaderResourceSet* set = descriptorSets[descriptorSet];
+
+	ShaderResourceConstantBuffer* ret = &set->constantBuffers[constantBuffer];
+
+	if (ret->type != ShaderResourceType::CONSTANT_BUFFER)
+		return nullptr;
+
+	return ret;
+
+}
