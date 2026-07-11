@@ -69,7 +69,7 @@ struct RenderInstanceCreateInfo
 	uint32_t maxPipelineHandles;
 	uint32_t maxAllocations;
 	uint32_t maxSubAllocations;
-	uint32_t maxGPUCommands;
+	uint32_t maxGPUCommandsStreams;
 	uint32_t maxTextureHandles;
 	uint32_t maxSamplerHandles;
 	uint32_t maxResourceStatuses;
@@ -104,7 +104,7 @@ struct RenderInstance
 
 	~RenderInstance();
 
-	void CreateRenderInstance(RenderInstanceCreateInfo *info, SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
+	void CreateRenderInstance(RenderInstanceCreateInfo *info, Allocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator);
 
 	void DestroySwapChainAttachments(int deviceSelection, EntryHandle swapChainIndex);
 
@@ -165,7 +165,7 @@ struct RenderInstance
 
 	int CreateComputePipelineObject(int deviceSelection, ComputeIntermediaryPipelineInfo* info);
 
-	void DrawScene(int deviceSelection, uint32_t imageIndex);
+	void DrawScene(int deviceSelection, int commandStreamIndex, uint32_t imageIndex);
 
 	void DestoryTexture(int deviceSelection, EntryHandle handle);
 
@@ -185,7 +185,7 @@ struct RenderInstance
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
-	void EndFrame(int deviceSelection);
+	void EndFrame(int deviceSelection, int commandStreamIndex);
 
 	void AddPipelineToRPGraphicsQueue(int psoIndex, int frameGraphIndex, int renderPass);
 
@@ -224,13 +224,13 @@ struct RenderInstance
 	int CreateGraphicRenderStateObject(int deviceSelection, int shaderGraphIndex, int pipelineDescriptionIndex, int* frameGraphAttachments, int* perFrameRenderPassSelection, int frameGraphCount);
 	int CreateComputePipelineStateObject(int deviceSelection, int shaderGraphIndex);
 
-	void ResetCommandList();
+	void ResetCommandList(int commandStreamIndex);
 
 	void CreateGraphicsQueueForAttachments(int frameGraphIndex, int renderPassIndex, uint32_t pipelineCount);
 
 	int CreateComputeQueue(uint32_t maxNumPipelines);
 
-	void AddCommandQueue(int index, GPUCommandStreamType type);
+	void AddCommandQueue(int commandStreamIndex, int handleIndex, GPUCommandStreamType type);
 
 	int UploadFrameAttachmentResource(int frameGraph, int resourceIndex, int perTextureViewIndex, ShaderResourceSetHandle handle, int bindingIndex, int textureStart);
 
@@ -287,6 +287,8 @@ struct RenderInstance
 	int CreateAttachmentImageView(int textureIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout, VKDevice* dev);
 
 	int CreateAttachmentImageView(int deviceSelection, int attachmentGraphInstance, int attachmentResourceIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout);
+
+	int CreateGPUCommandStream(int maxGPUCommandCount);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -307,8 +309,6 @@ struct RenderInstance
 	PoolAllocator<RenderPipelineDescription> pipelineInstancesIdentifier{};
 
 	PoolAllocator<PipelineHandle> pipelineHandles{};
-
-	GPUCommand* gpuCommands{};
 	
 	PoolAllocator<AttachmentGraph> attachmentGraphs{};
 
@@ -337,6 +337,8 @@ struct RenderInstance
 	PoolAllocator<RenderAllocation> allocations{};
 
 	PoolAllocator<ShaderResourceManager> descriptorManagers{};
+
+	PoolAllocator<GPUCommandStreamAllocator> gpuCommandStreams{};
 	
 	ShaderGraphsHolder shaderGraphs;
 
@@ -352,7 +354,7 @@ struct RenderInstance
 
 	RingAllocator* cacheAllocator;
 
-	SlabAllocator* storageAllocator;
+	Allocator* storageAllocator;
 
 	RingAllocator* updateCommandsCache;
 
@@ -360,8 +362,6 @@ struct RenderInstance
 
 	Logger* internalRendererLogger;
 
-	int gpuCommandCount = 0;
-	int maxGPUCommandCount = 0;
 	int currentUpdateCommandBuffer = 0;
 	uint32_t currentFrame = 0;
 	uint32_t previousFrame = ~0U;

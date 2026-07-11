@@ -633,7 +633,7 @@ int findMSB(unsigned int input)
 #endif
 }
 
-void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAllocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
+void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, Allocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
 	vkInstance = (VKInstance*)instanceStorageAllocator->Allocate(sizeof(VKInstance), alignof(VKInstance));
 
@@ -676,8 +676,7 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, SlabAl
 
 	pipelineHandles.Create(instanceStorageAllocator, info->maxPipelineHandles);
 
-	gpuCommands = (GPUCommand*)instanceStorageAllocator->Allocate(sizeof(GPUCommand) * info->maxGPUCommands, alignof(GPUCommand));
-	maxGPUCommandCount = info->maxGPUCommands;
+	gpuCommandStreams.Create(instanceStorageAllocator, info->maxGPUCommandsStreams);
 
 	renderTargetQueues.Create(instanceStorageAllocator, info->maxRenderQueues);
 
@@ -3795,7 +3794,7 @@ int RenderInstance::CreateComputePipelineObject(int deviceSelection, ComputeInte
 	return ret;
 }
 
-void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
+void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint32_t imageIndex)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -3829,9 +3828,11 @@ void RenderInstance::DrawScene(int deviceSelection, uint32_t imageIndex)
 
 	int queryCountIndex = queryCountBaseIndex;
 
-	while (commandCountIter <= gpuCommandCount)
+	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(commandStreamIndex);
+
+	while (commandCountIter <= stream->commandCount)
 	{
-		GPUCommand* command = &gpuCommands[commandCountIter];
+		GPUCommand* command = &stream->commands[commandCountIter];
 
 		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
@@ -4164,9 +4165,10 @@ void RenderInstance::DecreaseMSAA(int frameGraph, int renderPassIndex)
 	passInstance->currentSampleCount = next;
 }
 
-void RenderInstance::ResetCommandList()
+void RenderInstance::ResetCommandList(int commandStreamIndex)
 {
-	gpuCommandCount = 0;
+	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(commandStreamIndex);
+	stream->commandCount = 0;
 }
 
 void RenderInstance::CreateGraphicsQueueForAttachments(int frameGraphIndex, int renderPassIndex, uint32_t pipelineCount)
@@ -4183,15 +4185,33 @@ int RenderInstance::CreateComputeQueue(uint32_t maxNumPipelines)
 	return computeQueues.Allocate();
 }
 
-
-void RenderInstance::AddCommandQueue(int index, GPUCommandStreamType type)
+void RenderInstance::AddCommandQueue(int commandStreamIndex, int handleIndex, GPUCommandStreamType type)
 {
-	GPUCommand* command = &gpuCommands[gpuCommandCount++];
-	command->indexForStreamType = index;
+	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(commandStreamIndex);
+
+	if (stream->commandCount == stream->maxCommandCount)
+		return;
+
+	GPUCommand* command = &stream->commands[stream->commandCount++];
+
+	command->indexForStreamType = handleIndex;
 	command->streamType = type;
 }
 
-void RenderInstance::EndFrame(int deviceSelection)
+int RenderInstance::CreateGPUCommandStream(int maxGPUCommandCount)
+{
+	int gpuCommandsIndex = gpuCommandStreams.Allocate();
+
+	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(gpuCommandsIndex);
+
+	stream->commandCount = 0;
+	stream->maxCommandCount = maxGPUCommandCount;
+	stream->commands = (GPUCommand*)storageAllocator->Allocate(sizeof(GPUCommand) * maxGPUCommandCount);
+
+	return gpuCommandsIndex;
+}
+
+void RenderInstance::EndFrame(int commandStreamIndex, int deviceSelection)
 {
 	char StringBuffer[512];
 
@@ -4203,9 +4223,11 @@ void RenderInstance::EndFrame(int deviceSelection)
 
 	int queryOffset = 0;
 
-	while (commandCountIter < gpuCommandCount)
+	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(commandStreamIndex);
+
+	while (commandCountIter < stream->commandCount)
 	{
-		GPUCommand* command = &gpuCommands[commandCountIter];
+		GPUCommand* command = &stream->commands[commandCountIter];
 
 		const char* passDesc = "Undefined pass : ";
 

@@ -351,6 +351,7 @@ static int mainPresentationWindow = -1;
 static int mainHostBuffer = -1;
 static int mainDeviceBuffer = -1;
 static int mainDescriptorManagerIndex = -1;
+static int mainCommandStreamIndex = -1;
 
 static DeviceSlabAllocator mainHostAllocator, mainDeviceAllocator;
 
@@ -359,7 +360,6 @@ static IndirectDrawData debugIndirectDrawData;
 
 static WorldSpaceGPUPartition worldSpaceAssignment;
 static WorldSpaceGPUPartition lightAssignment;
-
 
 static int globalIndexBuffer = 0;
 static int globalIndexBufferSize = 1024 * KiB;
@@ -402,12 +402,10 @@ static const int globalMaterialIndicesSize = 4 * KiB;
 static int globalMaterialsLocation; 
 static const int globalMaterialsSize = 4 * KiB;
 
-
 static int globalBlendDetailsLocation;
 static int globalBlendRangesLocation;
 static const int globalBlendDetailsSize = 1 * KiB;
 static const int globalBlendRangesSize = 1 * KiB;
-
 
 static std::atomic<int> globalRenderableCount = 0;
 static std::atomic<int> globalBlendDetailCount = 0;
@@ -479,7 +477,6 @@ static GPULightSource mainSpotLight =
 	Vector4f(DegToRad(0.0),DegToRad(10.0),0.0,0.0),
 };
 
-
 static PoolAllocator<MeshCPUData> meshCPUData{};
 static PoolAllocator<GeometryCPUData> geometryCPUData{};
 static PoolAllocator<RenderableGeomCPUData> renderablesGeomObjects{};
@@ -544,7 +541,7 @@ static char PollingThreadSharedCmdMemory[4 * KiB];
 static char PollingThreadStringViewMemory[4 * KiB];
 static char LoggerMessageMemory[64 * KiB];
 
-static SlabAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
+static TLSFAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
 static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
 static RingAllocator AppInstanceTempAllocator{ AppInstanceTempMemory, sizeof(AppInstanceTempMemory) };
 static SlabAllocator GlobaScratchAllocator{ GlobalInputScratchMemory, sizeof(GlobalInputScratchMemory) };
@@ -888,8 +885,8 @@ void ApplicationLoop::Execute()
 
 		int previousGlobalLightCount = globalLightCount;
 
-		GlobalRenderer::gRenderInstance.AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
-		GlobalRenderer::gRenderInstance.AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
+		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 
 		DeviceHandleArrayUpdate samplerUpdate;
 
@@ -1048,19 +1045,20 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
 				}
 
-				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, swcImageIndex);
+				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, mainCommandStreamIndex, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
+
+				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
+
+				running = ProcessCommands();
+
 			}
 			else
 			{
 				mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Missed image handle during drawing, closing app"));
 				running = false;
-			}
-
-			GlobalRenderer::gRenderInstance.EndFrame(mainLogicalDevice);
-
-			running = ProcessCommands();
+			}			
 
 			fps();
 
@@ -3541,7 +3539,7 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxPipelineHandles = 25;
 	riCreateInfo.maxAllocations = 50;
 	riCreateInfo.maxSubAllocations = 30;
-	riCreateInfo.maxGPUCommands = 10;
+	riCreateInfo.maxGPUCommandsStreams = 1;
 	riCreateInfo.maxTextureHandles = 100;
 	riCreateInfo.maxSamplerHandles = 1;
 	riCreateInfo.maxResourceStatuses = 125;
@@ -3746,6 +3744,8 @@ void ApplicationLoop::InitializeRuntime()
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue(15);
 
 	CreateTexturePools();
+
+	mainCommandStreamIndex = GlobalRenderer::gRenderInstance.CreateGPUCommandStream(10);
 
 	globalBufferLocation = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, (sizeof(Matrix4f) * 3) + sizeof(Frustum), 1, alignof(Matrix4f), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalIndexBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainDeviceBuffer, globalIndexBufferSize, 1, 16, AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::NO_BUFFER_ALIGNMENT, &mainDeviceAllocator);
@@ -4436,9 +4436,9 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 		currentFrameGraphIndex = next;
 
-		GlobalRenderer::gRenderInstance.ResetCommandList();
-		GlobalRenderer::gRenderInstance.AddCommandQueue(mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
-		GlobalRenderer::gRenderInstance.AddCommandQueue(currentFrameGraphIndex, ATTACHMENT_COMMANDS);
+		GlobalRenderer::gRenderInstance.ResetCommandList(mainCommandStreamIndex);
+		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
+		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, currentFrameGraphIndex, ATTACHMENT_COMMANDS);
 
 		clamped = true;
 	}
@@ -4773,7 +4773,7 @@ void PrintDebugMemoryAllocation()
 
 	int actualSize = 0;
 
-	allocDetails = RenderInstanceMemoryAllocator.GetUsageAndCapacity();
+	//allocDetails = RenderInstanceMemoryAllocator.GetUsageAndCapacity();
 
 	actualSize = snprintf(StringBuffer, 512, "Render Instance memory allocation %d/%d", allocDetails.first, allocDetails.second);
 

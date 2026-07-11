@@ -1,10 +1,9 @@
 #pragma once
-#include "StringUtils.h"
 #include "IndexTypes.h"
+#include "StringUtils.h"
+#include "TLSFAllocator.h"
 
-#include <array>
 #include <atomic>
-#include <type_traits>
 #include <utility>
 
 template <typename T_AtomicType>
@@ -61,78 +60,117 @@ T_AtomicType UpdateAtomic(std::atomic<T_AtomicType>& atomic, T_AtomicType stride
 
 struct Allocator
 {
-	void* dataHead;
-	int dataSize;
-	std::atomic<int> dataAllocator;
-
 	Allocator() = default;
-
-	Allocator(void* _dataHead, int _size)
-	{
-		dataSize = _size;
-		dataAllocator = 0;
-		dataHead = _dataHead;
-	}
 
 	virtual void* Allocate(int _allocSize, int alignment) = 0;
 	virtual void* Allocate(int _allocSize) = 0;
 	virtual void Reset() = 0;
-	virtual void* Head() = 0;
+	virtual void* Head();
 	virtual void* CAllocate(int _allocSize, int alignment) = 0;
 	virtual void* CAllocate(int _allocSize) = 0;
+	virtual void* Realloc(void* memaddress, int _allocSize) = 0;
+	virtual void Free(int _allocSize);
+	virtual void Free(void* _allocPtr);
 
 	virtual StringView* AllocateFromNullString(const char* name) = 0;
 	virtual StringView AllocateFromNullStringCopy(const char* name) = 0;
 
 	virtual int OffsetInAllocator(void* dataPtr) = 0;
 
-	std::pair<int, int> GetUsageAndCapacity() const;
+	virtual std::pair<int, int> GetUsageAndCapacity() const = 0;
 };
 
 struct RingAllocator : public Allocator
 {
+	void* dataHead;
+	int dataSize;
+	std::atomic<int> dataAllocator;
+
 	RingAllocator() = default;
 
-	RingAllocator(void* _dataHead, int _size) :
-		Allocator(_dataHead, _size)
+	RingAllocator(void* _dataHead, int _size)
+		: Allocator()
 	{
-
+		dataSize = _size;
+		dataAllocator = 0;
+		dataHead = _dataHead;
 	}
 
 	void* Allocate(int _allocSize);
 	void* Allocate(int _allocSize, int alignment);
 	void Reset();
-	void* Head();
+	void* Head() override;
 	void* CAllocate(int _allocSize, int alignment);
 	void* CAllocate(int _allocSize);
+	void* Realloc(void* memaddress, int _allocSize);
 
 	StringView* AllocateFromNullString(const char* name);
 	StringView AllocateFromNullStringCopy(const char* name);
 
 	int OffsetInAllocator(void* dataPtr);
+
+	std::pair<int, int> GetUsageAndCapacity() const;
 };
 
 
 struct SlabAllocator : public Allocator
 {
+	void* dataHead;
+	int dataSize;
+	std::atomic<int> dataAllocator;
+
 	SlabAllocator() = default;
 	SlabAllocator(void* _dataHead, int _size) 
 		:
-		Allocator(_dataHead, _size)
+		Allocator()
 	{
+		dataSize = _size;
+		dataAllocator = 0;
+		dataHead = _dataHead;
 	}
 
 	void* Allocate(int _allocSize, int alignment);
 	void* Allocate(int _allocSize);
 	void Reset();
-	void* Head();
+	void* Head() override;
 	void* CAllocate(int _allocSize, int alignment);
 	void* CAllocate(int _allocSize);
+	void* Realloc(void* memaddress, int _allocSize);
+	void Free(int _allocSize) override;
 
 	StringView* AllocateFromNullString(const char* name);
 	StringView AllocateFromNullStringCopy(const char* name);
 
 	int OffsetInAllocator(void* dataPtr);
+
+	std::pair<int, int> GetUsageAndCapacity() const;
+};
+
+struct TLSFAllocator : public Allocator
+{
+	TLSFMain tlsf;
+	TLSFAllocator() = default;
+	TLSFAllocator(void* _dataHead, int _size)
+		:
+		Allocator()
+	{
+		TLSFInitialize(&tlsf, _dataHead, _size);
+	}
+
+	void* Allocate(int _allocSize, int alignment);
+	void* Allocate(int _allocSize);
+	void Reset();
+	void* CAllocate(int _allocSize, int alignment);
+	void* CAllocate(int _allocSize);
+	void* Realloc(void* memaddress, int _allocSize) override;
+	void Free(void* _allocPtr) override;
+
+	StringView* AllocateFromNullString(const char* name);
+	StringView AllocateFromNullStringCopy(const char* name);
+
+	int OffsetInAllocator(void* dataPtr);
+
+	std::pair<int, int> GetUsageAndCapacity() const;
 };
 
 struct DeviceSlabAllocator

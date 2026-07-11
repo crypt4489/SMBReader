@@ -854,3 +854,10 @@ struct RenderImageViewDescription
 	ImageLayout desiredLayoutForView;
 	EntryHandle viewIndex;
 };
+
+struct GPUCommandStreamAllocator
+{
+	int commandCount;
+	int maxCommandCount;
+	GPUCommand* commands;
+};
