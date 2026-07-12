@@ -2427,41 +2427,60 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	TextureMemoryRegion region;
 	int link = imageMemoryUpdateManager.linkHead;
 
 	DeviceSlabAllocator* stagingAlloc = &deviceContainer->stagingBufferAllocators[currentFrame];
 
+	TextureMemoryRegion* regions = (TextureMemoryRegion*)cacheAllocator->Allocate(sizeof(TextureMemoryRegion) * memCount, alignof(TextureMemoryRegion));
+
+	int regionCount = 0;
+
 	while (link >= 0)
 	{
-		link = imageMemoryUpdateManager.PopLink(&region, link);
+		link = imageMemoryUpdateManager.PopLink(&regions[regionCount++], link);
+	}
 
-		RenderTextureDescription* desc = textureResourceHandles.Get(region.textureIndex);
+	for (int i = 0; i < regionCount; i++)
+	{
+
+		TextureMemoryRegion* region = &regions[i];
+
+		RenderTextureDescription* desc = textureResourceHandles.Get(region->textureIndex);
 
 		EntryHandle handle = desc->textureIndex;
 
-		ResourceStatus* resourceStatus = resourceStatuses.Get(textureResourceHandles[region.textureIndex].resourceStatusIndex);
+		ResourceStatus* resourceStatus = resourceStatuses.Get(textureResourceHandles[region->textureIndex].resourceStatusIndex);
 
-		TransitionImageLayout(dev, rbo, handle, region.mipStart, region.mipLevels, 
-			desc->mipLayers, region.layerStart, region.layerCount, 
-			region.transferMask, ImageLayout::TRANSFER_DEST_OPTIMAL, 
+		TransitionImageLayout(dev, rbo, handle, region->mipStart, region->mipLevels,
+			desc->mipLayers, region->layerStart, region->layerCount,
+			region->transferMask, ImageLayout::TRANSFER_DEST_OPTIMAL,
 			resourceStatus, TRANSFER_BARRIER, TRANSFER_WRITE_DATA_RESOURCE);
 
-		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region.totalSize, deviceContainer->relatedPhysDeviceInfo->optimalImageCopyOffsetAlignment);
+	}
 
-		InsertAccumulatedBarriers(rbo, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+	InsertAccumulatedBarriers(rbo, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+
+	for (int i = 0; i < regionCount; i++)
+	{
+		TextureMemoryRegion* region = &regions[i];
+
+		RenderTextureDescription* desc = textureResourceHandles.Get(region->textureIndex);
+
+		EntryHandle handle = desc->textureIndex;
+
+		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region->totalSize, deviceContainer->relatedPhysDeviceInfo->optimalImageCopyOffsetAlignment);
 
 		dev->UploadImageData(
 			handle,
-			(char*)region.data,
-			region.totalSize,
+			(char*)region->data,
+			region->totalSize,
 			deviceContainer->stagingBuffers[currentFrame],
-			region.width,
-			region.height,
-			region.mipLevels,
-			region.layerCount,
+			region->width,
+			region->height,
+			region->mipLevels,
+			region->layerCount,
 			API::ConvertImageFormatToVulkanFormat(desc->format),
-			API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(region.transferMask),
+			API::ConvertImageViewAspectMaskToVulkanImageAspectFlags(region->transferMask),
 			currentImageOffsetInUploadArena,
 			rbo
 		);
@@ -3803,7 +3822,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 	GPUCommandStreamAllocator* stream = gpuCommandStreams.Get(commandStreamIndex);
 
-	while (commandCountIter <= stream->commandCount)
+	while (commandCountIter < stream->commandCount)
 	{
 		GPUCommand* command = &stream->commands[commandCountIter];
 
@@ -3820,7 +3839,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 				EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[0];
 
 				GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
-
+			
 				InsertAccumulatedBarriers(&rcb, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
 
 				rcb.BindComputePipeline(pipelineTemp);
@@ -4553,7 +4572,7 @@ void RenderInstance::SwapUpdateCommands()
 			{
 				driverHostMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
-			else if (bufType == MemoryTypeBits::DEVICE_MEMORY_TYPE)
+			else if (bufType & MemoryTypeBits::DEVICE_MEMORY_TYPE)
 			{
 				driverDeviceMemoryUpdater.Create(rducm->data, rducm->size, rducm->allocationIndex, rducm->allocOffset, rducm->copiesWithin);
 			}
