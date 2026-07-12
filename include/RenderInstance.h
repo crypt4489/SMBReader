@@ -45,6 +45,9 @@ namespace API
 	VkImageViewType ConvertImageTypeToVulkanImageViewType(ImageType imageType);
 
 	VkImageUsageFlags ConvertImageUsageFlagsToVulkanImageUsageFlags(ImageUsageFlags flags);
+
+	VkMemoryPropertyFlags ConvertMemoryTypeToVkMemoryPropertyFlags(MemoryType memType);
+
 }
 
 struct RenderInstanceCreateInfo
@@ -153,7 +156,7 @@ struct RenderInstance
 
 	int CreateImageView(int deviceSelection, int imageHandle, int firstMip, int mipCount, int firstLayer, int layerCount, ImageViewAspectMask imageAspect, ImageLayout desiredImageLayoutUsage);
 
-	int CreateImagePool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight, bool attachment);
+	int CreateImagePool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight, ImageUsageFlags usageFlags, MemoryType memType);
 
 	int CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo);
 
@@ -209,9 +212,6 @@ struct RenderInstance
 
 	int CreateSampler(int deviceSelection, uint32_t maxMipsLevel);
 
-	int CreateRSVMemoryPool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight);
-	int CreateDSVMemoryPool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight);
-
 	ImageFormat FindSupportedBackBufferColorFormat(int physicalDeviceIndex, int surfaceLevel, ImageFormat* requestedFormats, uint32_t requestSize);
 	ImageFormat FindSupportedDepthFormat(int deviceSelection, ImageFormat* requestedFormats, uint32_t requestSize);
 
@@ -240,9 +240,9 @@ struct RenderInstance
 	void PipelineUpdateIndirectCountBuffer(int pipelineIndex, int allocationIndex);
 	void PipelineUpdateDispatchCommands(int pipelineIndex, uint32_t x, uint32_t y, uint32_t z);
 
-	int CreateUniversalBuffer(int deviceSelection, size_t size, BufferType bufferMemoryType);
+	int CreateUniversalBuffer(int deviceSelection, size_t size, MemoryType bufferMemoryType);
 
-	void GetGPURequestedImageSizeAndAlignment(int deviceSelection, uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, size_t* actualImageSize, size_t* actualAlignment);
+	void GetGPURequestedImageSizeAndAlignment(int deviceSelection, uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, ImageUsageFlags usageFlags, size_t* actualImageSize, size_t* actualAlignment);
 
 	int CreateDescriptorHeap(int deviceSelection, DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxDescriptorSets, uint32_t maxShaderResourceSets);
 
@@ -289,6 +289,22 @@ struct RenderInstance
 	int CreateAttachmentImageView(int deviceSelection, int attachmentGraphInstance, int attachmentResourceIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout);
 
 	int CreateGPUCommandStream(int maxGPUCommandCount);
+
+	void CreateDriverSpecificBarrierArenas(int maxTextures, int maxAllocations);
+
+	void InsertAccumulatedBarriers(RecordingBufferObject* rcb, DriverSpecificBarrierAllocator* bufferBarriers, DriverSpecificBarrierAllocator* imageBarriers);
+	
+	void DeletePhysicalDevice(int physicalDeviceIndex);
+
+	void DeleteLogicalDevice(int logicalDeviceIndex);
+
+	void DeleteWindowSurface(int windowSurfaceIndex);
+
+	void DeleteSwapChain(int swapChainIndex);
+
+	void DeleteBufferHandle(int bufferHandleIndex);
+
+	void DeleteImagePools(int imagePoolIndex);
 	
 	static constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
@@ -304,7 +320,7 @@ struct RenderInstance
 
 	PoolAllocator<RenderBufferDescription> bufferHandles{};
 
-	PoolAllocator<EntryHandle> imagePools{};
+	PoolAllocator<ImagePoolDescription> imagePools{};
 
 	PoolAllocator<RenderPipelineDescription> pipelineInstancesIdentifier{};
 
@@ -361,6 +377,10 @@ struct RenderInstance
 	SlabAllocator* updateCommandBuffers[2];
 
 	Logger* internalRendererLogger;
+
+	DriverSpecificBarrierAllocator driverSpecificBufferBarriers{};
+
+	DriverSpecificBarrierAllocator driverSpecificImageBarriers{};
 
 	int currentUpdateCommandBuffer = 0;
 	uint32_t currentFrame = 0;

@@ -1087,7 +1087,10 @@ void CreateTexturePools()
 		int texturePoolHandle = 
 			rendInst.CreateImagePool(mainLogicalDevice,
 			requestedSize,
-			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, false
+			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, 
+				ImageUsageFlagBits::TRANSFER_SRC | ImageUsageFlagBits::TRANSFER_DEST
+				| ImageUsageFlagBits::SAMPLED | (i > 2 ? ImageUsageFlagBits::STORAGE : 0),
+				MemoryTypeBits::DEVICE_MEMORY_TYPE
 		);
 
 		if (texturePoolHandle < 0)
@@ -2337,7 +2340,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 				size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
 				GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
-					texture.width, texture.height, texture.miplevels, 1, format, &actualMemorySize, &actualMemoryAlignment
+					texture.width, texture.height, texture.miplevels, 1, format, ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST, &actualMemorySize, &actualMemoryAlignment
 				);
 
 				actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
@@ -2351,7 +2354,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 						1,
 						format,
 						ImageType::IMAGE_2D,
-						ImageUsageFlagBits::SAMPLED,
+						ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST,
 						poolIndex
 					);
 
@@ -3640,8 +3643,8 @@ void ApplicationLoop::InitializeRuntime()
 	size_t mainHostSize = 128 * MiB;
 	size_t mainDeviceSize = 64 * MiB;
 
-	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainDeviceSize, BufferType::DEVICE_MEMORY_TYPE);
-	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainHostSize, BufferType::HOST_MEMORY_TYPE);
+	mainDeviceBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainDeviceSize, MemoryTypeBits::DEVICE_MEMORY_TYPE);
+	mainHostBuffer = GlobalRenderer::gRenderInstance.CreateUniversalBuffer(mainLogicalDevice, mainHostSize, MemoryTypeBits::HOST_MEMORY_COHERENT_TYPE);
 
 	mainHostAllocator.dataAllocator = 0;
 	mainHostAllocator.dataSize = mainHostSize;
@@ -3658,9 +3661,19 @@ void ApplicationLoop::InitializeRuntime()
 
 	size_t mainRTVSize = 800 * MiB, mainDSVSize = 1024 * MiB;
 
-	mainRTVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainLogicalDevice, mainRTVSize, mainColorFormat, 4096, 4096);
+	mainRTVIndex = GlobalRenderer::gRenderInstance.CreateImagePool(
+		mainLogicalDevice, mainRTVSize, mainColorFormat, 4096, 4096,
+		ImageUsageFlagBits::TRANSFER_SRC | ImageUsageFlagBits::TRANSFER_DEST
+		| ImageUsageFlagBits::COLOR_ATTACHMENT,
+		MemoryTypeBits::DEVICE_MEMORY_TYPE
+		);
 
-	mainDSVIndex = GlobalRenderer::gRenderInstance.CreateRSVMemoryPool(mainLogicalDevice, mainDSVSize, mainDepthFormat, 4096, 4096);
+	mainDSVIndex = GlobalRenderer::gRenderInstance.CreateImagePool(
+		mainLogicalDevice, mainDSVSize, mainDepthFormat, 4096, 4096,
+		ImageUsageFlagBits::TRANSFER_SRC | ImageUsageFlagBits::TRANSFER_DEST|
+		ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::DEPTH_ATTACHMENT | 
+		ImageUsageFlagBits::STENCIL_ATTACHMENT,
+		MemoryTypeBits::DEVICE_MEMORY_TYPE);
 
 	mainRTVSlab.dataAllocator = 0;
 	mainRTVSlab.dataSize = mainRTVSize;
@@ -4539,7 +4552,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
 	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
-		details.width, details.height, details.miplevels, details.arrayLayers, details.type, &actualMemorySize, &actualMemoryAlignment
+		details.width, details.height, details.miplevels, details.arrayLayers, details.type, ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST, &actualMemorySize, &actualMemoryAlignment
 	);
 
 	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
@@ -4554,7 +4567,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 			6,
 			details.type,
 			ImageType::IMAGE_CUBE,
-			ImageUsageFlagBits::SAMPLED,
+			ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST,
 			poolIndex
 		);
 
@@ -4647,7 +4660,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 	size_t actualMemorySize = 0, actualMemoryAlignment = 0, actualMemoryAddress = 0;
 
 	GlobalRenderer::gRenderInstance.GetGPURequestedImageSizeAndAlignment(mainLogicalDevice,
-		details->width, details->height, details->miplevels, details->arrayLayers, details->type, &actualMemorySize, &actualMemoryAlignment
+		details->width, details->height, details->miplevels, details->arrayLayers, details->type, ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST, &actualMemorySize, &actualMemoryAlignment
 	);
 
 	actualMemoryAddress = perFormatAllocator->Allocate(actualMemorySize, actualMemoryAlignment);
@@ -4660,7 +4673,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 			details->arrayLayers,
 			details->type,
 			ImageType::IMAGE_2D,
-			ImageUsageFlagBits::SAMPLED,
+			ImageUsageFlagBits::SAMPLED | ImageUsageFlagBits::TRANSFER_DEST,
 			poolIndex
 		);
 

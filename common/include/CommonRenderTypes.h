@@ -503,11 +503,14 @@ constexpr float dx = 3.051851e-05f;
 constexpr float ax = 0.0009770395f;
 constexpr float bx = 0.0019550342f;
 
-enum BufferType
+enum MemoryTypeBits
 {
 	HOST_MEMORY_TYPE = 1,
 	DEVICE_MEMORY_TYPE = 2,
+	HOST_MEMORY_COHERENT_TYPE = 4,
 };
+
+typedef int MemoryType;
 
 enum BufferAlignmentType
 {

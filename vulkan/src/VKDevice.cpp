@@ -1140,70 +1140,7 @@ EntryHandle VKDevice::CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t
 	return fbIndex;
 }
 
-EntryHandle VKDevice::CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage)
-{
-	VkBuffer buffer;
-	VkDeviceMemory memory;
-	VkResult vkRes = VK_SUCCESS;
-
-	BufferAlloc* alloc = nullptr;
-
-	alloc = reinterpret_cast<BufferAlloc*>(AllocFromPerDeviceData(sizeof(BufferAlloc)));
-
-	if (!alloc)
-	{
-		AddDeviceErrorCode(DEVICE_STORAGE_EXHAUSTED, VK_RESULT_MAX_ENUM);
-		return EntryHandle();
-	}
-
-	int retCode =  VK::Utils::CreateBuffer(
-		device, gpu, allocSize,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
-		(coherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0), 
-		VK_SHARING_MODE_EXCLUSIVE, usage,
-		&buffer, &memory, &vkRes
-	);
-
-	if (retCode < 0)
-	{
-		int minorCode = 0;
-		switch (retCode)
-		{
-		case -1:
-			minorCode = DEVICE_VK_TYPE_BUFFER_FAILED;
-			break;
-		case -2:
-			minorCode = DEVICE_VK_TYPE_MEMORY_FAILED;
-			break;
-		case -3:
-			minorCode = DEVICE_VK_TYPE_BIND_MEMORY_FAILED;
-			break;
-		default:
-			break;
-		}
-		FreeFromPerDeviceData(alloc);
-		AddDeviceErrorCode(MINOR_CODE_PACK(minorCode) | DEVICE_VK_TYPE_CREATION_FAILED, vkRes);
-		return EntryHandle();
-	}
-
-	alloc->buffer = buffer;
-	alloc->memory = memory;
-
-	EntryHandle buffIndex = AddVkTypeToEntry(alloc, VulkBuffer);
-
-	if (buffIndex == EntryHandle())
-	{
-		AddDeviceErrorCode(DEVICE_HANDLE_ENTRIES_EXHAUSTION, VK_RESULT_MAX_ENUM);
-		vkFreeMemory(device, memory, nullptr);
-		vkDestroyBuffer(device, buffer, nullptr);
-		FreeFromPerDeviceData(alloc);
-	}
-
-	return buffIndex;
-}
-
-
-EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage)
+EntryHandle VKDevice::CreateBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps)
 {
 	VkBuffer buffer;
 	VkDeviceMemory memory;
@@ -1221,7 +1158,7 @@ EntryHandle VKDevice::CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFl
 
 	int retCode = VK::Utils::CreateBuffer(
 		device, gpu, allocSize,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_SHARING_MODE_EXCLUSIVE, usage,
+		memProps, VK_SHARING_MODE_EXCLUSIVE, usage,
 		&buffer, &memory, &vkRes
 	);
 
@@ -1267,7 +1204,7 @@ EntryHandle VKDevice::CreateImage(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount, size_t memAddr,
-	VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
+   VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex)
 {
 	VkResult vkRes = VK_SUCCESS;
 
@@ -3102,7 +3039,7 @@ void VKDevice::GetImageMemorySizeAndAlignment(
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount,
-	VkMemoryPropertyFlags memProps, VkImageLayout layout,
+	VkImageLayout layout,
 	VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType,
 	size_t* actualImageSize, size_t* alignment
 )

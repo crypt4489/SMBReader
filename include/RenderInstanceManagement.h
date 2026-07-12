@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <stdint.h>
+#include "allocator/AppAllocator.h"
 #include "CommonRenderTypes.h"
 #include "ShaderResourceSet.h"
 
@@ -814,7 +815,7 @@ struct RenderLogicalDeviceContainer
 struct RenderBufferDescription
 {
 	EntryHandle bufferHandle;
-	BufferType type;
+	MemoryType type;
 	int resourceStatus;
 };
 
@@ -860,4 +861,20 @@ struct GPUCommandStreamAllocator
 	int commandCount;
 	int maxCommandCount;
 	GPUCommand* commands;
+};
+
+struct DriverSpecificBarrierAllocator
+{
+	BarrierStage srcStage;
+	BarrierStage dstStage;
+	int barrierCount;
+	SlabAllocator* allocator;
+};
+
+struct ImagePoolDescription
+{
+	int generationCounter;
+	MemoryType imagePoolType;
+	EntryHandle imagePoolHandle;
+	size_t imagePoolSize;
 };

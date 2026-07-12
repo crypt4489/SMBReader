@@ -369,15 +369,13 @@ struct VKDevice
 
 	EntryHandle CreateFrameBuffer(EntryHandle* attachmentIndices, uint32_t attachmentsCount, EntryHandle renderPassIndex, VkExtent2D extent);
 
-	EntryHandle CreateHostBuffer(VkDeviceSize allocSize, bool coherent, VkBufferUsageFlags usage);
-
-	EntryHandle CreateDeviceBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage);
+	EntryHandle CreateBuffer(VkDeviceSize allocSize, VkBufferUsageFlags usage, VkMemoryPropertyFlags memProps);
 
 	EntryHandle CreateImage(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount, size_t memoryAddr,
-		VkMemoryPropertyFlags memProps, VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
+	    VkImageLayout layout, VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType, EntryHandle memIndex);
 /*
 	EntryHandle CreateImageHandle(
 		uint32_t width, uint32_t height, uint32_t layers,
@@ -631,7 +629,7 @@ struct VKDevice
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,
-		VkMemoryPropertyFlags memProps, VkImageLayout layout, 
+		VkImageLayout layout, 
 		VkImageTiling tiling, VkImageCreateFlags cflags, VkImageType imageType,
 		size_t* actualImageSize, size_t* alignment
 	);
