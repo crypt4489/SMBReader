@@ -107,16 +107,16 @@ Finish render instance based on minimum specs for both Vulkan and DX12
 - Fix all transfer/update command generation structures to be quicker and remove O(n) search (done).
 - Remove texture from vulkan layer and make the image views attachable to the render texture resource (done).
 - Make transitions and barrier view dependent and make it integrated so all subresources can be tracked (done). 
-- Create separate GPU command streams and have them be selectable for submission.
-- Finish logging and error tracking in shader resource binding.
+- Create separate GPU command streams and have them be selectable for submission (done).
+- integrate tlsf allocator into durable storage container (done).
+- Finish logging and error tracking in shader resource binding (done).
+- Create feature request system and make it so user can query features request (while also maintaining minimum viable feature request for this layer) (done).
+- setup batching for barriers in global sense (done).
 - Add destructor functions for various different handle creation and make use of the pool allocators.
 - Accurately handle fallback and failure designations at all levels.
 - Separate all vulkan specific functions or things that need to know it's using vulkan to separate file with compile type linking.
-- Create feature request system and make it so user can query features request (while also maintaining minimum viable feature request for this layer) 
 - Make robust all bounds checking, add failure designation to all possible failure (including integration with new vulkan failure designation and error handling)
 - remove any stl crap
-- integrate tlsf allocator into durable storage container
-- setup batching for barriers in global sense
 
 Finish app level architecture
 - Finish OS systems in windows and remove bad design decisions
