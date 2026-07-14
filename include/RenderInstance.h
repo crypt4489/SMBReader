@@ -84,6 +84,7 @@ struct RenderInstanceCreateInfo
 	uint32_t numberOfResourceUpdateAllocations;
 	uint32_t numberOfDriverDeviceAllocations;
 	uint32_t numberOfImageMemoryAllocations;
+	uint32_t maxConcurrentRecordings;
 	OSFileHandle internalRendererHandle;
 };
 
@@ -140,11 +141,11 @@ struct RenderInstance
 
 	void UploadDescriptorsUpdates(int deviceSelection);
 
-	void InvokeTransferCommands(int deviceSelection, RecordingBufferObject* rbo);
+	void InvokeTransferCommands(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum);
 
-	void UploadImageMemoryTransfers(int deviceSelection, RecordingBufferObject* rbo);
+	void UploadImageMemoryTransfers(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum);
 
-	void UploadDeviceLocalTransfers(int deviceSelection, RecordingBufferObject* rbo);
+	void UploadDeviceLocalTransfers(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum);
 
 	int GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
@@ -182,9 +183,9 @@ struct RenderInstance
 
 	EntryHandle CreateShaderResourceSet(ShaderResourceManager* descriptorManager, int deviceSelection, int descriptorSet);
 
-	void GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount);
+	void GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount, BarrierAccumulator* accumulator, int pipelineIndex);
 
-	void GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* pipelineHandle);
+	void GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* pipelineHandle, BarrierAccumulator* accumulator);
 
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
@@ -266,15 +267,15 @@ struct RenderInstance
 
 	void InitializeResourceStatus(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts, BarrierAction action, BarrierStage stage, ImageLayout imageLayout);
 
-	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator, int pipelineIndex);
 
 	void TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, EntryHandle imageIndex, int mipStart, int mipCount, int totalMipCount, int layerStart, int layerCount,
 		ImageViewAspectMask mask, ImageLayout requestedLayout, ResourceStatus* status,
-		BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+		BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator, int pipelineIndex);
 
-	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header);
+	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header, int pipelineIndex, BarrierAccumulator* accumulator);
 
-	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction);
+	void InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator);
 
 	int CreateAttachmentImage(
 		uint32_t width, uint32_t height,
@@ -290,9 +291,19 @@ struct RenderInstance
 
 	int CreateGPUCommandStream(int maxGPUCommandCount);
 
-	void CreateDriverSpecificBarrierArenas(int maxTextures, int maxAllocations);
+	void CreateDriverSpecificBarrierArenas(BarrierAccumulator* barrierAccumulator, int maxTextures, int maxAllocations);
 
-	void InsertAccumulatedBarriers(RecordingBufferObject* rcb, DriverSpecificBarrierAllocator* bufferBarriers, DriverSpecificBarrierAllocator* imageBarriers);
+	void InsertAccumulatedBarriers(RecordingBufferObject* rcb, BarrierAccumulator* accumulator);
+
+	uint32_t PopBarrierAccumulator();
+
+	void ReturnBarrierAccumulator(uint32_t returnIndex);
+
+	IntraPassBarrier* GetIntraPassBarrier(BarrierAccumulator* accum, BarrierType type, int pipelineIndex, void* driverBarrierData);
+
+	void InsertIntraPassBarrier(RecordingBufferObject* rbo, BarrierAccumulator* accum, int pipelineIndex);
+
+	void ResetIntraBarrierAccumulator(BarrierAccumulator* accumulator);
 	
 	void DeletePhysicalDevice(int physicalDeviceIndex);
 
@@ -378,9 +389,12 @@ struct RenderInstance
 
 	Logger* internalRendererLogger;
 
-	DriverSpecificBarrierAllocator driverSpecificBufferBarriers{};
+	uint32_t* barriersQueue = nullptr;
 
-	DriverSpecificBarrierAllocator driverSpecificImageBarriers{};
+	BarrierAccumulator* barrierAccumulators = nullptr;
+
+	uint32_t maxBarrierAccumulationCount = 0;
+	uint32_t currentBarrierAccumulationTop = 0;
 
 	int currentUpdateCommandBuffer = 0;
 	uint32_t currentFrame = 0;

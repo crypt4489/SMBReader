@@ -3558,6 +3558,7 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxSwapChains = 1;
 	riCreateInfo.maxGPUS = 1;
 	riCreateInfo.maxLogicalDevices = 1;
+	riCreateInfo.maxConcurrentRecordings = 1;
 
 	OSGetSTDOutput(&riCreateInfo.internalRendererHandle);
 

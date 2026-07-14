@@ -619,3 +619,10 @@ enum ImageUsageFlagBits
 	TRANSIENT_ATTACHMENT = 128,
 };
 
+
+enum class BarrierType
+{
+	NULL_BARRIER = 0,
+	BUFFER_BARRIER = 1,
+	IMAGE_BARRIER = 2,
+};

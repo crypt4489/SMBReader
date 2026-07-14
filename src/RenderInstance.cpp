@@ -724,25 +724,88 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, Alloca
 	maxLogicalDevices = info->maxLogicalDevices;
 	maxPhysicalDevices = info->maxGPUS;
 
-	CreateDriverSpecificBarrierArenas(info->maxTextureHandles, info->maxAllocations);
+	barriersQueue = (uint32_t*)storageAllocator->Allocate(sizeof(uint32_t) * info->maxConcurrentRecordings);
+
+	barrierAccumulators = (BarrierAccumulator*)storageAllocator->Allocate(sizeof(BarrierAccumulator) * info->maxConcurrentRecordings);
+
+	maxBarrierAccumulationCount = info->maxConcurrentRecordings;
+
+	currentBarrierAccumulationTop = 0;
+
+	for (uint32_t i = 0; i < info->maxConcurrentRecordings; i++)
+	{
+		CreateDriverSpecificBarrierArenas(&barrierAccumulators[i], info->maxTextureHandles, info->maxAllocations);
+		barriersQueue[i] = i;
+	}
 
 	return;
 }
 
 #define MAX_MIPS_FOR_BARRIER 16
-#define MAX_ARRAYS_FOR_BARRIER 16
+#define MAX_ARRAYS_FOR_BARRIER 8
 
-void RenderInstance::CreateDriverSpecificBarrierArenas(int maxTextures, int maxAllocations)
+void RenderInstance::CreateDriverSpecificBarrierArenas(BarrierAccumulator* barrierAccumulator, int maxTextures, int maxAllocations)
 {
-	driverSpecificBufferBarriers.allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
-	driverSpecificImageBarriers.allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
+	barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
+	barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
 
 	int imageSize = (sizeof(VkImageMemoryBarrier) * MAX_ARRAYS_FOR_BARRIER * MAX_MIPS_FOR_BARRIER * maxTextures) + sizeof(BarrierStage) * 2;
 
 	int bufferSize = (sizeof(VkBufferMemoryBarrier) * maxAllocations) + sizeof(BarrierStage) * 2;
 
-	std::construct_at(driverSpecificImageBarriers.allocator, storageAllocator->Allocate(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
-	std::construct_at(driverSpecificBufferBarriers.allocator, storageAllocator->Allocate(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
+	barrierAccumulator->intraPassCount = 0;
+	barrierAccumulator->intraPassTop = 0;
+
+	std::construct_at(barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
+	std::construct_at(barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
+	std::construct_at(&barrierAccumulator->intraPassBarrierAllocator, storageAllocator->Allocate(12 * KiB, alignof(VkBufferMemoryBarrier)), 12 * KiB);
+
+	for (int i = 0; i < MAX_INTRA_PASS_BARRIERS; i++)
+	{
+		barrierAccumulator->intraPassBarriers[i].pipelineInst = -1;
+		barrierAccumulator->intraPassBarriers[i].barrierType = BarrierType::NULL_BARRIER;
+		barrierAccumulator->intraPassBarriers[i].barrierCount = 0;
+	}
+
+	barrierAccumulator->intraPassCount = 0;
+	barrierAccumulator->intraPassTop = 0;
+	barrierAccumulator->intraPassBarrierAllocator.Reset();
+}
+
+uint32_t RenderInstance::PopBarrierAccumulator()
+{
+	if (currentBarrierAccumulationTop == maxBarrierAccumulationCount)
+		return ~0;
+
+	uint32_t barrierAccumIndex = barriersQueue[currentBarrierAccumulationTop++];
+
+	BarrierAccumulator* barrierAccumulator = &barrierAccumulators[barrierAccumIndex];
+
+	ResetIntraBarrierAccumulator(barrierAccumulator);
+
+	return barrierAccumIndex;
+}
+
+void RenderInstance::ResetIntraBarrierAccumulator(BarrierAccumulator* accumulator)
+{
+	for (int i = 0; i < accumulator->intraPassCount; i++)
+	{
+		accumulator->intraPassBarriers[i].pipelineInst = -1;
+		accumulator->intraPassBarriers[i].barrierType = BarrierType::NULL_BARRIER;
+		accumulator->intraPassBarriers[i].barrierCount = 0;
+	}
+
+	accumulator->intraPassCount = 0;
+	accumulator->intraPassTop = 0;
+	accumulator->intraPassBarrierAllocator.Reset();
+}
+
+void RenderInstance::ReturnBarrierAccumulator(uint32_t returnIndex)
+{
+	if (currentBarrierAccumulationTop == 0)
+		return;
+
+	barriersQueue[--currentBarrierAccumulationTop] = returnIndex;
 }
 
 RenderInstance::~RenderInstance()
@@ -2417,7 +2480,7 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 	}
 }
 
-void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBufferObject* rbo)
+void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum)
 {
 	int memCount = imageMemoryUpdateManager.linkCount;
 
@@ -2454,11 +2517,11 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 		TransitionImageLayout(dev, rbo, handle, region->mipStart, region->mipLevels,
 			desc->mipLayers, region->layerStart, region->layerCount,
 			region->transferMask, ImageLayout::TRANSFER_DEST_OPTIMAL,
-			resourceStatus, TRANSFER_BARRIER, TRANSFER_WRITE_DATA_RESOURCE);
+			resourceStatus, TRANSFER_BARRIER, TRANSFER_WRITE_DATA_RESOURCE, accum, -1);
 
 	}
 
-	InsertAccumulatedBarriers(rbo, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+	InsertAccumulatedBarriers(rbo, accum);
 
 	for (int i = 0; i < regionCount; i++)
 	{
@@ -2491,7 +2554,7 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 }
 
 
-void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBufferObject* rbo)
+void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum)
 {
 	int memCount = driverDeviceMemoryUpdater.linkCount;
 
@@ -2552,13 +2615,13 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 
 		EntryHandle index = bufferHandles[bufferHandle].bufferHandle;
 
-		InsertBufferBarrier(dev, rbo, handle, BarrierStageBits::TRANSFER_BARRIER, BarrierActionBits::TRANSFER_WRITE_DATA_RESOURCE);
+		InsertBufferBarrier(dev, rbo, handle, BarrierStageBits::TRANSFER_BARRIER, BarrierActionBits::TRANSFER_WRITE_DATA_RESOURCE, accum);
 	
 		if (index != previousBuffer)
 		{
 			if (previousBuffer != EntryHandle())
 			{
-				InsertAccumulatedBarriers(rbo, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+				InsertAccumulatedBarriers(rbo, accum);
 				cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
 				dev->WriteToDeviceBufferBatch(previousBuffer, deviceContainer->stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 			}
@@ -2576,14 +2639,14 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 		batchCounter++;
 	}
 
-	InsertAccumulatedBarriers(rbo, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+	InsertAccumulatedBarriers(rbo, accum);
 
 	cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
 
 	dev->WriteToDeviceBufferBatch(previousBuffer, deviceContainer->stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 }
 
-void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBufferObject* rbo)
+void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum)
 {
 	int memCount = transferCommandPool.linkCount;
 
@@ -3804,15 +3867,19 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 	UploadDescriptorsUpdates(deviceSelection);
 
+	uint32_t accumulatorIndex = PopBarrierAccumulator();
+
+	BarrierAccumulator* accumulator = &barrierAccumulators[accumulatorIndex];
+
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 	rcb.ResetQueries(deviceContainer->queryPoolIndex, deviceContainer->maxQueryResults * currentFrame, deviceContainer->maxQueryResults);
 
-	UploadDeviceLocalTransfers(deviceSelection, &rcb);
+	UploadDeviceLocalTransfers(deviceSelection, &rcb, accumulator);
 
-	InvokeTransferCommands(deviceSelection, &rcb);
+	InvokeTransferCommands(deviceSelection, &rcb, accumulator);
 
-	UploadImageMemoryTransfers(deviceSelection, &rcb);
+	UploadImageMemoryTransfers(deviceSelection, &rcb, accumulator);
 
 	int commandCountIter = 0;
 
@@ -3834,14 +3901,23 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 			for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
 			{
-				PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
+				int pipelineIndex = queue->pipelines[pipeInst];
+
+				PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
+
+				GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount, accumulator, pipelineIndex);
+			}
+
+			InsertAccumulatedBarriers(&rcb, accumulator);
+
+			for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
+			{
+				int pipelineIndex = queue->pipelines[pipeInst];
+
+				PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 				EntryHandle pipelineTemp = pipelineInstancesIdentifier[handle->pipelineIdentifierGroup].pipelineIndices[0];
-
-				GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
 			
-				InsertAccumulatedBarriers(&rcb, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
-
 				rcb.BindComputePipeline(pipelineTemp);
 
 				for (uint32_t ii = 0; ii < handle->resourceSetCount; ii++)
@@ -3868,9 +3944,13 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 					ii++;
 				}
 
+				InsertIntraPassBarrier(&rcb, accumulator, pipelineIndex);
+
 				rcb.DispatchCommand(handle->x, handle->y, handle->z);
 
 			}
+
+			ResetIntraBarrierAccumulator(accumulator);
 			
 			rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
@@ -3897,8 +3977,8 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 				int absoluteRenderTargetIndex = currentGraphInstance->consecutiveRenderTargetsBase + renderTargetPerPassBase + sampleLevelForRenderPass;
 
 				RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRenderTargetIndex]);
-#define MAX_ATTACHMENT_INSTANCE 10
-				VkClearValue clears[MAX_ATTACHMENT_INSTANCE];
+
+				VkClearValue* clears = (VkClearValue*)cacheAllocator->Allocate(sizeof(VkClearValue) * rpInst->attachInstCount);
 
 				AttachmentInstance* instances = rpInst->attachInst;
 
@@ -3932,14 +4012,16 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 					for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
 					{
-						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
+						int pipelineIndex = queue->pipelines[pipeInst];
 
-						GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount);
+						PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
-						GenerateDrawBindingsBarriers(deviceSelection, &rcb, handle);
+						GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount, accumulator, pipelineIndex);
+
+						GenerateDrawBindingsBarriers(deviceSelection, &rcb, handle, accumulator);
 					}
 
-					InsertAccumulatedBarriers(&rcb, &driverSpecificBufferBarriers, &driverSpecificImageBarriers);
+					InsertAccumulatedBarriers(&rcb, accumulator);
 				}
 
 				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], SubRenderTargetSelection, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} }, clears, clearCount);
@@ -3958,7 +4040,9 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 					for (uint32_t pipeInst = 0; pipeInst < queue->queueCount; pipeInst++)
 					{
-						PipelineHandle* handle = pipelineHandles.Get(queue->pipelines[pipeInst]);
+						int pipelineIndex = queue->pipelines[pipeInst];
+
+						PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 						PipelineInstanceData* pid = &pipelineInstancesIdentifier.Get(handle->pipelineIdentifierGroup)->instanceData;
 
@@ -4119,6 +4203,8 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 				rcb.EndRenderPassCommand();
 
+				ResetIntraBarrierAccumulator(accumulator);
+
 				rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 			
 				queryCountIndex += 2;
@@ -4129,6 +4215,8 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 	}
 
 	deviceContainer->queryCounts[currentFrame] = (queryCountIndex - queryCountBaseIndex);
+
+	ReturnBarrierAccumulator(accumulatorIndex);
 
 	rcb.EndRecordingCommand();
 }
@@ -4314,7 +4402,6 @@ void RenderInstance::AddPipelineToComputeQueue(int queueIndex, int psoIndex)
 
 	queue->pipelines[queue->queueCount++] = psoIndex;
 }
-
 
 void RenderInstance::ReadData(int deviceSelection, int handle, void* dest, int size, int offset)
 {
@@ -4811,7 +4898,7 @@ int RenderInstance::CreateDescriptorHeap(int deviceSelection, DescriptorTypes* t
 	return descriptorManagerIndex;
 }
 
-void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount)
+void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount, BarrierAccumulator* accumulator, int pipelineIndex)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -4846,7 +4933,7 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 
 					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
 
-					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE);
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE, accumulator, pipelineIndex);
 				}
 				break;
 			}
@@ -4862,7 +4949,7 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 
 					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
 
-					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE);
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, ConvertShaderStageToBarrierStage(header->stage), READ_SHADER_RESOURCE, accumulator, pipelineIndex);
 				}
 				break;
 			}
@@ -4878,7 +4965,7 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 
 					int viewIndex = imageBarrier->textureDetails[imageIndex].viewIndex;
 
-					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE);
+					TransitionImageLayout(dev, rcb, currImageIndex, viewIndex, COMPUTE_BARRIER, WRITE_SHADER_RESOURCE, accumulator, pipelineIndex);
 				}
 				break;
 			}
@@ -4894,7 +4981,7 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 				{
 					int allocationIndex = bufferBarrier->allocationIndex[g];
 
-					InsertBufferBarrier(dev, rcb, allocationIndex, ConvertShaderStageToBarrierStage(header->stage), header);
+					InsertBufferBarrier(dev, rcb, allocationIndex, ConvertShaderStageToBarrierStage(header->stage), header, pipelineIndex, accumulator);
 				}
 				break;
 			}
@@ -4903,29 +4990,29 @@ void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, Rec
 	}
 }
 
-void RenderInstance::InsertAccumulatedBarriers(RecordingBufferObject* rcb, DriverSpecificBarrierAllocator* bufferBarriers, DriverSpecificBarrierAllocator* imageBarriers)
+void RenderInstance::InsertAccumulatedBarriers(RecordingBufferObject* rcb, BarrierAccumulator* accumulator)
 {
 	RBOPipelineBarrierArgs args{};
 	bool insert = false;
 
-	if (imageBarriers->barrierCount)
+	if (accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].barrierCount)
 	{
-		args.srcStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(imageBarriers->srcStage);
-		args.dstStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(imageBarriers->dstStage);
+		args.srcStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].srcStage);
+		args.dstStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].dstStage);
 
-		args.imageMemoryBarrierCount = imageBarriers->barrierCount;
-		args.pImageMemoryBarriers = (VkImageMemoryBarrier*)imageBarriers->allocator->dataHead;
+		args.imageMemoryBarrierCount = accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].barrierCount;
+		args.pImageMemoryBarriers = (VkImageMemoryBarrier*)accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator->dataHead;
 
 		insert = true;
 	}
 
-	if (bufferBarriers->barrierCount)
+	if (accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].barrierCount)
 	{
-		args.srcStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(bufferBarriers->srcStage);
-		args.dstStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(bufferBarriers->dstStage);
+		args.srcStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].srcStage);
+		args.dstStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].dstStage);
 
-		args.bufferMemoryBarrierCount = bufferBarriers->barrierCount;
-		args.pBufferMemoryBarriers = (VkBufferMemoryBarrier*)bufferBarriers->allocator->dataHead;
+		args.bufferMemoryBarrierCount = accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].barrierCount;
+		args.pBufferMemoryBarriers = (VkBufferMemoryBarrier*)accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator->dataHead;
 
 		insert = true;
 	}
@@ -4934,33 +5021,33 @@ void RenderInstance::InsertAccumulatedBarriers(RecordingBufferObject* rcb, Drive
 	{
 		rcb->BindPipelineBarrierCommand(&args);
 
-		bufferBarriers->barrierCount = bufferBarriers->dstStage = bufferBarriers->srcStage = 0;
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].barrierCount = accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].dstStage = accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].srcStage = 0;
 
-		bufferBarriers->allocator->Reset();
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator->Reset();
 
-		imageBarriers->barrierCount = imageBarriers->srcStage = imageBarriers->dstStage = 0;
+		accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].barrierCount = accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].srcStage = accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].dstStage = 0;
 
-		imageBarriers->allocator->Reset();
+		accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator->Reset();
 	}
 }
 
-void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle)
+void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle, BarrierAccumulator* accumulator)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
 	if (handle->vertexBufferHandle != -1)
-		InsertBufferBarrier(dev, rcb, handle->vertexBufferHandle, BarrierStageBits::VERTEX_INPUT_BARRIER, BarrierActionBits::READ_VERTEX_INPUT);
+		InsertBufferBarrier(dev, rcb, handle->vertexBufferHandle, BarrierStageBits::VERTEX_INPUT_BARRIER, BarrierActionBits::READ_VERTEX_INPUT, accumulator);
 
 	if (handle->indirectBufferHandle != -1)
-		InsertBufferBarrier(dev, rcb, handle->indirectBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND);
+		InsertBufferBarrier(dev, rcb, handle->indirectBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND, accumulator);
 
 	if (handle->indirectCountBufferHandle != -1)
-		InsertBufferBarrier(dev, rcb, handle->indirectCountBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND);
+		InsertBufferBarrier(dev, rcb, handle->indirectCountBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND, accumulator);
 }
 
-void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator, int pipelineIndex)
 {
 	RenderTextureDescription* desc = textureResourceHandles.Get(imageIndex);
 
@@ -4979,12 +5066,12 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 	int viewLayerCount = viewDesc->layerCount;
 	int totalLayerCount = desc->arrayLayers;
 
-	TransitionImageLayout(dev, rcb, desc->textureIndex, viewMipStart, viewMipCount, totalMipCount, viewLayerStart, viewLayerCount, viewDesc->mask, viewDesc->desiredLayoutForView, status, destBarrierStage, destBarrierAction);
+	TransitionImageLayout(dev, rcb, desc->textureIndex, viewMipStart, viewMipCount, totalMipCount, viewLayerStart, viewLayerCount, viewDesc->mask, viewDesc->desiredLayoutForView, status, destBarrierStage, destBarrierAction, accumulator, pipelineIndex);
 }
 
 void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, EntryHandle imageIndex, int mipStart, int mipCount, int totalMipCount, int layerStart, int layerCount,
 	ImageViewAspectMask mask, ImageLayout requestedLayout, ResourceStatus* status,
-	BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+	BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator, int pipelineIndex)
 {
 	VkImageMemoryBarrier barrier{};
 
@@ -5130,34 +5217,70 @@ void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject*
 					break;
 			}
 
-			VkImageMemoryBarrier* currentBarrier = (VkImageMemoryBarrier*)driverSpecificImageBarriers.allocator->Allocate(sizeof(VkImageMemoryBarrier));
+			VkImageMemoryBarrier* currentBarrier = nullptr;
+			
+			if (destBarrierStage & curr->stages)
+			{
+				currentBarrier = (VkImageMemoryBarrier*)accumulator->intraPassBarrierAllocator.Allocate(sizeof(VkImageMemoryBarrier));
+				
+				IntraPassBarrier* intraBarrier = GetIntraPassBarrier(accumulator, BarrierType::IMAGE_BARRIER, pipelineIndex, currentBarrier);
+
+				intraBarrier->destStage |= destBarrierStage;
+				intraBarrier->srcStage |= curr->stages;
+				intraBarrier->barrierCount++;
+			}
+			else
+			{
+				currentBarrier = (VkImageMemoryBarrier*)accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator->Allocate(sizeof(VkImageMemoryBarrier));
+
+				accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].srcStage |= curr->stages;
+				accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].dstStage |= destBarrierStage;
+				accumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].barrierCount++;
+			}
 
 			*currentBarrier = barrier;
 
 			currentBarrier->oldLayout = API::ConvertImageLayoutToVulkanImageLayout(curr->layout);
 			currentBarrier->srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(curr->actions);
-
 			currentBarrier->subresourceRange.baseMipLevel = trackedMipStart;
 			currentBarrier->subresourceRange.levelCount = trackedMipCount;
 			currentBarrier->subresourceRange.baseArrayLayer = trackedLayerStart;
 			currentBarrier->subresourceRange.layerCount = trackedLayerCount;
-
-			driverSpecificImageBarriers.srcStage |= curr->stages;
-			driverSpecificImageBarriers.dstStage |= destBarrierStage;
-			driverSpecificImageBarriers.barrierCount++;
 
 			curr = curr->nextInLevel;
 		}
 	}
 }
 
-void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header)
+IntraPassBarrier* RenderInstance::GetIntraPassBarrier(BarrierAccumulator* accum, BarrierType type, int pipelineIndex, void* driverBarrierData)
+{
+	int topIndex = RENDER_MAX(accum->intraPassCount - 1, 0);
+
+	IntraPassBarrier* intraPassBarrier = &accum->intraPassBarriers[topIndex];
+
+	if (intraPassBarrier->pipelineInst != pipelineIndex || intraPassBarrier->barrierType != type)
+	{
+		intraPassBarrier = &accum->intraPassBarriers[accum->intraPassCount++];
+		intraPassBarrier->pipelineInst = pipelineIndex;
+		intraPassBarrier->barrierType = type;
+		intraPassBarrier->barrierCount = 0;
+		intraPassBarrier->driverSpecificBarriers = driverBarrierData;
+		intraPassBarrier->destStage = 0;
+		intraPassBarrier->srcStage = 0;
+	}
+
+	return intraPassBarrier;
+}
+
+void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, ShaderResourceHeader* header, int pipelineIndex, BarrierAccumulator* accumulator)
 {
 	size_t size = 0, offset = 0, align = 0;
 
 	int memIndex = -1, resourceStatusIndex = -1, bufferLastAccessFrame = 0;
 
 	AllocationType allocType;
+
+	VkBufferMemoryBarrier* vkBarrier = nullptr;
 
 	RenderAllocation* alloc = allocations.Get(allocationIndex);
 
@@ -5170,9 +5293,13 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 	if (allocType == AllocationType::PERFRAME)
 		bufferLastAccessFrame = currentFrame;
 
-	if ((status->currAction[bufferLastAccessFrame] & (BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::READ_UNIFORM_BUFFER))
+	if 
+	(
+		(status->currAction[bufferLastAccessFrame] & (BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::READ_UNIFORM_BUFFER))
+		&& !(status->currAction[bufferLastAccessFrame] & BarrierActionBits::WRITE_SHADER_RESOURCE)
 		&& (header->action == ShaderResourceAction::SHADERREAD)
-		&& (status->currStage[bufferLastAccessFrame] == destBarrierStage))
+		&& (status->currStage[bufferLastAccessFrame] & destBarrierStage)
+	)
 	{
 		return;
 	}
@@ -5192,49 +5319,45 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 		offset += (currentFrame * strideSize);
 	}
 
-	VkBufferMemoryBarrier* vkBarrier = (VkBufferMemoryBarrier*)driverSpecificBufferBarriers.allocator->Allocate(sizeof(VkBufferMemoryBarrier));
+	if (destBarrierStage & status->currStage[bufferLastAccessFrame])
+	{
+		vkBarrier = (VkBufferMemoryBarrier*)accumulator->intraPassBarrierAllocator.Allocate(sizeof(VkBufferMemoryBarrier));
 
-	driverSpecificBufferBarriers.barrierCount++;
+		IntraPassBarrier* intraBarrier = GetIntraPassBarrier(accumulator, BarrierType::BUFFER_BARRIER, pipelineIndex, vkBarrier);
 
-	driverSpecificBufferBarriers.srcStage |= status->currStage[bufferLastAccessFrame];
-	driverSpecificBufferBarriers.dstStage |= destBarrierStage;
+		intraBarrier->destStage |= destBarrierStage;
+		intraBarrier->srcStage |= status->currStage[bufferLastAccessFrame];
+		intraBarrier->barrierCount++;
+	}
+	else
+	{
+		vkBarrier = (VkBufferMemoryBarrier*)accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator->Allocate(sizeof(VkBufferMemoryBarrier));
+
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].srcStage |= status->currStage[bufferLastAccessFrame];
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].dstStage |= destBarrierStage;
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].barrierCount++;
+	}
 
 	VkBuffer buffer = dev->GetBufferHandle(bufferHandles[memIndex].bufferHandle);
-
-	vkBarrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-	vkBarrier->pNext = nullptr;
-	vkBarrier->srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
 
 	BarrierAction newAction = 0;
 
 	if (header->type == ShaderResourceType::UNIFORM_BUFFER)
-	{
 		newAction = BarrierActionBits::READ_UNIFORM_BUFFER;
-		vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
-		status->currAction[bufferLastAccessFrame] = newAction;
-	}
 	else
 	{
 		if (header->action == ShaderResourceAction::SHADERWRITE)
-		{
 			newAction = BarrierActionBits::WRITE_SHADER_RESOURCE;
-			vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
-			status->currAction[bufferLastAccessFrame] = newAction;
-		}
 		else if (header->action == ShaderResourceAction::SHADERREADWRITE)
-		{
 			newAction = BarrierActionBits::READ_SHADER_RESOURCE | BarrierActionBits::WRITE_SHADER_RESOURCE;
-			vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
-			status->currAction[bufferLastAccessFrame] = newAction;
-		}
 		else
-		{
 			newAction = BarrierActionBits::READ_SHADER_RESOURCE;
-			vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
-			status->currAction[bufferLastAccessFrame] = newAction;
-		}
 	}
 
+	vkBarrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	vkBarrier->pNext = nullptr;
+	vkBarrier->srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
+	vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
 	vkBarrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	vkBarrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	vkBarrier->buffer = buffer;
@@ -5242,9 +5365,10 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 	vkBarrier->size = size;
 
 	status->currStage[bufferLastAccessFrame] = destBarrierStage;
+	status->currAction[bufferLastAccessFrame] = newAction;
 }
 
-void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction)
+void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* rcb, int allocationIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator)
 {
 	RenderAllocation* bufferAlloc = allocations.Get(allocationIndex);
 
@@ -5277,7 +5401,7 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 			bufferBaseOffset += perFrameBufferOffset;
 		}
 
-		VkBufferMemoryBarrier* vkBarrier = (VkBufferMemoryBarrier*)driverSpecificBufferBarriers.allocator->Allocate(sizeof(VkBufferMemoryBarrier));
+		VkBufferMemoryBarrier* vkBarrier = (VkBufferMemoryBarrier*)accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator->Allocate(sizeof(VkBufferMemoryBarrier));
 
 		VkBuffer buffer = dev->GetBufferHandle(bufferHandles[bufferIndex].bufferHandle);
 
@@ -5291,10 +5415,43 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 		vkBarrier->offset = bufferBaseOffset;
 		vkBarrier->size = bufferSize;
 
-		driverSpecificBufferBarriers.srcStage |= status->currStage[resourceIndexToUpdate];
-		driverSpecificBufferBarriers.dstStage |= destBarrierStage;
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].srcStage |= status->currStage[resourceIndexToUpdate];
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].dstStage |= destBarrierStage;
 
 		status->currAction[resourceIndexToUpdate] = destBarrierAction;
 		status->currStage[resourceIndexToUpdate] = destBarrierStage;
+	}
+}
+
+void RenderInstance::InsertIntraPassBarrier(RecordingBufferObject* rbo, BarrierAccumulator* accum, int pipelineIndex)
+{
+	if (accum->intraPassTop == accum->intraPassCount)
+		return;
+
+	IntraPassBarrier* ipb = &accum->intraPassBarriers[accum->intraPassTop];
+
+	while(accum->intraPassTop < accum->intraPassCount && ipb->pipelineInst == pipelineIndex)
+	{
+		RBOPipelineBarrierArgs args{};
+		args.srcStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(ipb->srcStage);
+		args.dstStageMask |= API::ConvertBarrierStageToVulkanPipelineStage(ipb->destStage);
+
+		if (ipb->barrierType == BarrierType::IMAGE_BARRIER)
+		{
+			args.imageMemoryBarrierCount = ipb->barrierCount;
+			args.pImageMemoryBarriers = (VkImageMemoryBarrier*)ipb->driverSpecificBarriers;
+
+		} 
+		else if (ipb->barrierType == BarrierType::BUFFER_BARRIER)
+		{
+			args.bufferMemoryBarrierCount = ipb->barrierCount;
+			args.pBufferMemoryBarriers = (VkBufferMemoryBarrier*)ipb->driverSpecificBarriers;
+		}
+	
+		rbo->BindPipelineBarrierCommand(&args);
+
+		accum->intraPassTop++;
+
+		ipb = &accum->intraPassBarriers[accum->intraPassTop];
 	}
 }

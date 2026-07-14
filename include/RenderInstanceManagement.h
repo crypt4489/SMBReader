@@ -871,6 +871,32 @@ struct DriverSpecificBarrierAllocator
 	SlabAllocator* allocator;
 };
 
+struct IntraPassBarrier
+{
+	int pipelineInst;
+	BarrierType barrierType;
+	BarrierStage srcStage;
+	BarrierStage destStage;
+	uint32_t barrierCount;
+	uint32_t pad1;
+	void* driverSpecificBarriers;
+};
+
+#define MAX_INTRA_PASS_BARRIERS 64
+
+#define BUFFER_BARRIER_ACCUMULATOR 0
+#define IMAGE_BARRIER_ACCUMULATOR 1
+#define TOTAL_BARRIER_ACCUMULATORS 2
+
+struct BarrierAccumulator
+{
+	DriverSpecificBarrierAllocator accumulators[TOTAL_BARRIER_ACCUMULATORS];
+	SlabAllocator intraPassBarrierAllocator;
+	IntraPassBarrier intraPassBarriers[MAX_INTRA_PASS_BARRIERS];
+	int intraPassCount;
+	int intraPassTop;
+};
+
 struct ImagePoolDescription
 {
 	int generationCounter;
