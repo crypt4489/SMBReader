@@ -165,7 +165,7 @@ struct RenderInstance
 
 	uint32_t GetSwapChainWidth(int swapChainIndex);
 
-	int CreateGraphicsPipelineObject(int deviceSelection, GraphicsIntermediaryPipelineInfo *info, bool addToGraph);
+	int CreateGraphicsPipelineObject(int deviceSelection, GraphicsIntermediaryPipelineInfo *info);
 
 	int CreateComputePipelineObject(int deviceSelection, ComputeIntermediaryPipelineInfo* info);
 

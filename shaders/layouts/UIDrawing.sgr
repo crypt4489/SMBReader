@@ -1,0 +1,15 @@
+<ShaderGraph>
+	<GLSLShader type="vert">
+		UIVertexShader.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		UIPixelShader.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="v" size="12" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>
+

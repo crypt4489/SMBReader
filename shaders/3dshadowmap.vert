@@ -66,8 +66,6 @@ struct MeshDetails
     vec4 sphere;
 };
 
-
-
 layout(set = 0, binding = 0) readonly buffer PMBuffer {
     MeshDetails objects[];
 } perModelBuffer;

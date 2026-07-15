@@ -3763,7 +3763,7 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 	return handle;
 }
 
-int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIntermediaryPipelineInfo* info, bool addToGraph)
+int RenderInstance::CreateGraphicsPipelineObject(int deviceSelection, GraphicsIntermediaryPipelineInfo* info)
 {
 	PipelineInstanceData* pid = &pipelineInstancesIdentifier.Get(info->pipelinename)->instanceData;
 
@@ -4019,10 +4019,14 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 						GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount, accumulator, pipelineIndex);
 
 						GenerateDrawBindingsBarriers(deviceSelection, &rcb, handle, accumulator);
+
+						//InsertIntraPassBarrier(&rcb, accumulator, pipelineIndex);
 					}
 
 					InsertAccumulatedBarriers(&rcb, accumulator);
 				}
+
+
 
 				rcb.BeginRenderPassCommand(mainRenderTargets[absoluteRenderTargetIndex], SubRenderTargetSelection, VK_SUBPASS_CONTENTS_INLINE, { {0, 0}, {renderTarget->width, renderTarget->height} }, clears, clearCount);
 
