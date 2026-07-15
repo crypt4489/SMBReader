@@ -45,22 +45,13 @@ void main()
     float startY = container.anchorPoint.y/gs.window.height;
 
     float endX = container.absoluteSize.x/gs.window.width;
-    float endY = container.absoluteSize.x/gs.window.height;
+    float endY = container.absoluteSize.y/gs.window.height;
 
     vec2 mixer = poses[gl_VertexIndex];
 
-    vec2 pos = vec2(((endX - startX) * mixer.x) + startX,  ((endY - startY) * mixer.y) + startY);
+    vec2 pos =  2.0 * vec2(((endX - startX) * mixer.x) + startX,  ((endY - startY) * mixer.y) + startY) - 1.0;
 
-    pos -= vec2(-1.0, -1.0);
-
-    vec2 positions[4] = vec2[](
-        vec2(-1.0, -1.0), // bottom-left
-        vec2( 1.0, -1.0), // bottom-right
-        vec2(-1.0,  1.0), // top-left
-        vec2( 1.0,  1.0)  // top-right
-    );
-
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+    gl_Position = vec4(pos, 0.0, 1.0);
 
     backGroundColor = container.color;
 }

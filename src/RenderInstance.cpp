@@ -5421,6 +5421,7 @@ void RenderInstance::InsertBufferBarrier(VKDevice* dev, RecordingBufferObject* r
 
 		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].srcStage |= status->currStage[resourceIndexToUpdate];
 		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].dstStage |= destBarrierStage;
+		accumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].barrierCount++;
 
 		status->currAction[resourceIndexToUpdate] = destBarrierAction;
 		status->currStage[resourceIndexToUpdate] = destBarrierStage;

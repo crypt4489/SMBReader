@@ -642,7 +642,7 @@ static UIContainer mainLeftContainer =
 	.relativeContainerSize = {0.30f, 1.0f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.color = { 1.0, 0.0, 0.0, 1.0}
+	.color = { 1.0, 0.0, 0.0, 0.5}
 };
 
 struct WindowSize
@@ -1055,7 +1055,7 @@ void ApplicationLoop::Execute()
 				if (updateUI == framesInFlight)
 					GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUIElementsIndirectCountBuffer, 4, 0, 0);
 
-				//GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
+				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
 				
 				updateUI--;
 			}
@@ -1066,9 +1066,7 @@ void ApplicationLoop::Execute()
 			{
 				if (currentFrameGraphIndex == MSAAShadowMapping)
 				{
-					
-					if (updateShadowMap)
-						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(smdpd.shadowMapPipeline, currentFrameGraphIndex, 0);
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(smdpd.shadowMapPipeline, currentFrameGraphIndex, 0);
 
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(skyboxPipeline, currentFrameGraphIndex, 1);
 
@@ -1081,7 +1079,7 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(jointMeshPipelines[jointPipeline], currentFrameGraphIndex, 1);
 					}
 
-					//GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(globalUIDrawingPipelineIndex, currentFrameGraphIndex, 1);
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(globalUIDrawingPipelineIndex, currentFrameGraphIndex, 1);
 				}
 				else if (currentFrameGraphIndex == BasicShadow)
 				{
