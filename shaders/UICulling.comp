@@ -1,27 +1,15 @@
 #version 460
 
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
 struct VkDrawIndirectCommand 
 {
     uint vertexCount;
     uint instanceCount;
     uint firstVertex;
     uint firstInstance;
-};
-
-struct UIContainer
-{
-	uvec2 bitfields;  // x - bitfields y - children count
-	vec2 relativeContainerSize; // percent size of the canvas
-	vec2 absoluteSize;
-    vec2 anchorPoint;
-	vec4 color;
-};
-
-struct WindowSize
-{
-    float width;
-    float height;
-    uint totalUIContainerCount;
 };
 
 layout(push_constant) uniform GlobalContext {
@@ -42,6 +30,9 @@ layout(set = 0, binding = 2) buffer UIContainers
     UIContainer renderables[];
 } conts;
 
+layout(set = 0, binding = 3, r32ui) uniform uimageBuffer uiIndirectionHandles;
+
+
 layout (local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -51,12 +42,21 @@ void main()
     if (lIndex >= gs.window.totalUIContainerCount)
         return;
 
+    UIContainer cont = conts.renderables[lIndex];
+
+    uint bitfield = cont.bitfields.x;
+
+    if ((GET_TYPE_SPECIFIC_DATA(bitfield) & INVISIBLE_CONTAINER) == INVISIBLE_CONTAINER)
+        return;
+
     uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
 
-    UIContainer cont = conts.renderables[visibleIndex];
+    imageStore(uiIndirectionHandles, int(visibleIndex), uvec4(lIndex, 0, 0, 0));
 
-    conts.renderables[visibleIndex].absoluteSize.x = floor(cont.relativeContainerSize.x * gs.window.width);
-    conts.renderables[visibleIndex].absoluteSize.y = floor(cont.relativeContainerSize.y * gs.window.height);
+    conts.renderables[lIndex].anchorPoint.x = cont.padding.x;
+    conts.renderables[lIndex].anchorPoint.y = cont.padding.y;
+    conts.renderables[lIndex].absoluteSize.x = floor(cont.relativeContainerSize.x * gs.window.width) - (cont.padding.z + cont.padding.w);
+    conts.renderables[lIndex].absoluteSize.y = floor(cont.relativeContainerSize.y * gs.window.height) - (cont.padding.x + cont.padding.y);
 
     comStructs.command[visibleIndex].vertexCount = 4;
     comStructs.command[visibleIndex].instanceCount = 1;

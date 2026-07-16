@@ -1,0 +1,34 @@
+
+#define ROUNDED_CORNERS 1
+#define INVISIBLE_CONTAINER 8
+
+#define DEPTH_BIT_OFFSET 0
+#define DEPTH_MAX 8
+
+#define TYPE_BIT_OFFSET 3
+#define TYPE_MAX 16
+
+#define TYPE_SPECIFIC_DATA_OFFSET 8
+#define TYPE_SPECIFIC_MAX 16
+
+#define GET_DEPTH(packed) (((packed) >> DEPTH_BIT_OFFSET) & DEPTH_MAX-1) 
+#define GET_TYPE(packed) (((packed) >> TYPE_BIT_OFFSET) & TYPE_MAX-1) 
+#define GET_TYPE_SPECIFIC_DATA(packed) (((packed) >> TYPE_SPECIFIC_DATA_OFFSET) & TYPE_SPECIFIC_MAX-1)
+
+struct UIContainer
+{
+	uvec4 bitfields;  // x - bitfields y - children count
+    vec4 color;
+    vec4 padding; //padding top, bottom, left, right
+	vec2 relativeContainerSize; // percent size of the canvas
+	vec2 absoluteSize;
+    vec2 anchorPoint;
+	vec2 structPad;
+};
+
+struct WindowSize
+{
+    float width;
+    float height;
+    uint totalUIContainerCount;
+};

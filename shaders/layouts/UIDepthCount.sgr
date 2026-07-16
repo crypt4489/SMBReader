@@ -1,0 +1,15 @@
+<ShaderGraph>
+	<GLSLShader type="compute">
+		UIDepthCount.comp
+		<ComputeLayout x="32" y="1" z="1">
+		</ComputeLayout>
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="c" size="36" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

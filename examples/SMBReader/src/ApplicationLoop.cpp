@@ -66,7 +66,8 @@ enum ShaderResourceLayoutIdentifiers
 	SHADOWMAPCULL,
 	JOINTVISUAL,
 	UICULLING,
-	UIDRAWING
+	UIDRAWING,
+	UIDEPTHCOUNT
 };
 
 static std::array<StringView, 10> pds = {
@@ -82,7 +83,7 @@ static std::array<StringView, 10> pds = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIPipeline.pld"),
 };
 
-static std::array<StringView, 22> layouts = {
+static std::array<StringView, 23> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
@@ -105,6 +106,7 @@ static std::array<StringView, 22> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("JointVisualSL.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UICulling.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIDrawing.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIDepthCount.sgr"),
 };
 
 static std::array<StringView, 3> mainLayoutAttachments =
@@ -635,14 +637,34 @@ static int globalUIElementsIndirectCountBuffer = -1;
 static int globalUIElementsIndirectBuffer = -1;
 static int globalUICullPipelineIndex = -1;
 static int globalUIDrawingPipelineIndex = -1;
+static int globalDepthCounts = -1;
+static int globalDepthOffsets = -1;
+static int globalUIIndirectionHandleBuffer = -1;
+static int globalUICountPipeline = -1;
+static int globalUIPrefixSumPipeline = -1;
+
+static int globalUICount = 0;
+
+static UIContainer mainContainer =
+{
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 0, 0, 0},
+	.color = { 0.0, 0.0, 0.0, 0.0},
+	.padding = {0, 0.0, 0.0, 0.0 },
+	.relativeContainerSize = {1.0f, 1.0f},
+	.absoluteSize = { 0.0, 0.0 },
+	.anchorPoint = { 0.0, 0.0 },
+	.structPad = {0.0, 0.0}
+};
 
 static UIContainer mainLeftContainer =
 {
-	.bitfields = {0, 0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 0},
+	.color = { 1.0, 0.0, 0.0, 0.5},
+	.padding = {10.0, 10.0, 10.0, 0.0 },
 	.relativeContainerSize = {0.30f, 1.0f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.color = { 1.0, 0.0, 0.0, 0.5}
+	.structPad = {0.0, 0.0}
 };
 
 struct WindowSize
@@ -1055,12 +1077,16 @@ void ApplicationLoop::Execute()
 				if (updateUI == framesInFlight)
 					GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUIElementsIndirectCountBuffer, 4, 0, 0);
 
+				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICountPipeline);
+
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
 				
 				updateUI--;
 			}
 
 			swcImageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
+
+			UIContainer uiContainers[2];
 
 			if (swcImageIndex != ~0UL)
 			{
@@ -1098,7 +1124,7 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(jointMeshPipelines[jointPipeline], currentFrameGraphIndex, 0);
 					}
 
-					//GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(globalUIDrawingPipelineIndex, currentFrameGraphIndex, 0);
+					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(globalUIDrawingPipelineIndex, currentFrameGraphIndex, 0);
 
 					if (currentFrameGraphIndex == MSAAPost)
 						GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(mainFullScreenPipeline, currentFrameGraphIndex, 1);
@@ -1111,6 +1137,7 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
 
 				running = ProcessCommands();
+
 			}
 			else
 			{
@@ -3814,6 +3841,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, LIGHTASSIGN);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, SHADOWMAPCULL);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UICULLING);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIDEPTHCOUNT);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue(15);
 
@@ -5245,8 +5273,14 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	globalUIContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIContainer), maxUIContainers, alignof(UIContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIElementsIndirectBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(VkDrawIndirectCommand), maxUIContainers + maxUIElements, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIElementsIndirectCountBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDepthCounts = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDepthOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUIIndirectionHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), 0, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
+
+	windowSize.totalUIContainerCount = globalUICount;
 
 	ShaderResourceSetBuilder uiCullingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 	ShaderResourceSetContext uilDescriptorBuilder{ &mainAppLogger, false };
@@ -5254,6 +5288,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIElementsIndirectCountBuffer, 0, 1, 1);
 	uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIElementsIndirectBuffer, 0, 1, 0);
 	uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIContainerData, 0, 1, 2);
+	uiCullingBufferDescriptorB.BindBufferView(&uilDescriptorBuilder, &globalUIIndirectionHandleBuffer, 0, 1, 3);
 	uiCullingBufferDescriptorB.UploadConstant(&uilDescriptorBuilder, &windowSize, 0);
 
 	if (uilDescriptorBuilder.contextFailed)
@@ -5268,7 +5303,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	ShaderComputeLayout* uiCullDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UICULLING);
 
 	ComputeIntermediaryPipelineInfo uiCullPipelineCreate = {
-			.x = (uint32_t)std::ceil((float)1 / (float)uiCullDescriptorLayout->x),
+			.x = (uint32_t)std::ceil((float)2 / (float)uiCullDescriptorLayout->x),
 			.y = 1,
 			.z = 1,
 			.pipelinename = UICULLING,
@@ -5282,8 +5317,15 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	ShaderResourceSetContext uiDrawDescriptorContext{ &mainAppLogger, false };
 
 	uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
-	uiDrawingBufferDescriptorB.UploadConstant(&uilDescriptorBuilder, &windowSize, 0);
+	uiDrawingBufferDescriptorB.BindBufferView(&uiDrawDescriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
+	uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &windowSize, 0);
 
+	if (uiDrawDescriptorContext.contextFailed)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
+		mainAppLogger.ProcessMessage();
+		return;
+	}
 
 	std::array<ShaderResourceSetHandle, 1> uiDrawDescriptors = { uiDrawingBufferDescriptorB() };
 
@@ -5302,5 +5344,35 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	};
 
 	globalUIDrawingPipelineIndex = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &uiDrawPipelineCreate);
+
+
+	ShaderResourceSetBuilder uiDepCountBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIDEPTHCOUNT, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+	ShaderResourceSetContext uiDepCountDescriptorBuilder{ &mainAppLogger, false };
+
+	uiDepCountBufferDescriptorB.BindBufferToShaderResource(&uiDepCountDescriptorBuilder, &globalUIContainerData, 0, 1, 0);
+	uiDepCountBufferDescriptorB.BindBufferToShaderResource(&uiDepCountDescriptorBuilder, &globalDepthCounts, 0, 1, 1);
+	uiDepCountBufferDescriptorB.UploadConstant(&uiDepCountDescriptorBuilder, &windowSize, 0);
+
+	if (uiDepCountDescriptorBuilder.contextFailed)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
+		mainAppLogger.ProcessMessage();
+		return;
+	}
+
+	ShaderComputeLayout* uiDepCountDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UIDEPTHCOUNT);
+
+	std::array<ShaderResourceSetHandle, 1> uiDepthDescriptors = { uiDepCountBufferDescriptorB() };
+
+	ComputeIntermediaryPipelineInfo uiDepthCountPipelineCreate = {
+		.x = (uint32_t)std::ceil((float)2 / (float)uiCullDescriptorLayout->x),
+		.y = 1,
+		.z = 1,
+		.pipelinename = UIDEPTHCOUNT,
+		.descCount = 1,
+		.descriptorsetid = uiDepthDescriptors.data()
+	};
+
+	globalUICountPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiDepthCountPipelineCreate);
 
 }

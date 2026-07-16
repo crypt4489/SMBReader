@@ -1,0 +1,50 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext {
+    WindowSize window;
+} gs;
+
+layout(set = 0, binding = 0) buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) buffer Counts {
+	uint countsAtN[DEPTH_MAX];
+} counts;
+
+shared uint sharedCount[DEPTH_MAX];
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    if (lIndex >= gs.window.totalUIContainerCount)
+        return;
+
+    UIContainer cont = conts.renderables[lIndex];
+
+    uint bitfield = cont.bitfields.x;
+
+    uint contDepth = GET_DEPTH(bitfield);
+
+    atomicAdd(sharedCount[contDepth], 1u);
+
+    barrier();
+
+    if (gl_LocalInvocationID.x == 0)
+    {
+        for (uint i = 0; i<DEPTH_MAX; i++)
+        {
+            atomicAdd(counts.countsAtN[i], sharedCount[i]);
+        }
+    }
+
+	return;
+}

@@ -326,6 +326,11 @@ struct FaceStencilData
 	int reference;
 };
 
+struct BlendAttachments
+{
+
+};
+
 struct GenericPipelineStateInfo
 {
 	PrimitiveType primType;
@@ -345,6 +350,7 @@ struct GenericPipelineStateInfo
 	CullMode cullMode;
 	int vertexBufferDescCount;
 	VertexBufferDescription vertexBufferDesc[4];
+	int blendAttachmentCount;
 };
 
 enum class AttachmentDescriptionType

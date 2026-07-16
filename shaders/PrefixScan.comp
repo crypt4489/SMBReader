@@ -17,7 +17,6 @@ layout(set = 0, binding = 2) buffer Sums {
 	uint sumsAtN[];
 } sums;
 
-
 const int BlockSize = 2048;
 
 shared uint sharedTemp[BlockSize];

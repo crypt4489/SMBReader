@@ -13,5 +13,7 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="readwrite">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="write">
+		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>
