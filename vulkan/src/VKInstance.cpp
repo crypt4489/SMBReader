@@ -754,6 +754,7 @@ bool VKInstance::QuerySpecificPhysicalDeviceFeatures(GPUFeatureRequest* featureR
 {
 	VkPhysicalDeviceProperties deviceProperties{};
 
+
 	VkPhysicalDeviceVulkan12Features features12{};
 	features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 
@@ -913,6 +914,12 @@ bool VKInstance::QuerySpecificPhysicalDeviceFeatures(GPUFeatureRequest* featureR
 	if (featureRequest->requireWideLines)
 	{
 		if (!features2.features.wideLines)
+			meetsRequirements = false;
+	}
+
+	if (featureRequest->requireLogicOp)
+	{
+		if (!features2.features.logicOp)
 			meetsRequirements = false;
 	}
 

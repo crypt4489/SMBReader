@@ -48,6 +48,12 @@ namespace API
 
 	VkMemoryPropertyFlags ConvertMemoryTypeToVkMemoryPropertyFlags(MemoryType memType);
 
+	VkBlendFactor ConvertBlendFactorToVulkanBlendFactor(BlendFactor factor);
+
+	VkBlendOp ConvertBlendOpToVulkanBlendOp(BlendOp op);
+
+	VkLogicOp ConvertBlendLogicOpToVulkanLogicOp(BlendLogicOp op);
+
 }
 
 struct RenderInstanceCreateInfo

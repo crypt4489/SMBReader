@@ -303,11 +303,6 @@ enum class CullMode
 	CULL_FRONT = 2,
 };
 
-enum class BlendOp
-{
-	LOGIC_COPY = 1
-};
-
 enum class StencilOp
 {
 	REPLACE = 0,
@@ -326,31 +321,67 @@ struct FaceStencilData
 	int reference;
 };
 
+enum class BlendFactor
+{
+	FACTOR_ZERO = 0,
+	FACTOR_ONE = 1,
+	FACTOR_SRC_COLOR = 2,
+	FACTOR_DST_COLOR = 3,
+	FACTOR_SRC_ALPHA = 4,
+	FACTOR_DST_ALPHA = 5,
+	FACTOR_ONE_MINUS_SRC_ALPHA = 6,
+	FACTOR_ONE_MINUS_DST_ALPHA = 7,
+};
+
+enum class BlendOp
+{
+	BLEND_ADD = 1,
+	BLEND_SUB = 2,
+	BLEND_REVERSE_SUB = 3,
+	BLEND_MIN = 4,
+	BLEND_MAX = 5
+};
+
+enum class BlendLogicOp
+{
+	LOGIC_CLEAR = 0,
+	LOGIC_AND = 1,
+	LOGIC_COPY = 2
+};
+
 struct BlendAttachments
 {
-
+	int blendingEnabled;
+	BlendFactor srcColorFactor;
+	BlendFactor dstColorFactor;
+	BlendOp colorOp;
+	BlendFactor srcAlphaFactor;
+	BlendFactor dstAlphaFactor;
+	BlendOp alphaOp;
 };
 
 struct GenericPipelineStateInfo
 {
+	bool depthEnable;
+	bool depthWrite;
+	bool StencilEnable;
+	bool blendEnable;
 	PrimitiveType primType;
 	float lineWidth;
 	TriangleWinding windingOrder;
-	bool depthEnable;
-	bool depthWrite;
 	RasterizerTest depthTest;
-	bool StencilEnable;
 	FaceStencilData frontFace;
 	FaceStencilData backFace;
 	int sampleCountLow;
 	int sampleCountHigh;
 	ImageFormat colorFormat;
 	ImageFormat depthFormat;
-	BlendOp blendOp;
+	BlendLogicOp blendOp;
 	CullMode cullMode;
 	int vertexBufferDescCount;
 	VertexBufferDescription vertexBufferDesc[4];
 	int blendAttachmentCount;
+	BlendAttachments blendAttachments[4];
 };
 
 enum class AttachmentDescriptionType
@@ -557,6 +588,7 @@ struct GPUFeatureRequest
 	bool requireSamplerAnisotropy;
 	bool requireMultiDrawIndirect;
 	bool requireWideLines;
+	bool requireLogicOp;
 };
 
 enum class WindowManagementType

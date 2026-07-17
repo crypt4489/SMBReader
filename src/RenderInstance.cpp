@@ -494,6 +494,8 @@ namespace API
 			request->requireMultiDrawIndirect ? VK_TRUE : VK_FALSE;
 		features2->features.wideLines =
 			request->requireWideLines ? VK_TRUE : VK_FALSE;
+
+		features2->features.logicOp = request->requireLogicOp ? VK_TRUE : VK_FALSE;
 	}
 
 	VkImageAspectFlags ConvertImageViewAspectMaskToVulkanImageAspectFlags(ImageViewAspectMask aspectMask)
@@ -587,6 +589,100 @@ namespace API
 		retFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT * (((memType & MemoryTypeBits::HOST_MEMORY_TYPE) != 0) || ((memType & MemoryTypeBits::HOST_MEMORY_COHERENT_TYPE) != 0));
 		retFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT * ((memType & MemoryTypeBits::HOST_MEMORY_COHERENT_TYPE) != 0);
 		return retFlags;
+	}
+
+	VkBlendFactor ConvertBlendFactorToVulkanBlendFactor(BlendFactor factor)
+	{
+		VkBlendFactor vkFactor = VK_BLEND_FACTOR_ZERO;
+
+		switch (factor)
+		{
+		case BlendFactor::FACTOR_ZERO:
+			vkFactor = VK_BLEND_FACTOR_ZERO;
+			break;
+
+		case BlendFactor::FACTOR_ONE:
+			vkFactor = VK_BLEND_FACTOR_ONE;
+			break;
+
+		case BlendFactor::FACTOR_SRC_COLOR:
+			vkFactor = VK_BLEND_FACTOR_SRC_COLOR;
+			break;
+
+		case BlendFactor::FACTOR_DST_COLOR:
+			vkFactor = VK_BLEND_FACTOR_DST_COLOR;
+			break;
+
+		case BlendFactor::FACTOR_SRC_ALPHA:
+			vkFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+			break;
+
+		case BlendFactor::FACTOR_DST_ALPHA:
+			vkFactor = VK_BLEND_FACTOR_DST_ALPHA;
+			break;
+
+		case BlendFactor::FACTOR_ONE_MINUS_SRC_ALPHA:
+			vkFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+			break;
+
+		case BlendFactor::FACTOR_ONE_MINUS_DST_ALPHA:
+			vkFactor = VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+			break;
+		}
+
+		return vkFactor;
+	}
+
+	VkBlendOp ConvertBlendOpToVulkanBlendOp(BlendOp op)
+	{
+		VkBlendOp vkOp = VK_BLEND_OP_ADD;
+
+		switch (op)
+		{
+		case BlendOp::BLEND_ADD:
+			vkOp = VK_BLEND_OP_ADD;
+			break;
+
+		case BlendOp::BLEND_SUB:
+			vkOp = VK_BLEND_OP_SUBTRACT;
+			break;
+
+		case BlendOp::BLEND_REVERSE_SUB:
+			vkOp = VK_BLEND_OP_REVERSE_SUBTRACT;
+			break;
+
+		case BlendOp::BLEND_MIN:
+			vkOp = VK_BLEND_OP_MIN;
+			break;
+
+		case BlendOp::BLEND_MAX:
+			vkOp = VK_BLEND_OP_MAX;
+			break;
+		}
+
+		return vkOp;
+	}
+
+	VkLogicOp ConvertBlendLogicOpToVulkanLogicOp(BlendLogicOp op)
+	{
+		VkLogicOp vkOp = VK_LOGIC_OP_CLEAR;
+
+		switch (op)
+		{
+		case BlendLogicOp::LOGIC_CLEAR:
+			vkOp = VK_LOGIC_OP_CLEAR;
+			break;
+
+		case BlendLogicOp::LOGIC_AND:
+			vkOp = VK_LOGIC_OP_AND;
+			break;
+
+		case BlendLogicOp::LOGIC_COPY:
+			vkOp = VK_LOGIC_OP_COPY;
+			break;
+		}
+
+		return vkOp;
 	}
 }
 
@@ -2038,7 +2134,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 		}
 	}
 
-	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), 1, graph->resourceSetCount, 2, pushConstantRangeCount);
+	VKGraphicsPipelineBuilder* pipelineBuilder = dev->CreateGraphicsPipelineBuilder(EntryHandle(), stateInfo->blendAttachmentCount, graph->resourceSetCount, 2, pushConstantRangeCount);
 
 	uint32_t globalPushOffset = 0;
 
@@ -2085,9 +2181,22 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 
 	pipelineBuilder->CreateRasterizer(API::ConvertCullMode(stateInfo->cullMode), API::ConvertTriangleWinding(stateInfo->windingOrder), stateInfo->lineWidth);
 
-	pipelineBuilder->CreateColorBlendAttachment(0, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+	for (int i = 0; i < stateInfo->blendAttachmentCount; i++)
+	{
+		BlendAttachments* attach = &stateInfo->blendAttachments[i];
 
-	pipelineBuilder->CreateColorBlending(VK_LOGIC_OP_COPY);
+		pipelineBuilder->CreateColorBlendAttachment(i, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+			attach->blendingEnabled,
+			API::ConvertBlendFactorToVulkanBlendFactor(attach->srcColorFactor),
+			API::ConvertBlendFactorToVulkanBlendFactor(attach->dstColorFactor),
+			API::ConvertBlendFactorToVulkanBlendFactor(attach->srcAlphaFactor),
+			API::ConvertBlendFactorToVulkanBlendFactor(attach->dstAlphaFactor),
+			API::ConvertBlendOpToVulkanBlendOp(attach->colorOp),
+			API::ConvertBlendOpToVulkanBlendOp(attach->alphaOp)
+		);
+	}
+
+	pipelineBuilder->CreateColorBlending(stateInfo->blendEnable, API::ConvertBlendLogicOpToVulkanLogicOp(stateInfo->blendOp));
 
 	VkStencilOpState frontState = API::ConvertFaceStencilDataToVulkan(stateInfo->frontFace);
 	VkStencilOpState backState = API::ConvertFaceStencilDataToVulkan(stateInfo->backFace);

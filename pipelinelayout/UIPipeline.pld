@@ -5,4 +5,8 @@
 	</CullMode>
 	<DepthTest op="always" write="true">
 	</DepthTest>
+	<BlendDetails enable="false">
+	</BlendDetails>
+	<BlendAttachment enable="true" srcColor="srcAlpha" dstColor="minusSrcAlpha" colorOp="add" srcAlpha="one" dstAlpha="minusSrcAlpha" alphaOp="add">
+	</BlendAttachment>
 </PipelineDescription>

@@ -9,4 +9,6 @@
 	</FrontStencilTest>
 	<BackStencilTest failop="keep" passop="replace" depthfailop="keep" compareop="always" writemask="255" comparemask="255" ref="1">
 	</BackStencilTest>
+	<BlendAttachment enable="false" srcColor="one" dstColor="zero" colorOp="add" srcAlpha="one" dstAlpha="zero" alphaOp="add">
+	</BlendAttachment>
 </PipelineDescription>

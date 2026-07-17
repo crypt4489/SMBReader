@@ -88,6 +88,10 @@ static int HandleStencilTest(char* fileData, int size, int currentLocation, Face
 static int HandlePrimitiveType(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
 static int HandleVertexComponentInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, int perVertexSlotLocation, Logger* scratchLogger);
 static int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int vertexBufferInputLocation, Logger* scratchLogger);
+static int HandleBlendDetails(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger);
+static int HandleBlendAttachment(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int blendAttachmentLocation, Logger* scratchLogger);
+
+
 
 static int ReadAttributesAttachments(char* fileData, int size, int currentLocation, unsigned long* hashes, int* stackSize, Logger* scratchLogger);
 static int HandleAttachment(char* fileData, int size, int currentLocation, AttachmentDescriptionType descType, AttachmentDescription* description, Logger* scratchLogger);
@@ -1005,6 +1009,8 @@ int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* sta
 	int currentVertexInput = 0;
 	int currentVertexInputDescription = 0;
 
+	int blendAttachmentCount = 0;
+
 	stateInfo->depthEnable = false;
 	stateInfo->depthWrite = false;
 	stateInfo->StencilEnable = false;
@@ -1061,6 +1067,7 @@ int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* sta
 		{
 			if (opening)
 			{
+				currentVertexInputDescription = 0;
 				stateInfo->vertexBufferDescCount++;
 				stride = HandleVertexInput(dataStart, dataSize, curr, stateInfo, currentVertexInput, outputLogger);
 			}
@@ -1101,6 +1108,26 @@ int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* sta
 			}
 			break;
 		}
+		case hash("BlendDetails"):
+		{
+			if (opening)
+			{
+				stride = HandleBlendDetails(dataStart, dataSize, curr, stateInfo, outputLogger);
+			}
+			break;
+		}
+		case hash("BlendAttachment"):
+		{
+			if (opening)
+			{
+				stride = HandleBlendAttachment(dataStart, dataSize, curr, stateInfo, blendAttachmentCount, outputLogger);
+			}
+			else
+			{
+				blendAttachmentCount++;
+			}
+			break;
+		}
 		default:
 			outputLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid pipeline state tag"));
 			stride = -1;
@@ -1114,6 +1141,8 @@ int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* sta
 
 		curr += stride;
 	}
+
+	stateInfo->blendAttachmentCount = blendAttachmentCount;
 
 	return retCode;
 }
@@ -1167,6 +1196,14 @@ int ReadAttributesPipeline(char* fileData, int size, int currentLocation, unsign
 		case hash("passop"):
 		case hash("depthfailop"):
 		case hash("compareop"):
+		case hash("enable"):
+		case hash("srcColor"):
+		case hash("dstColor"):
+		case hash("colorOp"):
+		case hash("alphaOp"):
+		case hash("srcAlpha"):
+		case hash("dstAlpha"):
+		case hash("logicOp"):
 		{
 			attrValRetCode = ReadAttributeValueHash(fileData, size, currentLocation + charCount, &hashes[hashableCount + 1], scratchLogger);
 
@@ -1755,6 +1792,407 @@ int HandleVertexInput(char* fileData, int size, int currentLocation, GenericPipe
 		case hash("size"):
 		{
 			stateInfo->vertexBufferDesc[vertexBufferInputLocation].perInputSize = codeV;
+			break;
+		}
+		}
+
+		if (retCode)
+			return retCode;
+
+		stackIter += 2;
+	}
+
+	return charStride;
+}
+
+static int HandleBlendDetails(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, Logger* scratchLogger)
+{
+	unsigned long hashes[6];
+
+	int attrSize = 0;
+
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
+
+	int stackIter = 0;
+
+	int retCode = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("logicOp"):
+		{
+			switch (codeV)
+			{
+			case hash("copy"):
+			{
+				stateInfo->blendOp = BlendLogicOp::LOGIC_COPY;
+				break;
+			}
+			case hash("and"):
+			{
+				stateInfo->blendOp = BlendLogicOp::LOGIC_AND;
+				break;
+			}
+			case hash("clear"):
+			{
+				stateInfo->blendOp = BlendLogicOp::LOGIC_CLEAR;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid vertex rate"));
+				retCode = -1;
+				break;
+			}
+			break;
+		}
+		case hash("enable"):
+		{
+			switch (codeV)
+			{
+			case hash("true"):
+			{
+				stateInfo->blendEnable = true;
+				break;
+			}
+			default:
+				stateInfo->blendEnable = false;
+				break;
+			}
+			break;
+		}
+		}
+
+		if (retCode)
+			return retCode;
+
+		stackIter += 2;
+	}
+
+	return charStride;
+}
+
+static int HandleBlendAttachment(char* fileData, int size, int currentLocation, GenericPipelineStateInfo* stateInfo, int blendAttachmentLocation, Logger* scratchLogger)
+{
+	unsigned long hashes[14];
+
+	int attrSize = 0;
+
+	int charStride = ReadAttributesPipeline(fileData, size, currentLocation, hashes, &attrSize, scratchLogger);
+
+	if (charStride < 0)
+		return charStride;
+
+	int stackIter = 0;
+
+	int retCode = 0;
+
+	while (attrSize > stackIter)
+	{
+		unsigned long code = hashes[stackIter];
+		unsigned long codeV = hashes[stackIter + 1];
+
+		switch (code)
+		{
+		case hash("srcColor"):
+		{
+			switch (codeV)
+			{
+			case hash("zero"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_ZERO;
+				break;
+			}
+			case hash("one"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_ONE;
+				break;
+			}
+			case hash("srcColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_SRC_COLOR;
+				break;
+			}
+			case hash("dstColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_DST_COLOR;
+				break;
+			}
+			case hash("srcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_SRC_ALPHA;
+				break;
+			}
+			case hash("dstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_DST_ALPHA;
+				break;
+			}
+			case hash("minusSrcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_ONE_MINUS_SRC_ALPHA;
+				break;
+			}
+			case hash("minusDstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcColorFactor = BlendFactor::FACTOR_ONE_MINUS_DST_ALPHA;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Source Color Factor"));
+				retCode = -1;
+				break;
+			}
+			break;
+		}
+		case hash("dstColor"):
+		{
+			switch (codeV)
+			{
+			case hash("zero"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_ZERO;
+				break;
+			}
+			case hash("one"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_ONE;
+				break;
+			}
+			case hash("srcColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_SRC_COLOR;
+				break;
+			}
+			case hash("dstColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_DST_COLOR;
+				break;
+			}
+			case hash("srcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_SRC_ALPHA;
+				break;
+			}
+			case hash("dstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_DST_ALPHA;
+				break;
+			}
+			case hash("minusSrcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_ONE_MINUS_SRC_ALPHA;
+				break;
+			}
+			case hash("minusDstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstColorFactor = BlendFactor::FACTOR_ONE_MINUS_DST_ALPHA;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Dst Color Factor"));
+				retCode = -1;
+				break;
+			}
+			break;
+		}
+		case hash("colorOp"):
+		{
+			switch (codeV)
+			{
+			case hash("add"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].colorOp = BlendOp::BLEND_ADD;
+				break;
+			}
+			case hash("sub"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].colorOp = BlendOp::BLEND_SUB;
+				break;
+			}
+			case hash("reverseSub"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].colorOp = BlendOp::BLEND_REVERSE_SUB;
+				break;
+			}
+			case hash("min"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].colorOp = BlendOp::BLEND_MIN;
+				break;
+			}
+			case hash("max"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].colorOp = BlendOp::BLEND_MAX;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Color Op"));
+				retCode = -1;
+				break;
+			}
+			break;
+		}
+		case hash("srcAlpha"):
+		{
+			switch (codeV)
+			{
+			case hash("zero"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_ZERO;
+				break;
+			}
+			case hash("one"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_ONE;
+				break;
+			}
+			case hash("srcColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_SRC_COLOR;
+				break;
+			}
+			case hash("dstColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_DST_COLOR;
+				break;
+			}
+			case hash("srcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_SRC_ALPHA;
+				break;
+			}
+			case hash("dstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_DST_ALPHA;
+				break;
+			}
+			case hash("minusSrcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_ONE_MINUS_SRC_ALPHA;
+				break;
+			}
+			case hash("minusDstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].srcAlphaFactor = BlendFactor::FACTOR_ONE_MINUS_DST_ALPHA;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Source Alpha Factor"));
+				retCode = -1;
+				break;
+			}
+			break;
+		
+		}
+		case hash("dstAlpha"):
+		{
+			switch (codeV)
+			{
+			case hash("zero"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_ZERO;
+				break;
+			}
+			case hash("one"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_ONE;
+				break;
+			}
+			case hash("srcColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_SRC_COLOR;
+				break;
+			}
+			case hash("dstColor"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_DST_COLOR;
+				break;
+			}
+			case hash("srcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_SRC_ALPHA;
+				break;
+			}
+			case hash("dstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_DST_ALPHA;
+				break;
+			}
+			case hash("minusSrcAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_ONE_MINUS_SRC_ALPHA;
+				break;
+			}
+			case hash("minusDstAlpha"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].dstAlphaFactor = BlendFactor::FACTOR_ONE_MINUS_DST_ALPHA;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Dest Alpha Factor"));
+				retCode = -1;
+				break;
+			}
+			break;
+		}
+		case hash("alphaOp"):
+		{
+			switch (codeV)
+			{
+			case hash("add"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].alphaOp = BlendOp::BLEND_ADD;
+				break;
+			}
+			case hash("sub"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].alphaOp = BlendOp::BLEND_SUB;
+				break;
+			}
+			case hash("reverseSub"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].alphaOp = BlendOp::BLEND_REVERSE_SUB;
+				break;
+			}
+			case hash("min"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].alphaOp = BlendOp::BLEND_MIN;
+				break;
+			}
+			case hash("max"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].alphaOp = BlendOp::BLEND_MAX;
+				break;
+			}
+			default:
+				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid Alpha Op"));
+				retCode = -1;
+				break;
+			}
+			break;
+			break;
+		}
+
+		case hash("enable"):
+		{
+			switch (codeV)
+			{
+			case hash("true"):
+			{
+				stateInfo->blendAttachments[blendAttachmentLocation].blendingEnabled = true;
+				break;
+			}
+			default:
+				stateInfo->blendAttachments[blendAttachmentLocation].blendingEnabled = false;
+				break;
+			}
 			break;
 		}
 		}

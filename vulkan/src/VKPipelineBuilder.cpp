@@ -96,24 +96,23 @@ void VKGraphicsPipelineBuilder::CreateMultiSampling(VkSampleCountFlagBits count)
 	multisampling.alphaToOneEnable = VK_FALSE;
 }
 
-void VKGraphicsPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags)
+void VKGraphicsPipelineBuilder::CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags, VkBool32 blendOpEnable, VkBlendFactor srcColor, VkBlendFactor dstColor, VkBlendFactor srcAlpha, VkBlendFactor dstAlpha, VkBlendOp colorOp, VkBlendOp alphaOp)
 {
 	auto colorBlendAttachment = &colorBlendAttachments[attachmentNumber];
 	colorBlendAttachment->colorWriteMask = flags;
-	colorBlendAttachment->blendEnable = VK_FALSE;
-	colorBlendAttachment->srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment->dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachment->colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment->srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment->dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachment->alphaBlendOp = VK_BLEND_OP_ADD;
-
+	colorBlendAttachment->blendEnable = blendOpEnable;
+	colorBlendAttachment->srcColorBlendFactor = srcColor;
+	colorBlendAttachment->dstColorBlendFactor = dstColor;
+	colorBlendAttachment->colorBlendOp = colorOp;
+	colorBlendAttachment->srcAlphaBlendFactor = srcAlpha;
+	colorBlendAttachment->dstAlphaBlendFactor = dstAlpha;
+	colorBlendAttachment->alphaBlendOp = alphaOp;
 }
 
-void VKGraphicsPipelineBuilder::CreateColorBlending(VkLogicOp blendOp)
+void VKGraphicsPipelineBuilder::CreateColorBlending(VkBool32 logicOpEnable, VkLogicOp blendOp)
 {
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.logicOpEnable = logicOpEnable;
 	colorBlending.logicOp = blendOp;
 	colorBlending.attachmentCount = colorBlendAttachmentsCount;
 	colorBlending.pAttachments = colorBlendAttachments;

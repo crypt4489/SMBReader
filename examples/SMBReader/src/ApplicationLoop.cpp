@@ -659,7 +659,7 @@ static UIContainer mainContainer =
 static UIContainer mainLeftContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 0},
-	.color = { 1.0, 0.0, 0.0, 0.5},
+	.color = { 1.0, 0.0, 0.0, 1.0},
 	.padding = {10.0, 10.0, 10.0, 0.0 },
 	.relativeContainerSize = {0.30f, 1.0f},
 	.absoluteSize = { 0.0, 0.0 },

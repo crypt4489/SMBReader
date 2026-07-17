@@ -28,9 +28,6 @@ void main()
         float softness = 0.01;
 
         alpha = 1.0 - smoothstep(0.0, softness, dist);
-
-        if (alpha < 0.001)
-            discard;
     }
 
     outColor = backGroundColor; 

@@ -52,9 +52,13 @@ struct VKGraphicsPipelineBuilder : public VKPipelineBuilder
 
 	void CreateMultiSampling(VkSampleCountFlagBits count);
 
-	void CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags);
+	void CreateColorBlendAttachment(uint32_t attachmentNumber, VkColorComponentFlags flags, 
+		VkBool32 blendOpEnable, VkBlendFactor srcColor, 
+		VkBlendFactor dstColor, VkBlendFactor srcAlpha, 
+		VkBlendFactor dstAlpha, 
+		VkBlendOp colorOp, VkBlendOp alphaOp);
 
-	void CreateColorBlending(VkLogicOp blendOp);
+	void CreateColorBlending(VkBool32 logicOpEnable, VkLogicOp logicOp);
 
 	void CreateDepthStencil(VkCompareOp depthOp, bool depthenable, bool depthwriteenable, bool stencilEnable, VkStencilOpState* front, VkStencilOpState* back);
 
