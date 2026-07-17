@@ -32,7 +32,6 @@ layout(set = 0, binding = 2) buffer UIContainers
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer uiIndirectionHandles;
 
-
 layout (local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -53,10 +52,10 @@ void main()
 
     imageStore(uiIndirectionHandles, int(visibleIndex), uvec4(lIndex, 0, 0, 0));
 
-    conts.renderables[lIndex].anchorPoint.x = cont.padding.x;
-    conts.renderables[lIndex].anchorPoint.y = cont.padding.y;
-    conts.renderables[lIndex].absoluteSize.x = floor(cont.relativeContainerSize.x * gs.window.width) - (cont.padding.z + cont.padding.w);
-    conts.renderables[lIndex].absoluteSize.y = floor(cont.relativeContainerSize.y * gs.window.height) - (cont.padding.x + cont.padding.y);
+    conts.renderables[lIndex].anchorPoint.x = cont.padding.z;
+    conts.renderables[lIndex].anchorPoint.y = cont.padding.x;
+    conts.renderables[lIndex].absoluteSize.x = floor(cont.relativeContainerSize.x * gs.window.width) - (cont.padding.w);
+    conts.renderables[lIndex].absoluteSize.y = floor(cont.relativeContainerSize.y * gs.window.height) - (cont.padding.y);
 
     comStructs.command[visibleIndex].vertexCount = 4;
     comStructs.command[visibleIndex].instanceCount = 1;

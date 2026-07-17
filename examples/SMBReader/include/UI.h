@@ -2,6 +2,7 @@
 #include "math/MathTypes.h"
 
 #define ROUNDED_CORNERS 0x1
+#define BORDERS 0x2
 #define INVISIBLE_CONTAINER 0x8
 
 #define DEPTH_BIT_OFFSET 0x0

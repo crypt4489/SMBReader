@@ -12,8 +12,16 @@ set (APP_INCLUDES
 
 file(GLOB APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/smb/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 file(GLOB APP_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/smb/include/*.h" "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
+file(GLOB GLOBAL_SHADERS "${CMAKE_CURRENT_SOURCE_DIR}/shaders/layouts/*.sgr" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert" 
+"${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag")
 
-add_executable(${PROJECT_NAME} ${APP_SOURCES} ${APP_HEADERS})
+file(GLOB GLOBAL_PIPELINE_LAYOUTS "${CMAKE_CURRENT_SOURCE_DIR}/pipelineLayout/*.pld")
+
+file(GLOB GLOBAL_ATTACHMENT_LAYOUTS "${CMAKE_CURRENT_SOURCE_DIR}/attachmentdescriptions/*.adf")
+
+
+
+add_executable(${PROJECT_NAME} ${APP_SOURCES} ${APP_HEADERS} ${GLOBAL_SHADERS} ${GLOBAL_PIPELINE_LAYOUTS} ${GLOBAL_ATTACHMENT_LAYOUTS})
 
 target_include_directories (${PROJECT_NAME} PRIVATE ${APP_INCLUDES})
 target_link_libraries(${PROJECT_NAME} PRIVATE Core)
@@ -26,6 +34,21 @@ source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
         PREFIX "Source Files"
         FILES ${APP_SOURCES}
+    )
+
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
+        PREFIX "Pipeline Layouts"
+        FILES ${GLOBAL_PIPELINE_LAYOUTS}
+    )
+
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}
+        PREFIX "Attachment Descriptions"
+        FILES ${GLOBAL_ATTACHMENT_LAYOUTS}
+    )
+
+source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR}/shaders
+        PREFIX "Shaders"
+        FILES ${GLOBAL_SHADERS}
     )
 
 if (WIN32)
@@ -51,7 +74,7 @@ if (WIN32)
         PRE_BUILD
         COMMAND cmd /c "shadercompile.bat"
         VERBATIM
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         DEPENDS ${GLOBAL_SHADERS}
         COMMENT "Running shader compile"
     )
@@ -61,34 +84,34 @@ endif()
 add_custom_command(
 TARGET ${PROJECT_NAME}    
 POST_BUILD
-COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/shaders/compiled/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/shaders/compiled/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied compile shaders"
 )
 
 add_custom_command(
 TARGET ${PROJECT_NAME}    
 POST_BUILD
-COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/shaders/layouts/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/shaders/layouts/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied shader layouts"
 )
 
 add_custom_command(
 TARGET ${PROJECT_NAME}    
 POST_BUILD
-COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/pipelinelayout/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/pipelinelayout/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied pipeline layouts"
 )
 
 add_custom_command(
 TARGET ${PROJECT_NAME}    
 POST_BUILD
-COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/attachmentdescriptions/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/attachmentdescriptions/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied Attachment Descriptions"
 )
 
 add_custom_command(
 TARGET ${PROJECT_NAME}    
 POST_BUILD
-COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
+COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets/" "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}"
 COMMENT "Copied Assets"
 )
