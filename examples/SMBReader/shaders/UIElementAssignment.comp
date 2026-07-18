@@ -1,0 +1,56 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext {
+    uint count;
+} gs;
+
+layout(set = 0, binding = 0) readonly buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) readonly buffer UIChildrenOffsetss
+{
+    uint childOffsets[];
+} chilsOffs;
+
+layout(set = 0, binding = 2, r32ui) uniform uimageBuffer uiPositionalIndirectionHandles;
+
+layout(set = 0, binding = 3) buffer DepthOffsets {
+	uint offsetAtN[DEPTH_MAX];
+} depths;
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    if (lIndex >= gs.count)
+        return;
+
+    uvec4 cont = conts.renderables[lIndex].bitfields;
+
+    uint parentIndex = cont.z;
+
+    if (parentIndex == NO_PARENT)
+    {
+        uint rootIndex = atomicAdd(depths.offsetAtN[0], 1u);
+
+        imageStore(uiPositionalIndirectionHandles, int(rootIndex), uvec4(lIndex, 0, 0, 0));
+    }
+    else
+    {
+        uint childIndex = cont.w - 1;
+
+        uint parentChildOffset = chilsOffs.childOffsets[parentIndex];
+
+        imageStore(uiPositionalIndirectionHandles, int(parentChildOffset + childIndex), uvec4(lIndex, 0, 0, 0));
+    }
+
+	return;
+}

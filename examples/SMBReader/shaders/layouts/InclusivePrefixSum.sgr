@@ -1,0 +1,17 @@
+<ShaderGraph>
+	<GLSLShader type="compute">
+		InclusivePrefixScan.comp
+		<ComputeLayout x="2048" y="1" z="1">
+		</ComputeLayout>
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="write">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

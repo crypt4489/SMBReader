@@ -16,9 +16,12 @@
 #define GET_TYPE(packed) (((packed) >> TYPE_BIT_OFFSET) & TYPE_MAX-1) 
 #define GET_TYPE_SPECIFIC_DATA(packed) (((packed) >> TYPE_SPECIFIC_DATA_OFFSET) & TYPE_SPECIFIC_MAX-1)
 
+#define NO_PARENT 4294967295
+#define NOT_A_CHILD NO_PARENT
+
 struct UIContainer
 {
-	uvec4 bitfields;  // x - bitfields y - children count
+	uvec4 bitfields;  // x - bitfields y - children count z - parentIndex, w - childId  
     vec4 color;
     vec4 padding; //padding top, bottom, left, right
 	vec2 relativeContainerSize; // percent size of the canvas

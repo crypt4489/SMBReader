@@ -1,0 +1,114 @@
+#version 450
+
+
+layout(push_constant) uniform GlobalContext {
+    uint count;
+} gs;
+
+layout(set = 0, binding = 0) buffer Counts {
+	uint countsAtN[];
+} counts;
+
+layout(set = 0, binding = 1) buffer Offsets {
+	uint offsetAtN[];
+} offsets;
+
+layout(set = 0, binding = 2) buffer Sums {
+	uint sumsAtN[];
+} sums;
+
+const int BlockSize = 2048;
+
+shared uint sharedTemp[BlockSize];
+
+layout (local_size_x = BlockSize/2, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x;
+
+	uint globalIndex = (gl_WorkGroupID.x * (BlockSize/2)) + lIndex;
+
+	uint n = gs.count;
+
+	if (2*globalIndex < n)
+	{
+		sharedTemp[2*lIndex] = counts.countsAtN[2*globalIndex];
+	}
+	else 
+	{
+		sharedTemp[2*lIndex] = 0;
+	}
+
+
+	if ((2*globalIndex)+1 < n) 
+	{
+		sharedTemp[(2*lIndex)+1] = counts.countsAtN[(2*globalIndex)+1];
+	} 
+	else
+	{
+		sharedTemp[(2*lIndex)+1] = 0;
+	}
+
+	uint offset = 1;
+
+	for (uint d = BlockSize >> 1; d > 0; d = d>>1)
+	{
+		barrier();
+
+		if (lIndex < d)
+		{
+			uint ai = offset * (2 * lIndex + 1) - 1;
+			uint bi = offset * (2 * lIndex + 2) - 1;
+
+			sharedTemp[bi] += sharedTemp[ai];
+		}
+
+		offset *= 2;
+	}
+
+	if (lIndex == 0)
+	{
+		sharedTemp[BlockSize-1] = 0;
+	}
+
+	barrier();
+	
+	for (uint d = 1; d < BlockSize; d <<= 1)
+	{
+		offset >>= 1;
+		barrier();
+
+		if (lIndex < d)
+		{
+			uint ai = offset * (2 * lIndex + 1) - 1;
+			uint bi = offset * (2 * lIndex + 2) - 1;
+
+			uint t = sharedTemp[ai];
+			sharedTemp[ai] = sharedTemp[bi];
+			sharedTemp[bi] += t;
+		}
+	}
+
+	barrier();
+
+	if ((2*globalIndex) < n) {
+		offsets.offsetAtN[(2*globalIndex)] = sharedTemp[2*lIndex] + counts.countsAtN[2*globalIndex];
+	} 
+
+	if ((2*globalIndex)+1 < n) {
+		offsets.offsetAtN[(2*globalIndex)+1] = sharedTemp[(2*lIndex)+1] + counts.countsAtN[(2*globalIndex)+1];
+	} 
+
+	if (n > BlockSize)
+	{
+		if (lIndex == 0)
+		{
+			uint sharedMemIndex = BlockSize-1;
+			uint globalLastElement = min((gl_WorkGroupID.x + 1) * BlockSize, n) - 1;
+			sums.sumsAtN[gl_WorkGroupID.x] = sharedTemp[sharedMemIndex] + counts.countsAtN[globalLastElement];
+		} 
+	}
+
+	return;
+}

@@ -18,6 +18,9 @@
 #define MAKE_TYPE(type) (((type) & TYPE_MAX-1) << TYPE_BIT_OFFSET)
 #define MAKE_TYPE_SPECIFIC_DATA(data) (((data) & TYPE_SPECIFIC_MAX-1) << TYPE_SPECIFIC_DATA_OFFSET)
 
+#define NO_PARENT 4294967295
+#define NOT_A_CHILD NO_PARENT
+
 //bitfields
 
 //bits 0-2 depth
@@ -26,7 +29,7 @@
 
 struct UIContainer
 {
-	Vector4ui bitfields;  // x - bitfields y - children count, 
+	Vector4ui bitfields;  // x - bitfields y - children count, z - parentIndex, w - childId  
 	Vector4f color;
 	Vector4f padding; //padding top, bottom, left, right
 	Vector2f relativeContainerSize; // percent size of the canvas

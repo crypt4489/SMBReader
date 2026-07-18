@@ -47,7 +47,7 @@ bld/
 *.zip
 3rdparty/
 
-shaders/compiled/*.spv
+*.spv
 
 platform/linux/include/xdg-*
 

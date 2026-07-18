@@ -1,0 +1,50 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext {
+    uint count;
+} gs;
+
+layout(set = 0, binding = 0) readonly buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) buffer DepthOffsets {
+	uint offsetAtN[DEPTH_MAX];
+} depths;
+
+layout(set = 0, binding = 2) readonly buffer UIChildrenCounts
+{
+    uint childCounts[];
+} chilsCounts;
+
+layout(set = 0, binding = 3) writeonly buffer UIChildrenOffsets
+{
+    uint childOffsets[];
+} chilsOffs;
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    if (lIndex >= gs.count)
+        return;
+
+    uint bitfield = conts.renderables[lIndex].bitfields.x;
+
+    uint contDepth = GET_DEPTH(bitfield.x) + 1;
+
+    uint childCount = chilsCounts.childCounts[lIndex];
+
+    uint childDepthOffset = atomicAdd(depths.offsetAtN[contDepth], childCount);
+
+    chilsOffs.childOffsets[lIndex] = childDepthOffset; 
+
+	return;
+}
