@@ -52,11 +52,6 @@ void main()
 
     imageStore(uiIndirectionHandles, int(visibleIndex), uvec4(lIndex, 0, 0, 0));
 
-    conts.renderables[lIndex].anchorPoint.x = cont.padding.z;
-    conts.renderables[lIndex].anchorPoint.y = cont.padding.x;
-    conts.renderables[lIndex].absoluteSize.x = floor(cont.relativeContainerSize.x * gs.window.width) - (cont.padding.w);
-    conts.renderables[lIndex].absoluteSize.y = floor(cont.relativeContainerSize.y * gs.window.height) - (cont.padding.y);
-
     comStructs.command[visibleIndex].vertexCount = 4;
     comStructs.command[visibleIndex].instanceCount = 1;
     comStructs.command[visibleIndex].firstInstance = 0;

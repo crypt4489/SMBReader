@@ -1,0 +1,23 @@
+<ShaderGraph>
+	<GLSLShader type="compute">
+		UIAbsolutePositioning.comp
+		<ComputeLayout x="1" y="1" z="1">
+		</ComputeLayout>
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="c" size="12" offset="0" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="12" pushstage="0">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="readwrite">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

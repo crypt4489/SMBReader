@@ -69,7 +69,9 @@ enum ShaderResourceLayoutIdentifiers
 	UIDRAWING,
 	UIDEPTHCOUNT,
 	UICHILDDEPTHADD,
-	UIINDEXASSIGNMENT
+	UIINDEXASSIGNMENT, 
+	UILAYOUTSIZES,
+	UIABSOLUTEPOSITION
 };
 
 static std::array<StringView, 10> pds = {
@@ -85,7 +87,7 @@ static std::array<StringView, 10> pds = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIPipeline.pld"),
 };
 
-static std::array<StringView, 25> layouts = {
+static std::array<StringView, 27> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
@@ -111,6 +113,8 @@ static std::array<StringView, 25> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIDepthCount.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIChildDepthAdd.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIIndexAssignments.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("UILayoutsSizes.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIAbsolutePositioning.sgr"),
 };
 
 static std::array<StringView, 3> mainLayoutAttachments =
@@ -652,52 +656,53 @@ static int globalUIPrefixSumPipeline = -1;
 static int globalUIChildDepthAddPipeline = -1;
 static int globalUIIndexAssignmentPipeline = -1;
 
-static int globalUICount = 0;
+static int globalChildSubtreeDimensions = -1;
+static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
+static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
 
-static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6 ,7, 8 };
+static int globalUICount = 0;
+static int globalUIMaxDepth = 2;
+
+static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 static UIContainer mainContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 3, NO_PARENT, NOT_A_CHILD},
+	.bitfields = { MAKE_ORIENTATION(1) |MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 3, NO_PARENT, NOT_A_CHILD},
 	.color = { 0.0, 0.0, 0.0, 0.0},
 	.padding = {0, 0.0, 0.0, 0.0 },
 	.relativeContainerSize = {1.0f, 1.0f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.structPad = {0.0, 0.0}
 };
 
 static UIContainer mainLeftContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 1},
 	.color = { 1.0, 0.0, 0.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 0.0 },
-	.relativeContainerSize = {0.30f, 1.0f},
+	.padding = {10.0, 10.0, 10.0, 10.0 },
+	.relativeContainerSize = {0.30f, .966f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.structPad = {0.0, 0.0}
 };
 
 static UIContainer mainRightContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 3},
-	.color = { 1.0, 0.0, 0.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 0.0 },
-	.relativeContainerSize = {0.30f, 1.0f},
+	.color = { 0.0, 1.0, 0.0, 1.0},
+	.padding = {10.0, 10.0, 10.0, 10.0 },
+	.relativeContainerSize = {0.30f, .966f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.structPad = {0.0, 0.0}
 };
 
 static UIContainer mainCenterContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 2},
-	.color = { 1.0, 0.0, 0.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 0.0 },
-	.relativeContainerSize = {0.30f, 1.0f},
+	.color = { 0.0, 0.0, 1.0, 1.0},
+	.padding = {10.0, 10.0, 10.0, 10.0 },
+	.relativeContainerSize = {0.30f, .966f},
 	.absoluteSize = { 0.0, 0.0 },
 	.anchorPoint = { 0.0, 0.0 },
-	.structPad = {0.0, 0.0}
 };
 
 struct WindowSize
@@ -972,13 +977,15 @@ void ApplicationLoop::Execute()
 
 		uint32_t framesInFlight = GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT;
 
-		int updateMainDrawCommand = 0, updateMainDebugCommand = 0, updateLights = framesInFlight, updateShadowMap = 0, updateUI = framesInFlight;
+		int updateMainDrawCommand = 0, updateMainDebugCommand = 0, updateLights = framesInFlight, updateShadowMap = 0, updateUI = 0;
 
 		int mainDrawRenderableCount = mainIndirectDrawData.commandBufferCount;
 
 		int mainDebugDrawRenderableCount = debugIndirectDrawData.commandBufferCount;
 
 		int previousGlobalLightCount = globalLightCount;
+
+		int localUICount = 0;
 
 		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, mainComputeQueueIndex, COMPUTE_QUEUE_COMMANDS);
 		GlobalRenderer::gRenderInstance.AddCommandQueue(mainCommandStreamIndex, currentFrameGraphIndex, ATTACHMENT_COMMANDS);
@@ -1105,27 +1112,53 @@ void ApplicationLoop::Execute()
 				updateMainDebugCommand--;
 			}
 
-			if (updateUI > 0)
+			if (localUICount != globalUICount || updateUI > 0)
 			{
+				
+				if (!updateUI)
+					updateUI = framesInFlight;
+
 				if (updateUI == framesInFlight)
-					GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUIElementsIndirectCountBuffer, 4, 0, 0);
+					GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUIElementsIndirectCountBuffer, sizeof(uint32_t), 0, 0);
+				
+				if (localUICount != globalUICount)
+				{
+					if (updateUI == framesInFlight)
+					{
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthCounts , DEPTH_MAX*sizeof(uint32_t), 0, 0);
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthOffsets , DEPTH_MAX*sizeof(uint32_t), 0, 0);
+					}
 
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICountPipeline);
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICountPipeline);
 
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIPrefixSumPipeline);
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIPrefixSumPipeline);
 
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIChildDepthAddPipeline);
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIChildDepthAddPipeline);
 
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIIndexAssignmentPipeline);
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIIndexAssignmentPipeline);
 
-				//GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
+					if (updateUI == 1)
+					{
+						localUICount = globalUICount;
+					}
+				}
+
+				for (int i = 0; i < globalUIMaxDepth; i++)
+				{
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
+				}
+
+				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[1]);
+
+				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
 				
 				updateUI--;
+
 			}
 
 			swcImageIndex = GlobalRenderer::gRenderInstance.BeginFrame(mainLogicalDevice, mainPresentationSwapChain);
 
-			UIContainer uiContainers[2];
+			
 
 			if (swcImageIndex != ~0UL)
 			{
@@ -1174,17 +1207,7 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
-
-				static uint32_t huh[DEPTH_MAX];
-
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthCounts, huh, sizeof(huh), 0);
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthOffsets, huh, sizeof(huh), 0);
-			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalChildrenPrefixSumCount, huh, sizeof(huh), 0);
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalChildrenOffsets, huh, sizeof(huh), 0);
-				
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIIndirectionPositionalHandleBuffer, huh, sizeof(huh), 0);
-
-
+		
 				running = ProcessCommands();
 
 			}
@@ -3893,6 +3916,8 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIDEPTHCOUNT);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UICHILDDEPTHADD);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIINDEXASSIGNMENT);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UILAYOUTSIZES);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIABSOLUTEPOSITION);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue(15);
 
@@ -5337,7 +5362,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 
-	windowSize.totalUIContainerCount = 2;
+	windowSize.totalUIContainerCount = globalUICount;
 
 	{
 		ShaderResourceSetBuilder uiCullingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
@@ -5526,6 +5551,73 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 
 
 		globalUIIndexAssignmentPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+	}
+
+	for (int i = 0; i < 2; i++)
+	{
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UILAYOUTSIZES, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
+
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 2);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionPositionalHandleBuffer, 0, 1, 3);
+		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize, 0);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i], 1);
+
+		if (descriptorContext.contextFailed)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
+			mainAppLogger.ProcessMessage();
+			return;
+		}
+
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
+
+		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = UILAYOUTSIZES,
+			.descCount = 1,
+			.descriptorsetid = descriptors.data()
+		};
+
+		globalContainerSizeCalculationPipeline[i] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+	}
+
+	for (int i = 0; i < 1; i++)
+	{
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIABSOLUTEPOSITION, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
+
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 2);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalChildrenOffsets, 0, 1, 3);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionPositionalHandleBuffer, 0, 1, 4);
+		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize, 0);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i+1], 1);
+
+		if (descriptorContext.contextFailed)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
+			mainAppLogger.ProcessMessage();
+			return;
+		}
+
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
+
+		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = UIABSOLUTEPOSITION,
+			.descCount = 1,
+			.descriptorsetid = descriptors.data()
+		};
+
+		globalContainerPositionCalculationPipeline[i+1] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
 	}
 
 }

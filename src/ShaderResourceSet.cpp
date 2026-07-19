@@ -286,7 +286,7 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 		setLay->totalViewsCount = 0;
 		setLay->bindingCount = 0;
 	
-		while (tag && tag->hashCode == hash("ShaderResourceItem"))
+		while (resourceIter < shaderResourceCount && tag && tag->hashCode == hash("ShaderResourceItem"))
 		{
 			ShaderResourceTemplate* resource = &graph->shaderResources[resourceIter++];
 

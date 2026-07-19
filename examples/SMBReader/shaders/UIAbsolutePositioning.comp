@@ -1,0 +1,77 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext {
+    WindowSize window;
+    uint depthIndex;
+} gs;
+
+layout(set = 0, binding = 0) buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) readonly buffer DepthOffsets {
+	uint offsetAtN[DEPTH_MAX];
+} depthOffs;
+
+layout(set = 0, binding = 2) readonly buffer DepthCounts {
+	uint countsAtN[DEPTH_MAX];
+} depthCounts;
+
+layout(set = 0, binding = 3) readonly buffer UIChildrenOffsetss
+{
+    uint childOffsets[];
+} chilsOffs;
+
+layout(set = 0, binding = 4) uniform usamplerBuffer uiPositionalIndirectionHandles;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+	uint lIndex =  gl_WorkGroupID.x;
+
+    uint parentLevelCount = depthCounts.countsAtN[gs.depthIndex-1];
+    uint parentLevelOffset = depthOffs.offsetAtN[gs.depthIndex-1] - parentLevelCount;
+
+    uint currentLevelCount = depthCounts.countsAtN[gs.depthIndex];
+    uint currentLevelOffset = depthOffs.offsetAtN[gs.depthIndex] - currentLevelCount;
+
+    if (lIndex >= parentLevelCount)
+        return;
+
+    uint parentIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(parentLevelOffset + lIndex)).r);
+
+    uint childOffset = chilsOffs.childOffsets[parentIndex];
+
+    uint flags = conts.renderables[parentIndex].bitfields.x;
+
+    uint childCount = conts.renderables[parentIndex].bitfields.y;
+
+    uint orientation =  GET_ORIENTATION(flags);
+
+    float IS_HORIZONTAL = float(orientation == HORIZONTAL_ORIENTATION);
+    float IS_VERTICAL = float(orientation == VERTICAL_ORIENTATION);
+
+    vec2 baseAnchorPoint = conts.renderables[parentIndex].anchorPoint;
+
+    for (uint i = 0; i<childCount; i++)
+    {
+        uint currentIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(childOffset + i)).r);
+
+        vec2 size = conts.renderables[currentIndex].absoluteSize;
+        vec4 padding = conts.renderables[currentIndex].padding;
+
+        conts.renderables[currentIndex].anchorPoint.x = baseAnchorPoint.x + padding.z;
+        conts.renderables[currentIndex].anchorPoint.y = baseAnchorPoint.y + padding.x;
+
+        baseAnchorPoint.x += ((size.x + padding.w) * IS_HORIZONTAL);
+        baseAnchorPoint.y += ((size.y + padding.y) * IS_VERTICAL);
+    }
+
+	return;
+}

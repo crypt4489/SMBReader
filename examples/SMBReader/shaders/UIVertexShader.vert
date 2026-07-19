@@ -43,7 +43,7 @@ void main()
 
     vec2 mixer = poses[gl_VertexIndex];
 
-    vec2 pos =  2.0 * (((end-start) * mixer) + start) - 1.0;
+    vec2 pos =  2.0 * ((end * mixer)+start) - 1.0;
 
     gl_Position = vec4(pos, 0.0, 1.0);
 

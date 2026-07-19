@@ -1,0 +1,65 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext {
+    WindowSize window;
+    uint depthIndex;
+} gs;
+
+layout(set = 0, binding = 0) buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) readonly buffer DepthOffsets {
+	uint offsetAtN[DEPTH_MAX];
+} depthOffs;
+
+layout(set = 0, binding = 2) readonly buffer DepthCounts {
+	uint countsAtN[DEPTH_MAX];
+} depthCounts;
+
+layout(set = 0, binding = 3) uniform usamplerBuffer uiPositionalIndirectionHandles;
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+shared uint levelOffset;
+shared uint levelCount;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x;
+
+    if (lIndex == 0)
+    {
+        levelCount = depthCounts.countsAtN[gs.depthIndex];
+        levelOffset = depthOffs.offsetAtN[gs.depthIndex] - levelCount;
+    }
+
+    barrier();
+
+    if (lIndex >= levelCount)
+        return;
+
+    uint containerIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(levelOffset + lIndex)).r);
+
+    uint parentIndex = conts.renderables[containerIndex].bitfields.z;
+    vec2 relativeContainerSize = conts.renderables[containerIndex].relativeContainerSize;
+
+    if (parentIndex == NO_PARENT)
+    {
+        conts.renderables[containerIndex].absoluteSize.x = floor(relativeContainerSize.x * gs.window.width);
+        conts.renderables[containerIndex].absoluteSize.y = floor(relativeContainerSize.y * gs.window.height);
+    }
+    else
+    {
+        vec2 parentSize = conts.renderables[parentIndex].absoluteSize;
+        conts.renderables[containerIndex].absoluteSize.x = floor(relativeContainerSize.x * parentSize.x);
+        conts.renderables[containerIndex].absoluteSize.y = floor(relativeContainerSize.y * parentSize.y);
+    }
+
+	return;
+}
