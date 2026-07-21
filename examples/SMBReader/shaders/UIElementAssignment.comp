@@ -4,7 +4,8 @@
 
 #include "include/UI.iglsl"
 
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     uint count;
 } gs;
 
@@ -20,7 +21,8 @@ layout(set = 0, binding = 1) readonly buffer UIChildrenOffsetss
 
 layout(set = 0, binding = 2, r32ui) uniform uimageBuffer uiPositionalIndirectionHandles;
 
-layout(set = 0, binding = 3) buffer DepthOffsets {
+layout(set = 0, binding = 3) buffer DepthOffsets 
+{
 	uint offsetAtN[DEPTH_MAX];
 } depths;
 

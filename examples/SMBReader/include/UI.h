@@ -20,7 +20,6 @@
 #define HORIZONTAL_ORIENTATION 0
 #define VERTICAL_ORIENTATION 1
 
-
 #define MAKE_DEPTH(depth) (((depth) & DEPTH_MAX-1) << DEPTH_BIT_OFFSET)
 #define MAKE_TYPE(type) (((type) & TYPE_MAX-1) << TYPE_BIT_OFFSET)
 #define MAKE_TYPE_SPECIFIC_DATA(data) (((data) & TYPE_SPECIFIC_MAX-1) << TYPE_SPECIFIC_DATA_OFFSET)
@@ -28,6 +27,13 @@
 
 #define NO_PARENT 4294967295
 #define NOT_A_CHILD NO_PARENT
+
+#define MAKE_COLOR_COMPONENT(c) ((float)(c)/256.0)
+#define MAKE_COLOR(r, g, b, a) { MAKE_COLOR_COMPONENT(r), MAKE_COLOR_COMPONENT(g), MAKE_COLOR_COMPONENT(b), (float)(a)}
+#define PACK_COLOR_10_11_10_1(r, g, b, a) ((((unsigned int)(MAKE_COLOR_COMPONENT(r) * (float)(1<<10))) << 22) | \
+										   (((unsigned int)(MAKE_COLOR_COMPONENT(g) * (float)(1<<11))) << 11) | \
+										   (((unsigned int)(MAKE_COLOR_COMPONENT(b) * (float)(1<<10))) << 1) | \
+										   (((unsigned int)a) & 1))
 
 //bitfields
 
@@ -43,6 +49,14 @@ struct UIContainer
 	Vector4f padding; //padding top, bottom, left, right
 	Vector2f relativeContainerSize; // percent size of the canvas
 	Vector2f structPad;
+	
+	/*
+		For Container 
+		x = packedBorderColor1, y = packedBorderColor2
+	*/
+
+	Vector4ui packedData;
+
 };
 
 struct UIRetainedContainer

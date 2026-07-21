@@ -23,7 +23,6 @@
 #define GET_TYPE_SPECIFIC_DATA(packed) (((packed) >> TYPE_SPECIFIC_DATA_OFFSET) & TYPE_SPECIFIC_MAX-1)
 #define GET_ORIENTATION(packed) (((packed) & CONTAINER_ORIENTATION_MAX-1) << CONTAINER_ORIENTATION_DATA_OFFSET)
 
-
 #define NO_PARENT 4294967295
 #define NOT_A_CHILD NO_PARENT
 
@@ -36,6 +35,7 @@ struct UIContainer
     vec4 padding; //padding top, bottom, left, right
 	vec2 relativeContainerSize; // percent size of the canvas
     vec2 structPad;
+    uvec4 packedData;
 };
 
 struct UIRetainedContainer
@@ -48,5 +48,9 @@ struct WindowSize
 {
     float width;
     float height;
-    uint totalUIContainerCount;
 };
+
+vec4 makeColorFrom10_11_10_1(uint packedColor)
+{
+    return vec4(float((packedColor&4290772992U)>>22u), float((packedColor&4192256)>>11u), float((packedColor&2046u)>>1u), float(packedColor&1u)) * vec4(0.000977, 0.000488, 0.000977, 1.0);
+}

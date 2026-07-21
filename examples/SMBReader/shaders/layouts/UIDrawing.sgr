@@ -6,6 +6,8 @@
 		UIPixelShader.frag
 	</GLSLShader>
 	<ShaderResourceSet>
+		<ShaderResourceItem type="constantbuffer" used="f" size="4" offset="0" pushstage="0">
+		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="v" rw="read">

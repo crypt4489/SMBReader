@@ -5,9 +5,10 @@
 #include "include/UI.iglsl"
 
 layout(location = 0) out vec4 backGroundColor;
-layout(location = 1) out vec2 adjustedLocalPos;
-layout(location = 2) out vec2 rectSize;
-layout(location = 3) flat out uint uiDetails; 
+layout(location = 1) flat out uvec4 uiAncillaryData;
+layout(location = 2) out vec2 adjustedLocalPos;
+layout(location = 3) out vec2 rectSize;
+layout(location = 4) flat out uint uiDetails; 
 
 layout(set = 0, binding = 0) readonly buffer UIContainers
 {
@@ -55,4 +56,6 @@ void main()
     adjustedLocalPos = (mixer - 0.5) * 2.0 * end;
 
     uiDetails = container.bitfields.x;
+
+    uiAncillaryData = container.packedData;
 }

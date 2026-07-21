@@ -4,7 +4,8 @@
 
 #include "include/UI.iglsl"
 
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     uint count;
 } gs;
 
@@ -13,7 +14,8 @@ layout(set = 0, binding = 0) buffer UIContainers
     UIContainer renderables[];
 } conts;
 
-layout(set = 0, binding = 1) buffer DepthOffsets {
+layout(set = 0, binding = 1) buffer DepthOffsets 
+{
 	uint offsetAtN[DEPTH_MAX];
 } depths;
 

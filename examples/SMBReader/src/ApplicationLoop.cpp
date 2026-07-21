@@ -667,7 +667,7 @@ static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 static UIContainer mainContainer =
 {
-	.bitfields = { MAKE_ORIENTATION(1) |MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 3, NO_PARENT, NOT_A_CHILD},
+	.bitfields = { MAKE_ORIENTATION(VERTICAL_ORIENTATION) |MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 3, NO_PARENT, NOT_A_CHILD},
 	.color = { 0.0, 0.0, 0.0, 0.0},
 	.padding = {0, 0.0, 0.0, 0.0 },
 	.relativeContainerSize = {1.0f, 1.0f},
@@ -676,26 +676,41 @@ static UIContainer mainContainer =
 static UIContainer mainLeftContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 1},
-	.color = { 1.0, 0.0, 0.0, 1.0},
+	.color = MAKE_COLOR(45.0, 48.0, 56.0, 1.0),
 	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
 	.relativeContainerSize = {0.30f, .9f},
+	.structPad = {0.0, 0.0},
+	.packedData = {PACK_COLOR_10_11_10_1(0x45, 0x4A, 0x55, 1.0), 0, 0, 0}
 };
 
 static UIContainer mainRightContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 3},
-	.color = { 0.0, 1.0, 0.0, 1.0},
+	.color = MAKE_COLOR(54.0, 58.0, 67.0, 1.0),
 	.padding = {0.05, 0.05, 1.0/60.0, 1.0 / 60.0},
 	.relativeContainerSize = {0.30f, .9f},
+	.structPad = {0.0, 0.0},
+	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), 0, 0, 0}
 };
 
 static UIContainer mainCenterContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 2},
-	.color = { 0.0, 0.0, 1.0, 1.0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 2},
+	.color = MAKE_COLOR(65.0, 70.0, 80.0, 1.0),
 	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
 	.relativeContainerSize = {0.30f, .9f},
+	.structPad = {0.0, 0.0},
+	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), 0, 0, 0}
 };
+
+struct WindowSize
+{
+	float width;
+	float height;
+	float aspect; 
+} windowSize{ .width = 800.0, .height = 600.0, .aspect = 800.0/600.0 };
+
+
 
 static bool ExecuteCommands(const StringView& command, int argCount);
 static void SetPositionOfGeometry(int geomIndex, const Vector3f& pos);
@@ -991,6 +1006,11 @@ void ApplicationLoop::Execute()
 				int width = 0, height = 0;
 
 				mainWindow.GetWindowSize(&width, &height);
+
+				windowSize.height = (float)height;
+				windowSize.width = (float)width;
+
+				windowSize.aspect = windowSize.width / windowSize.height;
 
 				updateUI = framesInFlight;
 
@@ -5377,6 +5397,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
 		uiDrawingBufferDescriptorB.BindBufferView(&uiDrawDescriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
 		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
+		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &windowSize.aspect, 0);
 
 		if (uiDrawDescriptorContext.contextFailed)
 		{
