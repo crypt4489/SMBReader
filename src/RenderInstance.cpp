@@ -4377,7 +4377,7 @@ void RenderInstance::CreateGraphicsQueueForAttachments(int frameGraphIndex, int 
 	passInstance->graphicsOTQIndex = renderTargetQueues.Allocate();;
 }
 
-int RenderInstance::CreateComputeQueue(uint32_t maxNumPipelines)
+int RenderInstance::CreateComputeQueue()
 {
 	return computeQueues.Allocate();
 }

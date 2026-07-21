@@ -3835,24 +3835,17 @@ void ApplicationLoop::InitializeRuntime()
 	mainDSVSlab.dataAllocator = 0;
 	mainDSVSlab.dataSize = mainDSVSize;
 
-	MSAAPost = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[0], nullptr);
 	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[1], nullptr);
 	MSAAShadowMapping = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[2], nullptr);
 
 	currentFrameGraphIndex = MSAAShadowMapping;
 
-	frameGraphsCount = mainLayoutAttachments.size();
+	frameGraphsCount = 2;
 
 	mainPresentationSwapChain = GlobalRenderer::gRenderInstance.CreateSwapChainHandle(mainLogicalDevice, mainPresentationWindow, mainColorFormat, 800, 600);
 
 	std::array<AttachmentClear, 1> ShadowMapViewerClears {
 		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
-	};
-	std::array<AttachmentClear, 4> MSAAPostClears {
-		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
-		NOCLEAR, {0.0, 0.0, 0.0, 0.0},
-		CLEARCOLOR, {0.0, 0.0, 0.0, 0.0},
-		CLEARDEPTH, {1.0, 0}
 	};
 
 	std::array<AttachmentClear, 4> MSAAShadowMappingClears {
@@ -3863,14 +3856,10 @@ void ApplicationLoop::InitializeRuntime()
 	};
 
 	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, BasicShadow, 0, ShadowMapViewerClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAPost, 1, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 1, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	
-	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 800, 600, MSAAPostClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, mainShadowWidth, mainShadowHeight, MSAAShadowMappingClears.data(), &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 
-	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 0, 10);
-	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAPost, 1, 1);
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAShadowMapping, 0, 10);
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(MSAAShadowMapping, 1, 10);
 	GlobalRenderer::gRenderInstance.CreateGraphicsQueueForAttachments(BasicShadow, 0, 1);
@@ -3881,21 +3870,21 @@ void ApplicationLoop::InitializeRuntime()
 
 	mainLinearSampler = GlobalRenderer::gRenderInstance.CreateSampler(mainLogicalDevice, 7);
 
-	std::array frameGraphs = { MSAAPost, MSAAShadowMapping, BasicShadow };
+	std::array frameGraphs = { MSAAShadowMapping, BasicShadow };
 	std::array frameRenderPassSelection = { 0, 1, 0 };
 
-	std::array fullScreenFrameGraphs = { MSAAPost, BasicShadow };
+	std::array fullScreenFrameGraphs = { BasicShadow };
 
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, GENERIC, 0, frameGraphs.data(), frameRenderPassSelection.data(),  2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, TEXT, 1, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, DEBUGDRAW, 2, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, NORMALDEBUGDRAW, 3, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SKYBOX, 4, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, OUTLINE, 5, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, FULLSCREEN, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data() + 1, 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SHADOWMAPDRAW, 7, frameGraphs.data() + 1, frameRenderPassSelection.data(), 1);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, JOINTVISUAL, 8, frameGraphs.data(), frameRenderPassSelection.data(), 2);
-	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, UIDRAWING, 9, frameGraphs.data(), frameRenderPassSelection.data(), 2);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, GENERIC, 0, frameGraphs.data(), frameRenderPassSelection.data()+1,  1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, TEXT, 1, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, DEBUGDRAW, 2, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, NORMALDEBUGDRAW, 3, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SKYBOX, 4, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, OUTLINE, 5, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, FULLSCREEN, 6, fullScreenFrameGraphs.data(), frameRenderPassSelection.data(), 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, SHADOWMAPDRAW, 7, frameGraphs.data(), frameRenderPassSelection.data(), 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, JOINTVISUAL, 8, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
+	GlobalRenderer::gRenderInstance.CreateGraphicRenderStateObject(mainLogicalDevice, UIDRAWING, 9, frameGraphs.data(), frameRenderPassSelection.data()+1, 1);
 
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, INTERPOLATE);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, POLYNOMIAL);
@@ -3915,7 +3904,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UILAYOUTSIZES);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIABSOLUTEPOSITION);
 
-	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue(15);
+	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue();
 
 	CreateTexturePools();
 
@@ -3964,7 +3953,7 @@ void ApplicationLoop::InitializeRuntime()
 	int creationRetMW = CreateMeshWorldAssignment(mainGrid.numberOfDivision * mainGrid.numberOfDivision * mainGrid.numberOfDivision);
 	int creationRetGMB = CreateGenericMeshCommandBuffers(globalMeshCountMax);
 	int creationRetSM = CreateShadowMapManager(4, globalMeshCountMax, 1024, 1024, mainShadowWidth, mainShadowHeight);
-	int creationRetFS = CreateMSAAPostFullScreen();
+	int creationRetFS = 0;//CreateMSAAPostFullScreen();
 
 	CreateUITools(25, 5);
 
@@ -3988,8 +3977,6 @@ void ApplicationLoop::InitializeRuntime()
 	c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 
 	UpdateCameraMatrix();
-
-	
 }
 
 void ApplicationLoop::CleanupRuntime()

@@ -2192,6 +2192,8 @@ void VKDevice::DestroyDescriptorSet(EntryHandle handle)
 	FreeFromPerDeviceData(set->sets);
 
 	FreeFromPerDeviceData(set);
+
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyDevice()
@@ -2389,6 +2391,8 @@ void VKDevice::DestroyQueueManager(EntryHandle handle)
 	manager->DestroyManager();
 
 	FreeFromPerDeviceData(manager);
+
+	ReturnHandleObject(handle);
 }
 
 void VKDevice::DestroyQueryPool(EntryHandle handle)

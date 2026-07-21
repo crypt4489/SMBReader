@@ -235,7 +235,7 @@ struct RenderInstance
 
 	void CreateGraphicsQueueForAttachments(int frameGraphIndex, int renderPassIndex, uint32_t pipelineCount);
 
-	int CreateComputeQueue(uint32_t maxNumPipelines);
+	int CreateComputeQueue();
 
 	void AddCommandQueue(int commandStreamIndex, int handleIndex, GPUCommandStreamType type);
 
