@@ -42,7 +42,11 @@ struct UIContainer
 	Vector4f color;
 	Vector4f padding; //padding top, bottom, left, right
 	Vector2f relativeContainerSize; // percent size of the canvas
+	Vector2f structPad;
+};
+
+struct UIRetainedContainer
+{
 	Vector2f absoluteSize;
 	Vector2f anchorPoint;
-	Vector2f structPad;
 };

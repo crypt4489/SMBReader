@@ -12,8 +12,9 @@ struct VkDrawIndirectCommand
     uint firstInstance;
 };
 
-layout(push_constant) uniform GlobalContext {
-    WindowSize window;
+layout(push_constant) uniform GlobalContext 
+{
+    uint containerCount;
 } gs;
 
 layout(set = 0, binding = 0) writeonly buffer commands
@@ -32,30 +33,47 @@ layout(set = 0, binding = 2) buffer UIContainers
 
 layout(set = 0, binding = 3, r32ui) uniform uimageBuffer uiIndirectionHandles;
 
-layout (local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+shared uint groupVisibleCount;
+shared uint offsetIntoDrawList;
 
 void main()
 {
-	uint lIndex =  gl_LocalInvocationID.x;
+    uint lIndex = gl_LocalInvocationID.x + (gl_WorkGroupSize.x * gl_WorkGroupID.x);
 
-    if (lIndex >= gs.window.totalUIContainerCount)
-        return;
+    if (gl_LocalInvocationID.x == 0)
+    {
+        groupVisibleCount = 0;
+    }
+    barrier();
 
-    UIContainer cont = conts.renderables[lIndex];
+    uint groupVisibleIndex = gl_WorkGroupSize.x;
 
-    uint bitfield = cont.bitfields.x;
+    if (lIndex < gs.containerCount)
+    {
+        uint bitfield = conts.renderables[lIndex].bitfields.x;
 
-    if ((GET_TYPE_SPECIFIC_DATA(bitfield) & INVISIBLE_CONTAINER) == INVISIBLE_CONTAINER)
-        return;
+        if ((GET_TYPE_SPECIFIC_DATA(bitfield) & INVISIBLE_CONTAINER) != INVISIBLE_CONTAINER)
+            groupVisibleIndex = atomicAdd(groupVisibleCount, 1u);
+    }
+    barrier();
 
-    uint visibleIndex = atomicAdd(cCounts.visibleCount, 1u);
+    if (gl_LocalInvocationID.x == 0)
+    {
+        offsetIntoDrawList = atomicAdd(cCounts.visibleCount, groupVisibleCount);
+    }
+    barrier();
 
-    imageStore(uiIndirectionHandles, int(visibleIndex), uvec4(lIndex, 0, 0, 0));
+    if (lIndex < gs.containerCount && groupVisibleIndex < gl_WorkGroupSize.x)
+    {
+        uint absoluteOffset = offsetIntoDrawList + groupVisibleIndex;
 
-    comStructs.command[visibleIndex].vertexCount = 4;
-    comStructs.command[visibleIndex].instanceCount = 1;
-    comStructs.command[visibleIndex].firstInstance = 0;
-    comStructs.command[visibleIndex].firstVertex = 0;
+        imageStore(uiIndirectionHandles, int(absoluteOffset), uvec4(lIndex, 0, 0, 0));
 
-	return;
+        comStructs.command[absoluteOffset].vertexCount = 4;
+        comStructs.command[absoluteOffset].instanceCount = 1;
+        comStructs.command[absoluteOffset].firstInstance = 0;
+        comStructs.command[absoluteOffset].firstVertex = 0;
+    }
 }

@@ -5,11 +5,9 @@
 		</ComputeLayout>
 	</GLSLShader>
 	<ShaderResourceSet>
-		<ShaderResourceItem type="constantbuffer" used="c" size="12" offset="0" pushstage="0">
+		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="0" pushstage="0">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="12" pushstage="0">
-		</ShaderResourceItem>
-		<ShaderResourceItem type="storage" used="c" rw="readwrite">
+		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
@@ -18,6 +16,8 @@
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="bufferView" used="c" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="readwrite">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

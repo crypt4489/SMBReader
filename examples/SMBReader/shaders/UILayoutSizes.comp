@@ -4,12 +4,12 @@
 
 #include "include/UI.iglsl"
 
-layout(push_constant) uniform GlobalContext {
-    WindowSize window;
+layout(push_constant) uniform GlobalContext 
+{
     uint depthIndex;
 } gs;
 
-layout(set = 0, binding = 0) buffer UIContainers
+layout(set = 0, binding = 0) readonly buffer UIContainers
 {
     UIContainer renderables[];
 } conts;
@@ -24,6 +24,11 @@ layout(set = 0, binding = 2) readonly buffer DepthCounts {
 
 layout(set = 0, binding = 3) uniform usamplerBuffer uiPositionalIndirectionHandles;
 
+layout(set = 0, binding = 4) buffer UIRetainedContainers
+{
+    UIRetainedContainer renderables[];
+} retainedConts;
+
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 shared uint levelOffset;
@@ -31,7 +36,7 @@ shared uint levelCount;
 
 void main()
 {
-	uint lIndex =  gl_LocalInvocationID.x;
+	uint lIndex =  gl_LocalInvocationID.x + (gl_WorkGroupSize.x * gl_WorkGroupID.x);
 
     if (lIndex == 0)
     {
@@ -51,14 +56,14 @@ void main()
 
     if (parentIndex == NO_PARENT)
     {
-        conts.renderables[containerIndex].absoluteSize.x = floor(relativeContainerSize.x * gs.window.width);
-        conts.renderables[containerIndex].absoluteSize.y = floor(relativeContainerSize.y * gs.window.height);
+        retainedConts.renderables[containerIndex].absoluteSize.x = 1.0 * relativeContainerSize.x;
+        retainedConts.renderables[containerIndex].absoluteSize.y = 1.0 * relativeContainerSize.y;
     }
     else
     {
-        vec2 parentSize = conts.renderables[parentIndex].absoluteSize;
-        conts.renderables[containerIndex].absoluteSize.x = floor(relativeContainerSize.x * parentSize.x);
-        conts.renderables[containerIndex].absoluteSize.y = floor(relativeContainerSize.y * parentSize.y);
+        vec2 parentSize = retainedConts.renderables[parentIndex].absoluteSize;
+        retainedConts.renderables[containerIndex].absoluteSize.x = relativeContainerSize.x * parentSize.x;
+        retainedConts.renderables[containerIndex].absoluteSize.y = relativeContainerSize.y * parentSize.y;
     }
 
 	return;

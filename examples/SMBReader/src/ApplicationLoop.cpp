@@ -655,8 +655,8 @@ static int globalUICountPipeline = -1;
 static int globalUIPrefixSumPipeline = -1;
 static int globalUIChildDepthAddPipeline = -1;
 static int globalUIIndexAssignmentPipeline = -1;
+static int globalUIRetainedContainerData = -1;
 
-static int globalChildSubtreeDimensions = -1;
 static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
 static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
 
@@ -671,51 +671,30 @@ static UIContainer mainContainer =
 	.color = { 0.0, 0.0, 0.0, 0.0},
 	.padding = {0, 0.0, 0.0, 0.0 },
 	.relativeContainerSize = {1.0f, 1.0f},
-	.absoluteSize = { 0.0, 0.0 },
-	.anchorPoint = { 0.0, 0.0 },
 };
 
 static UIContainer mainLeftContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 1},
 	.color = { 1.0, 0.0, 0.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 10.0 },
-	.relativeContainerSize = {0.30f, .966f},
-	.absoluteSize = { 0.0, 0.0 },
-	.anchorPoint = { 0.0, 0.0 },
+	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
+	.relativeContainerSize = {0.30f, .9f},
 };
 
 static UIContainer mainRightContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 3},
 	.color = { 0.0, 1.0, 0.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 10.0 },
-	.relativeContainerSize = {0.30f, .966f},
-	.absoluteSize = { 0.0, 0.0 },
-	.anchorPoint = { 0.0, 0.0 },
+	.padding = {0.05, 0.05, 1.0/60.0, 1.0 / 60.0},
+	.relativeContainerSize = {0.30f, .9f},
 };
 
 static UIContainer mainCenterContainer =
 {
 	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 2},
 	.color = { 0.0, 0.0, 1.0, 1.0},
-	.padding = {10.0, 10.0, 10.0, 10.0 },
-	.relativeContainerSize = {0.30f, .966f},
-	.absoluteSize = { 0.0, 0.0 },
-	.anchorPoint = { 0.0, 0.0 },
-};
-
-struct WindowSize
-{
-	float width;
-	float height;
-	uint32_t totalUIContainerCount;
-};
-
-WindowSize windowSize = {
-	.width = 800.0f,
-	.height = 600.0f,
-	.totalUIContainerCount = 1
+	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
+	.relativeContainerSize = {0.30f, .9f},
 };
 
 static bool ExecuteCommands(const StringView& command, int argCount);
@@ -1015,9 +994,6 @@ void ApplicationLoop::Execute()
 
 				updateUI = framesInFlight;
 
-				windowSize.height = height ? (float)height : 1.0;
-				windowSize.width = width ? (float)width : 1.0;
-
 				GlobalRenderer::gRenderInstance.RecreateSwapChain(mainLogicalDevice, mainPresentationSwapChain, (uint32_t)width, (uint32_t)height);
 				c.CreateProjectionMatrix(GlobalRenderer::gRenderInstance.GetSwapChainWidth(mainPresentationSwapChain) / (float)GlobalRenderer::gRenderInstance.GetSwapChainHeight(mainPresentationSwapChain), 0.1f, 10000.0f, DegToRad(45.0f));
 				UpdateCameraMatrix();
@@ -1137,18 +1113,18 @@ void ApplicationLoop::Execute()
 
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIIndexAssignmentPipeline);
 
+					for (int i = 0; i < globalUIMaxDepth; i++)
+					{
+						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
+					}
+
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[1]);
+
 					if (updateUI == 1)
 					{
 						localUICount = globalUICount;
 					}
 				}
-
-				for (int i = 0; i < globalUIMaxDepth; i++)
-				{
-					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
-				}
-
-				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[1]);
 
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
 				
@@ -5355,14 +5331,12 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 	globalChildrenOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionPositionalHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-
+	globalUIRetainedContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIRetainedContainer), maxUIContainers, alignof(UIRetainedContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainRightContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
-
-	windowSize.totalUIContainerCount = globalUICount;
 
 	{
 		ShaderResourceSetBuilder uiCullingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
@@ -5372,7 +5346,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 		uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIElementsIndirectBuffer, 0, 1, 0);
 		uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIContainerData, 0, 1, 2);
 		uiCullingBufferDescriptorB.BindBufferView(&uilDescriptorBuilder, &globalUIIndirectionHandleBuffer, 0, 1, 3);
-		uiCullingBufferDescriptorB.UploadConstant(&uilDescriptorBuilder, &windowSize, 0);
+		uiCullingBufferDescriptorB.UploadConstant(&uilDescriptorBuilder, &globalUICount, 0);
 
 		if (uilDescriptorBuilder.contextFailed)
 		{
@@ -5402,7 +5376,7 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 
 		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
 		uiDrawingBufferDescriptorB.BindBufferView(&uiDrawDescriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
-		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &windowSize, 0);
+		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
 
 		if (uiDrawDescriptorContext.contextFailed)
 		{
@@ -5562,8 +5536,8 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 2);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
 		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionPositionalHandleBuffer, 0, 1, 3);
-		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize, 0);
-		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i], 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIRetainedContainerData, 0, 1, 4);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i], 0);
 
 		if (descriptorContext.contextFailed)
 		{
@@ -5596,8 +5570,8 @@ void CreateUITools(int maxUIElements, int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalChildrenOffsets, 0, 1, 3);
 		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionPositionalHandleBuffer, 0, 1, 4);
-		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize, 0);
-		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i+1], 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIRetainedContainerData, 0, 1, 5);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[i+1], 0);
 
 		if (descriptorContext.contextFailed)
 		{

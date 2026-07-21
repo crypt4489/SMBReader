@@ -35,9 +35,13 @@ struct UIContainer
     vec4 color;
     vec4 padding; //padding top, bottom, left, right
 	vec2 relativeContainerSize; // percent size of the canvas
-	vec2 absoluteSize;
-    vec2 anchorPoint;
     vec2 structPad;
+};
+
+struct UIRetainedContainer
+{
+    vec2 absoluteSize;
+    vec2 anchorPoint;
 };
 
 struct WindowSize

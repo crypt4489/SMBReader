@@ -9,18 +9,17 @@ layout(location = 1) out vec2 adjustedLocalPos;
 layout(location = 2) out vec2 rectSize;
 layout(location = 3) flat out uint uiDetails; 
 
-
-layout(push_constant) uniform GlobalContext 
-{
-    WindowSize window;
-} gs;
-
 layout(set = 0, binding = 0) readonly buffer UIContainers
 {
     UIContainer renderables[];
 } conts;
 
 layout(set = 0, binding = 1) uniform usamplerBuffer uiIndirectionHandles;
+
+layout(set = 0, binding = 2) readonly buffer UIRetainedContainers
+{
+    UIRetainedContainer renderables[];
+} retainedConts;
 
 void main()
 {
@@ -30,6 +29,8 @@ void main()
 
     UIContainer container = conts.renderables[renderableIndex];
 
+    UIRetainedContainer retainedContainer = retainedConts.renderables[renderableIndex];
+
     vec2 poses[4] = vec2[](
         vec2(0.0, 0.0),
         vec2(1.0, 0.0),
@@ -37,13 +38,13 @@ void main()
         vec2(1.0, 1.0)
     );
 
-    vec2 start = vec2(container.anchorPoint.x/gs.window.width, container.anchorPoint.y/gs.window.height);
+    vec2 start = retainedContainer.anchorPoint;
 
-    vec2 end = vec2(container.absoluteSize.x/gs.window.width, container.absoluteSize.y/gs.window.height);
+    vec2 end = retainedContainer.absoluteSize;
 
     vec2 mixer = poses[gl_VertexIndex];
 
-    vec2 pos =  2.0 * ((end * mixer)+start) - 1.0;
+    vec2 pos =  2.0 * ((end * mixer) + start) - 1.0;
 
     gl_Position = vec4(pos, 0.0, 1.0);
 

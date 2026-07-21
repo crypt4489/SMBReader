@@ -4,21 +4,23 @@
 
 #include "include/UI.iglsl"
 
-layout(push_constant) uniform GlobalContext {
-    WindowSize window;
+layout(push_constant) uniform GlobalContext 
+{
     uint depthIndex;
 } gs;
 
-layout(set = 0, binding = 0) buffer UIContainers
+layout(set = 0, binding = 0) readonly buffer UIContainers
 {
     UIContainer renderables[];
 } conts;
 
-layout(set = 0, binding = 1) readonly buffer DepthOffsets {
+layout(set = 0, binding = 1) readonly buffer DepthOffsets 
+{
 	uint offsetAtN[DEPTH_MAX];
 } depthOffs;
 
-layout(set = 0, binding = 2) readonly buffer DepthCounts {
+layout(set = 0, binding = 2) readonly buffer DepthCounts 
+{
 	uint countsAtN[DEPTH_MAX];
 } depthCounts;
 
@@ -29,6 +31,11 @@ layout(set = 0, binding = 3) readonly buffer UIChildrenOffsetss
 
 layout(set = 0, binding = 4) uniform usamplerBuffer uiPositionalIndirectionHandles;
 
+layout(set = 0, binding = 5) buffer UIRetainedContainers
+{
+    UIRetainedContainer renderables[];
+} retainedConts;
+
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -38,11 +45,11 @@ void main()
     uint parentLevelCount = depthCounts.countsAtN[gs.depthIndex-1];
     uint parentLevelOffset = depthOffs.offsetAtN[gs.depthIndex-1] - parentLevelCount;
 
+     if (lIndex >= parentLevelCount)
+        return;
+
     uint currentLevelCount = depthCounts.countsAtN[gs.depthIndex];
     uint currentLevelOffset = depthOffs.offsetAtN[gs.depthIndex] - currentLevelCount;
-
-    if (lIndex >= parentLevelCount)
-        return;
 
     uint parentIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(parentLevelOffset + lIndex)).r);
 
@@ -57,20 +64,20 @@ void main()
     float IS_HORIZONTAL = float(orientation == HORIZONTAL_ORIENTATION);
     float IS_VERTICAL = float(orientation == VERTICAL_ORIENTATION);
 
-    vec2 baseAnchorPoint = conts.renderables[parentIndex].anchorPoint;
+    vec2 baseAnchorPoint = retainedConts.renderables[parentIndex].anchorPoint;
 
     for (uint i = 0; i<childCount; i++)
     {
         uint currentIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(childOffset + i)).r);
 
-        vec2 size = conts.renderables[currentIndex].absoluteSize;
+        vec2 size = retainedConts.renderables[currentIndex].absoluteSize;
         vec4 padding = conts.renderables[currentIndex].padding;
 
-        conts.renderables[currentIndex].anchorPoint.x = baseAnchorPoint.x + padding.z;
-        conts.renderables[currentIndex].anchorPoint.y = baseAnchorPoint.y + padding.x;
+        retainedConts.renderables[currentIndex].anchorPoint.x = (baseAnchorPoint.x + padding.z);
+        retainedConts.renderables[currentIndex].anchorPoint.y = (baseAnchorPoint.y + padding.x);
 
-        baseAnchorPoint.x += ((size.x + padding.w) * IS_HORIZONTAL);
-        baseAnchorPoint.y += ((size.y + padding.y) * IS_VERTICAL);
+        baseAnchorPoint.x += ((size.x + padding.w + padding.z) * IS_HORIZONTAL);
+        baseAnchorPoint.y += ((size.y + padding.y + padding.x) * IS_VERTICAL);
     }
 
 	return;
