@@ -29,6 +29,7 @@ enum ImageFormat
 	R8G8B8A8_UNORM = 8,
 	R8G8B8 = 9,
 	B8G8R8A8_UNORM = 10,
+	R32_UINT = 11,
 	IMAGE_UNKNOWN = 0x7fffffff
 };
 

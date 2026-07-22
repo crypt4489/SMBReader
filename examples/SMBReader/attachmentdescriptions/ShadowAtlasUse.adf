@@ -6,9 +6,15 @@
 </AttachmentResource>
 <AttachmentResource imageType="static" format="d24s8" msaa="true">
 </AttachmentResource>
+<AttachmentResource imageType="static" format="r32u">
+</AttachmentResource>
 <Attachments>
 	<DepthAttachment resource="1" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="shader">
 	</DepthAttachment>
+</Attachments>
+<Attachments>
+	<ColorAttachment resource = "4" loadOp="clear" storeOp="store" srcLayout="undefined" dstLayout="shader">
+	</ColorAttachment>
 </Attachments>
 <Attachments>
 	<ResolveAttachment resource="0" loadOp="nocare" storeOp="store" srcLayout="undefined" dstLayout="present">

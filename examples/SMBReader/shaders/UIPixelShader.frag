@@ -9,6 +9,7 @@ layout(location = 1) flat in uvec4 uiAncillaryData;
 layout(location = 2) in vec2 adjustedLocalPos;
 layout(location = 3) in vec2 rectSize;
 layout(location = 4) flat in uint uiDetails; 
+layout(location = 5) flat in uvec4 uiRetainedData;
 layout(location = 0) out vec4 outColor;
 
 layout(push_constant) uniform GlobalContext 
@@ -76,6 +77,11 @@ void main()
     }
 
     fragmentColor.w *= alpha;
+
+    if ((uiRetainedData.x & 1) == 1)
+    {
+        fragmentColor.xyz = vec3(0.0);
+    }
 
     outColor = fragmentColor;
 }

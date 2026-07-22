@@ -23,44 +23,6 @@ namespace GlobalRenderer
 
 namespace API 
 {
-	VkImageUsageFlags ConvertAttachmentResourceUsageToVkImageUsage(AttachmentResourceInstanceUsage usage)
-	{
-		VkImageUsageFlags flags = 0;
-
-		switch (usage)
-		{
-		case AttachmentResourceInstanceUsage::COLOR_ATTACHMENT_USAGE:
-			flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-			break;
-
-		case AttachmentResourceInstanceUsage::DEPTH_ATTACHMENT_USAGE:
-			flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-			break;
-
-		case AttachmentResourceInstanceUsage::STENCIL_ATTACHMENT_USAGE:
-			flags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-			break;
-
-		case AttachmentResourceInstanceUsage::RESOLVE_ATTACHMENT_USAGE:
-			flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-			break;
-
-		case AttachmentResourceInstanceUsage::PRESERVE_ATTACHMENT_USAGE:
-			flags = 0; // no direct Vulkan usage flag
-			break;
-
-		case AttachmentResourceInstanceUsage::INPUT_ATTACHMENT_USAGE:
-			flags = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-			break;
-
-		default:
-			flags = 0;
-			break;
-		}
-
-		return flags;
-	}
-
 	VkAttachmentLoadOp ConvertAttachLoadOpToVulkanLoadOp(AttachmentLoadUsage loadOp)
 	{
 		VkAttachmentLoadOp ret = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -211,6 +173,9 @@ namespace API
 
 		case ImageFormat::D32FLOAT:
 			vkFormat = VK_FORMAT_D32_SFLOAT;
+			break;
+		case ImageFormat::R32_UINT:
+			vkFormat = VK_FORMAT_R32_UINT;
 			break;
 		}
 		return vkFormat;
@@ -1639,7 +1604,7 @@ int RenderInstance::CreateAttachmentResources(
 					{
 						int textureIndex = resourceInst->textureIds[v][g] = CreateAttachmentImage(imageWidth, imageHeight, 1, 1,
 							ImageType::IMAGE_2D, sampLo, resourceTempl->format,
-							ImageUsageFlagBits::TRANSIENT_ATTACHMENT | ImageUsageFlagBits::COLOR_ATTACHMENT, rtvAllocator, ImageLayout::UNDEFINED, dev, rtvPoolIndex, MANAGED_IMAGE_RESOURCE);
+							ImageUsageFlagBits::COLOR_ATTACHMENT | ImageUsageFlagBits::SAMPLED, rtvAllocator, ImageLayout::UNDEFINED, dev, rtvPoolIndex, MANAGED_IMAGE_RESOURCE);
 
 						CreateAttachmentImageView(textureIndex, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::COLORATTACHMENT, dev);
 					}

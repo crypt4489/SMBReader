@@ -63,4 +63,5 @@ struct UIRetainedContainer
 {
 	Vector2f absoluteSize;
 	Vector2f anchorPoint;
+	Vector4ui retainedHoverData;
 };

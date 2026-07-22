@@ -1,0 +1,37 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext 
+{
+    ivec2 cursorPosition;
+    uint previousFrame;
+} gs;
+
+layout(set = 0, binding = 0) readonly buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) buffer UIRetainedContainers
+{
+    UIRetainedContainer renderables[];
+} retainedConts;
+
+layout(set = 0, binding = 2) uniform utexture2D objectIDMap[3];
+layout(set = 0, binding = 3) uniform sampler samplerLinear;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint id = uint(texelFetch(usampler2D(objectIDMap[gs.previousFrame], samplerLinear), gs.cursorPosition, 0).r);
+
+    if (id == 0)
+        return;
+
+    retainedConts.renderables[id].retainedDrawData.x = retainedConts.renderables[id].retainedDrawData.x | HOVER_OVER;
+
+	return;
+}

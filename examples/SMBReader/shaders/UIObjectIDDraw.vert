@@ -4,12 +4,10 @@
 
 #include "include/UI.iglsl"
 
-layout(location = 0) out vec4 backGroundColor;
-layout(location = 1) flat out uvec4 uiAncillaryData;
-layout(location = 2) out vec2 adjustedLocalPos;
-layout(location = 3) out vec2 rectSize;
-layout(location = 4) flat out uint uiDetails; 
-layout(location = 5) flat out uvec4 uiRetainedData;
+layout(location = 0) out vec2 adjustedLocalPos;
+layout(location = 1) out vec2 rectSize;
+layout(location = 2) flat out uint uiDetails; 
+layout(location = 3) flat out uint objectID; 
 
 layout(set = 0, binding = 0) readonly buffer UIContainers
 {
@@ -28,6 +26,8 @@ void main()
     uint uiIndirectionHandle = uint(gl_DrawID);
 
     uint renderableIndex =  uint(texelFetch(uiIndirectionHandles, int(uiIndirectionHandle)).r);
+
+    objectID = renderableIndex;
 
     UIContainer container = conts.renderables[renderableIndex];
 
@@ -50,15 +50,9 @@ void main()
 
     gl_Position = vec4(pos, 0.0, 1.0);
 
-    backGroundColor = container.color;
-
     rectSize = end;
 
     adjustedLocalPos = (mixer - 0.5) * 2.0 * end;
 
     uiDetails = container.bitfields.x;
-
-    uiAncillaryData = container.packedData;
-
-    uiRetainedData = retainedContainer.retainedDrawData;
 }

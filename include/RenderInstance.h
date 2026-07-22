@@ -53,7 +53,6 @@ namespace API
 	VkBlendOp ConvertBlendOpToVulkanBlendOp(BlendOp op);
 
 	VkLogicOp ConvertBlendLogicOpToVulkanLogicOp(BlendLogicOp op);
-
 }
 
 struct RenderInstanceCreateInfo

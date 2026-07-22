@@ -2576,6 +2576,9 @@ int HandleAttachmentResource(char* fileData, int size, int currentLocation, Atta
 			case hash("d32f"):
 				resource->format = ImageFormat::D32FLOAT;
 				break;
+			case hash("r32u"):
+				resource->format = ImageFormat::R32_UINT;
+				break;
 			default:
 				scratchLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Invalid attachment image format"));
 				retCode = -1;
