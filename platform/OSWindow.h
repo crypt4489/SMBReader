@@ -75,6 +75,8 @@ struct GenericWindowInfo
     int resizeRequested = 0;
     int width = 0, height = 0;
     GenericKeyAction actions[KC_COUNT];
+    unsigned int currentCursorX, currentCursorY;
+    int clicked;
 
     int HandleResizeRequested()
     {

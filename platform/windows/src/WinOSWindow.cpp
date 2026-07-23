@@ -1,4 +1,5 @@
 #include <Windows.h>
+#include <windowsx.h>
 #include "OSWindow.h"
 #include "WinOSWindow.h"
 #include <atomic>
@@ -9,8 +10,6 @@ static std::atomic<int8_t>* freeList;
 static int maxFreeListEntry = 0;
 
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
-
-
 
 static int FindFreeIndex()
 {
@@ -190,6 +189,22 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
 
     switch (wm)
     {
+    case WM_LBUTTONDOWN:
+    {
+        info->clicked = 1;
+        break;
+    }
+    case WM_LBUTTONUP:
+    {
+        info->clicked = 0;
+        break;
+    }
+    case WM_MOUSEMOVE:
+    {
+        info->currentCursorX = GET_X_LPARAM(lp);
+        info->currentCursorY = GET_Y_LPARAM(lp);
+        break;
+    }
     case WM_SIZE:
     {
         UINT width = LOWORD(lp);

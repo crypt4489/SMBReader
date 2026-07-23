@@ -9,6 +9,8 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="8" pushstage="0">
 		</ShaderResourceItem>
+		<ShaderResourceItem type="constantbuffer" used="c" size="4" offset="12" pushstage="0">
+		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="read">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="c" rw="readwrite">
@@ -16,6 +18,8 @@
 		<ShaderResourceItem type="image2D" used="c" count="3">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="sampler" used="c" count="1">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="c" rw="readwrite">
 		</ShaderResourceItem>
 	</ShaderResourceSet>
 </ShaderGraph>

@@ -122,9 +122,8 @@ static std::array<StringView, 29> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UICursorSelection.sgr"),
 };
 
-static std::array<StringView, 3> mainLayoutAttachments =
+static std::array<StringView, 2> mainLayoutAttachments =
 {
-	STRING_VIEW_FROM_LITERAL_INIT_LIST("MSAAPostProcess.adf"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("BasicShadowMapAtt.adf"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("ShadowAtlasUse.adf")
 };
@@ -365,6 +364,12 @@ struct UniformGrid
 	Vector4f max;
 	Vector4f min;
 	int numberOfDivision;
+};
+
+struct GPUCursorInfo
+{
+	uint32_t currentElementSelected;
+	uint32_t currentButtonClicked;
 };
 
 static int mainGPU = -1;
@@ -663,9 +668,12 @@ static int globalUIIndexAssignmentPipeline = -1;
 static int globalUIGlobalIDPipeline = -1;
 static int globalUICursorPosition = -1;
 static int globalUIRetainedContainerData = -1;
+static int globalUICursorDetailData = -1;
 
 static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
 static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
+
+static ShaderResourceSetHandle globalUIIDResourceHandle;
 
 static int globalUICount = 0;
 static int globalUIMaxDepth = 2;
@@ -689,7 +697,7 @@ static UIContainer mainLeftContainer =
 	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
 	.relativeContainerSize = {0.30f, .9f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(0x45, 0x4A, 0x55, 1.0), 0, 0, 0}
+	.packedData = {PACK_COLOR_10_11_10_1(0x45, 0x4A, 0x55, 1.0), PACK_COLOR_10_11_10_1(126, 132, 148, 1), 0, 0}
 };
 
 static UIContainer mainRightContainer =
@@ -699,7 +707,7 @@ static UIContainer mainRightContainer =
 	.padding = {0.05, 0.05, 1.0/60.0, 1.0 / 60.0},
 	.relativeContainerSize = {0.30f, .9f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), 0, 0, 0}
+	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), 0, 0}
 };
 
 static UIContainer mainCenterContainer =
@@ -709,7 +717,7 @@ static UIContainer mainCenterContainer =
 	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
 	.relativeContainerSize = {0.30f, .9f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), 0, 0, 0}
+	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), 0, 0}
 };
 
 struct WindowSize
@@ -1011,6 +1019,9 @@ void ApplicationLoop::Execute()
 			if (mainWindow.ShouldCloseWindow()) break;
 
 			ProcessKeys(mainWindow.windowData.info.actions);
+
+			tempCursorPos.x = mainWindow.windowData.info.currentCursorX;
+			tempCursorPos.y = mainWindow.windowData.info.currentCursorY;
 
 			if (mainWindow.windowData.info.HandleResizeRequested())
 			{
@@ -3476,22 +3487,17 @@ void RecreateFrameGraphAttachments(uint32_t width, uint32_t height)
 	{
 		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, BasicShadow, 0, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 	}
-
-	if (MSAAPost >= 0)
-	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAPost, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAPost, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAPost, 1, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
-		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAPost, 1, viewIndex, mainFullScreen, 0, 0);
-	}
 	
 	if (MSAAShadowMapping >= 0)
 	{
-		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, 3, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
-		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 1, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, 4096, 4096, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreatePerFrameAttachment(mainLogicalDevice, MSAAShadowMapping, 1, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT, width, height, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
+		GlobalRenderer::gRenderInstance.CreateSwapChainAttachment(mainLogicalDevice, mainPresentationSwapChain, MSAAShadowMapping, 2, nullptr, &mainRTVSlab, &mainDSVSlab, mainRTVIndex, mainDSVIndex);
 
 		int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAShadowMapping, 1, 0, 1, 0, 1, DEPTH_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
+		int viewIndexObjectID = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAShadowMapping, 4, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
 
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 4, viewIndexObjectID, globalUIIDResourceHandle, 2, 0);
 		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, viewIndex, globalTexturesDescriptor, 3, shadowMapIndex);
 		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 1, viewIndex, smdpd.fullScreenDescriptorSet, 0, 0);
 	}
@@ -3837,8 +3843,8 @@ void ApplicationLoop::InitializeRuntime()
 	mainDSVSlab.dataAllocator = 0;
 	mainDSVSlab.dataSize = mainDSVSize;
 
-	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[1], nullptr);
-	MSAAShadowMapping = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[2], nullptr);
+	BasicShadow = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[0], nullptr);
+	MSAAShadowMapping = GlobalRenderer::gRenderInstance.CreateAttachmentGraph(mainLogicalDevice, &mainLayoutAttachments[1], nullptr);
 
 	currentFrameGraphIndex = MSAAShadowMapping;
 
@@ -5341,74 +5347,76 @@ void CreateUITools(int maxUIContainers)
 	globalUIElementsIndirectCountBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalDepthCounts = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalDepthOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	//globalChildrenPrefixSumCount = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalChildrenOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionPositionalHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIRetainedContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIRetainedContainer), maxUIContainers, alignof(UIRetainedContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUICursorDetailData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(GPUCursorInfo), 1, alignof(GPUCursorInfo), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
+	
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainRightContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 
 	{
-		ShaderResourceSetBuilder uiCullingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uilDescriptorBuilder{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIElementsIndirectCountBuffer, 0, 1, 1);
-		uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIElementsIndirectBuffer, 0, 1, 0);
-		uiCullingBufferDescriptorB.BindBufferToShaderResource(&uilDescriptorBuilder, &globalUIContainerData, 0, 1, 2);
-		uiCullingBufferDescriptorB.BindBufferView(&uilDescriptorBuilder, &globalUIIndirectionHandleBuffer, 0, 1, 3);
-		uiCullingBufferDescriptorB.UploadConstant(&uilDescriptorBuilder, &globalUICount, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIElementsIndirectCountBuffer, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIElementsIndirectBuffer, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 2);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 3);
+		descriptorBuilder.UploadConstant(&descriptorContext, &globalUICount, 0);
 
-		if (uilDescriptorBuilder.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> uiCullDescriptors = { uiCullingBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ShaderComputeLayout* uiCullDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UICULLING);
+		ShaderComputeLayout* computeLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UICULLING);
 
-		ComputeIntermediaryPipelineInfo uiCullPipelineCreate = {
-				.x = (uint32_t)std::ceil((float)2 / (float)uiCullDescriptorLayout->x),
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
+				.x = (uint32_t)std::ceil((float)globalUICount / (float)computeLayout->x),
 				.y = 1,
 				.z = 1,
 				.pipelinename = UICULLING,
 				.descCount = 1,
-				.descriptorsetid = uiCullDescriptors.data()
+				.descriptorsetid = descriptors.data()
 		};
 
-		globalUICullPipelineIndex = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiCullPipelineCreate);
+		globalUICullPipelineIndex = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
+
 	{
-		ShaderResourceSetBuilder uiDrawingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIDRAWING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiDrawDescriptorContext{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIDRAWING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
-		uiDrawingBufferDescriptorB.BindBufferView(&uiDrawDescriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
-		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &windowSize.aspect, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
+		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize.aspect, 0);
 
-		if (uiDrawDescriptorContext.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> uiDrawDescriptors = { uiDrawingBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		GraphicsIntermediaryPipelineInfo uiDrawPipelineCreate = {
+		GraphicsIntermediaryPipelineInfo pipelineCreateInfo = {
 			.drawType = 0,
 			.vertexBufferHandle = -1,
 			.vertexCount = 0,
 			.pipelinename = UIDRAWING,
 			.descCount = 1,
-			.descriptorsetid = uiDrawDescriptors.data(),
+			.descriptorsetid = descriptors.data(),
 			.indexBufferHandle = -1,
 			.indexSize = 2,
 			.indirectAllocation = globalUIElementsIndirectBuffer,
@@ -5416,88 +5424,89 @@ void CreateUITools(int maxUIContainers)
 			.indirectCountAllocation = globalUIElementsIndirectCountBuffer
 		};
 
-		globalUIDrawingPipelineIndex = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &uiDrawPipelineCreate);
+		globalUIDrawingPipelineIndex = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	{
-		ShaderResourceSetBuilder uiDepCountBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIDEPTHCOUNT, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiDepCountDescriptorBuilder{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIDEPTHCOUNT, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiDepCountBufferDescriptorB.BindBufferToShaderResource(&uiDepCountDescriptorBuilder, &globalUIContainerData, 0, 1, 0);
-		uiDepCountBufferDescriptorB.BindBufferToShaderResource(&uiDepCountDescriptorBuilder, &globalDepthCounts, 0, 1, 1);
-		uiDepCountBufferDescriptorB.UploadConstant(&uiDepCountDescriptorBuilder, &globalUICount, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 1);
+		descriptorBuilder.UploadConstant(&descriptorContext, &globalUICount, 0);
 
-		if (uiDepCountDescriptorBuilder.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		ShaderComputeLayout* uiDepCountDescriptorLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UIDEPTHCOUNT);
+		ShaderComputeLayout* computeLayout = GlobalRenderer::gRenderInstance.GetComputeLayout(UIDEPTHCOUNT);
 
-		std::array<ShaderResourceSetHandle, 1> uiDepthDescriptors = { uiDepCountBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiDepthCountPipelineCreate = {
-			.x = (uint32_t)std::ceil((float)2 / (float)uiDepCountDescriptorLayout->x),
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
+			.x = (uint32_t)std::ceil((float)globalUICount / (float)computeLayout->x),
 			.y = 1,
 			.z = 1,
 			.pipelinename = UIDEPTHCOUNT,
 			.descCount = 1,
-			.descriptorsetid = uiDepthDescriptors.data()
+			.descriptorsetid = descriptors.data()
 		};
 
-		globalUICountPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiDepthCountPipelineCreate);
+		globalUICountPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 
 	}
+
 	{
-		ShaderResourceSetBuilder uiDepPrefixBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiDepPrefixDescriptorBuilder{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, PREFIXSUM, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiDepPrefixBufferDescriptorB.BindBufferToShaderResource(&uiDepPrefixDescriptorBuilder, &globalDepthCounts, 0, 1, 0);
-		uiDepPrefixBufferDescriptorB.BindBufferToShaderResource(&uiDepPrefixDescriptorBuilder, &globalDepthOffsets, 0, 1, 1);
-		uiDepPrefixBufferDescriptorB.UploadConstant(&uiDepPrefixDescriptorBuilder, &depths[DEPTH_MAX], 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[DEPTH_MAX], 0);
 
-		if (uiDepPrefixDescriptorBuilder.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> uiPrefixDepthDescriptors = { uiDepPrefixBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiDepthPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
 			.pipelinename = PREFIXSUM,
 			.descCount = 1,
-			.descriptorsetid = uiPrefixDepthDescriptors.data()
+			.descriptorsetid = descriptors.data()
 		};
 
-		globalUIPrefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiDepthPrefixPipelineCreate);
+		globalUIPrefixSumPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	{
-		ShaderResourceSetBuilder uiChilPrefixBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICHILDDEPTHADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiChilPrefixDescriptorBuilder{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICHILDDEPTHADD, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiChilPrefixBufferDescriptorB.BindBufferToShaderResource(&uiChilPrefixDescriptorBuilder, &globalUIContainerData, 0, 1, 0);
-		uiChilPrefixBufferDescriptorB.BindBufferToShaderResource(&uiChilPrefixDescriptorBuilder, &globalDepthOffsets, 0, 1, 1);
-		uiChilPrefixBufferDescriptorB.BindBufferToShaderResource(&uiChilPrefixDescriptorBuilder, &globalChildrenOffsets, 0, 1, 2);
-		uiChilPrefixBufferDescriptorB.UploadConstant(&uiChilPrefixDescriptorBuilder, &globalUICount, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalChildrenOffsets, 0, 1, 2);
+		descriptorBuilder.UploadConstant(&descriptorContext, &globalUICount, 0);
 
-		if (uiChilPrefixDescriptorBuilder.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> uiChildDepthDescriptors = { uiChilPrefixBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> uiChildDepthDescriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
@@ -5507,7 +5516,7 @@ void CreateUITools(int maxUIContainers)
 		};
 
 
-		globalUIChildDepthAddPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+		globalUIChildDepthAddPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	{
@@ -5529,7 +5538,7 @@ void CreateUITools(int maxUIContainers)
 
 		std::array<ShaderResourceSetHandle, 1> uiIndexDescriptors = { uiUIIndexAssignBufferDescriptorB() };
 
-		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
@@ -5539,7 +5548,7 @@ void CreateUITools(int maxUIContainers)
 		};
 
 
-		globalUIIndexAssignmentPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+		globalUIIndexAssignmentPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	for (int i = 0; i < 2; i++)
@@ -5563,7 +5572,7 @@ void CreateUITools(int maxUIContainers)
 
 		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
@@ -5572,7 +5581,7 @@ void CreateUITools(int maxUIContainers)
 			.descriptorsetid = descriptors.data()
 		};
 
-		globalContainerSizeCalculationPipeline[i] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+		globalContainerSizeCalculationPipeline[i] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	for (int i = 0; i < 1; i++)
@@ -5597,7 +5606,7 @@ void CreateUITools(int maxUIContainers)
 
 		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
@@ -5606,26 +5615,26 @@ void CreateUITools(int maxUIContainers)
 			.descriptorsetid = descriptors.data()
 		};
 
-		globalContainerPositionCalculationPipeline[i+1] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+		globalContainerPositionCalculationPipeline[i+1] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 	{
-		ShaderResourceSetBuilder uiDrawingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIOBJECTDRAWING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiDrawDescriptorContext{ &mainAppLogger, false };
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIOBJECTDRAWING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
-		uiDrawingBufferDescriptorB.BindBufferView(&uiDrawDescriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
-		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &windowSize.aspect, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUIIndirectionHandleBuffer, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIRetainedContainerData, 0, 1, 2);
+		descriptorBuilder.UploadConstant(&descriptorContext, &windowSize.aspect, 0);
 
-		if (uiDrawDescriptorContext.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> uiDrawDescriptors = { uiDrawingBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> uiDrawDescriptors = { descriptorBuilder() };
 
 		GraphicsIntermediaryPipelineInfo uiDrawPipelineCreate = {
 			.drawType = 0,
@@ -5645,31 +5654,34 @@ void CreateUITools(int maxUIContainers)
 	}
 
 	{
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICURSORPOSITION, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
 
-		ShaderResourceSetBuilder uiDrawingBufferDescriptorB = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICURSORPOSITION, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
-		ShaderResourceSetContext uiDrawDescriptorContext{ &mainAppLogger, false };
+		globalUIIDResourceHandle = descriptorBuilder();
 
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIContainerData, 0, 1, 0);
-		uiDrawingBufferDescriptorB.BindBufferToShaderResource(&uiDrawDescriptorContext, &globalUIRetainedContainerData, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIRetainedContainerData, 0, 1, 1);
 
 		int viewIndex = GlobalRenderer::gRenderInstance.CreateAttachmentImageView(mainLogicalDevice, MSAAShadowMapping, 4, 0, 1, 0, 1, COLOR_IMAGE_ASPECT, ImageLayout::SHADERREADABLE);
 
-		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 4, viewIndex, uiDrawingBufferDescriptorB(), 2, 0);
+		GlobalRenderer::gRenderInstance.UploadFrameAttachmentResource(MSAAShadowMapping, 4, viewIndex, globalUIIDResourceHandle, 2, 0);
 
-		uiDrawingBufferDescriptorB.BindSamplerResourceToShaderResource(&uiDrawDescriptorContext, &mainLinearSampler, 1, 0, 3);
-		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &tempCursorPos, 0);
-		uiDrawingBufferDescriptorB.UploadConstant(&uiDrawDescriptorContext, &GlobalRenderer::gRenderInstance.previousFrame, 1);
+		descriptorBuilder.BindSamplerResourceToShaderResource(&descriptorContext, &mainLinearSampler, 1, 0, 3);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUICursorDetailData, 0, 1, 4);
+		descriptorBuilder.UploadConstant(&descriptorContext, &tempCursorPos, 0);
+		descriptorBuilder.UploadConstant(&descriptorContext, &GlobalRenderer::gRenderInstance.previousFrame, 1);
+		descriptorBuilder.UploadConstant(&descriptorContext, &mainWindow.windowData.info.clicked, 2);
 
-		if (uiDrawDescriptorContext.contextFailed)
+		if (descriptorContext.contextFailed)
 		{
 			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
 			mainAppLogger.ProcessMessage();
 			return;
 		}
 
-		std::array<ShaderResourceSetHandle, 1> descriptors = { uiDrawingBufferDescriptorB() };
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
-		ComputeIntermediaryPipelineInfo uiChildPrefixPipelineCreate = {
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
 			.x = 1,
 			.y = 1,
 			.z = 1,
@@ -5678,7 +5690,7 @@ void CreateUITools(int maxUIContainers)
 			.descriptorsetid = descriptors.data()
 		};
 
-		globalUICursorPosition = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &uiChildPrefixPipelineCreate);
+		globalUICursorPosition = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
 }

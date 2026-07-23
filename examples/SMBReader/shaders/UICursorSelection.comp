@@ -3,10 +3,17 @@
 #extension GL_GOOGLE_include_directive: require
 #include "include/UI.iglsl"
 
+struct GPUCursorInfo
+{
+	uint currentElementSelected;
+	uint currentButtonClicked;
+};
+
 layout(push_constant) uniform GlobalContext 
 {
     ivec2 cursorPosition;
     uint previousFrame;
+    uint clicked;
 } gs;
 
 layout(set = 0, binding = 0) readonly buffer UIContainers
@@ -21,6 +28,10 @@ layout(set = 0, binding = 1) buffer UIRetainedContainers
 
 layout(set = 0, binding = 2) uniform utexture2D objectIDMap[3];
 layout(set = 0, binding = 3) uniform sampler samplerLinear;
+layout(set = 0, binding = 4) buffer CursorData
+{
+    GPUCursorInfo info;
+} cursorInfo;
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
@@ -28,8 +39,11 @@ void main()
 {
     uint id = uint(texelFetch(usampler2D(objectIDMap[gs.previousFrame], samplerLinear), gs.cursorPosition, 0).r);
 
-    if (id == 0)
-        return;
+    if (id != cursorInfo.info.currentElementSelected)
+    {
+        retainedConts.renderables[cursorInfo.info.currentElementSelected].retainedDrawData.x = retainedConts.renderables[cursorInfo.info.currentElementSelected].retainedDrawData.x ^ HOVER_OVER;
+        cursorInfo.info.currentElementSelected = id;
+    }
 
     retainedConts.renderables[id].retainedDrawData.x = retainedConts.renderables[id].retainedDrawData.x | HOVER_OVER;
 

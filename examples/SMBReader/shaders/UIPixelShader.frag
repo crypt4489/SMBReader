@@ -47,6 +47,10 @@ void main()
     scaledPos.x *= gs.aspect;
     scaledRectSize.x *= gs.aspect;
 
+    float hoverFactor = float(uiRetainedData.x & HOVER_OVER);
+
+    fragmentColor = mix(fragmentColor, makeColorFrom10_11_10_1(uiAncillaryData.y), hoverFactor);
+
     if ((typeSpecData & ROUNDED_CORNERS) == ROUNDED_CORNERS)
     {
         float dist = roundCorners(scaledPos, scaledRectSize, 0.2);
@@ -77,11 +81,6 @@ void main()
     }
 
     fragmentColor.w *= alpha;
-
-    if ((uiRetainedData.x & 1) == 1)
-    {
-        fragmentColor.xyz = vec3(0.0);
-    }
-
+   
     outColor = fragmentColor;
 }
