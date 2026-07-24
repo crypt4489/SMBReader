@@ -669,6 +669,12 @@ static int globalUIGlobalIDPipeline = -1;
 static int globalUICursorPosition = -1;
 static int globalUIRetainedContainerData = -1;
 static int globalUICursorDetailData = -1;
+static int globalUITextDataPool = -1;
+static int globalUITextOffsetPool = -1;
+static int globalUITextCountPool = -1;
+static int globalUITextToUIIDs = -1;
+static int globalUITextVertexData = -1;
+static int globalUITextDataPoolSize = 4 * KiB;
 
 static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
 static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
@@ -676,15 +682,14 @@ static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
 static ShaderResourceSetHandle globalUIIDResourceHandle;
 
 static int globalUICount = 0;
-static int globalUIMaxDepth = 2;
+static int globalUIMaxDepth = 3;
 static Vector2i tempCursorPos = { 200, 200 };
-
 
 static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 static UIContainer mainContainer =
 {
-	.bitfields = { MAKE_ORIENTATION(VERTICAL_ORIENTATION) |MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), 3, NO_PARENT, NOT_A_CHILD},
+	.bitfields = { MAKE_ORIENTATION(VERTICAL_ORIENTATION) |MAKE_TYPE_SPECIFIC_DATA(INVISIBLE_CONTAINER) | MAKE_TYPE(0) | MAKE_DEPTH(0), PACK_PARENT_CHILD_INFO(NO_PARENT, NOT_A_CHILD, 1), 0, 0},
 	.color = { 0.0, 0.0, 0.0, 0.0},
 	.padding = {0, 0.0, 0.0, 0.0 },
 	.relativeContainerSize = {1.0f, 1.0f},
@@ -692,7 +697,7 @@ static UIContainer mainContainer =
 
 static UIContainer mainLeftContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 1},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_ORIENTATION(VERTICAL_ORIENTATION) | MAKE_TYPE(0) | MAKE_DEPTH(1), PACK_PARENT_CHILD_INFO(0, 1, 2), 0, 0},
 	.color = MAKE_COLOR(45.0, 48.0, 56.0, 1.0),
 	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
 	.relativeContainerSize = {0.30f, .9f},
@@ -702,20 +707,20 @@ static UIContainer mainLeftContainer =
 
 static UIContainer mainRightContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(ROUNDED_CORNERS | BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 3},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 2, 0), 0, 0},
 	.color = MAKE_COLOR(54.0, 58.0, 67.0, 1.0),
-	.padding = {0.05, 0.05, 1.0/60.0, 1.0 / 60.0},
-	.relativeContainerSize = {0.30f, .9f},
+	.padding = {0.025, 0.0, 0.1, 0.1},
+	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
 	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), 0, 0}
 };
 
 static UIContainer mainCenterContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(BORDERS) | MAKE_TYPE(0) | MAKE_DEPTH(1), 0, 0, 2},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 1, 0), 0, 0},
 	.color = MAKE_COLOR(65.0, 70.0, 80.0, 1.0),
-	.padding = {0.05, 0.05, 1.0 / 60.0, 1.0 / 60.0 },
-	.relativeContainerSize = {0.30f, .9f},
+	.padding = {0.1, 0.000, 0.1, .1 },
+	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
 	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), 0, 0}
 };
@@ -726,7 +731,6 @@ struct WindowSize
 	float height;
 	float aspect; 
 } windowSize{ .width = 800.0, .height = 600.0, .aspect = 800.0/600.0 };
-
 
 
 static bool ExecuteCommands(const StringView& command, int argCount);
@@ -1162,7 +1166,8 @@ void ApplicationLoop::Execute()
 						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
 					}
 
-					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[1]);
+					for (int i = 0; i<2; i++)
+						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[i+1]);
 
 					if (updateUI == 1)
 					{
@@ -1211,12 +1216,28 @@ void ApplicationLoop::Execute()
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(smdpd.fullScreenPipeline, currentFrameGraphIndex, 0);
 				}
 
+				
+
 				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, mainCommandStreamIndex, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
-		
+/*
+				static UIRetainedContainer retainedContainer[4];
+
+				static uint32_t levelCounts[4], levelOffsets[4];
+
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIRetainedContainerData, retainedContainer, sizeof(retainedContainer), 0);
+
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthCounts, levelCounts, sizeof(levelCounts), 0);
+
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthOffsets, levelOffsets, sizeof(levelCounts), 0);
+
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIIndirectionPositionalHandleBuffer, levelOffsets, sizeof(levelCounts), 0);
+
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalChildrenOffsets , levelOffsets, sizeof(levelCounts), 0);
+*/		
 				running = ProcessCommands();
 
 			}
@@ -3699,8 +3720,8 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxComputeQueues = 10;
 	riCreateInfo.maxRenderQueues = 10;
 	riCreateInfo.maxPipelineTemplates = 15;
-	riCreateInfo.maxPipelineInstances = 25;
-	riCreateInfo.maxPipelineHandles = 25;
+	riCreateInfo.maxPipelineInstances = 35;
+	riCreateInfo.maxPipelineHandles = 35;
 	riCreateInfo.maxAllocations = 50;
 	riCreateInfo.maxSubAllocations = 30;
 	riCreateInfo.maxGPUCommandsStreams = 1;
@@ -5355,9 +5376,9 @@ void CreateUITools(int maxUIContainers)
 
 	
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainRightContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 
 	{
 		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
@@ -5551,7 +5572,7 @@ void CreateUITools(int maxUIContainers)
 		globalUIIndexAssignmentPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < 3; i++)
 	{
 		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UILAYOUTSIZES, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
@@ -5584,7 +5605,7 @@ void CreateUITools(int maxUIContainers)
 		globalContainerSizeCalculationPipeline[i] = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
-	for (int i = 0; i < 1; i++)
+	for (int i = 0; i < 2; i++)
 	{
 		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UIABSOLUTEPOSITION, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
 		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };

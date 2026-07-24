@@ -53,7 +53,7 @@ void main()
 
     uint containerIndex =  uint(texelFetch(uiPositionalIndirectionHandles, int(levelOffset + lIndex)).r);
 
-    uint parentIndex = conts.renderables[containerIndex].bitfields.z;
+    uint parentIndex = GET_PARENT_INDEX(conts.renderables[containerIndex].bitfields.y);
     vec2 relativeContainerSize = conts.renderables[containerIndex].relativeContainerSize;
 
     if (parentIndex == NO_PARENT)

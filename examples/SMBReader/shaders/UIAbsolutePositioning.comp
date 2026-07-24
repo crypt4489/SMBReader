@@ -55,9 +55,11 @@ void main()
 
     uint childOffset = chilsOffs.childOffsets[parentIndex];
 
-    uint flags = conts.renderables[parentIndex].bitfields.x;
+    uvec2 bitfields = conts.renderables[parentIndex].bitfields.xy; 
 
-    uint childCount = conts.renderables[parentIndex].bitfields.y;
+    uint flags = bitfields.x;
+
+    uint childCount = GET_CHILD_COUNT(bitfields.y);
 
     uint orientation =  GET_ORIENTATION(flags);
 
@@ -65,6 +67,7 @@ void main()
     float IS_VERTICAL = float(orientation == VERTICAL_ORIENTATION);
 
     vec2 baseAnchorPoint = retainedConts.renderables[parentIndex].anchorPoint;
+    vec2 parentSize = retainedConts.renderables[parentIndex].absoluteSize;
 
     for (uint i = 0; i<childCount; i++)
     {
@@ -73,11 +76,11 @@ void main()
         vec2 size = retainedConts.renderables[currentIndex].absoluteSize;
         vec4 padding = conts.renderables[currentIndex].padding;
 
-        retainedConts.renderables[currentIndex].anchorPoint.x = (baseAnchorPoint.x + padding.z);
-        retainedConts.renderables[currentIndex].anchorPoint.y = (baseAnchorPoint.y + padding.x);
+        retainedConts.renderables[currentIndex].anchorPoint.x = (baseAnchorPoint.x + (padding.z * parentSize.x));
+        retainedConts.renderables[currentIndex].anchorPoint.y = (baseAnchorPoint.y + (padding.x * parentSize.y));
 
-        baseAnchorPoint.x += ((size.x + padding.w + padding.z) * IS_HORIZONTAL);
-        baseAnchorPoint.y += ((size.y + padding.y + padding.x) * IS_VERTICAL);
+        baseAnchorPoint.x += (((size.x + padding.w + padding.z) * parentSize.x) * IS_HORIZONTAL);
+        baseAnchorPoint.y += (((size.y + padding.y + padding.x) * parentSize.y) * IS_VERTICAL);
     }
 
 	return;

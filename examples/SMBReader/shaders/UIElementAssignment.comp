@@ -35,9 +35,9 @@ void main()
     if (lIndex >= gs.count)
         return;
 
-    uvec4 cont = conts.renderables[lIndex].bitfields;
+    uint bitfields = conts.renderables[lIndex].bitfields.y;
 
-    uint parentIndex = cont.z;
+    uint parentIndex = GET_PARENT_INDEX(bitfields);
 
     if (parentIndex == NO_PARENT)
     {
@@ -47,7 +47,7 @@ void main()
     }
     else
     {
-        uint childIndex = cont.w - 1;
+        uint childIndex = GET_CHILD_INDEX(bitfields) - 1;
 
         uint parentChildOffset = chilsOffs.childOffsets[parentIndex];
 

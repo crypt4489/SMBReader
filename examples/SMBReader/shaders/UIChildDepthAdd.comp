@@ -33,11 +33,11 @@ void main()
     if (lIndex >= gs.count)
         return;
 
-    uvec4 bitfield = conts.renderables[lIndex].bitfields;
+    uvec2 bitfields = conts.renderables[lIndex].bitfields.xy;
 
-    uint contDepth = GET_DEPTH(bitfield.x) + 1;
+    uint contDepth = GET_DEPTH(bitfields.x) + 1;
 
-    uint childCount = bitfield.y;
+    uint childCount = GET_CHILD_COUNT(bitfields.y);
 
     uint childDepthOffset = atomicAdd(depths.offsetAtN[contDepth], childCount);
 
