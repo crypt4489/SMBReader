@@ -48,10 +48,12 @@
 
 #define TEXT_SIZE_OFFSET 19
 #define MAX_TEXT_SIZE 4096
-#define MAKE_TEXT_SIZE (x) (((x) & MAX_TEXT_SIZE-1) << TEXT_SIZE_OFFSET)
+#define MAKE_TEXT_SIZE(x) (((x) & MAX_TEXT_SIZE-1) << TEXT_SIZE_OFFSET)
 
 #define HAS_TEXT_OFFSET 31
 #define MAKE_HAS_TEXT(x) ((x) << HAS_TEXT_OFFSET)
+
+#define PACK_TEXT_DATA(offset, count) (unsigned int)(MAKE_HAS_TEXT(1) | MAKE_TEXT_SIZE(count) | MAKE_TEXT_BUFFER_LOCATION(offset))
 
 #define MAKE_COLOR_COMPONENT(c) ((float)(c)/256.0)
 #define MAKE_COLOR(r, g, b, a) { MAKE_COLOR_COMPONENT(r), MAKE_COLOR_COMPONENT(g), MAKE_COLOR_COMPONENT(b), (float)(a)}
@@ -89,4 +91,10 @@ struct UIRetainedContainer
 	Vector2f absoluteSize;
 	Vector2f anchorPoint;
 	Vector4ui retainedHoverData;
+};
+
+struct UITextVertex
+{
+	Vector2f pos;
+	Vector2f texCoords;
 };

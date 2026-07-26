@@ -1,0 +1,72 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/UI.iglsl"
+
+layout(push_constant) uniform GlobalContext 
+{
+    uint count;
+} gs;
+
+layout(set = 0, binding = 0) readonly buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1, r32ui) uniform uimageBuffer UITextToContainerID;
+
+layout(set = 0, binding = 2) buffer UITextElementCount
+{
+    uint count;
+} uiTextElementCount;
+
+layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+shared uint groupCount;
+shared uint groupIndex;
+
+void main()
+{
+	uint lIndex =  gl_LocalInvocationID.x + (gl_WorkGroupSize.x * gl_WorkGroupID.x);
+
+    uint textCount = 0;
+
+    uint textOffset = 0;
+
+    if (gl_LocalInvocationID.x == 0)
+    {
+       groupCount = 0;
+    }
+    barrier();
+
+    uint groupVisibleIndex = gl_WorkGroupSize.x;
+
+    if (lIndex < gs.count)
+    {
+        uint bitfields = conts.renderables[lIndex].bitfields.z;
+
+        uint hasText = GET_HAS_TEXT(bitfields);
+
+        if (hasText == 1)
+        {
+            groupVisibleIndex = atomicAdd(groupCount, 1u);
+        }
+    }
+    barrier();
+
+    if (gl_LocalInvocationID.x == 0)
+    {
+        groupIndex = atomicAdd(uiTextElementCount.count, groupCount);
+    }
+    barrier();
+
+    if (groupVisibleIndex < gl_WorkGroupSize.x)
+    {
+        uint absoluteOffset = groupIndex + groupVisibleIndex;
+
+        imageStore(UITextToContainerID, int(absoluteOffset), uvec4(lIndex, 0, 0, 0));
+    }
+
+	return;
+}

@@ -38,6 +38,7 @@ bld/
 [Ll]ib
 [Bb]uild*
 
+*.dat
 *.dll
 *.jpg
 *.png

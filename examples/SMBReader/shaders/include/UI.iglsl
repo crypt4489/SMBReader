@@ -47,7 +47,7 @@
 
 #define TEXT_SIZE_OFFSET 19
 #define MAX_TEXT_SIZE 4096
-#define GET_TEXT_SIZE (packed) (((packed) >> TEXT_SIZE_OFFSET) & MAX_TEXT_SIZE-1)
+#define GET_TEXT_SIZE(packed) (((packed) >> TEXT_SIZE_OFFSET) & MAX_TEXT_SIZE-1)
 
 #define HAS_TEXT_OFFSET 31
 #define GET_HAS_TEXT(packed) (((packed) >> HAS_TEXT_OFFSET) & 1)

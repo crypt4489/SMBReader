@@ -73,7 +73,8 @@ enum ShaderResourceLayoutIdentifiers
 	UILAYOUTSIZES,
 	UIABSOLUTEPOSITION,
 	UIOBJECTDRAWING,
-	UICURSORPOSITION
+	UICURSORPOSITION,
+	UITEXTCOUNT
 };
 
 static std::array<StringView, 11> pds = {
@@ -90,7 +91,7 @@ static std::array<StringView, 11> pds = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIObjectPipeline.pld"),
 };
 
-static std::array<StringView, 29> layouts = {
+static std::array<StringView, 30> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("3DTexturedLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("TextLayout.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("InterpolateMeshLayout.sgr"),
@@ -120,6 +121,7 @@ static std::array<StringView, 29> layouts = {
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIAbsolutePositioning.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIObjectDrawID.sgr"),
 	STRING_VIEW_FROM_LITERAL_INIT_LIST("UICursorSelection.sgr"),
+	STRING_VIEW_FROM_LITERAL_INIT_LIST("UIContainerTextCount.sgr")
 };
 
 static std::array<StringView, 2> mainLayoutAttachments =
@@ -370,6 +372,16 @@ struct GPUCursorInfo
 {
 	uint32_t currentElementSelected;
 	uint32_t currentButtonClicked;
+};
+
+
+struct Font
+{
+	uint32_t pictureHeight, pictureWidth;
+	uint32_t cellWidth, cellHeight;
+	uint32_t startingChar;
+	int fontWidths[256];
+	uint32_t widthSize;
 };
 
 static int mainGPU = -1;
@@ -670,10 +682,12 @@ static int globalUICursorPosition = -1;
 static int globalUIRetainedContainerData = -1;
 static int globalUICursorDetailData = -1;
 static int globalUITextDataPool = -1;
-static int globalUITextOffsetPool = -1;
-static int globalUITextCountPool = -1;
 static int globalUITextToUIIDs = -1;
 static int globalUITextVertexData = -1;
+static int globalUITextElementsCount = -1;
+static int globalFontData = -1;
+static int globalUITextCountPipeline = -1;
+static int globalUITextGenerationPipeline = -1;
 static int globalUITextDataPoolSize = 4 * KiB;
 
 static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
@@ -707,7 +721,7 @@ static UIContainer mainLeftContainer =
 
 static UIContainer mainRightContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 2, 0), 0, 0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 2, 0), PACK_TEXT_DATA(0, 4), 0},
 	.color = MAKE_COLOR(54.0, 58.0, 67.0, 1.0),
 	.padding = {0.025, 0.0, 0.1, 0.1},
 	.relativeContainerSize = {0.8f, 0.05f},
@@ -835,6 +849,12 @@ static void CreateGPUGenericObjects();
 
 static void CreateUITools(int maxUIContainers);
 
+static Font mainFontData;
+static int mainFontImage;
+
+static int CreateFontTexture(StringView* fontName, StringView* fontDataName);
+
+static void CreateFontWidths(Font* font, char* fontData);
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	running(true),
@@ -1161,6 +1181,8 @@ void ApplicationLoop::Execute()
 
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUIIndexAssignmentPipeline);
 
+					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUITextCountPipeline);
+
 					for (int i = 0; i < globalUIMaxDepth; i++)
 					{
 						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
@@ -1216,8 +1238,6 @@ void ApplicationLoop::Execute()
 					GlobalRenderer::gRenderInstance.AddPipelineToRPGraphicsQueue(smdpd.fullScreenPipeline, currentFrameGraphIndex, 0);
 				}
 
-				
-
 				GlobalRenderer::gRenderInstance.DrawScene(mainLogicalDevice, mainCommandStreamIndex, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
@@ -1228,16 +1248,16 @@ void ApplicationLoop::Execute()
 
 				static uint32_t levelCounts[4], levelOffsets[4];
 
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIRetainedContainerData, retainedContainer, sizeof(retainedContainer), 0);
+			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIRetainedContainerData, retainedContainer, sizeof(retainedContainer), 0);
 
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthCounts, levelCounts, sizeof(levelCounts), 0);
+			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthCounts, levelCounts, sizeof(levelCounts), 0);
 
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthOffsets, levelOffsets, sizeof(levelCounts), 0);
+			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthOffsets, levelOffsets, sizeof(levelCounts), 0);
 
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIIndirectionPositionalHandleBuffer, levelOffsets, sizeof(levelCounts), 0);
+			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIIndirectionPositionalHandleBuffer, levelOffsets, sizeof(levelCounts), 0);
 
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalChildrenOffsets , levelOffsets, sizeof(levelCounts), 0);
-*/		
+				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUITextToUIIDs , levelOffsets, sizeof(levelCounts), 0);
+*/
 				running = ProcessCommands();
 
 			}
@@ -3937,6 +3957,7 @@ void ApplicationLoop::InitializeRuntime()
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UILAYOUTSIZES);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UIABSOLUTEPOSITION);
 	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UICURSORPOSITION);
+	GlobalRenderer::gRenderInstance.CreateComputePipelineStateObject(mainLogicalDevice, UITEXTCOUNT);
 
 	mainComputeQueueIndex = GlobalRenderer::gRenderInstance.CreateComputeQueue();
 
@@ -5374,7 +5395,12 @@ void CreateUITools(int maxUIContainers)
 	globalUIRetainedContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIRetainedContainer), maxUIContainers, alignof(UIRetainedContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUICursorDetailData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(GPUCursorInfo), 1, alignof(GPUCursorInfo), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	
+	globalUITextDataPool = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUITextDataPoolSize, 1, alignof(uint32_t), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUITextToUIIDs = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUITextVertexData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UITextVertex), 256, alignof(UITextVertex), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUITextElementsCount = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+
+
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainRightContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
@@ -5714,4 +5740,81 @@ void CreateUITools(int maxUIContainers)
 		globalUICursorPosition = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
 	}
 
+	{
+		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UITEXTCOUNT, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
+		ShaderResourceSetContext descriptorContext{ &mainAppLogger, false };
+
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUITextToUIIDs, 0, 1, 1);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextElementsCount, 0, 1, 2);
+		descriptorBuilder.UploadConstant(&descriptorContext, &globalUICount, 0);
+
+		if (descriptorContext.contextFailed)
+		{
+			mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("failed binding for UI descriptor"));
+			mainAppLogger.ProcessMessage();
+			return;
+		}
+
+		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
+
+		ComputeIntermediaryPipelineInfo pipelineCreateInfo = {
+			.x = 1,
+			.y = 1,
+			.z = 1,
+			.pipelinename = UITEXTCOUNT,
+			.descCount = 1,
+			.descriptorsetid = descriptors.data()
+		};
+
+		globalUITextCountPipeline = GlobalRenderer::gRenderInstance.CreateComputePipelineObject(mainLogicalDevice, &pipelineCreateInfo);
+	}
+
+}
+
+int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font)
+{
+	OSFileHandle fileHandle{};
+
+	int texture = Read2DImage(fontName, 1, TextureIOType::BMP);
+
+	int openFileRet = OSOpenFile(fontDataName->stringData, fontDataName->charCount, OSFileFlagsTypes::READ, &fileHandle);
+
+	if (openFileRet < 0)
+	{
+		mainAppLogger.AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("Cannot open font data"));
+		return texture;
+	}
+
+	char dataRead[sizeof(Font)];
+
+	uint64_t dataReadSize;
+
+	OSReadFile(&fileHandle, fileHandle.fileLength, dataRead, &dataReadSize);
+
+	OSCloseFile(&fileHandle);
+
+	CreateFontWidths(font, dataRead);
+
+	return texture;
+}
+
+void CreateFontWidths(Font* font, char* fontData)
+{
+	char* iter = fontData;
+	std::copy(iter, iter + 16, reinterpret_cast<char*>(font));
+
+	char start = *(iter + 16);
+
+	font->startingChar = start;
+
+	iter += 17;
+
+	font->widthSize = (font->pictureWidth / font->cellWidth) * (font->pictureHeight / font->cellHeight);;
+
+	for (int i = 0; i < font->widthSize; i++)
+	{
+		char width = *(iter + i);
+		font->fontWidths[i] = width;
+	}
 }
