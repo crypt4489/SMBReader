@@ -75,6 +75,12 @@ struct WindowSize
     float height;
 };
 
+struct UITextVertex
+{
+	vec2 pos;
+	vec2 texCoords;
+};
+
 vec4 makeColorFrom10_11_10_1(uint packedColor)
 {
     return vec4(float((packedColor&4290772992U)>>22u), float((packedColor&4192256)>>11u), float((packedColor&2046u)>>1u), float(packedColor&1u)) * vec4(0.000977, 0.000488, 0.000977, 1.0);

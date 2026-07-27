@@ -1,0 +1,18 @@
+<ShaderGraph>
+	<GLSLShader type="vert">
+		UITextVertexShader.vert
+	</GLSLShader>
+	<GLSLShader type="fragment">
+		UITextPixelShader.frag
+	</GLSLShader>
+	<ShaderResourceSet>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="storage" used="v" rw="read">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="image2D" used="f">
+		</ShaderResourceItem>
+		<ShaderResourceItem type="sampler" used="f">
+		</ShaderResourceItem>
+	</ShaderResourceSet>
+</ShaderGraph>

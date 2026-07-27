@@ -1,0 +1,118 @@
+#version 460
+
+#extension GL_GOOGLE_include_directive: require
+#extension GL_EXT_shader_8bit_storage : enable
+
+#include "include/UI.iglsl"
+
+
+layout(set = 0, binding = 0) readonly buffer UIContainers
+{
+    UIContainer renderables[];
+} conts;
+
+layout(set = 0, binding = 1) readonly buffer UIRetainedContainers
+{
+    UIRetainedContainer renderables[];
+} retainedConts;
+
+layout(set = 0, binding = 2) uniform usamplerBuffer UITextToContainerID;
+
+layout(set = 0, binding = 3) readonly buffer UITextPool 
+{
+	uint8_t text[];
+} textPool;
+
+layout(set = 0, binding = 4) uniform FontData
+{
+    uint pictureHeight, pictureWidth;
+	uint cellWidth, cellHeight;
+    uint startingChar;
+	uint widthSize;
+    uvec2 pad;
+	int fontWidths[256];
+    
+} fData;
+
+layout(set = 0, binding = 5) writeonly buffer UITextVertices 
+{
+	UITextVertex textVerts[];
+} textVertices;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+    uint lIndex =  gl_WorkGroupID.x;
+
+    uint uiIndex = uint(texelFetch(UITextToContainerID, int(lIndex)).r);
+
+    uint bitfields = conts.renderables[uiIndex].bitfields.z;
+
+    uint textSize = GET_TEXT_SIZE(bitfields);
+
+    uint textOffset = GET_TEXT_BUFFER_LOCATION(bitfields);
+
+    vec2 uiSize = retainedConts.renderables[uiIndex].absoluteSize; 
+  
+    vec2 uiStart = retainedConts.renderables[uiIndex].anchorPoint; 
+
+    float padleft = uiSize.x * 0.05;
+    float padtop = uiSize.y * 0.01;
+    float textHeight = uiSize.y * 1.5;
+    float textWidth = uiSize.x * 0.1;
+
+    vec2 textStride = vec2(textWidth, textHeight);
+    vec2 textCurrPos = vec2(padleft, padtop) + uiStart;
+
+    uint LETTERSPERROW = fData.pictureWidth / fData.cellWidth;
+
+    uint iter = 0;
+
+    for (uint i = 0; i<textSize; i++)
+    {
+        uint letter = uint(textPool.text[i+textOffset]) - fData.startingChar;
+
+        uint tx = (letter % LETTERSPERROW);
+
+        uint ty = (letter / LETTERSPERROW);
+
+        int letterwidth = clamp(fData.fontWidths[letter], 12, 12);
+
+        uint cx = tx * fData.cellWidth;
+
+        uint cy = ty * fData.cellHeight;
+
+        uint cx2 = cx + letterwidth;
+
+        uint cy2 = cy + fData.cellHeight;
+
+        float s1 = float(cx) / float(fData.pictureWidth);
+
+        float t1 = float(cy) / float(fData.pictureHeight);
+
+        float s2 = float(cx2) / float(fData.pictureWidth);
+
+        float t2 = float(cy2) / float(fData.pictureHeight);
+
+        float left = textCurrPos.x;
+        float right = textCurrPos.x + textStride.x;
+        float top = textCurrPos.y;
+        float bottom = textCurrPos.y + textStride.y;
+
+        textVertices.textVerts[iter+0].pos = vec2(left, top);
+        textVertices.textVerts[iter+0].texCoords = vec2(s1, t1);
+        textVertices.textVerts[iter+1].pos = vec2(right, top);
+        textVertices.textVerts[iter+1].texCoords = vec2(s2, t1);
+        textVertices.textVerts[iter+2].pos = vec2(left, bottom);
+        textVertices.textVerts[iter+2].texCoords = vec2(s1, t2);
+        textVertices.textVerts[iter+3].pos = vec2(right, bottom);
+        textVertices.textVerts[iter+3].texCoords = vec2(s2, t2);
+
+        iter += 4;
+
+        textCurrPos.x += textStride.x;
+    }
+
+	return;
+}
