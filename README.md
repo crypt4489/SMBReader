@@ -138,7 +138,19 @@ Finish app level architecture
 - Finish materials and add PBR system and other blending and texture mapping techniques for effects
 - Advanced post processing (blur per object, TAA/FXAA, etc.)
 - Ray traced shadows instead of shadow mapping and attempt tiled drawing in the compute shader
-- Create minimialistic (at least presentation layer, maybe no interactivity) UI system with compute draw list generation
+- Create minimialistic (at least presentation layer, maybe no interactivity) UI system with compute draw list generation (first pass done)
+  - All compute retained model (done)
+  - Depth organizing on gpu, allowing quick traversal of hierarchy (done).
+  - Text generation and drawing (bitmap font for now) (done).
+  - SDF widget drawing (done).
+  - Packed bitfields everywhere (done).
+  - Fix overall presentation (SDF rendering, better widget design, more bitfields for control, left/right justification and positioning).
+  - Add indirect dispatch for per depth absolute positioning and per depth draw positioning so no overlapping.
+  - Add collapsible containers and dispatches to calculate children heights.
+  - Add animation for above and other features.
+  - Create configurable and better text size in display.
+  - Create text and widget clipping so they cutoff and don't overdraw.
+  - Add interactivity and allow user input to highlighted widget and have bitfield for callbacks so CPU can perform action.
 - Write parser for GLTF/GLB to load in other scenes, possibly finish geometric SMB specs for Oddworld
 
 
