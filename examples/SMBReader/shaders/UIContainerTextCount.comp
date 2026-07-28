@@ -21,6 +21,13 @@ layout(set = 0, binding = 2) buffer UITextElementCount
     uint count;
 } uiTextElementCount;
 
+layout(set = 0, binding = 3) buffer UITextGenerationDispatchCommands
+{
+    uint x;
+    uint y;
+    uint z;
+} uiTextDispatchCommands;
+
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 shared uint groupCount;
@@ -58,6 +65,7 @@ void main()
     if (gl_LocalInvocationID.x == 0)
     {
         groupIndex = atomicAdd(uiTextElementCount.count, groupCount);
+        atomicAdd(uiTextDispatchCommands.x, groupCount);
     }
     barrier();
 

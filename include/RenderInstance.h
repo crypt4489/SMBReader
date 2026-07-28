@@ -192,6 +192,8 @@ struct RenderInstance
 
 	void GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* pipelineHandle, BarrierAccumulator* accumulator);
 
+	void GenerateComputeDispatchBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle, int pipelineIndex, BarrierAccumulator* accumulator);
+
 	ShaderComputeLayout* GetComputeLayout(int shaderGraphIndex);
 
 	void EndFrame(int deviceSelection, int commandStreamIndex);

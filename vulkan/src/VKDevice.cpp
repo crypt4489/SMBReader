@@ -384,6 +384,12 @@ void RecordingBufferObject::DispatchCommand(uint32_t x, uint32_t y, uint32_t z)
 	vkCmdDispatch(cbBufferHandler.buffer, x, y, z);
 }
 
+void RecordingBufferObject::IndirectDispatchCommand(EntryHandle bufferHandle, size_t bufferOffset)
+{
+	VkBuffer buffer = vkDeviceHandle->GetBufferHandle(bufferHandle);
+	vkCmdDispatchIndirect(cbBufferHandler.buffer, buffer, bufferOffset);
+}
+
 void RecordingBufferObject::BeginRenderPassCommand(EntryHandle renderTargetIndex, uint32_t imageIndex,
 	VkSubpassContents contents,
 	VkRect2D rect,

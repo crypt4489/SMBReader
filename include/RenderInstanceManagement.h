@@ -73,7 +73,6 @@ struct BufferArrayUpdate
 
 struct GraphicsIntermediaryPipelineInfo
 {
-	uint32_t drawType;
 	int vertexBufferHandle;
 	uint32_t vertexCount;
 	uint32_t pipelinename;
@@ -95,6 +94,7 @@ struct ComputeIntermediaryPipelineInfo
 	uint32_t z;
 	uint32_t pipelinename;
 	uint32_t descCount;
+	int indirectDispatchAllocation;
 	ShaderResourceSetHandle* descriptorsetid;
 };
 
@@ -172,6 +172,7 @@ struct PipelineHandle
 	uint32_t x;
 	uint32_t y;
 	uint32_t z;
+	int indirectDispatchCommandHandle;
 };
 
 struct PipelineInstanceData

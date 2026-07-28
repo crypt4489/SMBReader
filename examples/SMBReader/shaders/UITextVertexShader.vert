@@ -17,11 +17,21 @@ layout(set = 0, binding = 1) readonly buffer UITextVertices
 	UITextVertex textVerts[];
 } textVertices;
 
+layout(set = 0, binding = 4) uniform usamplerBuffer UITextToContainerID;
+
 void main()
 {
-    uint textOffset = gl_VertexIndex / 6;
+    uint drawID = gl_DrawID;
+
+    uint uiIndex = uint(texelFetch(UITextToContainerID, int(drawID)).r);
+
+    uint bitfields = conts.renderables[uiIndex].bitfields.z;
+
+    uint textOffset = GET_TEXT_BUFFER_LOCATION(bitfields);
 
     uint currentVertLocation = gl_VertexIndex % 6;
+
+    uint inTexVertOffset = (gl_VertexIndex / 6) * 4;
 
     uint textIndices[] = uint[](
         0, 
@@ -32,15 +42,15 @@ void main()
         3
     );
 
-    uint vertOffset = 0;
+    uint vertOffset = textOffset * 4;
 
-    UITextVertex vert = textVertices.textVerts[vertOffset + textIndices[currentVertLocation]];
+    UITextVertex vert = textVertices.textVerts[vertOffset + inTexVertOffset + textIndices[currentVertLocation]];
 
     vec2 outVert = 2.0 * vert.pos - 1.0; 
 
     gl_Position = vec4(outVert, 0.0, 1.0);
 
-    textColor = vec4(vec3(0.0), 1.0);
+    textColor =  makeColorFrom10_11_10_1(conts.renderables[uiIndex].packedData.z);
 
     textCoords = vert.texCoords;
 }

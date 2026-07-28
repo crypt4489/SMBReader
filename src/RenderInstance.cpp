@@ -3907,6 +3907,7 @@ int RenderInstance::CreateComputePipelineObject(int deviceSelection, ComputeInte
 	posStruct->x = info->x;
 	posStruct->y = info->y;
 	posStruct->z = info->z;
+	posStruct->indirectDispatchCommandHandle = info->indirectDispatchAllocation;
 	
 	uint32_t pushRangeCount = 0;
 
@@ -3980,6 +3981,8 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 				PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
 
 				GeneratePipelineDescriptorBarriers(deviceSelection, &rcb, handle->resourceSets, handle->resourceSetCount, accumulator, pipelineIndex);
+
+				GenerateComputeDispatchBindingsBarriers(deviceSelection, &rcb, handle, pipelineIndex, accumulator);
 			}
 
 			InsertAccumulatedBarriers(&rcb, accumulator);
@@ -4020,7 +4023,26 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 				InsertIntraPassBarrier(&rcb, accumulator, pipelineIndex);
 
-				rcb.DispatchCommand(handle->x, handle->y, handle->z);
+				if (handle->indirectDispatchCommandHandle >= 0)
+				{
+					RenderAllocation* indirectBufferAlloc = allocations.Get(handle->indirectDispatchCommandHandle);
+
+					size_t align = indirectBufferAlloc->alignment;
+
+					size_t copiesOfstruct = static_cast<size_t>(indirectBufferAlloc->structureCopies);
+
+					size_t indirectBufferBaseOffset = indirectBufferAlloc->offset;
+
+					size_t perFrameIndirectBufferOffset = (((indirectBufferAlloc->requestedSize * copiesOfstruct) + (align - 1)) & ~(align - 1));
+
+					int indirectBufferIndex = indirectBufferAlloc->memIndex;
+
+					rcb.IndirectDispatchCommand(bufferHandles[indirectBufferIndex].bufferHandle, indirectBufferBaseOffset + (currentFrame * perFrameIndirectBufferOffset));
+				}
+				else
+				{
+					rcb.DispatchCommand(handle->x, handle->y, handle->z);
+				}
 
 			}
 
@@ -5123,6 +5145,80 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 
 	if (handle->indirectCountBufferHandle != -1)
 		InsertBufferBarrier(dev, rcb, handle->indirectCountBufferHandle, BarrierStageBits::INDIRECT_DRAW_BARRIER, BarrierActionBits::READ_INDIRECT_COMMAND, accumulator);
+}
+
+void RenderInstance::GenerateComputeDispatchBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle, int pipelineIndex, BarrierAccumulator* accumulator)
+{
+	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+
+	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+
+	if (handle->indirectDispatchCommandHandle != -1)
+	{
+		int allocationIndex = handle->indirectDispatchCommandHandle;
+
+		size_t size = 0, offset = 0, align = 0;
+
+		int memIndex = -1, resourceStatusIndex = -1, bufferLastAccessFrame = 0;
+
+		AllocationType allocType;
+
+		VkBufferMemoryBarrier* vkBarrier = nullptr;
+
+		RenderAllocation* alloc = allocations.Get(allocationIndex);
+
+		resourceStatusIndex = alloc->resourceStatus;
+
+		allocType = alloc->allocType;
+
+		ResourceStatus* status = resourceStatuses.Get(resourceStatusIndex);
+
+		if (allocType == AllocationType::PERFRAME)
+			bufferLastAccessFrame = currentFrame;
+
+		if (BarrierStageBits::INDIRECT_DRAW_BARRIER & status->currStage[bufferLastAccessFrame] && BarrierActionBits::READ_INDIRECT_COMMAND & status->currAction[bufferLastAccessFrame])
+			return;
+
+		memIndex = alloc->memIndex;
+
+		align = alloc->alignment;
+
+		size = ((alloc->requestedSize * alloc->structureCopies) + align - 1) & ~(align - 1);
+
+		offset = alloc->offset;
+
+		if (allocType == AllocationType::PERFRAME)
+		{
+			size_t strideSize = size;
+
+			offset += (currentFrame * strideSize);
+		}
+
+		vkBarrier = (VkBufferMemoryBarrier*)accumulator->intraPassBarrierAllocator.Allocate(sizeof(VkBufferMemoryBarrier));
+
+		IntraPassBarrier* intraBarrier = GetIntraPassBarrier(accumulator, BarrierType::BUFFER_BARRIER, pipelineIndex, vkBarrier);
+
+		intraBarrier->destStage |= BarrierStageBits::INDIRECT_DRAW_BARRIER;
+		intraBarrier->srcStage |= status->currStage[bufferLastAccessFrame];
+		intraBarrier->barrierCount++;
+		
+		VkBuffer buffer = dev->GetBufferHandle(bufferHandles[memIndex].bufferHandle);
+
+		BarrierAction newAction = BarrierActionBits::READ_INDIRECT_COMMAND;
+
+		vkBarrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+		vkBarrier->pNext = nullptr;
+		vkBarrier->srcAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(status->currAction[bufferLastAccessFrame]);
+		vkBarrier->dstAccessMask = API::ConvertBarrierActionToVulkanAccessFlags(newAction);
+		vkBarrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		vkBarrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		vkBarrier->buffer = buffer;
+		vkBarrier->offset = offset;
+		vkBarrier->size = size;
+
+		status->currStage[bufferLastAccessFrame] = BarrierStageBits::INDIRECT_DRAW_BARRIER;
+		status->currAction[bufferLastAccessFrame] = newAction;
+	}
 }
 
 void RenderInstance::TransitionImageLayout(VKDevice* dev, RecordingBufferObject* rcb, int imageIndex, int perImageViewIndex, BarrierStage destBarrierStage, BarrierAction destBarrierAction, BarrierAccumulator* accumulator, int pipelineIndex)

@@ -40,7 +40,7 @@ layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
-	uint lIndex =  gl_WorkGroupID.x;
+	uint lIndex = gl_WorkGroupID.x;
 
     uint parentLevelCount = depthCounts.countsAtN[gs.depthIndex-1];
     uint parentLevelOffset = depthOffs.offsetAtN[gs.depthIndex-1] - parentLevelCount;

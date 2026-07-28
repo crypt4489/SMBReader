@@ -39,6 +39,19 @@ layout(set = 0, binding = 5) writeonly buffer UITextVertices
 	UITextVertex textVerts[];
 } textVertices;
 
+struct VkDrawIndirectCommand 
+{
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+layout(set = 0, binding = 6) writeonly buffer commands
+{
+    VkDrawIndirectCommand command[];
+} comStructs;
+
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main()
@@ -67,11 +80,22 @@ void main()
 
     uint LETTERSPERROW = fData.pictureWidth / fData.cellWidth;
 
-    uint iter = 0;
+    uint vertexStart = textOffset * 4;
 
-    for (uint i = 0; i<textSize; i++)
+    uint iter = vertexStart;
+
+    uint i = 0;
+
+    for (; i<textSize; i++)
     {
-        uint letter = uint(textPool.text[i+textOffset]) - fData.startingChar;
+        uint letter = uint(textPool.text[i+textOffset]); 
+
+        if (letter < fData.startingChar)
+        {
+            break;
+        }
+
+        letter -= fData.startingChar;
 
         uint tx = (letter % LETTERSPERROW);
 
@@ -113,6 +137,11 @@ void main()
 
         textCurrPos.x += textStride.x;
     }
+
+    comStructs.command[lIndex].vertexCount = i * 6; 
+    comStructs.command[lIndex].firstVertex = 0; 
+    comStructs.command[lIndex].instanceCount = 1;
+    comStructs.command[lIndex].firstInstance = 0;
 
 	return;
 }

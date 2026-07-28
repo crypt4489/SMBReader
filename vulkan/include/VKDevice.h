@@ -85,6 +85,8 @@ struct RecordingBufferObject
 
 	void DispatchCommand(uint32_t x, uint32_t y, uint32_t z);
 
+	void IndirectDispatchCommand(EntryHandle bufferHandle, size_t bufferOffset);
+
 	void EndRenderPassCommand();
 
 	void PushConstantsCommand(uint32_t offset, uint32_t size, VkShaderStageFlags flag, void *data);

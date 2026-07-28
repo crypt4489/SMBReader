@@ -692,12 +692,15 @@ static int globalUITextToUIIDs = -1;
 static int globalUITextVertexData = -1;
 static int globalUITextElementsCount = -1;
 static int globalUIFontData = -1;
+static int globalUITextIndirectCommands = -1;
 static int globalUITextCountPipeline = -1;
 static int globalUITextGenerationPipeline = -1;
 static int globalUITextRenderingPipeline = -1;
 static int globalUITextDataPoolSize = 4 * KiB;
+static int globalUITextIndirectDispatchCommands = -1;
 
 static const char* globalUITestText = "Test";
+static const char* globalUITestText2 = "Test2";
 
 static int globalContainerPositionCalculationPipeline[3] = { -1, -1, -1 };
 static int globalContainerSizeCalculationPipeline[3] = { -1, -1, -1 };
@@ -735,17 +738,17 @@ static UIContainer mainRightContainer =
 	.padding = {0.025, 0.0, 0.1, 0.1},
 	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), 0, 0}
+	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), PACK_COLOR_10_11_10_1(15, 88, 235, 1), 0}
 };
 
 static UIContainer mainCenterContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 1, 0), 0, 0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 1, 0), PACK_TEXT_DATA(4, 5), 0},
 	.color = MAKE_COLOR(65.0, 70.0, 80.0, 1.0),
 	.padding = {0.1, 0.000, 0.1, .1 },
 	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), 0, 0}
+	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), PACK_COLOR_10_11_10_1(15, 88, 235, 1), 0}
 };
 
 struct WindowSize
@@ -1111,7 +1114,6 @@ void ApplicationLoop::Execute()
 
 			if (mainDrawRenderableCount != mainIndirectDrawData.commandBufferCount || updateShadowMap)
 			{
-				
 				if (!updateShadowMap)
 				{
 					updateShadowMap = framesInFlight;
@@ -1167,7 +1169,6 @@ void ApplicationLoop::Execute()
 
 			if (localUICount != globalUICount || updateUI > 0)
 			{
-				
 				if (!updateUI)
 					updateUI = framesInFlight;
 
@@ -1180,6 +1181,7 @@ void ApplicationLoop::Execute()
 					{
 						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthCounts , DEPTH_MAX*sizeof(uint32_t), 0, 0);
 						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthOffsets , DEPTH_MAX*sizeof(uint32_t), 0, 0);
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUITextElementsCount, sizeof(uint32_t), 0, 0);
 					}
 
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICountPipeline);
@@ -1193,9 +1195,7 @@ void ApplicationLoop::Execute()
 					GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUITextCountPipeline);
 
 					for (int i = 0; i < globalUIMaxDepth; i++)
-					{
 						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerSizeCalculationPipeline[i]);
-					}
 
 					for (int i = 0; i<2; i++)
 						GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalContainerPositionCalculationPipeline[i+1]);
@@ -1211,7 +1211,6 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.AddPipelineToComputeQueue(mainComputeQueueIndex, globalUICullPipelineIndex);
 				
 				updateUI--;
-
 			}
 
 			if (checkCursor)
@@ -1256,24 +1255,6 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
-/*
-				static UIRetainedContainer retainedContainer[4];
-
-				static uint32_t levelCounts[4], levelOffsets[4];
-
-			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIRetainedContainerData, retainedContainer, sizeof(retainedContainer), 0);
-
-			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthCounts, levelCounts, sizeof(levelCounts), 0);
-
-			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalDepthOffsets, levelOffsets, sizeof(levelCounts), 0);
-
-			//	GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIIndirectionPositionalHandleBuffer, levelOffsets, sizeof(levelCounts), 0);
-
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUITextToUIIDs , levelOffsets, sizeof(levelCounts), 0);
-*/
-				static UITextVertex verts[4];
-
-				GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUITextVertexData, verts, sizeof(verts), 0);
 
 				running = ProcessCommands();
 
@@ -1302,14 +1283,14 @@ void CreateTexturePools()
 		ImageFormat::B8G8R8A8_UNORM
 	};
 
-	auto& rendInst = GlobalRenderer::gRenderInstance;
+	RenderInstance* rendInst =& GlobalRenderer::gRenderInstance;
 
 	size_t requestedSize = 128 * MiB;
 
 	for (int i = 0; i < 4; i++)
 	{
 		int texturePoolHandle = 
-			rendInst.CreateImagePool(mainLogicalDevice,
+			rendInst->CreateImagePool(mainLogicalDevice,
 			requestedSize,
 			formats[i], MAX_IMAGE_DIM, MAX_IMAGE_DIM, 
 				ImageUsageFlagBits::TRANSFER_SRC | ImageUsageFlagBits::TRANSFER_DEST
@@ -1718,7 +1699,7 @@ void CreateJointVisualObject(int numberOfJoints, uint32_t startingLocation)
 													JointDesc() };
 
 	GraphicsIntermediaryPipelineInfo jointInfo = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = jointMeshVertexAlloc,
 		.vertexCount = 6,
 		.pipelinename = JOINTVISUAL,
@@ -2674,6 +2655,7 @@ int CreateDebugCommandBuffers(int count)
 			.z = 1,
 			.pipelinename = DEBUGCULL,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = debugCullDescriptors.data()
 	};
 
@@ -2708,7 +2690,7 @@ int CreateDebugCommandBuffers(int count)
 	}
 
 	GraphicsIntermediaryPipelineInfo indirectDebugDrawPipelineCreate = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = DEBUGDRAW,
@@ -2802,7 +2784,7 @@ int CreateGenericMeshCommandBuffers(int count)
 	}
 
 	GraphicsIntermediaryPipelineInfo indirectDrawCreate = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = GENERIC,
@@ -2848,6 +2830,7 @@ int CreateGenericMeshCommandBuffers(int count)
 			.z = 1,
 			.pipelinename = RENDEROBJCULL,
 			.descCount = 2,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = computeDescriptors.data()
 	};
 
@@ -2881,7 +2864,7 @@ int CreateGenericMeshCommandBuffers(int count)
 	}
 
 	GraphicsIntermediaryPipelineInfo outlineDrawCreate = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = OUTLINE,
@@ -2958,6 +2941,7 @@ int CreateMeshWorldAssignment(int count)
 			.z = 1,
 			.pipelinename = PREFIXSUM,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
 
@@ -2995,6 +2979,7 @@ int CreateMeshWorldAssignment(int count)
 				.z = 1,
 				.pipelinename = PREFIXSUM,
 				.descCount = 1,
+				.indirectDispatchAllocation = -1,
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
 
@@ -3028,6 +3013,7 @@ int CreateMeshWorldAssignment(int count)
 				.z = 1,
 				.pipelinename = PREFIXADD,
 				.descCount = 1,
+				.indirectDispatchAllocation = -1,
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
 
@@ -3072,6 +3058,7 @@ int CreateMeshWorldAssignment(int count)
 			.z = 1,
 			.pipelinename = WORLDORGANIZE,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
@@ -3110,6 +3097,7 @@ int CreateMeshWorldAssignment(int count)
 			.z = 1,
 			.pipelinename = WORLDASSIGN,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
@@ -3173,6 +3161,7 @@ int CreateLightAssignments(int count)
 			.z = 1,
 			.pipelinename = PREFIXSUM,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = prefixSumDescriptor.data()
 	};
 
@@ -3203,6 +3192,7 @@ int CreateLightAssignments(int count)
 				.z = 1,
 				.pipelinename = PREFIXSUM,
 				.descCount = 1,
+				.indirectDispatchAllocation = -1,
 				.descriptorsetid = prefixSumOverflowDescriptor.data()
 		};
 
@@ -3242,6 +3232,7 @@ int CreateLightAssignments(int count)
 				.z = 1,
 				.pipelinename = PREFIXADD,
 				.descCount = 1,
+				.indirectDispatchAllocation = -1,
 				.descriptorsetid = incrementSumsDescriptor.data()
 		};
 
@@ -3285,6 +3276,7 @@ int CreateLightAssignments(int count)
 			.z = 1,
 			.pipelinename = LIGHTORGANIZE,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = preWorldDivDescriptor.data()
 	};
 
@@ -3321,6 +3313,7 @@ int CreateLightAssignments(int count)
 			.z = 1,
 			.pipelinename = LIGHTASSIGN,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = postWorldDivDescriptor.data()
 	};
 
@@ -3428,6 +3421,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 			.z = 1,
 			.pipelinename = SHADOWMAPCULL,
 			.descCount = 2,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = shadowClipDesc.data()
 	};
 	
@@ -3463,7 +3457,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	std::array<ShaderResourceSetHandle, 1> indirectShadowMapDraw = { smdpd.shadowMapDescriptorSet };
 	
 	GraphicsIntermediaryPipelineInfo indirectShadowDrawCreate = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 0,
 		.pipelinename = SHADOWMAPDRAW,
@@ -3510,7 +3504,7 @@ int CreateShadowMapManager(int maxShadowMapAssignment, int maxObjCount, int shad
 	}
 
 	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 4,
 		.pipelinename = FULLSCREEN,
@@ -3592,7 +3586,7 @@ int CreateMSAAPostFullScreen()
 	std::array<ShaderResourceSetHandle, 1> mainFullScreenDesc = { mainFullScreen };
 
 	GraphicsIntermediaryPipelineInfo fullscreenInfo = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = ~0,
 		.vertexCount = 4,
 		.pipelinename = FULLSCREEN,
@@ -3706,7 +3700,7 @@ int CreateSkyBox()
 	std::array<ShaderResourceSetHandle, 2> skyboxDescs = {  camSkyboxData(), skyboxDesc() };
 
 	GraphicsIntermediaryPipelineInfo skyboxInfo = {
-		.drawType = 0,
+		
 		.vertexBufferHandle = vertexAlloc,
 		.vertexCount = 24,
 		.pipelinename = SKYBOX,
@@ -3765,7 +3759,7 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxTextureHandles = 100;
 	riCreateInfo.maxSamplerHandles = 1;
 	riCreateInfo.maxResourceStatuses = 125;
-	riCreateInfo.commandBuffersSize = 16 * KiB;
+	riCreateInfo.commandBuffersSize = 32 * KiB;
 	riCreateInfo.commandsCacheSize = 64 * KiB;
 	riCreateInfo.internalLoggerRingSize = 8 * KiB;
 	riCreateInfo.numberOfDriverHostAllocations = 800;
@@ -5412,6 +5406,7 @@ void CreateUITools(int maxUIContainers)
 {
 	globalUIContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIContainer), maxUIContainers, alignof(UIContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIElementsIndirectBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(VkDrawIndirectCommand), maxUIContainers, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUITextIndirectCommands = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(VkDrawIndirectCommand), maxUIContainers, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIElementsIndirectCountBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalDepthCounts = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalDepthOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5420,7 +5415,9 @@ void CreateUITools(int maxUIContainers)
 	globalUIIndirectionPositionalHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIRetainedContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIRetainedContainer), maxUIContainers, alignof(UIRetainedContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUICursorDetailData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(GPUCursorInfo), 1, alignof(GPUCursorInfo), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	
+	globalUITextIndirectDispatchCommands = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t) * 3, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+
+
 	globalUIFontData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(Font), 2, alignof(Font), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextDataPool = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUITextDataPoolSize, 1, alignof(uint32_t), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextToUIIDs = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5433,6 +5430,11 @@ void CreateUITools(int maxUIContainers)
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainFontData, globalUIFontData, sizeof(Font), 0, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory((void*)globalUITestText, globalUITextDataPool, sizeof(char)*4, 0, TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory((void*)globalUITestText2, globalUITextDataPool, sizeof(char)*5, 4, TransferType::MEMORY);
+
+	uint32_t commands[3] = { 0, 1, 1 };
+
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(commands, globalUITextIndirectDispatchCommands, sizeof(commands), 0, TransferType::CACHED);
 
 	{
 		ShaderResourceSetBuilder descriptorBuilder = GlobalRenderer::gRenderInstance.AllocateShaderResourceSet(mainDescriptorManagerIndex, UICULLING, 0, GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT);
@@ -5461,6 +5463,7 @@ void CreateUITools(int maxUIContainers)
 				.z = 1,
 				.pipelinename = UICULLING,
 				.descCount = 1,
+				.indirectDispatchAllocation = -1,
 				.descriptorsetid = descriptors.data()
 		};
 
@@ -5486,7 +5489,7 @@ void CreateUITools(int maxUIContainers)
 		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
 		GraphicsIntermediaryPipelineInfo pipelineCreateInfo = {
-			.drawType = 0,
+			
 			.vertexBufferHandle = -1,
 			.vertexCount = 0,
 			.pipelinename = UIDRAWING,
@@ -5527,6 +5530,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UIDEPTHCOUNT,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5557,6 +5561,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = PREFIXSUM,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5587,6 +5592,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UICHILDDEPTHADD,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = uiChildDepthDescriptors.data()
 		};
 
@@ -5619,6 +5625,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UIINDEXASSIGNMENT,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = uiIndexDescriptors.data()
 		};
 
@@ -5653,6 +5660,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UILAYOUTSIZES,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5687,6 +5695,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UIABSOLUTEPOSITION,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5712,7 +5721,7 @@ void CreateUITools(int maxUIContainers)
 		std::array<ShaderResourceSetHandle, 1> uiDrawDescriptors = { descriptorBuilder() };
 
 		GraphicsIntermediaryPipelineInfo uiDrawPipelineCreate = {
-			.drawType = 0,
+			
 			.vertexBufferHandle = -1,
 			.vertexCount = 0,
 			.pipelinename = UIOBJECTDRAWING,
@@ -5762,6 +5771,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UICURSORPOSITION,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5775,6 +5785,7 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
 		descriptorBuilder.BindBufferView(&descriptorContext, &globalUITextToUIIDs, 0, 1, 1);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextElementsCount, 0, 1, 2);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextIndirectDispatchCommands, 0, 1, 3);
 		descriptorBuilder.UploadConstant(&descriptorContext, &globalUICount, 0);
 
 		if (descriptorContext.contextFailed)
@@ -5792,6 +5803,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UITEXTCOUNT,
 			.descCount = 1,
+			.indirectDispatchAllocation = -1,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5808,6 +5820,7 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextDataPool, 0, 1, 3);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIFontData, 0, 1, 4);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextVertexData, 0, 1, 5);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextIndirectCommands, 0, 1, 6);
 
 		if (descriptorContext.contextFailed)
 		{
@@ -5824,6 +5837,7 @@ void CreateUITools(int maxUIContainers)
 			.z = 1,
 			.pipelinename = UITEXTGENERATION,
 			.descCount = 1,
+			.indirectDispatchAllocation = globalUITextIndirectDispatchCommands,
 			.descriptorsetid = descriptors.data()
 		};
 
@@ -5841,6 +5855,8 @@ void CreateUITools(int maxUIContainers)
 
 		descriptorBuilder.BindImageResourceToShaderResource(&descriptorContext, &mainDictionary.textureHandles[mainFontImage], &viewIndex, 1, 0, 2);
 		descriptorBuilder.BindSamplerResourceToShaderResource(&descriptorContext, &mainLinearSampler, 1, 0, 3);
+		descriptorBuilder.BindBufferView(&descriptorContext, &globalUITextToUIIDs, 0, 1, 4);
+		
 
 		if (descriptorContext.contextFailed)
 		{
@@ -5852,20 +5868,18 @@ void CreateUITools(int maxUIContainers)
 		std::array<ShaderResourceSetHandle, 1> descriptors = { descriptorBuilder() };
 
 		GraphicsIntermediaryPipelineInfo pipelineCreate = {
-			.drawType = 0,
+			
 			.vertexBufferHandle = -1,
-			.vertexCount = 24,
+			.vertexCount = 0,
 			.pipelinename = UITEXTRENDERING,
 			.descCount = 1,
 			.descriptorsetid = descriptors.data(),
-
 			.indexBufferHandle = -1,
 			.instanceCount = 1,
 			.indexSize = 2,
-			
-			.indirectAllocation = -1,
-			.indirectDrawCount = 0,
-			.indirectCountAllocation = -1
+			.indirectAllocation = globalUITextIndirectCommands,
+			.indirectDrawCount = maxUIContainers,
+			.indirectCountAllocation = globalUITextElementsCount
 		};
 
 		globalUITextRenderingPipeline = GlobalRenderer::gRenderInstance.CreateGraphicsPipelineObject(mainLogicalDevice, &pipelineCreate);
