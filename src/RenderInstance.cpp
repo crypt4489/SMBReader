@@ -5,7 +5,6 @@
 #include <string.h>
 #include <assert.h>
 
-#include "FileManager.h"
 #include "ShaderResourceSet.h"
 
 #include "VKInstance.h"
@@ -1951,9 +1950,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 		VkShaderStageFlags shaderFlags = API::ConvertShaderStageToVulkanShaderStage(map->type);
 
-		uint64_t readCount = 0;
-
-		if (FileManager::FileExists(&nameView)) {
+		if (!OSFileExist(nameView.stringData, nameView.charCount)) {
 
 			OSOpenFile(nameView.stringData, nameView.charCount, READ, &handle);
 
@@ -1961,7 +1958,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength);
 
-			OSReadFile(&handle, shaderLength, shaderData, &readCount);
+			OSReadFile(&handle, shaderLength, shaderData);
 		}
 		else
 		{
@@ -1971,7 +1968,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 			shaderData = (char*)cacheAllocator->CAllocate(shaderLength + 1);
 
-			OSReadFile(&handle, shaderLength, shaderData, &readCount);
+			OSReadFile(&handle, shaderLength, shaderData);
 
 			if (shaderData[shaderLength - 1] != '\0')
 			{

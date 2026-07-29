@@ -201,7 +201,7 @@ int OSCloseFile(OSFileHandle* fileHandle)
     return OS_SUCCESS;
 }
 
-int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize)
+int64_t OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
     if (fileHandle->osDataHandle >= maxFreeListEntry+1)
     {
@@ -231,13 +231,11 @@ int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataR
     }
 
     fileHandle->filePointer += hBytesRead;
-    
-    *dataReadSize = hBytesRead;
 
-    return OS_SUCCESS;
+    return hBytesRead;
 }
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize)
+int64_t OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
 {
     HANDLE hFile = INVALID_HANDLE_VALUE;
 
@@ -267,9 +265,7 @@ int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t
 
     fileHandle->filePointer += hBytesWrite;
 
-    *dataWriteSize = hBytesWrite;
-
-    return OS_SUCCESS;
+    return hBytesWrite;
 }
 
 int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
@@ -433,6 +429,146 @@ int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
 
     if (ret == WAIT_TIMEOUT) 
         return OS_FILE_POLL_TIMEOUT;
+
+    return OS_SUCCESS;
+}
+
+int OSCreateDirectory(const char* directoryPath, int charCount, OSDirectoryFlag directoryFlag)
+{
+    if (charCount >= MAX_PATH)
+        return OS_FAILED_CREATE_DIRECTORY;
+
+    char pathscratch[MAX_PATH];
+
+    memcpy(pathscratch, directoryPath, charCount);
+
+    pathscratch[charCount] = '\0';
+
+    SECURITY_DESCRIPTOR securityDescriptor;
+
+    SECURITY_ATTRIBUTES attributes;
+
+    InitializeSecurityDescriptor(&securityDescriptor, SECURITY_DESCRIPTOR_REVISION);
+
+    BOOL daclRet = FALSE;
+
+    if (directoryFlag == OSDirectoryFlags::PUBLIC_DIR)
+    {
+        daclRet = SetSecurityDescriptorDacl(&securityDescriptor, TRUE, NULL, FALSE);
+    }
+    else if (directoryFlag == OSDirectoryFlags::PRIVATE_DIR)
+    {
+
+    }
+
+    if (daclRet == FALSE)
+    {
+        return OS_FAILED_CREATE_DIRECTORY;
+    }
+
+    attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
+    attributes.lpSecurityDescriptor = &securityDescriptor;
+    attributes.bInheritHandle = FALSE;
+
+    BOOL dirRet = CreateDirectory(pathscratch, &attributes);
+
+    if (dirRet == FALSE)
+    {
+        return OS_FAILED_CREATE_DIRECTORY;
+    }
+
+    return OS_SUCCESS;
+}
+
+int OSGetCurrentDirectorySize()
+{
+   return GetCurrentDirectory(0, NULL);
+}
+
+int OSGetCurrentDirectory(int bufferSize, char* outputBuffer)
+{
+    return GetCurrentDirectory(bufferSize, outputBuffer);
+}
+
+int OSSetCurrentDirectory(const char* inputPath, int charCount)
+{
+    if (charCount >= MAX_PATH)
+        return OS_FAILED_SET_CURRENT_DIRECTORY;
+
+    char pathscratch[MAX_PATH];
+
+    memcpy(pathscratch, inputPath, charCount);
+
+    pathscratch[charCount] = '\0';
+
+    BOOL setCurrentDirectoryRet = SetCurrentDirectory(pathscratch);
+
+    if (setCurrentDirectoryRet == FALSE)
+    {
+        return OS_FAILED_SET_CURRENT_DIRECTORY;
+    }
+
+    return OS_SUCCESS;
+}
+
+int OSExtractFileName(const char* inputFilePath, int inputFilePathCount, char* outputBuffer)
+{
+    char filePathTerminator1 = '\\';
+    char filePathTerminator2 = '/';
+
+    int searchForFileTerminatorIter = inputFilePathCount-1;
+
+    while (searchForFileTerminatorIter >= 0)
+    {
+        if (inputFilePath[searchForFileTerminatorIter] == filePathTerminator2 || inputFilePath[searchForFileTerminatorIter] == filePathTerminator1)
+            break;
+     
+        searchForFileTerminatorIter--;
+    }
+
+    int searchForFileExtensionBeginIter = inputFilePathCount;
+
+    while (searchForFileExtensionBeginIter >= 0)
+    {
+        if (inputFilePath[searchForFileExtensionBeginIter] == '.')
+            break;
+
+        searchForFileExtensionBeginIter--;
+    }
+
+    if (searchForFileExtensionBeginIter < 0)
+        return -1;
+
+    int fileNameSize = (searchForFileExtensionBeginIter - searchForFileTerminatorIter) - 1;
+
+    memcpy(outputBuffer, inputFilePath + searchForFileTerminatorIter + 1, fileNameSize);
+    
+    return fileNameSize;
+}
+
+int OSGetSystemFileTerminator()
+{
+    return '\\';
+}
+
+int OSFileExist(const char* inputFile, int charCount)
+{
+    char pathscratch[MAX_PATH];
+
+    if (charCount <= 0 || charCount >= MAX_PATH)
+        return OS_FAILED_EXISTING;
+
+    memcpy(pathscratch, inputFile, charCount);
+    pathscratch[charCount] = '\0';
+
+    HANDLE hFile = CreateFileA(pathscratch, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return OS_FAILED_EXISTING;
+    }
+
+    CloseHandle(hFile);
 
     return OS_SUCCESS;
 }

@@ -36,13 +36,11 @@ int SMBFile::LoadFile( Allocator* inputDataAllocator, Logger* scratch)
 
 int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
 {
-	uint64_t readCount = 0;
-
-	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic), &readCount);
+	OSReadFile(&fileHandle, 8, reinterpret_cast<char*>(&magic));
 
 	int stringsize = 0;
 
-	OSReadFile(&fileHandle, 4, reinterpret_cast<char*>(&stringsize), &readCount);
+	OSReadFile(&fileHandle, 4, reinterpret_cast<char*>(&stringsize));
 
 	if (stringsize < 0 || stringsize >= MAX_STRING_SIZE)
 	{
@@ -54,20 +52,18 @@ int SMBFile::ReadHeader(Allocator* inputDataAllocator, Logger* scratch)
 
 	name.charCount = stringsize;
 
-	OSReadFile(&fileHandle, stringsize, strBuf, &readCount);
+	OSReadFile(&fileHandle, stringsize, strBuf);
 
 	name.stringData = strBuf;
 
-	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset), &readCount);
+	OSReadFile(&fileHandle, 36, reinterpret_cast<char*>(&fileOffset));
 
 	return 0;
 }
 
 int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* scratch)
 {
-	uint64_t readCount = 0;
-
-	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic), &readCount);
+	OSReadFile(&fileHandle, 44, reinterpret_cast<char*>(&chunk.magic));
 
 	if (chunk.chunkId != chunk.chunkIdCopy)
 	{
@@ -83,7 +79,7 @@ int SMBFile::ReadChunk(SMBChunk& chunk, Allocator* inputDataAllocator, Logger* s
 
 	chunk.fileName.charCount = chunk.stringsize;
 	char* strBuf = (char*)inputDataAllocator->Allocate(chunk.stringsize);
-	OSReadFile(&fileHandle, chunk.stringsize, strBuf, &readCount);
+	OSReadFile(&fileHandle, chunk.stringsize, strBuf);
 
 	chunk.fileName.stringData = strBuf;
 
@@ -394,13 +390,11 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		break;
 	}
 
-	uint64_t readCount = 0;
-
 	if (decompressed)
 	{
 		void* data = tempMemoryPool->Allocate(vertexSize);
 
-		OSReadFile(handle, vertexSize, (char*)data, &readCount);
+		OSReadFile(handle, vertexSize, (char*)data);
 
 		unsigned char* g = (unsigned char*)data;
 
@@ -523,14 +517,12 @@ void SMBCopyVertexData(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile*
 		}
 		}
 	} else {
-		OSReadFile(handle, vertexSize, (char*)vertexDataOut, &readCount);
+		OSReadFile(handle, vertexSize, (char*)vertexDataOut);
 	}
 }
 
 void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* file, void* indexDataOut)
 {
-	uint64_t readCount = 0;
-
 	int renderableType = geoDefinition->renderablesTypes[renderableIndex];
 	
 	int iCount = SMB_FILE_MIN(geoDefinition->indicesCount[renderableIndex], 65535);
@@ -549,14 +541,14 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* fi
 
 			uint32_t byteInput;
 
-			OSReadFile(handle, 4, (char*)&byteInput, &readCount);
+			OSReadFile(handle, 4, (char*)&byteInput);
 
 			uint32_t stride = (byteInput >> 0x12) & 0x7ff;
 			uint32_t indexType = (byteInput & 0x3ffff);
 
 			if (indexType == 0x1800)
 			{
-				OSReadFile(handle, stride * 4, (char*)indices, &readCount);
+				OSReadFile(handle, stride * 4, (char*)indices);
 
 				indices += (stride * 2);
 
@@ -564,7 +556,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* fi
 			}
 			else if (indexType == 0x1808)
 			{
-				OSReadFile(handle, 2, (char*)indices, &readCount);
+				OSReadFile(handle, 2, (char*)indices);
 				iCount--;
 			}
 			else if (indexType == 0x17fc) {
@@ -574,7 +566,7 @@ void SMBCopyIndices(SMBGeoChunk* geoDefinition, int renderableIndex, SMBFile* fi
 	} 
 	else if (renderableType == IVRENDERABLE)
 	{
-		OSReadFile(handle, iCount * 4, (char*)indices, &readCount);
+		OSReadFile(handle, iCount * 4, (char*)indices);
 	}
 }
 
@@ -676,20 +668,18 @@ bool cpospack6_c16tex2_bone2_type_h::operator==(const cpospack6_c16tex2_bone2_ty
 
 char* GetJointNames(Allocator* inputAllocator, SMBFile* file, SMBChunk* chunk)
 {
-	uint64_t readCount = 0;
-
 	OSSeekFile(&file->fileHandle, chunk->offsetInHeader, BEGIN);
 
 	int jointNameSize = 0;
 
-	OSReadFile(&file->fileHandle, 4, (char*)&jointNameSize, &readCount);
+	OSReadFile(&file->fileHandle, 4, (char*)&jointNameSize);
 
 	if (jointNameSize != chunk->stringsize)
 		return nullptr;
 
 	char* stringData = (char*)inputAllocator->Allocate(jointNameSize);
 
-	OSReadFile(&file->fileHandle, jointNameSize, stringData, &readCount);
+	OSReadFile(&file->fileHandle, jointNameSize, stringData);
 
 	return stringData;
 }
@@ -698,7 +688,7 @@ int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file)
 {
 	uint64_t readCount = 0;
 
-	OSReadFile(&file->fileHandle, 4, (char*)&skel->jointCount, &readCount);
+	OSReadFile(&file->fileHandle, 4, (char*)&skel->jointCount);
 
 	skel->joints = (SMBJoint*)inputAllocator->Allocate(sizeof(SMBJoint) * skel->jointCount);
 
@@ -706,19 +696,19 @@ int GetBoneData(Allocator* inputAllocator, SMBSkeleton* skel, SMBFile* file)
 	{
 		SMBJoint* joint = &skel->joints[i];
 
-		OSReadFile(&file->fileHandle, sizeof(Matrix4f), (char*)&joint->granny_inverseBindPose, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(Matrix4f), (char*)&joint->granny_inverseBindPose);
 
-		OSReadFile(&file->fileHandle, 4, (char*)&joint->granny_flags, &readCount);
+		OSReadFile(&file->fileHandle, 4, (char*)&joint->granny_flags);
 
-		OSReadFile(&file->fileHandle, sizeof(Vector3f), (char*)&joint->granny_position, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(Vector3f), (char*)&joint->granny_position);
 
-		OSReadFile(&file->fileHandle, sizeof(Vector4f), (char*)&joint->granny_orientation, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(Vector4f), (char*)&joint->granny_orientation);
 
-		OSReadFile(&file->fileHandle, sizeof(float), (char*)&joint->granny_scale, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(float), (char*)&joint->granny_scale);
 
 		OSSeekFile(&file->fileHandle, 4, CURRENT); //random ptr
 
-		OSReadFile(&file->fileHandle, sizeof(uint32_t), (char*)&joint->granny_parentIndex, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(uint32_t), (char*)&joint->granny_parentIndex);
 
 		OSSeekFile(&file->fileHandle, 4, CURRENT); // struct padding
 	}
@@ -732,13 +722,11 @@ int GetStringOffset(SMBFile* file, SMBSkeleton* skel)
 
 	int numJoints = skel->jointCount;
 
-	uint64_t readCount = 0;
-
 	while (numJoints--)
 	{
 		uint32_t input = 0;
 
-		OSReadFile(&file->fileHandle, sizeof(int), (char*)&input, &readCount);
+		OSReadFile(&file->fileHandle, sizeof(int), (char*)&input);
 
 		skel->joints[index].nameOffsetInSMB = input;
 

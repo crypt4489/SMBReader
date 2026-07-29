@@ -149,9 +149,7 @@ int CreateShaderGraph(StringView filename, Allocator* readerMemory, ShaderGraph*
 	
 	void* fileData = readerMemory->Allocate(dataSize);
 
-	uint64_t readCount = 0;
-
-	OSReadFile(&fileHandle, dataSize, (char*)fileData, &readCount);
+	OSReadFile(&fileHandle, dataSize, (char*)fileData);
 
 	OSCloseFile(&fileHandle);
 
@@ -993,9 +991,7 @@ int CreatePipelineDescription(StringView filename, GenericPipelineStateInfo* sta
 
 	void* fileData = tempAllocator->Allocate(dataSize);
 
-	uint64_t readCount = 0;
-
-	OSReadFile(&fileHandle, dataSize, (char*)fileData, &readCount);
+	OSReadFile(&fileHandle, dataSize, (char*)fileData);
 
 	OSCloseFile(&fileHandle);
 
@@ -2218,9 +2214,7 @@ int CreateAttachmentGraphFromFile(StringView filename, AttachmentGraph* graph, A
 
 	void* data = inputScratchAllocator->Allocate(dataSize);
 
-	uint64_t readCount = 0;
-
-	OSReadFile(&fileHandle, dataSize, (char*)data, &readCount);
+	OSReadFile(&fileHandle, dataSize, (char*)data);
 
 	OSCloseFile(&fileHandle);
 

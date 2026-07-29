@@ -1,11 +1,12 @@
 #include "SMBExporter.h"
 
-#include "imageutils/TextureIO.h"
-#include "FileManager.h"
 #include "imageutils/DXTCompression.h"
+#include "imageutils/TextureIO.h"
+
 #include "SMBTexture.h"
 
 #include <string.h>
+#include <stdio.h>
 
 void ExportChunksFromFile(SMBFile* smb, Allocator* inputScratchMemory)
 {
@@ -33,13 +34,27 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 {
 	const int MAX_SMB_ARCHIVE_OBJECT_NAME = 55;
 
-	StringView imageName{};
-
 	char* strBuf = (char*)inputScratchMemory->Allocate(MAX_SMB_ARCHIVE_OBJECT_NAME);
 
-	FileManager::ExtractFileNameFromPath(&chunk.fileName, &imageName, strBuf);
+	int fileNameLength = OSExtractFileName(chunk.fileName.stringData, chunk.fileName.charCount, strBuf);
 
-	auto pathToTextures = FileManager::SetupDirectory(&imageName);
+	strBuf[fileNameLength] = '\0';
+
+	int currentDirectorySize = OSGetCurrentDirectorySize() + 2;
+
+	char* rootDirectory = (char*)inputScratchMemory->Allocate(currentDirectorySize);
+
+	OSGetCurrentDirectory(currentDirectorySize, rootDirectory);
+
+	int filePathScratchSize = currentDirectorySize + (fileNameLength*2) + 10;
+
+	char* filePathScratch = (char*)inputScratchMemory->Allocate(filePathScratchSize);
+
+	int filePathSlash = OSGetSystemFileTerminator();
+
+	int filePathTotalSize = snprintf(filePathScratch, filePathScratchSize, "%s%c%s%c", rootDirectory, filePathSlash, strBuf, filePathSlash);
+
+	OSCreateDirectory(filePathScratch, filePathTotalSize, PUBLIC_DIR);
 
 	SMBTexture tex;
 	
@@ -55,27 +70,23 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 	for (uint32_t i = 0; i < tex.miplevels; i++)
 	{
-		uint64_t writeOutSize;
-
-		std::string writeFileName = std::string(imageName.stringData, imageName.charCount) + std::to_string(i + 1) + ".bmp";
-
-		auto writePath = pathToTextures / writeFileName;
+		filePathTotalSize = snprintf(filePathScratch, filePathScratchSize, "%s%c%s%c%s%d%s", rootDirectory, filePathSlash, strBuf, filePathSlash, strBuf, i + 1, ".bmp");
 
 		uint32_t writeWidth = tex.width >> i;
 		uint32_t writeHeight = tex.height >> i;
 
 		OSFileHandle handle;
 
-		OSOpenFile(writePath.string().c_str(), writePath.string().size(), CREATE_IF_NOT_EXIST | WRITE, &handle);
+		OSOpenFile(filePathScratch, filePathTotalSize, CREATE_IF_NOT_EXIST | WRITE, &handle);
 
 		TexUtils::BMP::BitmapFileHeader fileheader{};
 		TexUtils::BMP::BitmapInfoHeader infoheader{};
 
 		TexUtils::BMP::WriteOutBMPHeaders(&fileheader, &infoheader, writeWidth, writeHeight);
 
-		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType), &writeOutSize);
+		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapFileHeader), reinterpret_cast<char*>(&fileheader.bfType));
 
-		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize), &writeOutSize);
+		OSWriteFile(&handle, sizeof(TexUtils::BMP::BitmapInfoHeader), reinterpret_cast<char*>(&infoheader.biSize));
 
 		char* bgra = ptr;
 
@@ -112,7 +123,7 @@ void ExportTextureFromFile(SMBFile* smb, SMBChunk& chunk, Allocator* inputScratc
 
 		for (uint32_t i = 0; i < writeHeight; i++)
 		{
-			OSWriteFile(&handle, bpr, input + offset, &writeOutSize);
+			OSWriteFile(&handle, bpr, input + offset);
 			offset -= bpr;
 		}
 

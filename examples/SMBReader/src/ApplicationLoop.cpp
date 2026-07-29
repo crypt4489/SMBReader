@@ -2,7 +2,6 @@
 #include "allocator/AppAllocator.h"
 #include "Camera.h"
 #include "CommonRenderTypes.h"
-#include "FileManager.h"
 #include "logger/Logger.h"
 #include "RenderInstance.h"
 #include "OSMemory.h"
@@ -713,6 +712,9 @@ static int globalUICount = 0;
 static int globalUIMaxDepth = 3;
 static Vector2i tempCursorPos = { 200, 200 };
 
+static Font mainFontData;
+static int mainFontImage;
+
 static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 static UIContainer mainContainer =
@@ -862,10 +864,6 @@ static bool MoveCamera(double fps);
 static void CreateGPUGenericObjects();
 
 static void CreateUITools(int maxUIContainers);
-
-static Font mainFontData;
-static int mainFontImage;
-
 static int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font);
 
 static void CreateFontWidths(Font* font, char* fontData);
@@ -952,13 +950,23 @@ void ApplicationLoop::Execute()
 			return;
 		}
 
-		StringView fileName{};
+		char* currentDirectory;
+
+		int currentDirectoryLength = OSGetCurrentDirectorySize();
+
+		currentDirectory = (char*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(currentDirectoryLength + mainInputString.charCount + 5);
+
+		OSGetCurrentDirectory(currentDirectoryLength, currentDirectory);
 
 		char* strBuf = (char*)SMBThreadedFileScratchAllocators[arenaIndex].Allocate(mainInputString.charCount);
 
-		FileManager::ExtractFileNameFromPath(&mainInputString, &fileName, strBuf);
+		int fileNameLength = OSExtractFileName(mainInputString.stringData, mainInputString.charCount, strBuf);
 
-		FileManager::SetFileCurrentDirectory(&fileName);
+		int newCurrentDirectoryLen = snprintf(currentDirectory, currentDirectoryLength + fileNameLength + 5, "%s%c%s", currentDirectory, OSGetSystemFileTerminator(), strBuf);
+
+		OSCreateDirectory(currentDirectory, newCurrentDirectoryLen, PUBLIC_DIR);
+
+		OSSetCurrentDirectory(currentDirectory, newCurrentDirectoryLen);
 
 		ExportChunksFromFile(&mainSMB, &GlobaScratchAllocator);
 
@@ -2326,8 +2334,6 @@ int CreateAABBDebugStruct(const Vector3f& center, const Vector4f& halfExtents, c
 
 void ProcessSMBFile(SMBFile *file, int arenaIndex)
 {
-	uint64_t readCount = 0;
-
 	const int MAX_GEO_FILES = 2;
 	const int MAX_TEXTURES = 10;
 
@@ -2355,7 +2361,7 @@ void ProcessSMBFile(SMBFile *file, int arenaIndex)
 
 			char* geomHeader = (char*)SMBThreadedFileInputAllocators[arenaIndex].Allocate(chunk[i].headerSize);
 
-			OSReadFile(&file->fileHandle, chunk[i].headerSize, geomHeader, &readCount);
+			OSReadFile(&file->fileHandle, chunk[i].headerSize, geomHeader);
 
 		    int geometryPorcessRet = ProcessGeometryClass(geomHeader, totalTextureCount, geoDef, chunk[i].contigOffset + file->fileOffset, chunk[i].fileOffset + file->numContiguousBytes + file->fileOffset, &mainAppLogger, &SMBThreadedFileInputAllocators[arenaIndex]);
 
@@ -4438,8 +4444,8 @@ void ScanSTDIN(void* data)
 	OSFileHandle stdIn;
 
 	OSGetSTDInput(&stdIn);
-	uint64_t numberOfBytesRead;
-	DWORD events, readReturn = 0;
+	int64_t readReturn = 0;
+	DWORD events;
 	INPUT_RECORD record;
 
 	char inputBuffer[1024];
@@ -4474,7 +4480,7 @@ void ScanSTDIN(void* data)
 			continue;
 		}
 
-		readReturn = OSReadFile(&stdIn, 1024, inputBuffer, &numberOfBytesRead);
+		readReturn = OSReadFile(&stdIn, 1024, inputBuffer);
 
 		if (readReturn < 0)
 		{
@@ -4482,10 +4488,10 @@ void ScanSTDIN(void* data)
 			break;
 		}
 
-		if (numberOfBytesRead <= 2)
+		if (readReturn <= 2)
 			continue;
 
-		int wordCount = FindWords(inputBuffer, numberOfBytesRead - 2);
+		int wordCount = FindWords(inputBuffer, readReturn - 2);
 
 		AddCommandTS(wordCount);
 
@@ -4709,9 +4715,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 	void* fileData = GlobaScratchAllocator.Allocate(size);
 
-	uint64_t readCount = 0;
-
-	int nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
+	int64_t nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 	OSCloseFile(&outHandle);
 
@@ -4744,7 +4748,7 @@ int ReadCubeImage(StringView* name, int textureCount, TextureIOType ioType)
 
 		fileData = GlobaScratchAllocator.Allocate(size);
 
-		nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
+		nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 		OSCloseFile(&outHandle);
 
@@ -4849,9 +4853,7 @@ int Read2DImage(StringView* name, int mipCounts, TextureIOType ioType)
 
 		void* fileData = GlobaScratchAllocator.Allocate(size);
 		
-		uint64_t readCount = 0;
-
-		int nRead = OSReadFile(&outHandle, size, (char*)fileData, &readCount);
+		int64_t nRead = OSReadFile(&outHandle, size, (char*)fileData);
 
 		OSCloseFile(&outHandle);
 
@@ -5905,9 +5907,7 @@ int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font
 
 	char dataRead[sizeof(Font)];
 
-	uint64_t dataReadSize;
-
-	OSReadFile(&fileHandle, fileHandle.fileLength, dataRead, &dataReadSize);
+	OSReadFile(&fileHandle, fileHandle.fileLength, dataRead);
 
 	OSCloseFile(&fileHandle);
 

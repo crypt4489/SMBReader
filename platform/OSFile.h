@@ -34,6 +34,14 @@ enum OSRelativeFlags
 	END = 2,
 };
 
+enum OSDirectoryFlags
+{
+	PRIVATE_DIR = 1,
+	PUBLIC_DIR = 2,
+};
+
+typedef int OSDirectoryFlag;
+
 enum OSFileErrorFlags
 {
 	OS_SUCCESS = 0,
@@ -50,6 +58,10 @@ enum OSFileErrorFlags
 	OS_FILE_CLOSED_FAILED = -11,
 	OS_FILE_FUNCTION_NOT_IMPLEMENTED = -12,
 	OS_FAILED_POLL = -13,
+	OS_FAILED_CREATE_DIRECTORY = -14,
+	OS_FAILED_GET_CURRENT_DIRECTORY = -15,
+	OS_FAILED_SET_CURRENT_DIRECTORY = -16,
+	OS_FAILED_EXISTING = -17
 };
 
 struct OSFileIterator
@@ -79,11 +91,11 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
 int OSCloseFile(OSFileHandle* fileHandle);
 
-int OSReadFile(OSFileHandle* fileHandle, int size, char* buffer, uint64_t* dataReadSize);
+int64_t OSReadFile(OSFileHandle* fileHandle, int size, char* buffer);
 
 int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags);
 
-int OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer, uint64_t* dataWriteSize);
+int64_t OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer);
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator);
 
@@ -96,3 +108,15 @@ void OSGetSTDError(OSFileHandle* fileHandle);
 void CloseAllFiles();
 
 int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut);
+
+int OSCreateDirectory(const char* directoryPath, int charCount, OSDirectoryFlag directoryFlag);
+
+int OSGetCurrentDirectorySize();
+int OSGetCurrentDirectory(int bufferSize, char* outputBuffer);
+int OSSetCurrentDirectory(const char* inputPath, int charCount);
+
+int OSExtractFileName(const char* inputFilePath, int inputFilePathCount, char* outputBuffer);
+
+int OSGetSystemFileTerminator();
+
+int OSFileExist(const char* inputFile, int charCount);
