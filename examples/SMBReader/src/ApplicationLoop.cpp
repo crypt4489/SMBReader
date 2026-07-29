@@ -5,6 +5,8 @@
 #include "FileManager.h"
 #include "logger/Logger.h"
 #include "RenderInstance.h"
+#include "OSMemory.h"
+#include "OSTime.h"
 #include "SMBExporter.h"
 #include "SMBFile.h"
 #include "SMBTexture.h"
@@ -880,6 +882,7 @@ ApplicationLoop::~ApplicationLoop() {
 	{ 
 		CleanupRuntime(); 
 	} 
+
 	CloseAllFiles();
 	CloseAllSyncObject();
 	CloseAllThreads();
@@ -888,7 +891,6 @@ ApplicationLoop::~ApplicationLoop() {
 
 void ApplicationLoop::Execute()
 {
-
 	OSSyncMemoryRequirements syncMemReq = OSGetSyncMemoryRequirements(10);
 	OSWindowMemoryRequirements winMemReq = OSGetWindowMemoryRequirements(1);
 	OSFileMemoryRequirements fileMemReq = OSGetFileMemoryRequirements(30);
@@ -917,6 +919,8 @@ void ApplicationLoop::Execute()
 		winMemReq.dataSize,
 		1
 	);
+
+	OSTimeInitialize();
 
 	mainAppLogger.InitLogger(LoggerMessageMemory, sizeof(LoggerMessageMemory));
 
@@ -986,10 +990,8 @@ void ApplicationLoop::Execute()
 
 		CreateUniformGrid();
 
-		LARGE_INTEGER startTime;
-		LARGE_INTEGER currentTime;
-		LARGE_INTEGER frequency;
-
+		double startTime = OSGetCurrentTimeSeconds();
+		double currentTime = 0.0;
 		uint64_t frameCounter = 0;
 		double FPS = 60.0f;
 
@@ -997,14 +999,14 @@ void ApplicationLoop::Execute()
 
 		StringView view { windowText, 0 };
 
-		auto fps = [&frameCounter, &currentTime, &startTime, &frequency, &FPS, &windowText, &view, this]()
+		auto fps = [&frameCounter, &currentTime, &startTime, &FPS, &windowText, &view, this]()
 			{
-				double elapsed;
-				QueryPerformanceCounter(&currentTime);
+				currentTime = OSGetCurrentTimeSeconds();
 
-				elapsed = static_cast<double>((currentTime.QuadPart - startTime.QuadPart)) / frequency.QuadPart;
+				double elapsed = currentTime - startTime;
 
-				if (elapsed >= 1.0) {
+				if (elapsed >= 1.0) 
+				{
 					FPS = static_cast<double>(frameCounter) / elapsed;
 			
 					view.charCount = snprintf(windowText, sizeof(windowText), "FPS : %.2f", FPS);
@@ -1012,15 +1014,12 @@ void ApplicationLoop::Execute()
 					mainWindow.SetWindowTitle(view);
 				
 					frameCounter = 0;
-					QueryPerformanceCounter(&startTime);
+					startTime = OSGetCurrentTimeSeconds();
 					return 1;
 				}
 
 				return 0;
 			};
-
-		QueryPerformanceFrequency(&frequency);
-		QueryPerformanceCounter(&startTime);
 
 		uint32_t framesInFlight = GlobalRenderer::gRenderInstance.MAX_FRAMES_IN_FLIGHT;
 
@@ -1053,6 +1052,8 @@ void ApplicationLoop::Execute()
 			mainWindow.PollEvents();
 
 			if (mainWindow.ShouldCloseWindow()) break;
+
+			if (mainWindow.windowData.info.minimized) continue;
 
 			ProcessKeys(mainWindow.windowData.info.actions);
 
@@ -4462,7 +4463,8 @@ void ScanSTDIN(void* data)
 
 		switch (record.EventType) {
 		case KEY_EVENT:
-			if (record.Event.KeyEvent.bKeyDown) {
+			if (record.Event.KeyEvent.bKeyDown) 
+			{
 				if (record.Event.KeyEvent.uChar.AsciiChar == VK_RETURN)
 				{
 					break;
@@ -4622,30 +4624,29 @@ void LoadObjectThreaded(void* data)
 
 void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 {
+	camMovements[RIGHT] = (keyActions[KC_D].GetCurrentState() == HELD || keyActions[KC_D].GetCurrentState() == PRESSED);
 
-	camMovements[RIGHT] = (keyActions[KC_D].state == HELD || keyActions[KC_D].state == PRESSED);
+	camMovements[LEFT] = (keyActions[KC_A].GetCurrentState() == HELD || keyActions[KC_A].GetCurrentState() == PRESSED);
 
-	camMovements[LEFT] = (keyActions[KC_A].state == HELD || keyActions[KC_A].state == PRESSED);
+	camMovements[FORWARD] = (keyActions[KC_W].GetCurrentState() == HELD || keyActions[KC_W].GetCurrentState() == PRESSED);
 
-	camMovements[FORWARD] = (keyActions[KC_W].state == HELD || keyActions[KC_W].state == PRESSED);
+	camMovements[BACK] = (keyActions[KC_S].GetCurrentState() == HELD || keyActions[KC_S].GetCurrentState() == PRESSED);
 
-	camMovements[BACK] = (keyActions[KC_S].state == HELD || keyActions[KC_S].state == PRESSED);
+	camMovements[PITCHUP] = (keyActions[KC_UP].GetCurrentState() == HELD || keyActions[KC_UP].GetCurrentState() == PRESSED);
 
-	camMovements[PITCHUP] = (keyActions[KC_UP].state == HELD || keyActions[KC_UP].state == PRESSED);
+	camMovements[PITCHDOWN] = (keyActions[KC_DOWN].GetCurrentState() == HELD || keyActions[KC_DOWN].GetCurrentState() == PRESSED);
 
-	camMovements[PITCHDOWN] = (keyActions[KC_DOWN].state == HELD || keyActions[KC_DOWN].state == PRESSED);
+	camMovements[ROTATEYRIGHT] = (keyActions[KC_RIGHT].GetCurrentState() == HELD || keyActions[KC_RIGHT].GetCurrentState() == PRESSED);
 
-	camMovements[ROTATEYRIGHT] = (keyActions[KC_RIGHT].state == HELD || keyActions[KC_RIGHT].state == PRESSED);
-
-	camMovements[ROTATEYLEFT] = (keyActions[KC_LEFT].state == HELD || keyActions[KC_LEFT].state == PRESSED);
+	camMovements[ROTATEYLEFT] = (keyActions[KC_LEFT].GetCurrentState() == HELD || keyActions[KC_LEFT].GetCurrentState() == PRESSED);
 
 
-	if (keyActions[KC_TWO].state == PRESSED)
+	if (keyActions[KC_TWO].GetCurrentState() == PRESSED)
 	{
 		GlobalRenderer::gRenderInstance.IncreaseMSAA(currentFrameGraphIndex, 0);
 	}
 
-	if (keyActions[KC_ONE].state == PRESSED)
+	if (keyActions[KC_ONE].GetCurrentState() == PRESSED)
 	{
 		GlobalRenderer::gRenderInstance.DecreaseMSAA(currentFrameGraphIndex, 0);
 	}
@@ -4654,19 +4655,20 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 	static bool clamped = false;
 
-	if (keyActions[KC_Q].state == PRESSED && !clamped)
+	if (keyActions[KC_Q].GetCurrentState() == PRESSED && !clamped)
 	{
 		int next = currentFrameGraphIndex + dir;
 
 		if (next < 0)
 		{
 			dir = 1;
-			next = 0;
+			next = currentFrameGraphIndex + 1;
 		}
-		else if (next >= frameGraphsCount)
+		
+		if (next >= frameGraphsCount)
 		{
 			dir = -1;
-			next = frameGraphsCount - 1;
+			next = (currentFrameGraphIndex - 1 < 0 ? 0 : currentFrameGraphIndex -1);
 		}
 
 		currentFrameGraphIndex = next;
@@ -4677,7 +4679,7 @@ void ProcessKeys(GenericKeyAction keyActions[KC_COUNT])
 
 		clamped = true;
 	}
-	else if (keyActions[KC_Q].state == RELEASED && clamped)
+	else if (keyActions[KC_Q].GetCurrentState() == RELEASED && clamped)
 	{
 		clamped = false;
 	}

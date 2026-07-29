@@ -287,9 +287,7 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
     }
     case WM_KEYUP:
     case WM_KEYDOWN:
-
     {
-
         WORD vkCode = LOWORD(wp);
 
         WORD keyFlags = HIWORD(lp);
@@ -304,8 +302,6 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
         WORD repeatCount = LOWORD(lp);
 
         BOOL isKeyReleased = (keyFlags & KF_UP) == KF_UP;
-
-
 
         switch (vkCode)
         {
@@ -382,8 +378,7 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
 
         default: break;
         }
-
-        return 0;
+        break;
     }
 
 
@@ -394,16 +389,15 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
         {
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)infoStruct->lpCreateParams);
         }
-        return 0;
     }
 
     case WM_QUIT:
     {
-        return 0;
+        break;
     }
     case WM_NCACTIVATE:
     {
-        return 0;
+        break;
     }
     }
 

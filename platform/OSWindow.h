@@ -55,14 +55,28 @@ enum ActionStates
     HELD = 2
 };
 
+#define PREVSTATE_OFFSET 4
+#define CURRENTSTATE_OFFSET 0
+
 struct GenericKeyAction
 {
-    int state;
-    int prevState;
+    char state;
+
     void Update(int newState)
     {
-        prevState = state;
-        state = newState;
+        state <<= PREVSTATE_OFFSET;
+        state &= 0xf0;
+        state |= (newState & 0xf);
+    }
+
+    int GetCurrentState()
+    {
+        return (state & 0xf);
+    }
+
+    int GetPreviousState()
+    {
+        return ((state >> PREVSTATE_OFFSET) & 0xf);
     }
 };
 
@@ -85,7 +99,6 @@ struct GenericWindowInfo
         return ret;
     }
 };
-
 
 struct OSWindow
 {
