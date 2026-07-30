@@ -4,10 +4,10 @@
 #include "VKDevice.h"
 #include "VKInstance.h"
 
-#include <algorithm>
-
 #define VK_SWC_MIN(a, b) ((a) > (b) ? (b) : (a))
 #define VK_SWC_MAX(a, b) ((a) < (b) ? (b) : (a))
+
+#define VK_SWC_CLAMP(a, b, c) (((a) < (b)) ? (b) : ((a) > (c)) ? (c) : (a))
 
 static VkSurfaceFormatKHR chooseSwapSurfaceFormat(VkSurfaceFormatKHR* availableFormats, size_t formatCount, VkFormat requestedFormat) 
 {
@@ -37,7 +37,6 @@ static VkPresentModeKHR chooseSwapPresentMode(VkPresentModeKHR* availablePresent
 	return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-
 static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) 
 {	
 	if (capabilities.currentExtent.width != UINT_MAX) 
@@ -51,8 +50,8 @@ static VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities,
 			height
 		};
 
-		actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-		actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
+		actualExtent.width = VK_SWC_CLAMP(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
+		actualExtent.height = VK_SWC_CLAMP(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
 
 		return actualExtent;
 	}
@@ -179,8 +178,8 @@ int VKSwapChain::RecreateSwapChain(uint32_t width, uint32_t height)
 	VkSurfaceCapabilitiesKHR caps;
 
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device->gpu, surface, &caps);
-	width = std::clamp(width, caps.minImageExtent.width, caps.maxImageExtent.width);
-	height = std::clamp(height, caps.minImageExtent.height, caps.maxImageExtent.height);
+	width = VK_SWC_CLAMP(width, caps.minImageExtent.width, caps.maxImageExtent.width);
+	height = VK_SWC_CLAMP(height, caps.minImageExtent.height, caps.maxImageExtent.height);
 	swapChainExtent = { width, height };
 
 	VkSwapchainCreateInfoKHR createInfo{};

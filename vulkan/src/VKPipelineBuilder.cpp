@@ -2,7 +2,6 @@
 
 #include "VKPipelineBuilder.h"
 #include "VKDevice.h"
-#include <array>
 
 #include <string.h>
 
