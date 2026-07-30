@@ -13,22 +13,22 @@ void WindowManager::GetWindowSize(int* width, int* height)
 
 int WindowManager::CreateMainWindow()
 {
-    int ret = CreateOSWindow("MyGameEngine", 800, 600, &windowData);
+    int ret = OSCreateWindow("MyGameEngine", 800, 600, &windowData);
 
     return ret;
 }
 
 int WindowManager::PollEvents()
 {
-    return PollOSWindowEvents(&windowData);;
+    return OSWindowPollEvents(&windowData);;
 }
 
 void WindowManager::GetInternalData(OSWindowInternalData* data)
 {
-   GetInternalOSData(&windowData, data);
+   OSWindowGetInternalData(&windowData, data);
 }
 
 void WindowManager::SetWindowTitle(StringView text)
 {
-    SetOSWindowText(&windowData, text.stringData);
+    OSWindowSetText(&windowData, text.stringData);
 }

@@ -3,7 +3,18 @@
 #include <atomic>
 
 static HANDLE* intFileHandles;
-static std::atomic<int8_t>* freeList;
+static std::atomic<int> boundedLinearAllocator;
+
+struct MPMCQueueData
+{
+    std::atomic<size_t> currentSequence;
+    int freeIndex;
+};
+
+static MPMCQueueData* freeList;
+static std::atomic<size_t> enqueuePos{ 0 };
+static std::atomic<size_t> dequeuePos{ 0 };
+
 static int maxFreeListEntry = 0;
 
 static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
@@ -39,35 +50,94 @@ static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode, DWORD* creation
     return outflags;
 }
 
+static int PopFromFreeList()
+{
+    MPMCQueueData* cell;
+    
+    size_t pos = dequeuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
+        if (diff == 0)
+        {
+            if (dequeuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return -1;
+        else
+            pos = dequeuePos.load(std::memory_order_relaxed);
+    }
+
+    cell->currentSequence.store(pos + maxFreeListEntry, std::memory_order_release);
+
+    int freeListIndex = cell->freeIndex;
+
+    cell->freeIndex = -1;
+
+    return freeListIndex;
+}
+
+static void ReturnIndex(int index) 
+{
+    MPMCQueueData* cell;
+    
+    size_t pos = enqueuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+        if (diff == 0)
+        {
+            if (enqueuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return;
+        else
+            pos = enqueuePos.load(std::memory_order_relaxed);
+    }
+
+    intFileHandles[index] = INVALID_HANDLE_VALUE;
+    cell->freeIndex = index;
+    cell->currentSequence.store(pos + 1, std::memory_order_release);
+}
+
 static int FindFreeIndex()
 {
-    for (int i = 0; i < maxFreeListEntry; i++)
+    int ret = PopFromFreeList();
+    
+    if (ret < 0)
     {
-        int idx = i;
+        int linearTop = boundedLinearAllocator.load(std::memory_order_acquire);
 
-        int8_t expected = 1; 
-        if (freeList[idx].compare_exchange_strong(
-            expected,
-            -1,
-            std::memory_order_acquire,
-            std::memory_order_relaxed))
+        while (linearTop < maxFreeListEntry)
         {
-            return idx;
+            if (boundedLinearAllocator.compare_exchange_weak(linearTop, linearTop + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+            {
+                ret = linearTop;
+                break;
+            }
         }
     }
-    return -1;
+
+    return ret;
 }
 
 OSFileMemoryRequirements OSGetFileMemoryRequirements(int maxNumberOfOpenFiles)
 {
     int handlesSize = (maxNumberOfOpenFiles) * sizeof(HANDLE);
-    int freeListSize = (maxNumberOfOpenFiles) * sizeof(std::atomic<int8_t>);
+    int freeListSize = (maxNumberOfOpenFiles) * sizeof(MPMCQueueData);
 
     OSFileMemoryRequirements memReqs{ handlesSize + freeListSize, alignof(HANDLE) };
 
     return memReqs;
 }
-
 
 void CloseAllFiles()
 {
@@ -75,14 +145,16 @@ void CloseAllFiles()
     {
         int idx = i;
 
-        int8_t expected = 1;
-        if (freeList[idx].load(
-            std::memory_order_acquire) == -1)
+        if (intFileHandles[idx] != INVALID_HANDLE_VALUE)
         {
             CloseHandle(intFileHandles[idx]);
-            freeList[idx].store(1);
+            intFileHandles[idx] = INVALID_HANDLE_VALUE;
+            freeList[i].currentSequence.store(i, std::memory_order_relaxed);
         }
     }
+
+    enqueuePos.store(0, std::memory_order_relaxed);
+    dequeuePos.store(0, std::memory_order_relaxed);
 }
 
 int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
@@ -96,24 +168,34 @@ int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
 
     dataHead += handleSize * sizeof(HANDLE);
 
-    freeList = (std::atomic<int8_t>*)dataHead;
+    freeList = (MPMCQueueData*)dataHead;
 
     for (int i = 0; i < handleSize; i++)
     {
-        freeList[i] = 1;
+        intFileHandles[i] = INVALID_HANDLE_VALUE;
+        freeList[i].currentSequence.store(i, std::memory_order_relaxed);
     }
 
     maxFreeListEntry = handleSize;
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
 {
     char pathscratch[MAX_PATH];
 
-     if (nameLength <= 0 || nameLength >= MAX_PATH)
-        return OS_FAILED_CREATE;
+    if (nameLength <= 0 || nameLength >= MAX_PATH)
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
+
+    int internalHandlePtr = FindFreeIndex();
+
+    if (internalHandlePtr < 0)
+    {
+        return OS_FILE_HANDLE_EXHASUTED;
+    }
 
     HANDLE hFile;
     DWORD fileShare = 0, creationFlags = 0;
@@ -126,18 +208,18 @@ int OSCreateFile(const char* filename, int nameLength, OSFileFlags flags, OSFile
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        return OS_FAILED_CREATE;
+        ReturnIndex(internalHandlePtr);
+        return OS_FILE_FAILED_CREATE;
     }
 
     fileHandle->fileLength = 0;
     fileHandle->filePointer = 0;
 
-    int internalHandlePtr = FindFreeIndex();
     intFileHandles[internalHandlePtr] = hFile;
 
     fileHandle->osDataHandle = internalHandlePtr;
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHandle* fileHandle)
@@ -145,7 +227,16 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
     char pathscratch[MAX_PATH];
 
     if (nameLength <= 0 || nameLength >= MAX_PATH)
-        return OS_FAILED_CREATE;
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
+
+    int internalHandlePtr = FindFreeIndex();
+
+    if (internalHandlePtr < 0)
+    {
+        return OS_FILE_HANDLE_EXHASUTED;
+    }
 
     HANDLE hFile;
     DWORD fileShare = 0, creationFlags = 0;
@@ -158,7 +249,8 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        return OS_FAILED_CREATE;
+        ReturnIndex(internalHandlePtr);
+        return OS_FILE_FAILED_CREATE;
     }
 
     LARGE_INTEGER fileSize;
@@ -168,44 +260,55 @@ int OSOpenFile(const char* filename, int nameLength, OSFileFlags flags, OSFileHa
     if (!retVal)
     {
         CloseHandle(hFile);
-        return OS_FAILED_SIZE;
+        ReturnIndex(internalHandlePtr);
+        return OS_FILE_FAILED_SIZE;
     }
 
     fileHandle->fileLength = (uint64_t)fileSize.QuadPart;
     fileHandle->filePointer = 0;
 
-    int internalHandlePtr = FindFreeIndex();
+    
     intFileHandles[internalHandlePtr] = hFile;
 
     fileHandle->osDataHandle = internalHandlePtr;
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSCloseFile(OSFileHandle* fileHandle)
 {
-    if (fileHandle->osDataHandle < 0 || fileHandle->osDataHandle >= maxFreeListEntry)
-        return OS_FILE_CLOSED_FAILED;
+    int fileIndex = fileHandle->osDataHandle;
 
-    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    if (fileIndex < 0 || fileIndex >= maxFreeListEntry)
+    {
+        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
+    }
+        
+    HANDLE hFile = intFileHandles[fileIndex];
 
-    CloseHandle(hFile);
+    int retCode = 0;
 
-    intFileHandles[fileHandle->osDataHandle] = INVALID_HANDLE_VALUE;
-    freeList[fileHandle->osDataHandle].store(1, std::memory_order_release);
+    if (!CloseHandle(hFile))
+    {
+        retCode = OS_FILE_FAILED_CLOSE;
+    }
+
+    ReturnIndex(fileHandle->osDataHandle);
 
     fileHandle->osDataHandle = -1;
     fileHandle->fileLength = 0;
     fileHandle->filePointer = 0;
 
-    return OS_SUCCESS;
+    return retCode;
 }
 
 int64_t OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
 {
-    if (fileHandle->osDataHandle >= maxFreeListEntry+1)
+    int fileIndex = fileHandle->osDataHandle;
+
+    if (fileIndex < 0 || fileIndex >= maxFreeListEntry+1)
     {
-        return OS_STD_HANDLE_INVALID;
+        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
     }
 
     HANDLE hFile = INVALID_HANDLE_VALUE;
@@ -214,20 +317,16 @@ int64_t OSReadFile(OSFileHandle* fileHandle, int size, char* buffer)
     {
         hFile = stdInputHandle;
     }
-    else if (fileHandle->osDataHandle < maxFreeListEntry && fileHandle->osDataHandle >= 0)
+    else if (fileHandle->osDataHandle < maxFreeListEntry)
     {
-        hFile = intFileHandles[fileHandle->osDataHandle];
-    }
-    else 
-    {
-        return OS_FAILED_READ;
+        hFile = intFileHandles[fileIndex];
     }
 
     DWORD hBytesRead = 0;
 
     if (ReadFile(hFile, buffer, size, &hBytesRead, NULL) == FALSE)
     {
-        return OS_FAILED_READ;
+        return OS_FILE_FAILED_READ;
     }
 
     fileHandle->filePointer += hBytesRead;
@@ -253,14 +352,14 @@ int64_t OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
     }
     else 
     {
-        return OS_FAILED_WRITE;
+        return OS_FILE_FAILED_WRITE;
     }
 
     DWORD hBytesWrite = 0;
 
     if (WriteFile(hFile, buffer, size, &hBytesWrite, NULL) == FALSE)
     {
-        return OS_FAILED_WRITE;
+        return OS_FILE_FAILED_WRITE;
     }
 
     fileHandle->filePointer += hBytesWrite;
@@ -270,16 +369,14 @@ int64_t OSWriteFile(OSFileHandle* fileHandle, int size, const char* buffer)
 
 int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
 {
-    if (fileHandle->osDataHandle >= maxFreeListEntry)
+    int fileIndex = fileHandle->osDataHandle;
+
+    if (fileIndex < 0 || fileIndex >= maxFreeListEntry + 1)
     {
-        return OS_STD_HANDLE_INVALID;
-    }
-    else if (fileHandle->osDataHandle < 0)
-    {
-        return OS_FAILED_SEEK;
+        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
     }
 
-    HANDLE hFile = intFileHandles[fileHandle->osDataHandle];
+    HANDLE hFile = intFileHandles[fileIndex];
 
     DWORD moveMethod = FILE_BEGIN;
 
@@ -294,7 +391,7 @@ int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
         moveMethod = FILE_END;
         break;
     default:
-        return OS_INVALID_ARGUMENT;
+        return OS_FILE_INVALID_ARGUMENT;
     }
 
     LARGE_INTEGER winSeekPointer, setSeekPointer;
@@ -305,20 +402,22 @@ int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
 
     if (!wRet)
     {
-        return OS_FAILED_SEEK;
+        return OS_FILE_FAILED_SEEK;
     }
 
     fileHandle->filePointer = setSeekPointer.QuadPart;
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterator* iterator)
 {
     char pathscratch[MAX_PATH];
 
-    if (!searchString || !iterator || nameLength <= 0) 
-        return OS_INVALID_ARGUMENT;
+    if (!searchString || !iterator || nameLength <= 0 || nameLength >= MAX_PATH)
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
 
     int index = FindFreeIndex();
 
@@ -331,7 +430,8 @@ int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterato
 
     if (searchIdx == INVALID_HANDLE_VALUE)
     {
-        return OS_FAILED_SEARCH_ITER;
+        ReturnIndex(index);
+        return OS_FILE_FAILED_SEARCH_ITER;
     }
 
     intFileHandles[index] = searchIdx;
@@ -339,28 +439,34 @@ int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterato
     strncpy(iterator->currentFileName, data.cFileName, 250);
     iterator->osDataHandle = index;
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSNextFile(OSFileIterator* iterator)
 {
-    if (!iterator) return OS_INVALID_ARGUMENT;
+    if (!iterator) return OS_FILE_INVALID_ARGUMENT;
 
-    int index = iterator->osDataHandle;
+    int fileIndex = iterator->osDataHandle;
+
+    if (fileIndex < 0 || fileIndex >= maxFreeListEntry + 1)
+    {
+        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
+    }
 
     WIN32_FIND_DATAA data;
 
-    BOOL ret = FindNextFileA(intFileHandles[index], &data);
+    BOOL ret = FindNextFileA(intFileHandles[fileIndex], &data);
 
     if (!ret)
     {
-        CloseHandle(intFileHandles[index]);
-        return OS_REACH_ITER_END;
+        CloseHandle(intFileHandles[fileIndex]);
+        ReturnIndex(fileIndex);
+        return OS_FILE_REACH_ITER_END;
     }
 
-    strncpy(iterator->currentFileName, data.cFileName, 250);
+    strncpy(iterator->currentFileName, data.cFileName, MAX_PATH);
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 void OSGetSTDInput(OSFileHandle* fileHandle)
@@ -422,21 +528,25 @@ int OSPollFile(OSFileHandle* fileHandle, int millisecondTimeOut)
     }
     else 
     {
-        return OS_FAILED_POLL;
+        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
     }
 
     DWORD ret = WaitForSingleObject(hFile, millisecondTimeOut);
 
-    if (ret == WAIT_TIMEOUT) 
+    if (ret == WAIT_TIMEOUT)
+    {
         return OS_FILE_POLL_TIMEOUT;
+    }
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSCreateDirectory(const char* directoryPath, int charCount, OSDirectoryFlag directoryFlag)
 {
-    if (charCount >= MAX_PATH)
-        return OS_FAILED_CREATE_DIRECTORY;
+    if (charCount <= 0 || charCount >= MAX_PATH)
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
 
     char pathscratch[MAX_PATH];
 
@@ -463,7 +573,7 @@ int OSCreateDirectory(const char* directoryPath, int charCount, OSDirectoryFlag 
 
     if (daclRet == FALSE)
     {
-        return OS_FAILED_CREATE_DIRECTORY;
+        return OS_FILE_FAILED_CREATE_DIRECTORY;
     }
 
     attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
@@ -474,10 +584,10 @@ int OSCreateDirectory(const char* directoryPath, int charCount, OSDirectoryFlag 
 
     if (dirRet == FALSE)
     {
-        return OS_FAILED_CREATE_DIRECTORY;
+        return OS_FILE_FAILED_CREATE_DIRECTORY;
     }
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSGetCurrentDirectorySize()
@@ -492,8 +602,10 @@ int OSGetCurrentDirectory(int bufferSize, char* outputBuffer)
 
 int OSSetCurrentDirectory(const char* inputPath, int charCount)
 {
-    if (charCount >= MAX_PATH)
-        return OS_FAILED_SET_CURRENT_DIRECTORY;
+    if (charCount <= 0 || charCount >= MAX_PATH)
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
 
     char pathscratch[MAX_PATH];
 
@@ -505,14 +617,19 @@ int OSSetCurrentDirectory(const char* inputPath, int charCount)
 
     if (setCurrentDirectoryRet == FALSE)
     {
-        return OS_FAILED_SET_CURRENT_DIRECTORY;
+        return OS_FILE_FAILED_SET_CURRENT_DIRECTORY;
     }
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }
 
 int OSExtractFileName(const char* inputFilePath, int inputFilePathCount, char* outputBuffer)
 {
+    if (inputFilePathCount <= 0 || inputFilePathCount >= MAX_PATH)
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
+
     char filePathTerminator1 = '\\';
     char filePathTerminator2 = '/';
 
@@ -551,24 +668,29 @@ int OSGetSystemFileTerminator()
     return '\\';
 }
 
-int OSFileExist(const char* inputFile, int charCount)
+int OSFileExist(const char* inputFile, int charCount, OSFileFlags flags)
 {
     char pathscratch[MAX_PATH];
 
     if (charCount <= 0 || charCount >= MAX_PATH)
-        return OS_FAILED_EXISTING;
+    {
+        return OS_FILE_INVALID_ARGUMENT;
+    }
+
+    DWORD fileShare = 0, creationFlags = 0;
+    DWORD hAccess = ConvertOSFlags(flags, &fileShare, &creationFlags);
 
     memcpy(pathscratch, inputFile, charCount);
     pathscratch[charCount] = '\0';
 
-    HANDLE hFile = CreateFileA(pathscratch, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = CreateFileA(pathscratch, hAccess, fileShare, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
     if (hFile == INVALID_HANDLE_VALUE)
     {
-        return OS_FAILED_EXISTING;
+        return OS_FILE_FAILED_EXISTING;
     }
 
     CloseHandle(hFile);
 
-    return OS_SUCCESS;
+    return OS_FILE_SUCCESS;
 }

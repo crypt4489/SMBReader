@@ -1,6 +1,6 @@
 #pragma once
 
-#include <filesystem>
+#include "StringUtils.h"
 
 struct ProgramArgs
 {
@@ -9,6 +9,7 @@ struct ProgramArgs
 	void ScanSTDIN();
 	
 	bool justexport;
-	std::filesystem::path inputFile;
+	StringView inputFile;
+	char stringBuffer[256];
 };
 

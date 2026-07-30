@@ -1950,7 +1950,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 
 		VkShaderStageFlags shaderFlags = API::ConvertShaderStageToVulkanShaderStage(map->type);
 
-		if (!OSFileExist(nameView.stringData, nameView.charCount)) {
+		if (!OSFileExist(nameView.stringData, nameView.charCount, OSFileFlagsTypes::READ)) {
 
 			OSOpenFile(nameView.stringData, nameView.charCount, READ, &handle);
 
@@ -3035,7 +3035,7 @@ int RenderInstance::CreateImagePool(int deviceSelection, size_t size, ImageForma
 	VkImageUsageFlags vkUsageFlags = API::ConvertImageUsageFlagsToVulkanImageUsageFlags(usageFlags);
 	VkMemoryPropertyFlags vkMemPropertyFlags = API::ConvertMemoryTypeToVkMemoryPropertyFlags(memType);
 
-	std::pair<int, VkDeviceSize> poolInfo = dev->FindImageMemoryIndexForPool(maxWidth, maxHeight,
+	MemoryTypeInfo poolInfo = dev->FindImageMemoryIndexForPool(maxWidth, maxHeight,
 		1, vkFormat, 1,
 		vkUsageFlags,
 		1, vkMemPropertyFlags);
@@ -3044,7 +3044,7 @@ int RenderInstance::CreateImagePool(int deviceSelection, size_t size, ImageForma
 
 	ImagePoolDescription* poolDesc = imagePools.Get(poolIndex);
 
-	poolDesc->imagePoolHandle = dev->CreateImageMemoryPool(size, poolInfo.first);
+	poolDesc->imagePoolHandle = dev->CreateImageMemoryPool(size, poolInfo.memoryIndex);
 	poolDesc->imagePoolSize = size;
 	poolDesc->imagePoolType = memType;
 

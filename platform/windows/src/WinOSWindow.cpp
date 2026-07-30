@@ -6,35 +6,108 @@
 
 static HINSTANCE* instancePointers;
 static HWND* windowPtrs;
-static std::atomic<int8_t>* freeList;
+
+static std::atomic<int> boundedLinearAllocator;
+
+struct MPMCQueueData
+{
+    std::atomic<size_t> currentSequence;
+    int freeIndex;
+};
+
+static MPMCQueueData* freeList;
+static std::atomic<size_t> enqueuePos{ 0 };
+static std::atomic<size_t> dequeuePos{ 0 };
+
 static int maxFreeListEntry = 0;
 
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
 
+static int PopFromFreeList()
+{
+    MPMCQueueData* cell;
+
+    size_t pos = dequeuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
+        if (diff == 0)
+        {
+            if (dequeuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return -1;
+        else
+            pos = dequeuePos.load(std::memory_order_relaxed);
+    }
+
+    cell->currentSequence.store(pos + maxFreeListEntry, std::memory_order_release);
+
+    int freeListIndex = cell->freeIndex;
+
+    cell->freeIndex = -1;
+
+    return freeListIndex;
+}
+
+static void ReturnIndex(int index)
+{
+    MPMCQueueData* cell;
+
+    size_t pos = enqueuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+        if (diff == 0)
+        {
+            if (enqueuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return;
+        else
+            pos = enqueuePos.load(std::memory_order_relaxed);
+    }
+
+    windowPtrs[index] = NULL;
+    instancePointers[index] = NULL;
+    cell->freeIndex = index;
+    cell->currentSequence.store(pos + 1, std::memory_order_release);
+}
+
 static int FindFreeIndex()
 {
-    for (int i = 0; i < maxFreeListEntry; i++)
-    {
-        int idx = i;
+    int ret = PopFromFreeList();
 
-        int8_t expected = 1;
-        if (freeList[idx].compare_exchange_strong(
-            expected,
-            -1,
-            std::memory_order_acquire,
-            std::memory_order_relaxed))
+    if (ret < 0)
+    {
+        int linearTop = boundedLinearAllocator.load(std::memory_order_acquire);
+
+        while (linearTop < maxFreeListEntry)
         {
-            return idx;
+            if (boundedLinearAllocator.compare_exchange_weak(linearTop, linearTop + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+            {
+                ret = linearTop;
+                break;
+            }
         }
     }
-    return -1;
+
+    return ret;
 }
 
 OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows)
 {
     int handlesSize = (maxNumberOfWindows) * sizeof(HINSTANCE);
     int handlesWndSize = (maxNumberOfWindows) * sizeof(HWND);
-    int freeListSize = (maxNumberOfWindows) * sizeof(std::atomic<int8_t>);
+    int freeListSize = (maxNumberOfWindows) * sizeof(MPMCQueueData);
 
     OSWindowMemoryRequirements memReqs{ handlesSize + handlesWndSize + freeListSize, alignof(HINSTANCE) };
 
@@ -43,18 +116,20 @@ OSWindowMemoryRequirements OSGetWindowMemoryRequirements(int maxNumberOfWindows)
 
 void CloseAllWindows()
 {
-    for (int i = 0; i < maxFreeListEntry; i++)
+    for (int idx = 0; idx < maxFreeListEntry; idx++)
     {
-        int idx = i;
-
-        int8_t expected = 1;
-        if (freeList[idx].load(
-            std::memory_order_acquire) == -1)
+        if (windowPtrs[idx] != NULL)
         {
             DestroyWindow(windowPtrs[idx]);
-            freeList[idx].store(1);
+            windowPtrs[idx] = NULL;
+            instancePointers[idx] = NULL;
         }
+
+        freeList[idx].currentSequence.store(idx, std::memory_order_relaxed);
     }
+
+    enqueuePos.store(0, std::memory_order_relaxed);
+    dequeuePos.store(0, std::memory_order_relaxed);
 }
 
 int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows)
@@ -72,20 +147,28 @@ int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows)
     
     dataHead += sizeof(HWND) * handleSize;
 
-    freeList = (std::atomic<int8_t>*)dataHead;
+    freeList = (MPMCQueueData*)dataHead;
 
     for (int i = 0; i < handleSize; i++)
     {
-        freeList[i] = 1;
+        freeList[i].currentSequence.store(i, std::memory_order_relaxed);
+        windowPtrs[i] = NULL;
     }
 
     maxFreeListEntry = handleSize;
 
-    return 0;
+    return OS_WINDOW_SUCCESS;
 }
 
-int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData)
+int OSCreateWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData)
 {
+    int windowIndex = FindFreeIndex();
+
+    if (windowIndex < 0)
+    {
+        return OS_WINDOW_HANDLE_EXHAUSTED;
+    }
+
     HINSTANCE hInst = GetModuleHandle(NULL);
 
     WNDCLASSEX wc = { };
@@ -105,10 +188,10 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
     wc.lpszClassName = TEXT(name);
     wc.hIconSm = LoadIcon(NULL, IDI_APPLICATION);
 
-    if (!RegisterClassEx(&wc)) {
-        MessageBox(NULL, TEXT("Could not register window class"),
-            NULL, MB_ICONERROR);
-        return OPEN_WINDOW_FAILED;
+    if (!RegisterClassEx(&wc))
+    {
+        ReturnIndex(windowIndex);
+        return OS_WINDOW_CREATE_FAILED;
     }
 
     RECT wr = { 0, 0, 800, 600 };
@@ -131,31 +214,60 @@ int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensi
         &windowData->info);
 
 
-    if (!hwnd) {
-        MessageBox(NULL, TEXT("Could not create window"), NULL, MB_ICONERROR);
-        return OPEN_WINDOW_FAILED;
+    if (!hwnd) 
+    {
+        ReturnIndex(windowIndex);
+        return OS_WINDOW_CREATE_FAILED;
     }
 
     SetWindowText(hwnd, TEXT(name));
     ShowWindow(hwnd, 1);
     UpdateWindow(hwnd);
 
-    int windowIndex = FindFreeIndex();
-
     windowPtrs[windowIndex] = hwnd;
     instancePointers[windowIndex] = hInst;
     windowData->internalOSHandle = windowIndex;
 
-    return 0;
+    return OS_WINDOW_SUCCESS;
 }
 
-int PollOSWindowEvents(OSWindow* window)
+int OSWindowClose(OSWindow* window)
 {
-    HWND hWndMain = windowPtrs[window->internalOSHandle];
+    int windowIndex = window->internalOSHandle;
+
+    if (windowIndex < 0 || windowIndex >= maxFreeListEntry)
+    {
+        return OS_WINDOW_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    int retCode = OS_WINDOW_SUCCESS;
+
+    if (!DestroyWindow(windowPtrs[windowIndex]))
+    {
+        retCode = OS_WINDOW_CLOSE_FAILED;
+    }
+
+    ReturnIndex(windowIndex);
+
+    window->internalOSHandle = -1;
+
+    return retCode;
+}
+
+int OSWindowPollEvents(OSWindow* window)
+{
+    int windowIndex = window->internalOSHandle;
+
+    if (windowIndex < 0 || windowIndex >= maxFreeListEntry)
+    {
+        return OS_WINDOW_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    HWND hWndMain = windowPtrs[windowIndex];
 
     MSG msg;
 
-    int ret = 0;
+    int ret = OS_WINDOW_SUCCESS;
 
     while (PeekMessage(&msg, hWndMain, 0, 0, PM_REMOVE))
     {
@@ -165,7 +277,6 @@ int PollOSWindowEvents(OSWindow* window)
 
     return ret;
 }
-
 
 static void UpdateWindowRECT(RECT* rect, UINT dpi)
 {
@@ -184,7 +295,6 @@ static void UpdateWindowRECT(RECT* rect, UINT dpi)
 
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
 {
-
     GenericWindowInfo* info = (GenericWindowInfo*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
     switch (wm)
@@ -380,8 +490,6 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
         }
         break;
     }
-
-
     case WM_CREATE:
     {
         CREATESTRUCT* infoStruct = (CREATESTRUCT*)lp;
@@ -389,8 +497,8 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
         {
             SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)infoStruct->lpCreateParams);
         }
+        break;
     }
-
     case WM_QUIT:
     {
         break;
@@ -404,22 +512,38 @@ LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp)
     return DefWindowProc(hwnd, wm, wp, lp);
 }
 
-int GetInternalOSData(OSWindow* window, void* internalDataStruct)
+int OSWindowGetInternalData(OSWindow* window, void* internalDataStruct)
 {
-    HWND hWndMain = windowPtrs[window->internalOSHandle];
-    HINSTANCE hInstMain = instancePointers[window->internalOSHandle];
+    int windowIndex = window->internalOSHandle;
+
+    if (windowIndex < 0 || windowIndex >= maxFreeListEntry)
+    {
+        return OS_WINDOW_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    HWND hWndMain = windowPtrs[windowIndex];
+    HINSTANCE hInstMain = instancePointers[windowIndex];
 
     OSWindowInternalData* data = (OSWindowInternalData*)internalDataStruct;
 
     data->inst = hInstMain;
     data->wnd = hWndMain;
 
-    return 0;
+    return OS_WINDOW_SUCCESS;
 }
 
-int SetOSWindowText(OSWindow* window, const char* text)
+int OSWindowSetText(OSWindow* window, const char* text)
 {
-    HWND hwnd = windowPtrs[window->internalOSHandle];
-    SetWindowText(hwnd, TEXT(text));
-    return 0;
+    int windowIndex = window->internalOSHandle;
+
+    if (windowIndex < 0 || windowIndex >= maxFreeListEntry)
+    {
+        return OS_WINDOW_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    HWND hWndMain = windowPtrs[windowIndex];
+
+    SetWindowText(hWndMain, TEXT(text));
+
+    return OS_WINDOW_SUCCESS;
 }

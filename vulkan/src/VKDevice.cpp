@@ -11,7 +11,10 @@
 #include "VKSwapChain.h"
 #include "VKUtilities.h"
 
+#include <bitset>
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 
 #include <assert.h>
 #include <stdio.h>
@@ -184,6 +187,33 @@ static const char* ConvertDeviceMinorCodeString(int deviceMinorCode)
 	}
 	return strOutput;
 }
+
+struct QueueManager
+{
+	QueueManager(uint32_t* _cqs, uint32_t _cqss,
+		int32_t _mqc, uint32_t _qfi,
+		uint32_t _queueCapabilities, bool present,
+		VKDevice* _d, void* data);
+
+	uint32_t GetQueue();
+
+	void ReturnQueue(size_t queueNum);
+
+	uint32_t ConvertQueueProps(uint32_t flags, bool present);
+
+	void DestroyManager();
+
+	std::bitset<16> bitmap;
+	const int32_t maxQueueCount;
+	const uint32_t queueFamilyIndex;
+	const uint32_t queueCapabilities;
+	EntryHandle* poolIndices;
+	VKDevice* device;
+	std::mutex queueSema;
+	std::condition_variable queueCV;
+	int queueCountCV;
+};
+
 
 DescriptorPoolBuilder::DescriptorPoolBuilder(DeviceOwnedAllocator* alloc, size_t _numPoolSizes, VkDescriptorPoolCreateFlags _flags)
 	:
@@ -2900,6 +2930,21 @@ QueueManager* VKDevice::GetQueueManager(EntryHandle queueManagerIndex)
 	return queueManager;
 }
 
+uint32_t VKDevice::GetQueueManagerFamilyIndex(EntryHandle queueManagerIndex)
+{
+	HandlePoolObject objHandle = GetVkTypeFromEntry(queueManagerIndex);
+
+	if (objHandle.type != VulkQueueManager || !objHandle.memoryLocation)
+	{
+		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_QUEUE_MANAGER_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
+		return ~0ul;
+	}
+
+	QueueManager* queueManager = reinterpret_cast<QueueManager*>(objHandle.memoryLocation);
+
+	return queueManager->queueFamilyIndex;
+}
+
 RecordingBufferObject VKDevice::GetRecordingBufferObject(EntryHandle handle)
 {
 	VKCommandBuffer* buffer = GetCommandBuffer(handle);
@@ -3152,7 +3197,7 @@ VkShaderStageFlagBits VKDevice::ConvertShaderFlags(const char* filename, int nam
 	return VK_SHADER_STAGE_ALL;
 }
 
-std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t width,
+MemoryTypeInfo VKDevice::FindImageMemoryIndexForPool(uint32_t width,
 	uint32_t height, uint32_t mipLevels,
 	VkFormat type, uint32_t layers,
 	VkImageUsageFlags flags, uint32_t sampleCount,
@@ -3191,7 +3236,7 @@ std::pair<uint32_t, VkDeviceSize> VKDevice::FindImageMemoryIndexForPool(uint32_t
 
 	vkDestroyImage(device, image, nullptr);
 
-	return std::make_pair(memoryTypeIndex, memRequirements.alignment);
+	return MemoryTypeInfo{ memoryTypeIndex, memRequirements.alignment };
 }
 
 int VKDevice::PresentSwapChainCommandBufferInline(EntryHandle swapChainIdx, EntryHandle* presentWaitSemaphores, uint32_t presentWaitSemaphoreCount, uint32_t imageIndex, uint32_t frameInFlight, EntryHandle commandBufferIndex)

@@ -24,5 +24,6 @@ struct VKGraphicsPipelineBuilder;
 struct VKComputePipelineBuilder;
 struct VKAllocationCB;
 struct DeviceOwnedAllocator;
+struct QueueManager;
 
 

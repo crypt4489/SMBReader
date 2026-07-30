@@ -10,38 +10,112 @@ struct ThreadData
     int index;
 };
 
+static std::atomic<int> boundedLinearAllocator;
 
-static std::atomic<int8_t>* freeList;
+struct MPMCQueueData
+{
+    std::atomic<size_t> currentSequence;
+    int freeIndex;
+};
+
+static MPMCQueueData* freeList;
+static std::atomic<size_t> enqueuePos{ 0 };
+static std::atomic<size_t> dequeuePos{ 0 };
+
 static int maxFreeListEntry = 0;
+
 static HANDLE* handles;
 static ThreadData* dataThreads;
 
-DWORD WINAPI MyThreadFunction(LPVOID lpParam);
+static DWORD WINAPI MyThreadFunction(LPVOID lpParam);
+
+static int InternalOSCloseThread(int index);
+
+static int PopFromFreeList()
+{
+    MPMCQueueData* cell;
+
+    size_t pos = dequeuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)(pos + 1);
+        if (diff == 0)
+        {
+            if (dequeuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return -1;
+        else
+            pos = dequeuePos.load(std::memory_order_relaxed);
+    }
+
+    cell->currentSequence.store(pos + maxFreeListEntry, std::memory_order_release);
+
+    int freeListIndex = cell->freeIndex;
+
+    cell->freeIndex = -1;
+
+    return freeListIndex;
+}
+
+static void ReturnIndex(int index)
+{
+    MPMCQueueData* cell;
+
+    size_t pos = enqueuePos.load(std::memory_order_relaxed);
+
+    for (;;)
+    {
+        cell = &freeList[pos % maxFreeListEntry];
+        size_t seq = cell->currentSequence.load(std::memory_order_acquire);
+        intptr_t diff = (intptr_t)seq - (intptr_t)pos;
+        if (diff == 0)
+        {
+            if (enqueuePos.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+                break;
+        }
+        else if (diff < 0)
+            return;
+        else
+            pos = enqueuePos.load(std::memory_order_relaxed);
+    }
+
+    handles[index] = INVALID_HANDLE_VALUE;
+
+    cell->freeIndex = index;
+    cell->currentSequence.store(pos + 1, std::memory_order_release);
+}
 
 static int FindFreeIndex()
 {
-    for (int i = 0; i < maxFreeListEntry; i++)
-    {
-        int idx = i;
+    int ret = PopFromFreeList();
 
-        int8_t expected = 1;
-        if (freeList[idx].compare_exchange_strong(
-            expected,
-            -1,
-            std::memory_order_acquire,
-            std::memory_order_relaxed))
+    if (ret < 0)
+    {
+        int linearTop = boundedLinearAllocator.load(std::memory_order_acquire);
+
+        while (linearTop < maxFreeListEntry)
         {
-            return idx;
+            if (boundedLinearAllocator.compare_exchange_weak(linearTop, linearTop + 1, std::memory_order_relaxed, std::memory_order_relaxed))
+            {
+                ret = linearTop;
+                break;
+            }
         }
     }
-    return -1;
+
+    return ret;
 }
 
 OSThreadMemoryRequirements OSGetThreadMemoryRequirements(int maxNumberOfOpenThreads)
 {
     int handlesSize = (maxNumberOfOpenThreads) * sizeof(HANDLE);
     int threadDataSize = (maxNumberOfOpenThreads) * sizeof(ThreadData);
-    int freeListSize = (maxNumberOfOpenThreads) * sizeof(std::atomic<int8_t>);
+    int freeListSize = (maxNumberOfOpenThreads) * sizeof(MPMCQueueData);
 
     OSThreadMemoryRequirements memReqs{ handlesSize + threadDataSize + freeListSize, alignof(HANDLE) };
 
@@ -62,30 +136,31 @@ int OSSeedThreadMemory(void* dataSource, int dataSize, int numberOfOpenThreads)
 
     dataHead += sizeof(ThreadData) * handleSize;
 
-    freeList = (std::atomic<int8_t>*)dataHead;
+    freeList = (MPMCQueueData*)dataHead;
 
     for (int i = 0; i < handleSize; i++)
     {
-        freeList[i] = 1;
+        freeList[i].currentSequence.store(i, std::memory_order_relaxed);
+        handles[i] = INVALID_HANDLE_VALUE;
     }
 
     maxFreeListEntry = handleSize;
 
-    return 0;
+    return OS_THREAD_SUCCESS;
 }
 
 int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer routine, OSThreadFlags flags)
 {
     int index = FindFreeIndex();
 
-    dataThreads[index].argumentToThread = argumentToThread;
-    dataThreads[index].routine = routine;
-    dataThreads[index].flags = flags;
-    dataThreads[index].index = index;
+    if (index < 0)
+    {
+        return OS_THREAD_HANDLE_EXHAUSTED;
+    }
 
     DWORD threadID;
 
-   handles[index] = CreateThread(
+    HANDLE hThread = CreateThread(
         NULL,                   // default security attributes
         0,                      // use default stack size  
         MyThreadFunction,       // thread function name
@@ -93,50 +168,102 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
         0,                      // use default creation flags 
         &threadID);
 
+    if (hThread == INVALID_HANDLE_VALUE)
+    {
+        ReturnIndex(index);
+        return OS_THREAD_FAILED_CREATE;
+    }
+
+    handles[index] = hThread;
+
+    dataThreads[index].argumentToThread = argumentToThread;
+    dataThreads[index].routine = routine;
+    dataThreads[index].flags = flags;
+    dataThreads[index].index = index;
+
     handle->threadIdentifier = threadID;
     handle->osDataHandle = index;
 
-    return 0;
+    return OS_THREAD_SUCCESS;
 }
 
 void CloseAllThreads()
 {
     for (int i = 0; i < maxFreeListEntry; i++)
     {
-        int idx = i;
-
-        int8_t expected = 1;
-        if (freeList[idx].load(
-            std::memory_order_acquire) == -1)
+        if (handles[i] != INVALID_HANDLE_VALUE)
         {
-            CloseHandle(handles[idx]);
-            freeList[idx].store(1, std::memory_order_release);
+            CloseHandle(handles[i]);
+            handles[i] = INVALID_HANDLE_VALUE;
         }
+
+        freeList[i].currentSequence.store(i, std::memory_order_relaxed);
     }
+
+    enqueuePos.store(0, std::memory_order_relaxed);
+    dequeuePos.store(0, std::memory_order_relaxed);
 }
 
 int OSCloseThread(OSThreadHandle* handle)
 {
+    int ret = InternalOSCloseThread(handle->osDataHandle);
 
-    if (handle->osDataHandle == -1)
-        return -1;
+    handle->osDataHandle = -1;
+    handle->threadIdentifier = 0;
 
-    HANDLE hand = handles[handle->osDataHandle];
-
-    freeList[handle->osDataHandle].store(1, std::memory_order_release);
-
-    CloseHandle(hand);
-
-    return 0;
+    return ret;
 }
+
+int InternalOSCloseThread(int index)
+{
+    int osIndex = index;
+
+    if (osIndex < 0 || osIndex >= maxFreeListEntry)
+    {
+        return OS_THREAD_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    HANDLE hand = handles[osIndex];
+
+    int retCode = 0;
+
+    if (!CloseHandle(hand))
+    {
+        retCode = OS_THREAD_FAILED_CLOSE;
+    }
+
+    ReturnIndex(osIndex);
+
+    return OS_THREAD_SUCCESS;
+}
+
 
 int OSWaitThread(OSThreadHandle* handle, int timeout)
 {
-    HANDLE hand = handles[handle->osDataHandle];
-    WaitForSingleObject(hand, (DWORD)timeout);
-    return 0;
-}
+    int handleIdx = handle->osDataHandle;
 
+    if (handleIdx < 0 || handleIdx >= maxFreeListEntry)
+    {
+        return OS_THREAD_HANDLE_OUT_OF_BOUNDS;
+    }
+
+    HANDLE hand = handles[handle->osDataHandle];
+
+    DWORD waitResult = WaitForSingleObject(hand, (DWORD)timeout);
+
+    int ret = OS_THREAD_SUCCESS;
+
+    switch (waitResult)
+    {
+    case WAIT_OBJECT_0:
+        break;
+    case WAIT_TIMEOUT:
+        ret = OS_THREAD_FAILED_TIMEOUT;
+        break;
+    }
+
+    return ret;
+}
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 {
@@ -146,8 +273,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 
     if (data->flags & OS_THREAD_ASYNC)
     {
-        CloseHandle(handles[data->index]);
-        freeList[data->index].store(1, std::memory_order_release);
+        InternalOSCloseThread(data->index);
     }
 
     ExitThread(0);

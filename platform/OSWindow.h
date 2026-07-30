@@ -108,7 +108,11 @@ struct OSWindow
 
 enum OSWindowErrorCode
 {
-    OPEN_WINDOW_FAILED = -1,
+    OS_WINDOW_SUCCESS = 0,
+    OS_WINDOW_HANDLE_EXHAUSTED = -1,
+    OS_WINDOW_HANDLE_OUT_OF_BOUNDS = -2,
+    OS_WINDOW_CREATE_FAILED = -3,
+    OS_WINDOW_CLOSE_FAILED = -4
 };
 
 struct OSWindowMemoryRequirements
@@ -123,10 +127,12 @@ void CloseAllWindows();
 
 int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows);
 
-int CreateOSWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData);
+int OSCreateWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData);
 
-int PollOSWindowEvents(OSWindow* window);
+int OSWindowPollEvents(OSWindow* window);
 
-int GetInternalOSData(OSWindow* window, void* internalDataStruct);
+int OSWindowGetInternalData(OSWindow* window, void* internalDataStruct);
 
-int SetOSWindowText(OSWindow* window, const char* text);
+int OSWindowSetText(OSWindow* window, const char* text);
+
+int OSWindowClose(OSWindow* window);

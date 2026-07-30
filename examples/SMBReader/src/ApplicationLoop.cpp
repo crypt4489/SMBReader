@@ -22,7 +22,11 @@
 
 
 #include <array>
+#include <bit>
+#include <cctype>
+#include <cmath>
 #include <queue>
+#include <string>
 
 #define MAX_MESH_TEXTURES 8192
 #define MAX_IMAGE_DIM 4096
@@ -659,7 +663,7 @@ static std::atomic_bool arenasUsed[MAX_SMB_ARENAS];
 static char vertexAndIndicesMemory[16 * MiB];
 static char geometryObjectSpecificMemory[4 * KiB];
 static char mainTextureCacheMemory[256 * MiB];
-static char mainOSDataManagement[KiB];
+static char mainOSDataManagement[32 * KiB];
 
 static SlabAllocator osAllocator(mainOSDataManagement, sizeof(mainOSDataManagement));
 static SlabAllocator vertexAndIndicesAlloc(vertexAndIndicesMemory, sizeof(vertexAndIndicesMemory));
@@ -924,7 +928,7 @@ void ApplicationLoop::Execute()
 
 	OSGetSTDOutput(&mainAppLogger.fileHandle);
 
-	StringView mainInputString = AppInstanceTempAllocator.AllocateFromNullStringCopy(args.inputFile.string().c_str());
+	StringView mainInputString = args.inputFile;
 
 	if (args.justexport)
 	{

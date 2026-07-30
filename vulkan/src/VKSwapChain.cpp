@@ -125,17 +125,17 @@ int VKSwapChain::CreateSwapChain(uint32_t width, uint32_t height, EntryHandle gr
 	createInfo.imageArrayLayers = 1;
 	createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	
-	QueueManager* graphicsTransferManager = device->GetQueueManager(graphicsTransferQueue);
+	uint32_t graphicsFamilyIndex = device->GetQueueManagerFamilyIndex(graphicsTransferQueue);
 
-	if (!graphicsTransferManager)
+	if (graphicsFamilyIndex == ~0ul)
 		return -1;
 
-	queueFamiliesCache[queueFamiliesCacheCount++] = graphicsTransferManager->queueFamilyIndex;
+	queueFamiliesCache[queueFamiliesCacheCount++] = graphicsFamilyIndex;
 
 	if (graphicsTransferQueue != presentQueue)
 	{
-		QueueManager* presentManager = device->GetQueueManager(presentQueue);
-		queueFamiliesCache[queueFamiliesCacheCount++] = presentManager->queueFamilyIndex;
+		uint32_t presentFamilyIndex = device->GetQueueManagerFamilyIndex(presentQueue);
+		queueFamiliesCache[queueFamiliesCacheCount++] = presentFamilyIndex;
 	}
 
 	queueSharing = createInfo.imageSharingMode = (queueFamiliesCacheCount > 1) ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;

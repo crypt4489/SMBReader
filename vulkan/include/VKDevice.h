@@ -2,10 +2,6 @@
 
 #include "allocator/TLSFAllocator.h"
 
-#include <bitset>
-#include <condition_variable>
-#include <mutex>
-
 #include "vulkan/vulkan.h"
 
 #include "IndexTypes.h"
@@ -148,32 +144,6 @@ enum VKQueueCapabilities
 	PRESENTQUEUE = 8
 };
 
-struct QueueManager
-{
-	QueueManager(uint32_t* _cqs, uint32_t _cqss,
-		int32_t _mqc, uint32_t _qfi,
-		uint32_t _queueCapabilities, bool present,
-		VKDevice* _d, void* data);
-
-	uint32_t GetQueue();
-
-	void ReturnQueue(size_t queueNum);
-
-	uint32_t ConvertQueueProps(uint32_t flags, bool present);
-
-	void DestroyManager();
-
-	std::bitset<16> bitmap;
-	const int32_t maxQueueCount;
-	const uint32_t queueFamilyIndex;
-	const uint32_t queueCapabilities;
-	EntryHandle* poolIndices;
-	VKDevice* device;
-	std::mutex queueSema;
-	std::condition_variable queueCV;
-	int queueCountCV;
-};
-
 struct ShaderHandle
 {
 	VkShaderModule sMod;
@@ -243,6 +213,12 @@ struct ImageAllocation
 	VkImage imageHandle;
 	size_t deviceMemoryAddress;
 	EntryHandle memIndex;
+};
+
+struct MemoryTypeInfo
+{
+	uint32_t memoryIndex;
+	VkDeviceSize memoryAlignment;
 };
 
 enum HandleType : uint64_t
@@ -517,6 +493,8 @@ struct VKDevice
 		
 	QueueManager* GetQueueManager(EntryHandle queueManagerIndex);
 
+	uint32_t GetQueueManagerFamilyIndex(EntryHandle queueManagerIndex);
+
 	RecordingBufferObject GetRecordingBufferObject(EntryHandle handle);
 
 	VkRenderPass GetRenderPass(EntryHandle handle);
@@ -620,7 +598,7 @@ struct VKDevice
 
 	VkShaderStageFlagBits ConvertShaderFlags(const char* filename, int nameLength);
 
-	std::pair<uint32_t, VkDeviceSize> FindImageMemoryIndexForPool(uint32_t width,
+	MemoryTypeInfo FindImageMemoryIndexForPool(uint32_t width,
 		uint32_t height, uint32_t mipLevels,
 		VkFormat type, uint32_t layers,
 		VkImageUsageFlags flags, uint32_t sampleCount,

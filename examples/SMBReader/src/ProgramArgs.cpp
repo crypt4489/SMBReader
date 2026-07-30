@@ -1,8 +1,9 @@
 #include "ProgramArgs.h"
 
-#include <iostream> 
+#include <iostream>
 #include <cctype>
 #include <locale>
+#include <string>
 
 ProgramArgs::ProgramArgs(int argc, char** argv) : justexport(false)
 {
@@ -14,15 +15,16 @@ ProgramArgs::ProgramArgs(int argc, char** argv) : justexport(false)
 	{
 		if (strcmp(argv[1], "-d") == 0)
 		{
-			std::string in = std::string(argv[2]);
 			size_t off = 0;
-			size_t size = in.size();
-			if (in[0] == '\"') off++;
-			if (in[size - 1] == '\"') size--;
-			inputFile = in.substr(off, size - off);
-			return;
+			size_t size = strnlen(argv[2], 256);
+			if (argv[2][0] == '\"') off++;
+			if (argv[2][size - 1] == '\"') size--;
+			strncpy(stringBuffer, argv[2] + off, (size - off));
+			inputFile.charCount = size-off;
 		}
 	}
+
+	inputFile.stringData = stringBuffer;
 }
 
 
@@ -37,5 +39,8 @@ void ProgramArgs::ScanSTDIN()
 	size_t size = in.length(), off = 0;
 	if (in[off] == '\"') off++;
 	if (in[size - 1] == '\"') size--;
-	inputFile = in.substr(off, size - off);
+	
+	strncpy(stringBuffer, in.substr(off, size - off).c_str(), 256);
+
+	inputFile.charCount = size - off;
 }
