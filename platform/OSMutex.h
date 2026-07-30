@@ -64,3 +64,4 @@ int ExclusiveReleaseOSSharedExclusive(OSSharedExclusive* osse);
 int SharedReleaseOSSharedExclusive(OSSharedExclusive* osse);
 int TryExclusiveAcquireOSSharedExclusive(OSSharedExclusive* osse);
 int TrySharedAcquireOSSharedExclusive(OSSharedExclusive* osse);
+void DeleteOSSharedExclusive(OSSharedExclusive* osse);

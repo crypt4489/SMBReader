@@ -4,10 +4,9 @@
 #include "WinOSWindow.h"
 #include <atomic>
 
-static HINSTANCE* instancePointers;
-static HWND* windowPtrs;
-
-static std::atomic<int> boundedLinearAllocator;
+#ifdef _MSC_VER
+#define ALIGNAS(x) __declspec(align(x))
+#endif
 
 struct MPMCQueueData
 {
@@ -15,11 +14,14 @@ struct MPMCQueueData
     int freeIndex;
 };
 
+static HINSTANCE* instancePointers;
+static HWND* windowPtrs;
 static MPMCQueueData* freeList;
-static std::atomic<size_t> enqueuePos{ 0 };
-static std::atomic<size_t> dequeuePos{ 0 };
-
 static int maxFreeListEntry = 0;
+
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
+ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
 LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
 
@@ -130,6 +132,7 @@ void CloseAllWindows()
 
     enqueuePos.store(0, std::memory_order_relaxed);
     dequeuePos.store(0, std::memory_order_relaxed);
+    boundedLinearAllocator.store(0, std::memory_order_relaxed);
 }
 
 int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows)

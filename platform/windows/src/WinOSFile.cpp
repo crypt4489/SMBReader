@@ -2,8 +2,9 @@
 #include "Windows.h"
 #include <atomic>
 
-static HANDLE* intFileHandles;
-static std::atomic<int> boundedLinearAllocator;
+#ifdef _MSC_VER
+#define ALIGNAS(x) __declspec(align(x))
+#endif
 
 struct MPMCQueueData
 {
@@ -11,11 +12,14 @@ struct MPMCQueueData
     int freeIndex;
 };
 
+static HANDLE* intFileHandles;
+static int* handleTypes;
 static MPMCQueueData* freeList;
-static std::atomic<size_t> enqueuePos{ 0 };
-static std::atomic<size_t> dequeuePos{ 0 };
-
 static int maxFreeListEntry = 0;
+
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
+ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
 static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
 static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
@@ -155,6 +159,7 @@ void CloseAllFiles()
 
     enqueuePos.store(0, std::memory_order_relaxed);
     dequeuePos.store(0, std::memory_order_relaxed);
+    boundedLinearAllocator.store(0, std::memory_order_relaxed);
 }
 
 int OSSeedFileMemory(void* dataSource, int dataSize, int numberOfOpenFiles)
@@ -420,6 +425,11 @@ int OSCreateFileIterator(const char* searchString, int nameLength, OSFileIterato
     }
 
     int index = FindFreeIndex();
+
+    if (index < 0)
+    {
+        return OS_FILE_HANDLE_EXHASUTED;
+    }
 
     WIN32_FIND_DATAA data;
 

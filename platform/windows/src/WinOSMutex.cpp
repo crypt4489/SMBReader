@@ -2,15 +2,21 @@
 #include <Windows.h>
 #include <atomic>
 
+#ifdef _MSC_VER
+#define ALIGNAS(x) __declspec(align(x))
+#endif
+
 enum WinHandleType
 {
 	SEMAPHORE_HANDLE = 1,
 	SRWLOCK_HANDLE = 2,
 };
 
-static void** handles;
-static int* handleTypes;
-static std::atomic<int> boundedLinearAllocator;
+union WinHandleUnion
+{
+	SRWLOCK lock;
+	HANDLE semaphoreHandle;
+};
 
 struct MPMCQueueData
 {
@@ -18,11 +24,14 @@ struct MPMCQueueData
 	int freeIndex;
 };
 
+static WinHandleUnion* handles;
+static int* handleTypes;
 static MPMCQueueData* freeList;
-static std::atomic<size_t> enqueuePos{ 0 };
-static std::atomic<size_t> dequeuePos{ 0 };
-
 static int maxFreeListEntry = 0;
+
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
+ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
 static int PopFromFreeList()
 {
@@ -77,8 +86,18 @@ static void ReturnIndex(int index)
 			pos = enqueuePos.load(std::memory_order_relaxed);
 	}
 
-	handles[index] = NULL;
+	switch (handleTypes[index])
+	{
+	case SEMAPHORE_HANDLE:
+		handles[index].semaphoreHandle = INVALID_HANDLE_VALUE;
+		break;
+	case SRWLOCK_HANDLE:
+		handles[index].lock = SRWLOCK_INIT;
+		break;
+	}
+
 	handleTypes[index] = 0;
+
 	cell->freeIndex = index;
 	cell->currentSequence.store(pos + 1, std::memory_order_release);
 }
@@ -108,18 +127,19 @@ void CloseAllSyncObject()
 {
 	for (int idx = 0; idx < maxFreeListEntry; idx++)
 	{
-		if (handles[idx] != NULL)
+		if (handleTypes[idx] != 0)
 		{
 			switch (handleTypes[idx])
 			{
 			case SEMAPHORE_HANDLE:
-				CloseHandle(handles[idx]);
+				CloseHandle(handles[idx].semaphoreHandle);
+				handles[idx].semaphoreHandle = INVALID_HANDLE_VALUE;
 				break;
 			case SRWLOCK_HANDLE:
+				handles[idx].lock = SRWLOCK_INIT;
 				break;
 			}
 
-			handles[idx] = NULL;
 			handleTypes[idx] = 0;
 		}
 
@@ -128,11 +148,12 @@ void CloseAllSyncObject()
 
 	enqueuePos.store(0, std::memory_order_relaxed);
 	dequeuePos.store(0, std::memory_order_relaxed);
+	boundedLinearAllocator.store(0, std::memory_order_relaxed);
 }
 
 OSSyncMemoryRequirements OSGetSyncMemoryRequirements(int maxNumberOfOpenSyncObjects)
 {
-	int handlesSize = (maxNumberOfOpenSyncObjects) * sizeof(void*);
+	int handlesSize = (maxNumberOfOpenSyncObjects) * sizeof(WinHandleUnion);
 	int handlesTypeSize = (maxNumberOfOpenSyncObjects) * sizeof(int);
 	int freeListSize = (maxNumberOfOpenSyncObjects) * sizeof(MPMCQueueData);
 
@@ -146,7 +167,7 @@ int OSSeedSyncMemory(void* dataSource, int dataSize, int maxNumberSyncObjects)
 	uintptr_t dataHead = (uintptr_t)dataSource;
 	uintptr_t dataStart = dataHead;
 
-	handles = (void**)dataSource;
+	handles = (WinHandleUnion*)dataSource;
 
 	int handleSize = maxNumberSyncObjects;
 
@@ -161,7 +182,6 @@ int OSSeedSyncMemory(void* dataSource, int dataSize, int maxNumberSyncObjects)
 	for (int i = 0; i < handleSize; i++)
 	{
 		freeList[i].currentSequence.store(i, std::memory_order_relaxed);
-		handles[i] = NULL;
 		handleTypes[i] = 0;
 	}
 
@@ -187,7 +207,7 @@ int CreateOSSemaphore(OSSemaphore* semaphore, int count)
 		return OS_SEMAPHORE_CREATE_FAILED;
 	}
 
-	handles[osIndex] = semaIndex;
+	handles[osIndex].semaphoreHandle = semaIndex;
 	handleTypes[osIndex] = SEMAPHORE_HANDLE;
 
 	semaphore->maxCount = count;
@@ -205,7 +225,7 @@ int WaitOSSemaphore(OSSemaphore* semaphore, unsigned int waitMS)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	HANDLE sema = handles[semaphore->osDataHandle];
+	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
 
 	DWORD waitResult = WaitForSingleObject(sema, waitMS);
 
@@ -232,7 +252,7 @@ int NotifyOSSemaphore(OSSemaphore* semaphore)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	HANDLE sema = handles[semaphore->osDataHandle];
+	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
 
 	if (!ReleaseSemaphore(
 		sema,  
@@ -254,7 +274,7 @@ int DeleteOSSemaphore(OSSemaphore* semaphore)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	HANDLE sema = handles[semaphore->osDataHandle];
+	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
 
 	CloseHandle(sema);
 
@@ -275,7 +295,7 @@ int CreateOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_EXHAUSTED;
 	}
 
-	InitializeSRWLock((SRWLOCK*)&handles[osIndex]);
+	InitializeSRWLock(&handles[osIndex].lock);
 
 	osse->internalOSHandle = osIndex;
 
@@ -291,7 +311,7 @@ int ExclusiveAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	AcquireSRWLockExclusive((SRWLOCK*)&handles[osIndex]);
+	AcquireSRWLockExclusive(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
 }
@@ -305,7 +325,7 @@ int SharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	AcquireSRWLockShared((SRWLOCK*)&handles[osIndex]);
+	AcquireSRWLockShared(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
 }
@@ -319,7 +339,7 @@ int ExclusiveReleaseOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	ReleaseSRWLockExclusive((SRWLOCK*)&handles[osIndex]);
+	ReleaseSRWLockExclusive(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
 }
@@ -333,7 +353,7 @@ int SharedReleaseOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	ReleaseSRWLockShared((SRWLOCK*)&handles[osIndex]);
+	ReleaseSRWLockShared(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
 }
@@ -347,7 +367,7 @@ int TryExclusiveAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	if (!TryAcquireSRWLockExclusive((SRWLOCK*)&handles[osIndex]))
+	if (!TryAcquireSRWLockExclusive(&handles[osIndex].lock))
 	{
 		return OSSE_ACQUIRE_FAILED;
 	}
@@ -364,7 +384,7 @@ int TrySharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	if (!TryAcquireSRWLockShared((SRWLOCK*)&handles[osIndex]))
+	if (!TryAcquireSRWLockShared(&handles[osIndex].lock))
 	{
 		return OSSE_ACQUIRE_FAILED;
 	}
@@ -372,3 +392,7 @@ int TrySharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 	return OSSE_SUCCESS;
 }
 
+void DeleteOSSharedExclusive(OSSharedExclusive* osse)
+{
+	ReturnIndex(osse->internalOSHandle);
+}

@@ -2,6 +2,10 @@
 #include "Windows.h"
 #include <atomic>
 
+#ifdef _MSC_VER
+#define ALIGNAS(x) __declspec(align(x))
+#endif
+
 struct ThreadData
 {
     ThreadPointer routine;
@@ -10,8 +14,6 @@ struct ThreadData
     int index;
 };
 
-static std::atomic<int> boundedLinearAllocator;
-
 struct MPMCQueueData
 {
     std::atomic<size_t> currentSequence;
@@ -19,13 +21,13 @@ struct MPMCQueueData
 };
 
 static MPMCQueueData* freeList;
-static std::atomic<size_t> enqueuePos{ 0 };
-static std::atomic<size_t> dequeuePos{ 0 };
-
-static int maxFreeListEntry = 0;
-
 static HANDLE* handles;
 static ThreadData* dataThreads;
+static int maxFreeListEntry = 0;
+
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
+ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
 static DWORD WINAPI MyThreadFunction(LPVOID lpParam);
 
@@ -160,12 +162,17 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
 
     DWORD threadID;
 
+    dataThreads[index].argumentToThread = argumentToThread;
+    dataThreads[index].routine = routine;
+    dataThreads[index].flags = flags;
+    dataThreads[index].index = index;
+
     HANDLE hThread = CreateThread(
-        NULL,                   // default security attributes
-        0,                      // use default stack size  
-        MyThreadFunction,       // thread function name
-        &dataThreads[index],          // argument to thread function 
-        0,                      // use default creation flags 
+        NULL,                 
+        0,                       
+        MyThreadFunction,      
+        &dataThreads[index],        
+        0,                       
         &threadID);
 
     if (hThread == INVALID_HANDLE_VALUE)
@@ -175,11 +182,6 @@ int OSCreateThread(OSThreadHandle* handle, void* argumentToThread, ThreadPointer
     }
 
     handles[index] = hThread;
-
-    dataThreads[index].argumentToThread = argumentToThread;
-    dataThreads[index].routine = routine;
-    dataThreads[index].flags = flags;
-    dataThreads[index].index = index;
 
     handle->threadIdentifier = threadID;
     handle->osDataHandle = index;
@@ -202,6 +204,7 @@ void CloseAllThreads()
 
     enqueuePos.store(0, std::memory_order_relaxed);
     dequeuePos.store(0, std::memory_order_relaxed);
+    boundedLinearAllocator.store(0, std::memory_order_relaxed);
 }
 
 int OSCloseThread(OSThreadHandle* handle)
