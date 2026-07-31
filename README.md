@@ -119,7 +119,15 @@ Finish render instance based on minimum specs for both Vulkan and DX12
 - remove any stl crap
 
 Finish app level architecture
-- Finish OS systems in windows and remove bad design decisions
+- Finish OS systems in windows and remove bad design decisions (done).
+  - Added Memory and Time OS modules (done).
+  - Removed all of std::filesystem crap (done).
+  - Added MPMC queue for free list to make multi threaded (done).
+  - Consistent error handling from API return codes (done).
+  - Bulk Memory Allocations tracking with block header system for O(1) lookup (done).
+  - Add a GetLastError support.
+  - possibly switch over to NTL stuff instead of WinAPI (longer term).
+  - expand block header allocations details    
 - Create OS linux layer with what is already done in agnostic interface
 - Make robust the shader translation layer and have compute shader execute in uniform way (minimize divergence among wave invocations)
 - Try to finish any unimplemented paths in the shaders (uncompressed data loading, light assignment and culling, etc.)
