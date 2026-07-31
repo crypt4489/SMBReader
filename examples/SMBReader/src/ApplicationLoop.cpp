@@ -719,7 +719,7 @@ static Vector2i tempCursorPos = { 200, 200 };
 static Font mainFontData;
 static int mainFontImage;
 
-static std::array<int, DEPTH_MAX+1> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+static std::array<int, DEPTH_MAX+2> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
 static UIContainer mainContainer =
 {
@@ -885,6 +885,7 @@ ApplicationLoop::~ApplicationLoop() {
 		CleanupRuntime(); 
 	} 
 
+	ReleaseAllMemoryAllocations();
 	CloseAllFiles();
 	CloseAllSyncObject();
 	CloseAllThreads();
@@ -897,6 +898,7 @@ void ApplicationLoop::Execute()
 	OSWindowMemoryRequirements winMemReq = OSGetWindowMemoryRequirements(1);
 	OSFileMemoryRequirements fileMemReq = OSGetFileMemoryRequirements(30);
 	OSThreadMemoryRequirements threadMemReq = OSGetThreadMemoryRequirements(5);
+	OSMemoryRequirements osMemRequiresMents = OSGetMemoryRequirements(5);
 
 	OSSeedFileMemory(
 		osAllocator.Allocate(fileMemReq.dataSize, fileMemReq.alignment),
@@ -920,6 +922,12 @@ void ApplicationLoop::Execute()
 		osAllocator.Allocate(winMemReq.dataSize, winMemReq.alignment),
 		winMemReq.dataSize,
 		1
+	);
+
+	OSSeedMemory(
+		osAllocator.Allocate(osMemRequiresMents.dataSize, osMemRequiresMents.alignment),
+		osMemRequiresMents.dataSize,
+		5
 	);
 
 	OSTimeInitialize();
@@ -1192,8 +1200,8 @@ void ApplicationLoop::Execute()
 				{
 					if (updateUI == framesInFlight)
 					{
-						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthCounts , DEPTH_MAX*sizeof(uint32_t), 0, 0);
-						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthOffsets , DEPTH_MAX*sizeof(uint32_t), 0, 0);
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthCounts , (DEPTH_MAX+1)*sizeof(uint32_t), 0, 0);
+						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalDepthOffsets , (DEPTH_MAX+1)*sizeof(uint32_t), 0, 0);
 						GlobalRenderer::gRenderInstance.InsertTransferCommand(globalUITextElementsCount, sizeof(uint32_t), 0, 0);
 					}
 
@@ -5416,8 +5424,8 @@ void CreateUITools(int maxUIContainers)
 	globalUIElementsIndirectBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(VkDrawIndirectCommand), maxUIContainers, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextIndirectCommands = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(VkDrawIndirectCommand), maxUIContainers, alignof(VkDrawIndirectCommand), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIElementsIndirectCountBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), 2, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalDepthCounts = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-	globalDepthOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDepthCounts = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX+1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalDepthOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), DEPTH_MAX+1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalChildrenOffsets = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIIndirectionPositionalHandleBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5552,7 +5560,7 @@ void CreateUITools(int maxUIContainers)
 
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthCounts, 0, 1, 0);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalDepthOffsets, 0, 1, 1);
-		descriptorBuilder.UploadConstant(&descriptorContext, &depths[DEPTH_MAX], 0);
+		descriptorBuilder.UploadConstant(&descriptorContext, &depths[DEPTH_MAX+1], 0);
 
 		if (descriptorContext.contextFailed)
 		{

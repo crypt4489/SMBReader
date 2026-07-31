@@ -25,7 +25,7 @@ static HANDLE* handles;
 static ThreadData* dataThreads;
 static int maxFreeListEntry = 0;
 
-ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator{ 0 };
 ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
 ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
@@ -128,7 +128,7 @@ int OSSeedThreadMemory(void* dataSource, int dataSize, int numberOfOpenThreads)
 {
     uintptr_t dataHead = (uintptr_t)dataSource;
 
-    handles = (void**)dataSource;
+    handles = (HANDLE*)dataSource;
 
     int handleSize = numberOfOpenThreads;
 

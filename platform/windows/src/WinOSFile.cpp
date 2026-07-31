@@ -17,7 +17,7 @@ static int* handleTypes;
 static MPMCQueueData* freeList;
 static int maxFreeListEntry = 0;
 
-ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator{ 0 };
 ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
 ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
@@ -152,9 +152,10 @@ void CloseAllFiles()
         if (intFileHandles[idx] != INVALID_HANDLE_VALUE)
         {
             CloseHandle(intFileHandles[idx]);
-            intFileHandles[idx] = INVALID_HANDLE_VALUE;
-            freeList[i].currentSequence.store(i, std::memory_order_relaxed);
+            intFileHandles[idx] = INVALID_HANDLE_VALUE;  
         }
+
+        freeList[i].currentSequence.store(i, std::memory_order_relaxed);
     }
 
     enqueuePos.store(0, std::memory_order_relaxed);
@@ -376,12 +377,20 @@ int OSSeekFile(OSFileHandle* fileHandle, size_t pointer, OSRelativeFlags flags)
 {
     int fileIndex = fileHandle->osDataHandle;
 
-    if (fileIndex < 0 || fileIndex >= maxFreeListEntry + 1)
-    {
-        return OS_FILE_HANDLE_OUT_OF_BOUNDS;
-    }
+    HANDLE hFile;
 
-    HANDLE hFile = intFileHandles[fileIndex];
+    if (fileHandle->osDataHandle == maxFreeListEntry + 1)
+    {
+        hFile = stdErrorHandle;
+    }
+    else if (fileHandle->osDataHandle < maxFreeListEntry && fileHandle->osDataHandle >= 0)
+    {
+        hFile = intFileHandles[fileHandle->osDataHandle];
+    }
+    else
+    {
+        return OS_FILE_FAILED_SEEK;
+    }
 
     DWORD moveMethod = FILE_BEGIN;
 

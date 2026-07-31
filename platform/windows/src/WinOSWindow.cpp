@@ -19,11 +19,11 @@ static HWND* windowPtrs;
 static MPMCQueueData* freeList;
 static int maxFreeListEntry = 0;
 
-ALIGNAS(64) static std::atomic<int> boundedLinearAllocator;
+ALIGNAS(64) static std::atomic<int> boundedLinearAllocator{ 0 };
 ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
 ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
-LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
+static LRESULT CALLBACK winproc(HWND hwnd, UINT wm, WPARAM wp, LPARAM lp);
 
 static int PopFromFreeList()
 {
