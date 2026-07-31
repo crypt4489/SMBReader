@@ -297,33 +297,28 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
         }
         else
         {
-            index = FindFreeIndex();
-
-            if (index < 0)
-            {
-                return retAddr;
-            }
-
-            adjustedSize = ((size + sizeof(MemBlockHeader)) + (pageSize - 1)) & ~(pageSize - 1);
+            return nullptr;
         }
 
-        void* retAddr = VirtualAlloc((void*)((uintptr_t)potentialBlockHeader + currentCommitHeader), adjustedSize, ConverMemoryAllocationType(allocType), ConvertMemoryProtection(protection));
+        adjustedSize = (adjustedSize + (pageSize - 1)) & ~(pageSize - 1);
+
+        retAddr = VirtualAlloc((void*)((uintptr_t)potentialBlockHeader + currentCommitHeader), adjustedSize, ConverMemoryAllocationType(allocType), ConvertMemoryProtection(protection));
 
         if (!retAddr)
         {
-            if (potentialBlockHeader->blockCommitSentinel != BLOCK_HEADER_SENTINEL_VALUE)
-            {
-                ReturnIndex(index);
-            }
-
             return retAddr;
         }
-
-        if ((potentialBlockHeader->blockCommitSentinel == BLOCK_HEADER_SENTINEL_VALUE) && (allocType & OSMemoryAllocationTypes::COMMIT))
+ 
+        if ((allocType & OSMemoryAllocationTypes::COMMIT))
         {
             potentialBlockHeader->blockCommitSize += adjustedSize;
-            return retAddr;
         }
+        else if ((allocType & OSMemoryAllocationTypes::RESERVE))
+        {
+            potentialBlockHeader->blockSize += adjustedSize;
+        }
+
+        return retAddr;
     }
 
     if ((allocType & OSMemoryAllocationTypes::RESERVE) && !(allocType & OSMemoryAllocationTypes::COMMIT))
@@ -343,7 +338,7 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
     blockHeader->blockCommitSentinel = BLOCK_HEADER_SENTINEL_VALUE;
     blockHeader->blockDetails = MAKE_BLOCK_DETAILS(index, protection, allocType);
     blockHeader->blockSize = adjustedSize;
-    blockHeader->blockCommitSize = (allocType & OSMemoryAllocationTypes::COMMIT) ? adjustedSize : sizeof(MemBlockHeader);
+    blockHeader->blockCommitSize = (allocType & OSMemoryAllocationTypes::COMMIT) ? adjustedSize : pageSize;
 
     memoryLocations[index] = blockHeader;
 
@@ -366,7 +361,7 @@ int OSMemoryRelease(void* memAddr, uint64_t size, OSMemoryReleaseTypes freeType)
 
     size_t headerCommitSize = header->blockCommitSize;
 
-    if (headerCommitSize < size)
+    if ((headerCommitSize - sizeof(MemBlockHeader)) < size)
     {
         return OS_MEMORY_FREE_FAILURE;
     }
@@ -378,11 +373,12 @@ int OSMemoryRelease(void* memAddr, uint64_t size, OSMemoryReleaseTypes freeType)
         absoluteMemAddr = absoluteMemAddr + (headerCommitSize - size);
     }
 
+    int index = GET_BLOCK_DETAILS_ALLOCATION_INDEX(header->blockDetails);
+
     BOOL virtualFreeReturn = VirtualFree((void*)absoluteMemAddr, size, ConvertReleaseType(freeType));
 
     if (freeType == OSMemoryReleaseTypes::RELEASE)
     {
-        int index = GET_BLOCK_DETAILS_ALLOCATION_INDEX(header->blockDetails);
         ReturnIndex(index);
     }
     else
