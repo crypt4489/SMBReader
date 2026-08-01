@@ -1,7 +1,10 @@
 #pragma once
+
+#include "OS.h"
+
 struct OSThreadHandle
 {
-	unsigned long threadIdentifier;
+	uint32_t threadIdentifier;
 	int osDataHandle;
 
 	OSThreadHandle()

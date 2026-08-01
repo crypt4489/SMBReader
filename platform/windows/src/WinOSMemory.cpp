@@ -1,16 +1,5 @@
 #include "OSMemory.h"
 #include <Windows.h>
-#include <atomic>
-
-#ifdef _MSC_VER
-#define ALIGNAS(x) __declspec(align(x))
-#endif
-
-struct MPMCQueueData
-{
-	std::atomic<size_t> currentSequence;
-	int freeIndex;
-};
 
 #define BLOCK_HEADER_SENTINEL_VALUE 0xbbadbeefbbadbeef
 
@@ -300,7 +289,7 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
 
         adjustedSize = (adjustedSize + (pageSize - 1)) & ~(pageSize - 1);
 
-        retAddr = VirtualAlloc((void*)((uintptr_t)potentialBlockHeader + currentCommitHeader), adjustedSize, ConverMemoryAllocationType(allocType), ConvertMemoryProtection(protection));
+        retAddr = VirtualAlloc((void*)(((uintptr_t)startingAddress - pageSize) + currentCommitHeader), adjustedSize, ConverMemoryAllocationType(allocType), ConvertMemoryProtection(protection));
 
         if (!retAddr)
         {
@@ -331,7 +320,7 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
         }
     }
 
-    blockHeader = (MemBlockHeader*)retAddr;
+    blockHeader = (MemBlockHeader*)(((uintptr_t)retAddr) + pageSize-sizeof(MemBlockHeader));
 
     blockHeader->blockCommitSentinel = BLOCK_HEADER_SENTINEL_VALUE;
     blockHeader->blockDetails = MAKE_BLOCK_DETAILS(index, protection, allocType);
@@ -364,6 +353,8 @@ int OSMemoryRelease(void* memAddr, uint64_t size, OSMemoryReleaseTypes freeType)
         pageSize = OSGetLargePageSize();
     }
 
+    size = (size + (pageSize - 1)) & ~(pageSize - 1);
+
     size_t headerCommitSize = header->blockCommitSize;
 
     if ((headerCommitSize - pageSize) < size)
@@ -371,7 +362,7 @@ int OSMemoryRelease(void* memAddr, uint64_t size, OSMemoryReleaseTypes freeType)
         return OS_MEMORY_FREE_FAILURE;
     }
 
-    uintptr_t absoluteMemAddr = (uintptr_t)header;
+    uintptr_t absoluteMemAddr = ((uintptr_t)memAddr) - pageSize;
 
     if (freeType == OSMemoryReleaseTypes::DECOMMIT)
     {

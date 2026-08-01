@@ -1,29 +1,20 @@
 #include "OSFile.h"
 #include "Windows.h"
-#include <atomic>
-
-#ifdef _MSC_VER
-#define ALIGNAS(x) __declspec(align(x))
-#endif
-
-struct MPMCQueueData
-{
-    std::atomic<size_t> currentSequence;
-    int freeIndex;
-};
 
 static HANDLE* intFileHandles;
 static int* handleTypes;
 static MPMCQueueData* freeList;
 static int maxFreeListEntry = 0;
 
+static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
+static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
+static HANDLE stdErrorHandle = INVALID_HANDLE_VALUE;
+
 ALIGNAS(64) static std::atomic<int> boundedLinearAllocator{ 0 };
 ALIGNAS(64) static std::atomic<size_t> enqueuePos{ 0 };
 ALIGNAS(64) static std::atomic<size_t> dequeuePos{ 0 };
 
-static HANDLE stdInputHandle = INVALID_HANDLE_VALUE;
-static HANDLE stdOutputHandle = INVALID_HANDLE_VALUE;
-static HANDLE stdErrorHandle = INVALID_HANDLE_VALUE;
+
 
 static DWORD ConvertOSFlags(OSFileFlags flags, DWORD* shareMode, DWORD* creationFlags)
 {

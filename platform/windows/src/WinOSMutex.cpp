@@ -2,10 +2,6 @@
 #include <Windows.h>
 #include <atomic>
 
-#ifdef _MSC_VER
-#define ALIGNAS(x) __declspec(align(x))
-#endif
-
 enum WinHandleType
 {
 	SEMAPHORE_HANDLE = 1,
@@ -16,12 +12,6 @@ union WinHandleUnion
 {
 	SRWLOCK lock;
 	HANDLE semaphoreHandle;
-};
-
-struct MPMCQueueData
-{
-	std::atomic<size_t> currentSequence;
-	int freeIndex;
 };
 
 static WinHandleUnion* handles;
@@ -199,6 +189,11 @@ int CreateOSSemaphore(OSSemaphore* semaphore, int count)
 		return OS_SEMAPHORE_HANDLE_EXHAUSTED;
 	}
 
+	if (handleTypes[osIndex] != SEMAPHORE_HANDLE)
+	{
+		return OS_SEMAPHORE_WRONG_TYPE;
+	}
+
 	HANDLE semaIndex = CreateSemaphore(NULL, count, count, NULL);
 	
 	if (semaIndex == INVALID_HANDLE_VALUE)
@@ -225,7 +220,12 @@ int WaitOSSemaphore(OSSemaphore* semaphore, unsigned int waitMS)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
+	if (handleTypes[osIndex] != SEMAPHORE_HANDLE)
+	{
+		return OS_SEMAPHORE_WRONG_TYPE;
+	}
+
+	HANDLE sema = handles[osIndex].semaphoreHandle;
 
 	DWORD waitResult = WaitForSingleObject(sema, waitMS);
 
@@ -252,7 +252,12 @@ int NotifyOSSemaphore(OSSemaphore* semaphore)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
-	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
+	if (handleTypes[osIndex] != SEMAPHORE_HANDLE)
+	{
+		return OS_SEMAPHORE_WRONG_TYPE;
+	}
+
+	HANDLE sema = handles[osIndex].semaphoreHandle;
 
 	if (!ReleaseSemaphore(
 		sema,  
@@ -272,6 +277,11 @@ int DeleteOSSemaphore(OSSemaphore* semaphore)
 	if (osIndex < 0 || osIndex >= maxFreeListEntry)
 	{
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
+	}
+
+	if (handleTypes[osIndex] != SEMAPHORE_HANDLE)
+	{
+		return OS_SEMAPHORE_WRONG_TYPE;
 	}
 
 	HANDLE sema = handles[semaphore->osDataHandle].semaphoreHandle;
@@ -311,6 +321,11 @@ int ExclusiveAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
+	}
+
 	AcquireSRWLockExclusive(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
@@ -323,6 +338,11 @@ int SharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 	if (osIndex < 0 || osIndex >= maxFreeListEntry)
 	{
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
+	}
+
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
 	}
 
 	AcquireSRWLockShared(&handles[osIndex].lock);
@@ -339,6 +359,11 @@ int ExclusiveReleaseOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
+	}
+
 	ReleaseSRWLockExclusive(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
@@ -353,6 +378,11 @@ int SharedReleaseOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
+	}
+
 	ReleaseSRWLockShared(&handles[osIndex].lock);
 
 	return OSSE_SUCCESS;
@@ -365,6 +395,11 @@ int TryExclusiveAcquireOSSharedExclusive(OSSharedExclusive* osse)
 	if (osIndex < 0 || osIndex >= maxFreeListEntry)
 	{
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
+	}
+
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
 	}
 
 	if (!TryAcquireSRWLockExclusive(&handles[osIndex].lock))
@@ -384,6 +419,11 @@ int TrySharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 		return OS_SEMAPHORE_HANDLE_OUT_OF_BOUNDS;
 	}
 
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return OSSE_WRONG_TYPE;
+	}
+
 	if (!TryAcquireSRWLockShared(&handles[osIndex].lock))
 	{
 		return OSSE_ACQUIRE_FAILED;
@@ -394,5 +434,17 @@ int TrySharedAcquireOSSharedExclusive(OSSharedExclusive* osse)
 
 void DeleteOSSharedExclusive(OSSharedExclusive* osse)
 {
-	ReturnIndex(osse->internalOSHandle);
+	int osIndex = osse->internalOSHandle;
+
+	if (osIndex < 0 || osIndex >= maxFreeListEntry)
+	{
+		return;
+	}
+
+	if (handleTypes[osIndex] != SRWLOCK_HANDLE)
+	{
+		return;
+	}
+
+	ReturnIndex(osIndex);
 }

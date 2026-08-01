@@ -1,4 +1,5 @@
 #pragma once
+#include "OS.h"
 
 #define OS_INFINITE_TIMEOUT 0xffffffff
 
@@ -22,6 +23,7 @@ enum OSSemaphoreErrorCodes
 	OS_SEMAPHORE_CREATE_FAILED = -3,
 	OS_SEMAPHORE_TIMEOUT_FAILED = -4,
 	OS_SEMAPHORE_RELEASE_FAILED = -5,
+	OS_SEMAPHORE_WRONG_TYPE = -6
 	
 };
 
@@ -54,7 +56,8 @@ struct OSSharedExclusive
 enum OSSharedExclusiveError
 {
 	OSSE_SUCCESS = 0,
-	OSSE_ACQUIRE_FAILED = -1,
+	OSSE_ACQUIRE_FAILED = -1, 
+	OSSE_WRONG_TYPE = -2
 };
 
 int CreateOSSharedExclusive(OSSharedExclusive* osse);

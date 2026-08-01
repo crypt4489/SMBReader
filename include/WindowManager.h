@@ -13,7 +13,7 @@ struct WindowManager
 
 	void GetWindowSize(int* width, int* height);
 
-	int CreateMainWindow();
+	int CreateMainWindow(int width, int height, const char* name, int nameLength);
 
 	int PollEvents();
 
@@ -22,5 +22,7 @@ struct WindowManager
 	void SetWindowTitle(StringView text);
 
 	OSWindow windowData;
+
+	GenericWindowInfo windowKeyData;
 };
 

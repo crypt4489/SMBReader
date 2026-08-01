@@ -1,3 +1,4 @@
+#include "OS.h"
 
 enum KeyCodes
 {
@@ -80,6 +81,47 @@ struct GenericKeyAction
     }
 };
 
+#define PACK_WINDOW_COORDINATES_EVENT(x, y) (((x&0xffff) << 16) | (y&0xffff))
+#define GET_WINDOW_COORDINATES_EVENT_X(packed) ((packed >> 16) &0xffff)
+#define GET_WINDOW_COORDINATES_EVENT_Y(packed) (packed&0xffff)
+
+#define PACK_WINDOW_SIZE_EVENT(width, height, minimized, maximized) (((((uint64_t)maximized)&1) << 33) | ((((uint64_t)minimized)&1) << 32) | ((((uint64_t)width)&0xffff) << 16) | (((uint64_t)height)&0xffff))
+#define GET_WINDOW_SIZE_EVENT_MAXIMIZED(packed) ((packed >> 33) &1)
+#define GET_WINDOW_SIZE_EVENT_MINIMIZED(packed) ((packed >> 32) &1)
+#define GET_WINDOW_SIZE_EVENT_WIDTH(packed) ((packed >> 16) &0xffff)
+#define GET_WINDOW_SIZE_EVENT_HEIGHT(packed) (packed&0xffff)
+
+#define PACK_KEY_CODE_ACTION(keyCode, keyAction) (((keyCode & KC_COUNT-1) << 3) | (keyAction & 3))
+#define GET_KEY_CODE(packed) ((packed >> 3) & KC_COUNT-1)
+#define GET_KEY_ACTION(packed) (packed & 3)
+
+enum GenericWindowEventType
+{
+    WINDOW_EVENT_TYPE_MOUSE_LEFT_BUTTON = 1,
+    WINDOW_EVENT_TYPE_MOUSE_COORDINATES = 2,
+    WINDOW_EVENT_TYPE_WINDOW_SIZE = 3,
+    WINDOW_EVENT_TYPE_RESIZE_REQUESTED = 4,
+    WINDOW_EVENT_TYPE_SHOULD_BE_CLOSED = 5,
+    WINDOW_EVENT_TYPE_KEY_ACTION = 6
+
+};
+
+struct GenericWindowEventPacked
+{
+    uint64_t EventType;
+    uint64_t EventPacked;
+};
+
+struct GenericWindowEventBuffer
+{
+    void* dataHead;
+    size_t dataSize;
+    ALIGNAS(64) std::atomic<size_t> dataWrite;
+    ALIGNAS(64) std::atomic<size_t> dataRead;
+    ALIGNAS(64) std::atomic<size_t> ringLapsSinceLastRead;
+    int requestedFullScreen;
+};
+
 struct GenericWindowInfo
 {
     int shouldBeClosed = 0;
@@ -87,10 +129,12 @@ struct GenericWindowInfo
     int maximized = 0;
     int fullScreen = 0;
     int resizeRequested = 0;
-    int width = 0, height = 0;
-    GenericKeyAction actions[KC_COUNT];
-    unsigned int currentCursorX, currentCursorY;
+    int width = 0;
+    int height = 0;
+    unsigned int currentCursorX;
+    unsigned int currentCursorY;
     int clicked;
+    GenericKeyAction actions[KC_COUNT];
 
     int HandleResizeRequested()
     {
@@ -103,7 +147,7 @@ struct GenericWindowInfo
 struct OSWindow
 {
 	int internalOSHandle;
-    GenericWindowInfo info;
+    GenericWindowEventBuffer eventBuffer;
 };
 
 enum OSWindowErrorCode
@@ -129,10 +173,12 @@ int OSSeedWindowMemory(void* dataSource, int dataSize, int maxNumberOfWindows);
 
 int OSCreateWindow(const char* name, int requestedDimensionX, int requestDimensionY, OSWindow* windowData);
 
-int OSWindowPollEvents(OSWindow* window);
+int OSWindowPollEvents(OSWindow* window, GenericWindowInfo* info);
 
 int OSWindowGetInternalData(OSWindow* window, void* internalDataStruct);
 
 int OSWindowSetText(OSWindow* window, const char* text);
 
 int OSWindowClose(OSWindow* window);
+
+int OSWindowSeedEventBuffer(OSWindow* window, void* bufferMemory, size_t bufferSize);

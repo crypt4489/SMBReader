@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include "OS.h"
 
 void OSTimeInitialize();
 int64_t OSGetSystemTicks();

@@ -591,6 +591,7 @@ static char GlobalInputScratchMemory[128 * MiB];
 static char PollingThreadSharedCmdMemory[4 * KiB];
 static char PollingThreadStringViewMemory[4 * KiB];
 static char LoggerMessageMemory[64 * KiB];
+static char MainWindowEventBuffer[KiB];
 
 static TLSFAllocator RenderInstanceMemoryAllocator{ RenderInstanceMemoryPool, sizeof(RenderInstanceMemoryPool) };
 static RingAllocator RenderInstanceTemporaryAllocator{ RenderInstanceTemporaryPool, sizeof(RenderInstanceTemporaryPool) };
@@ -1073,14 +1074,14 @@ void ApplicationLoop::Execute()
 
 			if (mainWindow.ShouldCloseWindow()) break;
 
-			if (mainWindow.windowData.info.minimized) continue;
+			if (mainWindow.windowKeyData.minimized) continue;
 
-			ProcessKeys(mainWindow.windowData.info.actions);
+			ProcessKeys(mainWindow.windowKeyData.actions);
 
-			tempCursorPos.x = mainWindow.windowData.info.currentCursorX;
-			tempCursorPos.y = mainWindow.windowData.info.currentCursorY;
+			tempCursorPos.x = mainWindow.windowKeyData.currentCursorX;
+			tempCursorPos.y = mainWindow.windowKeyData.currentCursorY;
 
-			if (mainWindow.windowData.info.HandleResizeRequested())
+			if (mainWindow.windowKeyData.HandleResizeRequested())
 			{
 				int width = 0, height = 0;
 
@@ -3755,7 +3756,9 @@ void ApplicationLoop::InitializeRuntime()
 	
 	mainDictionary.textureSize = sizeof(mainTextureCacheMemory);
 
-	mainWindow.CreateMainWindow();
+	OSWindowSeedEventBuffer(&mainWindow.windowData, MainWindowEventBuffer, sizeof(MainWindowEventBuffer));
+
+	mainWindow.CreateMainWindow(800, 600, "MyGameEngine", 0);
 
 	RenderInstanceCreateInfo riCreateInfo{};
 	riCreateInfo.maxAttachmentGraphTemplates = mainLayoutAttachments.size();
@@ -5770,7 +5773,7 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUICursorDetailData, 0, 1, 4);
 		descriptorBuilder.UploadConstant(&descriptorContext, &tempCursorPos, 0);
 		descriptorBuilder.UploadConstant(&descriptorContext, &GlobalRenderer::gRenderInstance.previousFrame, 1);
-		descriptorBuilder.UploadConstant(&descriptorContext, &mainWindow.windowData.info.clicked, 2);
+		descriptorBuilder.UploadConstant(&descriptorContext, &mainWindow.windowKeyData.clicked, 2);
 
 		if (descriptorContext.contextFailed)
 		{

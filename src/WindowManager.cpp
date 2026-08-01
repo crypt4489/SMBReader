@@ -2,25 +2,25 @@
 
 bool WindowManager::ShouldCloseWindow()
 {
-	return windowData.info.shouldBeClosed;
+	return windowKeyData.shouldBeClosed;
 }
 
 void WindowManager::GetWindowSize(int* width, int* height)
 {
-    *width = windowData.info.width;
-    *height = windowData.info.height;
+    *width = windowKeyData.width;
+    *height = windowKeyData.height;
 }
 
-int WindowManager::CreateMainWindow()
+int WindowManager::CreateMainWindow(int width, int height, const char* name, int nameLength)
 {
-    int ret = OSCreateWindow("MyGameEngine", 800, 600, &windowData);
+    int ret = OSCreateWindow(name, width, height, &windowData);
 
     return ret;
 }
 
 int WindowManager::PollEvents()
 {
-    return OSWindowPollEvents(&windowData);;
+    return OSWindowPollEvents(&windowData, &windowKeyData);
 }
 
 void WindowManager::GetInternalData(OSWindowInternalData* data)

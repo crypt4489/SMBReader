@@ -1,10 +1,5 @@
 #include "OSThread.h"
 #include "Windows.h"
-#include <atomic>
-
-#ifdef _MSC_VER
-#define ALIGNAS(x) __declspec(align(x))
-#endif
 
 struct ThreadData
 {
@@ -12,12 +7,6 @@ struct ThreadData
     void* argumentToThread;
     OSThreadFlags flags;
     int index;
-};
-
-struct MPMCQueueData
-{
-    std::atomic<size_t> currentSequence;
-    int freeIndex;
 };
 
 static MPMCQueueData* freeList;
