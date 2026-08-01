@@ -291,14 +291,12 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
 
         size_t currentCommitHeader = 0;
 
-        if (potentialBlockHeader->blockCommitSentinel == BLOCK_HEADER_SENTINEL_VALUE)
+        if (potentialBlockHeader->blockCommitSentinel != BLOCK_HEADER_SENTINEL_VALUE)
         {
-            currentCommitHeader = potentialBlockHeader->blockCommitSize;
+            return nullptr;    
         }
-        else
-        {
-            return nullptr;
-        }
+        
+        currentCommitHeader = potentialBlockHeader->blockCommitSize;
 
         adjustedSize = (adjustedSize + (pageSize - 1)) & ~(pageSize - 1);
 
@@ -309,11 +307,11 @@ void* OSMemoryAllocate(void* startingAddress, uint64_t size, OSMemoryAllocationT
             return retAddr;
         }
  
-        if ((allocType & OSMemoryAllocationTypes::COMMIT))
+        if (allocType & OSMemoryAllocationTypes::COMMIT)
         {
             potentialBlockHeader->blockCommitSize += adjustedSize;
         }
-        else if ((allocType & OSMemoryAllocationTypes::RESERVE))
+        else if (allocType & OSMemoryAllocationTypes::RESERVE)
         {
             potentialBlockHeader->blockSize += adjustedSize;
         }
@@ -359,9 +357,16 @@ int OSMemoryRelease(void* memAddr, uint64_t size, OSMemoryReleaseTypes freeType)
         return OS_MEMORY_FREE_FAILURE;
     }
 
+    uint64_t pageSize = OSGetStandardPageSize();
+
+    if (GET_BLOCK_DETAILS_ALLOCATION_TYPE(header->blockDetails) & OSMemoryAllocationTypes::USE_LARGE_PAGES)
+    {
+        pageSize = OSGetLargePageSize();
+    }
+
     size_t headerCommitSize = header->blockCommitSize;
 
-    if ((headerCommitSize - sizeof(MemBlockHeader)) < size)
+    if ((headerCommitSize - pageSize) < size)
     {
         return OS_MEMORY_FREE_FAILURE;
     }
