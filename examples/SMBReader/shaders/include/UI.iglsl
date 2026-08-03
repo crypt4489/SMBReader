@@ -54,7 +54,7 @@
 
 struct UIContainer
 {
-	uvec4 bitfields;  // x - bitfields y - packed children data z - packed text data 
+	uvec4 bitfields;  // // x - bitfields y - childIndex/children count/parentCount, z - textData, w - textRenderingInfo  
     vec4 color;
     vec4 padding; //padding top, bottom, left, right
 	vec2 relativeContainerSize; // percent size of the canvas
@@ -79,6 +79,24 @@ struct UITextVertex
 {
 	vec2 pos;
 	vec2 texCoords;
+};
+
+struct FontDataStruct
+{
+    uint pictureHeight, pictureWidth;
+	uint cellWidth, cellHeight;
+    uint startingChar;
+	uint widthSize;
+    uint lettersPerRow;
+    uint fontHeight;
+};
+
+struct VkDrawIndirectCommand 
+{
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
 };
 
 vec4 makeColorFrom10_11_10_1(uint packedColor)

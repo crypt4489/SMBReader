@@ -17,7 +17,6 @@ void Allocator::Free(int allocSize)
 	return;
 }
 
-
 void* RingAllocator::Allocate(int _allocSize, int alignment)
 {
 	char* head = (char*)dataHead;

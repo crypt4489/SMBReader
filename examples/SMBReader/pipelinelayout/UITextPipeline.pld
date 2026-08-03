@@ -7,6 +7,6 @@
 	</DepthTest>
 	<BlendDetails enable="false">
 	</BlendDetails>
-	<BlendAttachment enable="false" srcColor="srcAlpha" dstColor="minusSrcAlpha" colorOp="add" srcAlpha="one" dstAlpha="minusSrcAlpha" alphaOp="add">
+	<BlendAttachment enable="true" srcColor="srcAlpha" dstColor="minusSrcAlpha" colorOp="add" srcAlpha="srcAlpha" dstAlpha="zero" alphaOp="add">
 	</BlendAttachment>
 </PipelineDescription>

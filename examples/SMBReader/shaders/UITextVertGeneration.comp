@@ -23,15 +23,9 @@ layout(set = 0, binding = 3) readonly buffer UITextPool
 	uint8_t text[];
 } textPool;
 
-layout(set = 0, binding = 4) uniform FontData
+layout(set = 0, binding = 4) readonly buffer FontData
 {
-    uint pictureHeight, pictureWidth;
-	uint cellWidth, cellHeight;
-    uint startingChar;
-	uint widthSize;
-    uvec2 pad;
-	int fontWidths[256];
-    
+    FontDataStruct fData[];  
 } fData;
 
 layout(set = 0, binding = 5) writeonly buffer UITextVertices 
@@ -39,18 +33,15 @@ layout(set = 0, binding = 5) writeonly buffer UITextVertices
 	UITextVertex textVerts[];
 } textVertices;
 
-struct VkDrawIndirectCommand 
-{
-    uint vertexCount;
-    uint instanceCount;
-    uint firstVertex;
-    uint firstInstance;
-};
-
 layout(set = 0, binding = 6) writeonly buffer commands
 {
     VkDrawIndirectCommand command[];
 } comStructs;
+
+layout(set = 0, binding = 7) readonly buffer FontWidths
+{
+    int fontWidths[];
+} fontWidths;
 
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
@@ -70,19 +61,25 @@ void main()
   
     vec2 uiStart = retainedConts.renderables[uiIndex].anchorPoint; 
 
+    FontDataStruct mainFontData = fData.fData[0];
+
+    float invAspect = uiSize.y / uiSize.x;
+
+    float textHeight = uiSize.y * (float(mainFontData.fontHeight) / float(mainFontData.cellHeight));
+    
     float padleft = uiSize.x * 0.05;
-    float padtop = uiSize.y * 0.01;
-    float textHeight = uiSize.y * 1.5;
-    float textWidth = uiSize.x * 0.1;
 
-    vec2 textStride = vec2(textWidth, textHeight);
-    vec2 textCurrPos = vec2(padleft, padtop) + uiStart;
+    float padTop = uiSize.y - (textHeight + (uiSize.y * 0.01));
+   
+    vec2 textCurrPos = vec2(padleft, padTop) + uiStart;
 
-    uint LETTERSPERROW = fData.pictureWidth / fData.cellWidth;
+    uint LETTERSPERROW = mainFontData.lettersPerRow;
 
     uint vertexStart = textOffset * 4;
 
     uint iter = vertexStart;
+
+    uint fontWidthOffset = 256 * 0;
 
     uint i = 0;
 
@@ -90,39 +87,41 @@ void main()
     {
         uint letter = uint(textPool.text[i+textOffset]); 
 
-        if (letter < fData.startingChar)
+        if (letter < mainFontData.startingChar)
         {
             break;
         }
 
-        letter -= fData.startingChar;
+        letter -= mainFontData.startingChar;
 
         uint tx = (letter % LETTERSPERROW);
 
         uint ty = (letter / LETTERSPERROW);
 
-        int letterwidth = clamp(fData.fontWidths[letter], 12, 12);
+        int letterwidth = fontWidths.fontWidths[letter+fontWidthOffset];
 
-        uint cx = tx * fData.cellWidth;
+        uint cx = tx * mainFontData.cellWidth;
 
-        uint cy = ty * fData.cellHeight;
+        uint cy = ty * mainFontData.cellHeight;
 
         uint cx2 = cx + letterwidth;
 
-        uint cy2 = cy + fData.cellHeight;
+        uint cy2 = cy + mainFontData.fontHeight;
 
-        float s1 = float(cx) / float(fData.pictureWidth);
+        float s1 = float(cx) / float(mainFontData.pictureWidth);
 
-        float t1 = float(cy) / float(fData.pictureHeight);
+        float t1 = float(cy) / float(mainFontData.pictureHeight);
 
-        float s2 = float(cx2) / float(fData.pictureWidth);
+        float s2 = float(cx2) / float(mainFontData.pictureWidth);
 
-        float t2 = float(cy2) / float(fData.pictureHeight);
+        float t2 = float(cy2) / float(mainFontData.pictureHeight);
+
+        float textHorizontalStride = (uiSize.x * invAspect * (float(letterwidth)/float(mainFontData.cellWidth)));
 
         float left = textCurrPos.x;
-        float right = textCurrPos.x + textStride.x;
+        float right = textCurrPos.x + textHorizontalStride;
         float top = textCurrPos.y;
-        float bottom = textCurrPos.y + textStride.y;
+        float bottom = textCurrPos.y + textHeight;
 
         textVertices.textVerts[iter+0].pos = vec2(left, top);
         textVertices.textVerts[iter+0].texCoords = vec2(s1, t1);
@@ -135,7 +134,7 @@ void main()
 
         iter += 4;
 
-        textCurrPos.x += textStride.x;
+        textCurrPos.x += textHorizontalStride;
     }
 
     comStructs.command[lIndex].vertexCount = i * 6; 

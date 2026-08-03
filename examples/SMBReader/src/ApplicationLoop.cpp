@@ -391,7 +391,8 @@ struct Font
 	uint32_t cellWidth, cellHeight;
 	uint32_t startingChar;
 	uint32_t widthSize;
-	uint32_t pad[2];
+	uint32_t lettersPerRow;
+	uint32_t fontHeight;
 	int fontWidths[256];
 };
 
@@ -704,6 +705,10 @@ static int globalUITextGenerationPipeline = -1;
 static int globalUITextRenderingPipeline = -1;
 static int globalUITextDataPoolSize = 4 * KiB;
 static int globalUITextIndirectDispatchCommands = -1;
+static int globalUIFontWidthsBuffer = -1;
+static int globalUIFontWidthsBufferSize = 16 * KiB;
+
+static DeviceSlabAllocator globalUITextAllocator(4*KiB);
 
 static const char* globalUITestText = "Test";
 static const char* globalUITestText2 = "Test2";
@@ -717,8 +722,10 @@ static int globalUICount = 0;
 static int globalUIMaxDepth = 3;
 static Vector2i tempCursorPos = { 200, 200 };
 
-static Font mainFontData;
-static int mainFontImage;
+static Font mainFontData[16];
+static int mainFontImage[16];
+static int globalUIFontAllocIndex = 0;
+static ShaderResourceSetHandle globalFontImageDescriptor;
 
 static std::array<int, DEPTH_MAX+2> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
 
@@ -869,9 +876,10 @@ static bool MoveCamera(double fps);
 static void CreateGPUGenericObjects();
 
 static void CreateUITools(int maxUIContainers);
-static int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font);
+static int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHeight);
+static void CreateUIText(UIContainer* container, const char* text, int textLength);
+static void CreateFontWidths(Font* font, char* fontData, int fontHeight);
 
-static void CreateFontWidths(Font* font, char* fontData);
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
 	running(true),
@@ -1277,6 +1285,12 @@ void ApplicationLoop::Execute()
 				GlobalRenderer::gRenderInstance.SubmitFrame(mainLogicalDevice, mainPresentationSwapChain, swcImageIndex);
 
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
+
+				//static UITextVertex vertices[10];
+
+				//static Font fontData;
+
+				//GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIFontData, &fontData, sizeof(fontData), 0);
 
 				running = ProcessCommands();
 
@@ -4048,11 +4062,12 @@ void ApplicationLoop::InitializeRuntime()
 	StringView fontName = STRING_VIEW_FROM_LITERAL("Font.bmp");
 	StringView fontDataName = STRING_VIEW_FROM_LITERAL("FontData.dat");
 
-	mainFontImage = CreateFontTexture(&fontName, &fontDataName, &mainFontData);
-
 	CreateUITools(25);
 
-	
+	CreateFontTexture(&fontName, &fontDataName, 20);
+
+	CreateUIText(&mainCenterContainer, globalUITestText, sizeof(globalUITestText) - 1);
+	CreateUIText(&mainRightContainer, globalUITestText2, sizeof(globalUITestText2) - 1);
 
 	if (creationRetSB < 0 ||
 		creationRetDB < 0 ||
@@ -5418,9 +5433,6 @@ void CreateGPUGenericObjects()
 	CreateRenderable(cpuMeshRenderable, gpuMeshRendrables, Identity4f(), gpuGeomRenderable, materialRangeIndex, 1, blendRangesIndex, meshGPUIndex, 1);
 }
 
-
-
-
 void CreateUITools(int maxUIContainers)
 {
 	globalUIContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIContainer), maxUIContainers, alignof(UIContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5435,7 +5447,7 @@ void CreateUITools(int maxUIContainers)
 	globalUIRetainedContainerData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UIRetainedContainer), maxUIContainers, alignof(UIRetainedContainer), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUICursorDetailData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(GPUCursorInfo), 1, alignof(GPUCursorInfo), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextIndirectDispatchCommands = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t) * 3, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
-
+	globalUIFontWidthsBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUIFontWidthsBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
 	globalUIFontData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(Font), 2, alignof(Font), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextDataPool = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUITextDataPoolSize, 1, alignof(uint32_t), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5447,9 +5459,7 @@ void CreateUITools(int maxUIContainers)
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainLeftContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainRightContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
 	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainCenterContainer, globalUIContainerData, sizeof(UIContainer), sizeof(UIContainer) * globalUICount++, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(&mainFontData, globalUIFontData, sizeof(Font), 0, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory((void*)globalUITestText, globalUITextDataPool, sizeof(char)*4, 0, TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory((void*)globalUITestText2, globalUITextDataPool, sizeof(char)*5, 4, TransferType::MEMORY);
+	
 
 	uint32_t commands[3] = { 0, 1, 1 };
 
@@ -5840,6 +5850,7 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIFontData, 0, 1, 4);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextVertexData, 0, 1, 5);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextIndirectCommands, 0, 1, 6);
+		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIFontWidthsBuffer, 0, 1, 7);
 
 		if (descriptorContext.contextFailed)
 		{
@@ -5870,12 +5881,10 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextVertexData, 0, 1, 1);
 
-		int viewIndex = 0;
-
-		descriptorBuilder.BindImageResourceToShaderResource(&descriptorContext, &mainDictionary.textureHandles[mainFontImage], &viewIndex, 1, 0, 2);
 		descriptorBuilder.BindSamplerResourceToShaderResource(&descriptorContext, &mainLinearSampler, 1, 0, 3);
 		descriptorBuilder.BindBufferView(&descriptorContext, &globalUITextToUIIDs, 0, 1, 4);
 		
+		globalFontImageDescriptor = descriptorBuilder();
 
 		if (descriptorContext.contextFailed)
 		{
@@ -5906,7 +5915,7 @@ void CreateUITools(int maxUIContainers)
 
 }
 
-int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font)
+int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHeight)
 {
 	OSFileHandle fileHandle{};
 
@@ -5926,12 +5935,28 @@ int CreateFontTexture(StringView* fontName, StringView* fontDataName, Font* font
 
 	OSCloseFile(&fileHandle);
 
-	CreateFontWidths(font, dataRead);
+	CreateFontWidths(&mainFontData[globalUIFontAllocIndex], dataRead, fontHeight);
+
+	DeviceHandleArrayUpdateTextureView arrayUpdateStruct{};
+
+	arrayUpdateStruct.imageHandle = mainDictionary.textureHandles[texture];
+	arrayUpdateStruct.viewIndex = 0;
+
+	DeviceHandleArrayUpdate update;
+
+	update.updateType = DeviceHandleArrayUpdateType::TEXTURE_VIEW_UPDATE;
+	update.resourceCount = 1;
+	update.resourceDstBegin = globalUIFontAllocIndex;
+	update.resourceHandles = &arrayUpdateStruct;
+
+	GlobalRenderer::gRenderInstance.UpdateShaderResourceArray(globalFontImageDescriptor, 2, ShaderResourceType::IMAGE2D, &update);
+
+	mainFontImage[globalUIFontAllocIndex++] = texture;
 
 	return texture;
 }
 
-void CreateFontWidths(Font* font, char* fontData)
+void CreateFontWidths(Font* font, char* fontData, int fontHeight)
 {
 	char* iter = fontData;
 	std::copy(iter, iter + 16, reinterpret_cast<char*>(font));
@@ -5949,4 +5974,22 @@ void CreateFontWidths(Font* font, char* fontData)
 		char width = *(iter + i);
 		font->fontWidths[i] = width;
 	}
+
+	font->lettersPerRow = font->pictureWidth / font->cellWidth;
+	font->fontHeight = fontHeight;
+
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font, globalUIFontData, sizeof(uint32_t) * 8, globalUIFontAllocIndex * (sizeof(uint32_t) * 8), TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font->fontWidths, globalUIFontWidthsBuffer, sizeof(uint32_t) * 256, globalUIFontAllocIndex  * sizeof(uint32_t) * 256, TransferType::MEMORY);
+}
+
+void CreateUIText(UIContainer* container, const char* text, int textLength)
+{
+	int textOffset = globalUITextAllocator.Allocate(textLength, 1);
+
+	if (text)
+	{
+		GlobalRenderer::gRenderInstance.UpdateDriverMemory((void*)text, globalUITextDataPool, sizeof(char) * textLength, textOffset, TransferType::MEMORY);
+	}
+
+	container->bitfields.z = PACK_TEXT_DATA(textOffset, textLength);
 }

@@ -69,9 +69,18 @@
 //bits 8-11 typeSpecificData
 //bit 12 orientation 
 
+
+// textRenderingInfo
+
+//bis 0-1 left/right/center justified
+//bits 2-5 font index
+//bits 6-13 text font size (squared size along both dims)
+//bits 14-22 bottom pad in percentage of size of container
+//bits 23-31 justified pad in percentage of size of container
+
 struct UIContainer
 {
-	Vector4ui bitfields;  // x - bitfields y - children count, z - parentIndex, w - childId  
+	Vector4ui bitfields;  // x - bitfields y - childIndex/children count/parentCount, z - textData, w - textRenderingInfo   
 	Vector4f color;
 	Vector4f padding; //padding top, bottom, left, right
 	Vector2f relativeContainerSize; // percent size of the canvas

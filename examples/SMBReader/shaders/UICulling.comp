@@ -4,14 +4,6 @@
 
 #include "include/UI.iglsl"
 
-struct VkDrawIndirectCommand 
-{
-    uint vertexCount;
-    uint instanceCount;
-    uint firstVertex;
-    uint firstInstance;
-};
-
 layout(push_constant) uniform GlobalContext 
 {
     uint containerCount;

@@ -13,10 +13,7 @@ layout(set = 0, binding = 3) uniform sampler samplerLinear;
 
 void main() 
 {
-    vec3 fontColor = texture(sampler2D(fontMap, samplerLinear), textCoords).rgb;
-
-    if (fontColor == vec3(0.0))
-        discard;
+    float alpha = texture(sampler2D(fontMap, samplerLinear), textCoords).r;
    
-    outColor = vec4(textColor.xyz * fontColor.xyz, 1.0);
+    outColor = vec4(textColor.xyz, alpha);
 }
