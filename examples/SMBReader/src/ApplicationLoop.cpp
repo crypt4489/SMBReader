@@ -393,6 +393,9 @@ struct Font
 	uint32_t widthSize;
 	uint32_t lettersPerRow;
 	uint32_t fontHeight;
+	uint32_t globalHeightModifier;
+	uint32_t globalWidthModifier;
+	uint32_t fontWidthsOffset;
 	int fontWidths[256];
 };
 
@@ -725,6 +728,7 @@ static Vector2i tempCursorPos = { 200, 200 };
 static Font mainFontData[16];
 static int mainFontImage[16];
 static int globalUIFontAllocIndex = 0;
+static DeviceSlabAllocator globalUIFontWidths{ 16 * KiB };
 static ShaderResourceSetHandle globalFontImageDescriptor;
 
 static std::array<int, DEPTH_MAX+2> depths = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
@@ -749,22 +753,22 @@ static UIContainer mainLeftContainer =
 
 static UIContainer mainRightContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 2, 0), PACK_TEXT_DATA(0, 4), 0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 2, 0), 0, PACK_TEXT_INFO(TEXT_INFO_JUSTIFICATION_LEFT, 0, 48, 0.05, 0.01)},
 	.color = MAKE_COLOR(54.0, 58.0, 67.0, 1.0),
 	.padding = {0.025, 0.0, 0.1, 0.1},
 	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), PACK_COLOR_10_11_10_1(15, 88, 235, 1), 0}
+	.packedData = {PACK_COLOR_10_11_10_1(0x54, 0x5A, 0x67, 1.0), PACK_COLOR_10_11_10_1(118, 130, 156, 1), PACK_COLOR_10_11_10_1(0, 0, 0, 1), 0}
 };
 
 static UIContainer mainCenterContainer =
 {
-	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 1, 0), PACK_TEXT_DATA(4, 5), 0},
+	.bitfields = {MAKE_TYPE_SPECIFIC_DATA(0) | MAKE_TYPE(0) | MAKE_DEPTH(2), PACK_PARENT_CHILD_INFO(1, 1, 0), 0, PACK_TEXT_INFO(TEXT_INFO_JUSTIFICATION_LEFT, 1, 64, 0.05, 0.01)},
 	.color = MAKE_COLOR(65.0, 70.0, 80.0, 1.0),
 	.padding = {0.1, 0.000, 0.1, .1 },
 	.relativeContainerSize = {0.8f, 0.05f},
 	.structPad = {0.0, 0.0},
-	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), PACK_COLOR_10_11_10_1(15, 88, 235, 1), 0}
+	.packedData = {PACK_COLOR_10_11_10_1(255.0, 255.0, 255.0, 1.0), PACK_COLOR_10_11_10_1(115, 155, 235, 1), PACK_COLOR_10_11_10_1(0, 0, 0, 1), 0}
 };
 
 struct WindowSize
@@ -876,9 +880,9 @@ static bool MoveCamera(double fps);
 static void CreateGPUGenericObjects();
 
 static void CreateUITools(int maxUIContainers);
-static int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHeight);
+static int CreateFontTexture(StringView* fontName, StringView* fontDataName, uint32_t fontHeight, uint32_t globalHeightModifier, uint32_t globalWidthModifier);
 static void CreateUIText(UIContainer* container, const char* text, int textLength);
-static void CreateFontWidths(Font* font, char* fontData, int fontHeight);
+static void CreateFontWidths(Font* font, char* fontData, uint32_t fontHeight, uint32_t globalHeightModifier, uint32_t globalWidthModifier);
 
 ApplicationLoop::ApplicationLoop(ProgramArgs& _args) :
 	args(_args),
@@ -1286,11 +1290,11 @@ void ApplicationLoop::Execute()
 
 				GlobalRenderer::gRenderInstance.EndFrame(mainCommandStreamIndex, mainLogicalDevice);
 
-				//static UITextVertex vertices[10];
+				//static UITextVertex vertices[64];
 
 				//static Font fontData;
 
-				//GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUIFontData, &fontData, sizeof(fontData), 0);
+				//GlobalRenderer::gRenderInstance.ReadData(mainLogicalDevice, globalUITextVertexData, vertices, sizeof(vertices), 0);
 
 				running = ProcessCommands();
 
@@ -4061,10 +4065,14 @@ void ApplicationLoop::InitializeRuntime()
 
 	StringView fontName = STRING_VIEW_FROM_LITERAL("Font.bmp");
 	StringView fontDataName = STRING_VIEW_FROM_LITERAL("FontData.dat");
+	StringView font2Name = STRING_VIEW_FROM_LITERAL("Font2.bmp");
+	StringView font2DataName = STRING_VIEW_FROM_LITERAL("Font2Data.dat");
 
 	CreateUITools(25);
 
-	CreateFontTexture(&fontName, &fontDataName, 20);
+	CreateFontTexture(&font2Name, &fontDataName, 20, 3, 0);
+	CreateFontTexture(&fontName, &fontDataName, 20, 5, 0);
+	
 
 	CreateUIText(&mainCenterContainer, globalUITestText, sizeof(globalUITestText) - 1);
 	CreateUIText(&mainRightContainer, globalUITestText2, sizeof(globalUITestText2) - 1);
@@ -4077,7 +4085,7 @@ void ApplicationLoop::InitializeRuntime()
 		creationRetSM < 0 ||
 		creationRetFS < 0)
 	{
-		mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Shutting down environment, cannot create minimal sandbox"));
+		mainAppLogger.AddLogMessage(LOGINFO, STRING_VIEW_FROM_LITERAL("Shutting down environment, cannot create minimum sandbox"));
 		return;
 	}
 
@@ -5449,7 +5457,7 @@ void CreateUITools(int maxUIContainers)
 	globalUITextIndirectDispatchCommands = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t) * 3, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUIFontWidthsBuffer = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUIFontWidthsBufferSize, 1, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 
-	globalUIFontData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(Font), 2, alignof(Font), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
+	globalUIFontData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t) * 12, 16, alignof(Font), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextDataPool = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, globalUITextDataPoolSize, 1, alignof(uint32_t), AllocationType::STATIC, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextToUIIDs = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(uint32_t), maxUIContainers, alignof(uint32_t), AllocationType::PERFRAME, ComponentFormatType::R32_UINT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
 	globalUITextVertexData = GlobalRenderer::gRenderInstance.GetAllocFromBuffer(mainLogicalDevice, mainHostBuffer, sizeof(UITextVertex), 256, alignof(UITextVertex), AllocationType::PERFRAME, ComponentFormatType::NO_BUFFER_FORMAT, BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT, &mainHostAllocator);
@@ -5915,7 +5923,7 @@ void CreateUITools(int maxUIContainers)
 
 }
 
-int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHeight)
+int CreateFontTexture(StringView* fontName, StringView* fontDataName, uint32_t fontHeight, uint32_t globalHeightModifier, uint32_t globalWidthModifier)
 {
 	OSFileHandle fileHandle{};
 
@@ -5935,7 +5943,7 @@ int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHe
 
 	OSCloseFile(&fileHandle);
 
-	CreateFontWidths(&mainFontData[globalUIFontAllocIndex], dataRead, fontHeight);
+	CreateFontWidths(&mainFontData[globalUIFontAllocIndex], dataRead, fontHeight, globalHeightModifier, globalWidthModifier);
 
 	DeviceHandleArrayUpdateTextureView arrayUpdateStruct{};
 
@@ -5956,7 +5964,7 @@ int CreateFontTexture(StringView* fontName, StringView* fontDataName, int fontHe
 	return texture;
 }
 
-void CreateFontWidths(Font* font, char* fontData, int fontHeight)
+void CreateFontWidths(Font* font, char* fontData, uint32_t fontHeight, uint32_t globalHeightModifier, uint32_t globalWidthModifier)
 {
 	char* iter = fontData;
 	std::copy(iter, iter + 16, reinterpret_cast<char*>(font));
@@ -5977,9 +5985,15 @@ void CreateFontWidths(Font* font, char* fontData, int fontHeight)
 
 	font->lettersPerRow = font->pictureWidth / font->cellWidth;
 	font->fontHeight = fontHeight;
+	font->globalHeightModifier = globalHeightModifier;
+	font->globalWidthModifier = globalWidthModifier;
 
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font, globalUIFontData, sizeof(uint32_t) * 8, globalUIFontAllocIndex * (sizeof(uint32_t) * 8), TransferType::MEMORY);
-	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font->fontWidths, globalUIFontWidthsBuffer, sizeof(uint32_t) * 256, globalUIFontAllocIndex  * sizeof(uint32_t) * 256, TransferType::MEMORY);
+	uint32_t fontWidthPosition = (uint32_t)globalUIFontWidths.Allocate(sizeof(uint32_t) * font->widthSize, 1);
+
+	font->fontWidthsOffset = fontWidthPosition / sizeof(uint32_t);
+
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font, globalUIFontData, sizeof(uint32_t) * 11, globalUIFontAllocIndex * (sizeof(uint32_t) * 12), TransferType::MEMORY);
+	GlobalRenderer::gRenderInstance.UpdateDriverMemory(font->fontWidths, globalUIFontWidthsBuffer, sizeof(uint32_t) * font->widthSize, fontWidthPosition, TransferType::MEMORY);
 }
 
 void CreateUIText(UIContainer* container, const char* text, int textLength)

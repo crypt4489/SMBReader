@@ -10,7 +10,7 @@
 		</ShaderResourceItem>
 		<ShaderResourceItem type="storage" used="v" rw="read">
 		</ShaderResourceItem>
-		<ShaderResourceItem type="image2D" used="f">
+		<ShaderResourceItem type="image2D" used="f" count="16">
 		</ShaderResourceItem>
 		<ShaderResourceItem type="sampler" used="f">
 		</ShaderResourceItem>

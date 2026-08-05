@@ -5,6 +5,7 @@
 
 #include "include/UI.iglsl"
 
+#define BITMAP_FONT_BOTTOM_ADJUSTED 2
 
 layout(set = 0, binding = 0) readonly buffer UIContainers
 {
@@ -51,40 +52,59 @@ void main()
 
     uint uiIndex = uint(texelFetch(UITextToContainerID, int(lIndex)).r);
 
-    uint bitfields = conts.renderables[uiIndex].bitfields.z;
+    uvec2 bitfields = conts.renderables[uiIndex].bitfields.zw;
 
-    uint textSize = GET_TEXT_SIZE(bitfields);
+    uint textSize = GET_TEXT_SIZE(bitfields.x);
 
-    uint textOffset = GET_TEXT_BUFFER_LOCATION(bitfields);
+    uint textOffset = GET_TEXT_BUFFER_LOCATION(bitfields.x);
+
+    uint fontIndex = GET_TEXT_INFO_FONT_INDEX(bitfields.y);
+
+    float requestedFontSize = max(float(GET_TEXT_INFO_FONT_SIZE(bitfields.y)), 1.0);
+
+    float justifiedPad = GET_TEXT_INFO_JUSTIFIED_PAD(bitfields.y);
+    
+    float bottomPad = GET_TEXT_INFO_BOTTOM_PAD(bitfields.y);
 
     vec2 uiSize = retainedConts.renderables[uiIndex].absoluteSize; 
   
     vec2 uiStart = retainedConts.renderables[uiIndex].anchorPoint; 
 
-    FontDataStruct mainFontData = fData.fData[0];
+    FontDataStruct mainFontData = fData.fData[fontIndex];
+
+    vec2 fontScale = vec2(requestedFontSize / float(mainFontData.cellWidth), requestedFontSize / float(mainFontData.cellHeight));
+
+    float fontHeight = float(mainFontData.fontHeight - mainFontData.globalHeightModifier - BITMAP_FONT_BOTTOM_ADJUSTED);
+
+    vec2 drawWidthHeight = vec2(float(mainFontData.cellWidth), float(mainFontData.cellHeight));
+
+    vec2 fPicWidthHeight = vec2(float(mainFontData.pictureWidth), float(mainFontData.pictureHeight));
 
     float invAspect = uiSize.y / uiSize.x;
 
-    float textHeight = uiSize.y * (float(mainFontData.fontHeight) / float(mainFontData.cellHeight));
+    float textHeight = (uiSize.y * (fontHeight / drawWidthHeight.y)) * fontScale.y;
+
+    float textHangOver = min(uiSize.y / textHeight, 1.0);
+
+     textHeight = min(textHeight, uiSize.y);
     
-    float padleft = uiSize.x * 0.05;
+    float padJust = uiSize.x * justifiedPad;
 
-    float padTop = uiSize.y - (textHeight + (uiSize.y * 0.01));
+    float padTop = max(uiSize.y - (textHeight + (uiSize.y * bottomPad)), 0.0);
    
-    vec2 textCurrPos = vec2(padleft, padTop) + uiStart;
+    vec2 textCurrPos = vec2(padJust, padTop) + uiStart;
 
-    uint LETTERSPERROW = mainFontData.lettersPerRow;
-
-    uint vertexStart = textOffset * 4;
-
-    uint iter = vertexStart;
-
-    uint fontWidthOffset = 256 * 0;
+    uint iter = textOffset * 4;
 
     uint i = 0;
 
     for (; i<textSize; i++)
     {
+        if (textCurrPos.x >= uiSize.x)
+        {
+            break;
+        }
+
         uint letter = uint(textPool.text[i+textOffset]); 
 
         if (letter < mainFontData.startingChar)
@@ -94,43 +114,39 @@ void main()
 
         letter -= mainFontData.startingChar;
 
-        uint tx = (letter % LETTERSPERROW);
+        uint tx = (letter % mainFontData.lettersPerRow);
 
-        uint ty = (letter / LETTERSPERROW);
+        uint ty = (letter /  mainFontData.lettersPerRow);
 
-        int letterwidth = fontWidths.fontWidths[letter+fontWidthOffset];
+        float letterwidth = float(fontWidths.fontWidths[letter+mainFontData.fontWidthOffset]);
 
-        uint cx = tx * mainFontData.cellWidth;
+        float textHorizontalStride = (uiSize.x * invAspect * ((letterwidth * fontScale.x) / drawWidthHeight.x));
 
-        uint cy = ty * mainFontData.cellHeight;
+        float textHangOverWidth = min((uiSize.x + uiStart.x) / (textCurrPos.x + textHorizontalStride), 1.0);
 
-        uint cx2 = cx + letterwidth;
-
-        uint cy2 = cy + mainFontData.fontHeight;
-
-        float s1 = float(cx) / float(mainFontData.pictureWidth);
-
-        float t1 = float(cy) / float(mainFontData.pictureHeight);
-
-        float s2 = float(cx2) / float(mainFontData.pictureWidth);
-
-        float t2 = float(cy2) / float(mainFontData.pictureHeight);
-
-        float textHorizontalStride = (uiSize.x * invAspect * (float(letterwidth)/float(mainFontData.cellWidth)));
+        textHorizontalStride *= textHangOverWidth;
 
         float left = textCurrPos.x;
         float right = textCurrPos.x + textHorizontalStride;
         float top = textCurrPos.y;
         float bottom = textCurrPos.y + textHeight;
 
+        vec2 cxy1 = vec2(float(tx * mainFontData.cellWidth), float(ty * mainFontData.cellHeight + mainFontData.globalHeightModifier));
+
+        vec2 cxy2 = vec2(cxy1.x + (letterwidth * textHangOverWidth), cxy1.y + (fontHeight * textHangOver));
+
+        vec2 st1 = cxy1 / fPicWidthHeight; 
+
+        vec2 st2 = cxy2 / fPicWidthHeight; 
+
         textVertices.textVerts[iter+0].pos = vec2(left, top);
-        textVertices.textVerts[iter+0].texCoords = vec2(s1, t1);
+        textVertices.textVerts[iter+0].texCoords = st1;
         textVertices.textVerts[iter+1].pos = vec2(right, top);
-        textVertices.textVerts[iter+1].texCoords = vec2(s2, t1);
+        textVertices.textVerts[iter+1].texCoords = vec2(st2.x, st1.y);
         textVertices.textVerts[iter+2].pos = vec2(left, bottom);
-        textVertices.textVerts[iter+2].texCoords = vec2(s1, t2);
+        textVertices.textVerts[iter+2].texCoords = vec2(st1.x, st2.y);
         textVertices.textVerts[iter+3].pos = vec2(right, bottom);
-        textVertices.textVerts[iter+3].texCoords = vec2(s2, t2);
+        textVertices.textVerts[iter+3].texCoords = st2;
 
         iter += 4;
 

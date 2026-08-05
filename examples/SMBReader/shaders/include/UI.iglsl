@@ -52,6 +52,40 @@
 #define HAS_TEXT_OFFSET 31
 #define GET_HAS_TEXT(packed) (((packed) >> HAS_TEXT_OFFSET) & 1)
 
+#define TEXT_INFO_JUSTIFICATION_LEFT 0
+#define TEXT_INFO_JUSTIFICATION_RIGHT 1
+#define TEXT_INFO_JUSTIFICATION_CENTER 2
+
+#define TEXT_INFO_JUSTIFICATION_OFFSET 0
+#define TEXT_INFO_JUSTIFICATION_MASK 3
+
+#define TEXT_INFO_FONT_INDEX_OFFSET 2
+#define TEXT_INFO_FONT_INDEX_MASK   0xF
+
+#define TEXT_INFO_FONT_SIZE_OFFSET 6
+#define TEXT_INFO_FONT_SIZE_MASK   0xFF
+
+#define TEXT_INFO_BOTTOM_PAD_OFFSET 14
+#define TEXT_INFO_BOTTOM_PAD_MASK   0x1FF
+
+#define TEXT_INFO_JUSTIFIED_PAD_OFFSET 23
+#define TEXT_INFO_JUSTIFIED_PAD_MASK   0x1FF
+
+#define GET_TEXT_INFO_JUSTIFICATION(packed) \
+    (((packed) >> TEXT_INFO_JUSTIFICATION_OFFSET) & TEXT_INFO_JUSTIFICATION_MASK)
+
+#define GET_TEXT_INFO_FONT_INDEX(packed) \
+    (((packed) >> TEXT_INFO_FONT_INDEX_OFFSET) & TEXT_INFO_FONT_INDEX_MASK)
+
+#define GET_TEXT_INFO_FONT_SIZE(packed) \
+    (((packed) >> TEXT_INFO_FONT_SIZE_OFFSET) & TEXT_INFO_FONT_SIZE_MASK)
+
+#define GET_TEXT_INFO_BOTTOM_PAD(packed) \
+    (float(((packed) >> TEXT_INFO_BOTTOM_PAD_OFFSET) & TEXT_INFO_BOTTOM_PAD_MASK) / float(TEXT_INFO_BOTTOM_PAD_MASK))
+
+#define GET_TEXT_INFO_JUSTIFIED_PAD(packed) \
+    (float(((packed) >> TEXT_INFO_JUSTIFIED_PAD_OFFSET) & TEXT_INFO_JUSTIFIED_PAD_MASK) / float(TEXT_INFO_JUSTIFIED_PAD_MASK))
+
 struct UIContainer
 {
 	uvec4 bitfields;  // // x - bitfields y - childIndex/children count/parentCount, z - textData, w - textRenderingInfo  
@@ -89,6 +123,10 @@ struct FontDataStruct
 	uint widthSize;
     uint lettersPerRow;
     uint fontHeight;
+    uint globalHeightModifier;
+	uint globalWidthModifier;
+    uint fontWidthOffset;
+    uint pad1;
 };
 
 struct VkDrawIndirectCommand 
