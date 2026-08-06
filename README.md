@@ -116,12 +116,12 @@ Finish render instance based on minimum specs for both Vulkan and DX12
 - Accurately handle fallback and failure designations at all levels.
 - Separate all vulkan specific functions or things that need to know it's using vulkan to separate file with compile type linking.
 - Make robust all bounds checking, add failure designation to all possible failure (including integration with new vulkan failure designation and error handling)
-- remove any stl crap
+- remove any stl
 
 Finish app level architecture
 - Finish OS systems in windows and remove bad design decisions (done).
   - Added Memory and Time OS modules (done).
-  - Removed all of std::filesystem crap (done).
+  - Removed all of std::filesystem (done).
   - Added MPMC queue for free list to make multi threaded (done).
   - Consistent error handling from API return codes (done).
   - Bulk Memory Allocations tracking with block header system for O(1) lookup (done).
