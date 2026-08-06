@@ -555,6 +555,7 @@ static CircularMessageQueueMPSC RenderableAllocQueue{ RenderableAllocQueueMemory
 static Logger mainAppLogger{};
 
 static int mainLinearSampler = -1;
+static int mainNearestSampler = -1;
 
 static uint32_t swcImageIndex = 0;
 
@@ -3797,7 +3798,7 @@ void ApplicationLoop::InitializeRuntime()
 	riCreateInfo.maxSubAllocations = 30;
 	riCreateInfo.maxGPUCommandsStreams = 1;
 	riCreateInfo.maxTextureHandles = 100;
-	riCreateInfo.maxSamplerHandles = 1;
+	riCreateInfo.maxSamplerHandles = 5;
 	riCreateInfo.maxResourceStatuses = 125;
 	riCreateInfo.commandBuffersSize = 32 * KiB;
 	riCreateInfo.commandsCacheSize = 64 * KiB;
@@ -3971,7 +3972,19 @@ void ApplicationLoop::InitializeRuntime()
 
 	GlobalRenderer::gRenderInstance.CreateShaderGraphs(mainLogicalDevice, layouts.data(), layouts.size());
 
-	mainLinearSampler = GlobalRenderer::gRenderInstance.CreateSampler(mainLogicalDevice, 7);
+	mainLinearSampler = GlobalRenderer::gRenderInstance.CreateSampler(mainLogicalDevice, 
+		0, 7, 
+		SamplerFilterMode::FILTER_LINEAR, SamplerFilterMode::FILTER_LINEAR, 
+		SamplerAddressMode::ADDRESS_REPEAT, SamplerMipmapMode::MIPMAP_MODE_LINEAR,
+		CompareOp::LESS
+	);
+
+	mainNearestSampler = GlobalRenderer::gRenderInstance.CreateSampler(mainLogicalDevice, 
+		0, 7, 
+		SamplerFilterMode::FILTER_NEAREST, SamplerFilterMode::FILTER_NEAREST, 
+		SamplerAddressMode::ADDRESS_REPEAT, SamplerMipmapMode::MIPMAP_MODE_NEAREST,
+		CompareOp::LESS
+	);
 
 	std::array frameGraphs = { MSAAShadowMapping, BasicShadow };
 	std::array frameRenderPassSelection = { 0, 2, 1 };
@@ -5888,7 +5901,7 @@ void CreateUITools(int maxUIContainers)
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUIContainerData, 0, 1, 0);
 		descriptorBuilder.BindBufferToShaderResource(&descriptorContext, &globalUITextVertexData, 0, 1, 1);
 
-		descriptorBuilder.BindSamplerResourceToShaderResource(&descriptorContext, &mainLinearSampler, 1, 0, 3);
+		descriptorBuilder.BindSamplerResourceToShaderResource(&descriptorContext, &mainNearestSampler, 1, 0, 3);
 		descriptorBuilder.BindBufferView(&descriptorContext, &globalUITextToUIIDs, 0, 1, 4);
 		
 		globalFontImageDescriptor = descriptorBuilder();

@@ -14,7 +14,7 @@ namespace API
 {
 	VkFormat ConvertComponentFormatTypeToVulkanFormat(ComponentFormatType type);
 
-	VkCompareOp ConvertRasterizerTestToVulkanCompareOp(RasterizerTest testApp);
+	VkCompareOp ConvertCompareOpToVulkanCompareOp(CompareOp testApp);
 
 	VkFormat ConvertImageFormatToVulkanFormat(ImageFormat format);
 
@@ -53,6 +53,12 @@ namespace API
 	VkBlendOp ConvertBlendOpToVulkanBlendOp(BlendOp op);
 
 	VkLogicOp ConvertBlendLogicOpToVulkanLogicOp(BlendLogicOp op);
+
+	VkFilter ConvertSamplerFilterModeToVulkanFilter(SamplerFilterMode filterMode);
+
+	VkSamplerAddressMode ConvertSamplerAddressModeToVulkanSamplerAddressMode(SamplerAddressMode addressMode);
+
+	VkSamplerMipmapMode ConvertSamplerMipmapModeToVulkanSamplerMipmapMode(SamplerMipmapMode mipmapMode);
 }
 
 struct RenderInstanceCreateInfo
@@ -218,7 +224,12 @@ struct RenderInstance
 
 	void SwapUpdateCommands();
 
-	int CreateSampler(int deviceSelection, uint32_t maxMipsLevel);
+	int CreateSampler(
+		int deviceSelection, uint32_t baseLod, uint32_t maxLod, 
+		SamplerFilterMode minFilter, SamplerFilterMode magFilter, 
+		SamplerAddressMode addressMode, SamplerMipmapMode mipmapMode, 
+		CompareOp compareOp
+	);
 
 	ImageFormat FindSupportedBackBufferColorFormat(int physicalDeviceIndex, int surfaceLevel, ImageFormat* requestedFormats, uint32_t requestSize);
 	ImageFormat FindSupportedDepthFormat(int deviceSelection, ImageFormat* requestedFormats, uint32_t requestSize);

@@ -27,7 +27,7 @@ struct PrimitiveXMLTag : PipelineXMLTag
 struct DepthXMLTag : PipelineXMLTag
 {
 	bool enabled;
-	RasterizerTest depthOp;
+	CompareOp depthOp;
 };
 
 struct CullModeXMLTag : PipelineXMLTag

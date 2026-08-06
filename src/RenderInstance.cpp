@@ -95,41 +95,41 @@ namespace API
 		return format;
 	}
 
-	VkCompareOp ConvertRasterizerTestToVulkanCompareOp(RasterizerTest testApp)
+	VkCompareOp ConvertCompareOpToVulkanCompareOp(CompareOp testApp)
 	{
 		VkCompareOp ret = VK_COMPARE_OP_ALWAYS;
 
 		switch (testApp)
 		{
-		case RasterizerTest::NEVER:
+		case CompareOp::NEVER:
 			ret = VK_COMPARE_OP_NEVER;
 			break;
 
-		case RasterizerTest::LESS:
+		case CompareOp::LESS:
 			ret = VK_COMPARE_OP_LESS;
 			break;
 
-		case RasterizerTest::EQUAL:
+		case CompareOp::EQUAL:
 			ret = VK_COMPARE_OP_EQUAL;
 			break;
 
-		case RasterizerTest::LESSEQUAL:
+		case CompareOp::LESSEQUAL:
 			ret = VK_COMPARE_OP_LESS_OR_EQUAL;
 			break;
 
-		case RasterizerTest::GREATER:
+		case CompareOp::GREATER:
 			ret = VK_COMPARE_OP_GREATER;
 			break;
 
-		case RasterizerTest::NOTEQUAL:
+		case CompareOp::NOTEQUAL:
 			ret = VK_COMPARE_OP_NOT_EQUAL;
 			break;
 
-		case RasterizerTest::GREATEREQUAL:
+		case CompareOp::GREATEREQUAL:
 			ret = VK_COMPARE_OP_GREATER_OR_EQUAL;
 			break;
 
-		case RasterizerTest::ALLPASS:
+		case CompareOp::ALLPASS:
 			ret = VK_COMPARE_OP_ALWAYS;
 			break;
 
@@ -407,7 +407,7 @@ namespace API
 		state.failOp = ConvertStencilOpToVulkan(face.failOp);
 		state.passOp = ConvertStencilOpToVulkan(face.passOp);
 		state.depthFailOp = ConvertStencilOpToVulkan(face.depthFailOp);
-		state.compareOp = ConvertRasterizerTestToVulkanCompareOp(face.stencilCompare);
+		state.compareOp = ConvertCompareOpToVulkanCompareOp(face.stencilCompare);
 
 		state.compareMask = static_cast<uint32_t>(face.compareMask);
 		state.writeMask = static_cast<uint32_t>(face.writeMask);
@@ -647,6 +647,72 @@ namespace API
 		}
 
 		return vkOp;
+	}
+
+	VkFilter ConvertSamplerFilterModeToVulkanFilter(SamplerFilterMode filterMode)
+	{
+		VkFilter filter = VK_FILTER_NEAREST;
+
+		switch (filterMode)
+		{
+		case SamplerFilterMode::FILTER_NEAREST:
+			filter = VK_FILTER_NEAREST;
+			break;
+
+		case SamplerFilterMode::FILTER_LINEAR:
+			filter = VK_FILTER_LINEAR;
+			break;
+		}
+
+		return filter;
+	}
+
+	VkSamplerAddressMode ConvertSamplerAddressModeToVulkanSamplerAddressMode(SamplerAddressMode addressMode)
+	{
+		VkSamplerAddressMode mode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+
+		switch (addressMode)
+		{
+		case SamplerAddressMode::ADDRESS_REPEAT:
+			mode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			break;
+
+		case SamplerAddressMode::ADDRESS_MIRRORED_REPEAT:
+			mode = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+			break;
+
+		case SamplerAddressMode::ADDRESS_CLAMP_TO_EDGE:
+			mode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+
+		case SamplerAddressMode::ADDRESS_CLAMP_TO_BORDER:
+			mode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+			break;
+
+		case SamplerAddressMode::ADDRESS_MIRROR_CLAMP_TO_EDGE:
+			mode = VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+			break;
+		}
+
+		return mode;
+	}
+
+	VkSamplerMipmapMode ConvertSamplerMipmapModeToVulkanSamplerMipmapMode(SamplerMipmapMode mipmapMode)
+	{
+		VkSamplerMipmapMode mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+		switch (mipmapMode)
+		{
+		case SamplerMipmapMode::MIPMAP_MODE_NEAREST:
+			mode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+			break;
+
+		case SamplerMipmapMode::MIPMAP_MODE_LINEAR:
+			mode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
+		}
+
+		return mode;
 	}
 }
 
@@ -2163,7 +2229,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 	VkStencilOpState frontState = API::ConvertFaceStencilDataToVulkan(stateInfo->frontFace);
 	VkStencilOpState backState = API::ConvertFaceStencilDataToVulkan(stateInfo->backFace);
 
-	pipelineBuilder->CreateDepthStencil(API::ConvertRasterizerTestToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthEnable, stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
+	pipelineBuilder->CreateDepthStencil(API::ConvertCompareOpToVulkanCompareOp(stateInfo->depthTest), stateInfo->depthEnable, stateInfo->depthWrite, stateInfo->StencilEnable, &frontState, &backState);
 
 	AttachmentRenderPassInstance* rendPassInst = &graphInstance->passes[graphRenderPassIndex];
 
@@ -3634,13 +3700,25 @@ ImageFormat RenderInstance::FindSupportedDepthFormat(int deviceSelection, ImageF
 	return ImageFormat::IMAGE_UNKNOWN;
 }
 
-int RenderInstance::CreateSampler(int deviceSelection, uint32_t maxMipsLevel)
+int RenderInstance::CreateSampler(int deviceSelection, uint32_t baseLod, uint32_t maxLod, SamplerFilterMode minFilter, SamplerFilterMode magFilter, SamplerAddressMode addressMode, SamplerMipmapMode mipmapMode, CompareOp compareOp)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
 	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
 
-	EntryHandle samplerHandle = dev->CreateSampler(maxMipsLevel);
+	VkSamplerAddressMode mode = API::ConvertSamplerAddressModeToVulkanSamplerAddressMode(addressMode);
+
+	EntryHandle samplerHandle = dev->CreateSampler(
+		API::ConvertSamplerFilterModeToVulkanFilter(minFilter), 
+		API::ConvertSamplerFilterModeToVulkanFilter(magFilter),
+		mode,
+		mode,
+		mode,
+		API::ConvertCompareOpToVulkanCompareOp(compareOp),
+		API::ConvertSamplerMipmapModeToVulkanSamplerMipmapMode(mipmapMode),
+		static_cast<float>(maxLod),
+		static_cast<float>(baseLod)
+	);
 
 	int samplerIndex = samplerResourceHandles.Allocate();
 

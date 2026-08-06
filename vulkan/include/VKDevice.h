@@ -415,7 +415,12 @@ struct VKDevice
 		VkCommandBufferLevel level
 	);
 
-	EntryHandle CreateSampler(uint32_t mipLevels);
+	EntryHandle CreateSampler(
+		VkFilter minFilter, VkFilter magFilter, 
+		VkSamplerAddressMode addressModeU, VkSamplerAddressMode addressModeV, 
+		VkSamplerAddressMode addressModeW, VkCompareOp compareOp, 
+		VkSamplerMipmapMode samplerMode, float maxLod, float minLod
+	);
 
 	EntryHandle* CreateSemaphores(uint32_t count);
 

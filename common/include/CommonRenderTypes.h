@@ -4,7 +4,7 @@
 #define UNBOUNDED_DESCRIPTOR_ARRAY (1u << 31)
 #define DESCRIPTOR_COUNT_MASK (0x7FFFFFFF)
 
-enum RasterizerTest
+enum CompareOp
 {
 	NEVER = 0,
 	LESS = 1,
@@ -316,7 +316,7 @@ struct FaceStencilData
 	StencilOp failOp;
 	StencilOp passOp;
 	StencilOp depthFailOp;
-	RasterizerTest stencilCompare;
+	CompareOp stencilCompare;
 	int writeMask;
 	int compareMask;
 	int reference;
@@ -370,7 +370,7 @@ struct GenericPipelineStateInfo
 	PrimitiveType primType;
 	float lineWidth;
 	TriangleWinding windingOrder;
-	RasterizerTest depthTest;
+	CompareOp depthTest;
 	FaceStencilData frontFace;
 	FaceStencilData backFace;
 	int sampleCountLow;
@@ -658,10 +658,30 @@ enum ImageUsageFlagBits
 	TRANSIENT_ATTACHMENT = 128,
 };
 
-
 enum class BarrierType
 {
 	NULL_BARRIER = 0,
 	BUFFER_BARRIER = 1,
 	IMAGE_BARRIER = 2,
+};
+
+enum class SamplerFilterMode
+{
+	FILTER_NEAREST = 1,
+	FILTER_LINEAR = 2,
+};
+
+enum class SamplerAddressMode
+{
+	ADDRESS_REPEAT = 1,
+	ADDRESS_MIRRORED_REPEAT = 2,
+	ADDRESS_CLAMP_TO_EDGE = 3,
+	ADDRESS_CLAMP_TO_BORDER = 4,
+	ADDRESS_MIRROR_CLAMP_TO_EDGE = 5
+};
+
+enum class SamplerMipmapMode
+{
+	MIPMAP_MODE_NEAREST = 1,
+	MIPMAP_MODE_LINEAR = 2,
 };

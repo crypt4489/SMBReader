@@ -1872,7 +1872,12 @@ EntryHandle VKDevice::CreateImageHandle(
 }
 */
 
-EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
+EntryHandle VKDevice::CreateSampler(
+	VkFilter minFilter, VkFilter magFilter,
+	VkSamplerAddressMode addressModeU, VkSamplerAddressMode addressModeV,
+	VkSamplerAddressMode addressModeW, VkCompareOp compareOp, 
+	VkSamplerMipmapMode samplerMode, float maxLod, float minLod
+)
 {
 	VkSampler sampler = VK_NULL_HANDLE;
 
@@ -1883,12 +1888,12 @@ EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 
 	VkSamplerCreateInfo samplerInfo{};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerInfo.magFilter = VK_FILTER_LINEAR;
-	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.magFilter = minFilter;
+	samplerInfo.minFilter = magFilter;
 
-	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeU = addressModeU;
+	samplerInfo.addressModeV = addressModeV;
+	samplerInfo.addressModeW = addressModeW;
 
 	samplerInfo.anisotropyEnable = VK_TRUE;
 	samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
@@ -1901,9 +1906,9 @@ EntryHandle VKDevice::CreateSampler(uint32_t mipLevels)
 	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 
 	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	samplerInfo.mipLodBias = 0.0f;
-	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = static_cast<float>(mipLevels);
+	samplerInfo.mipLodBias = samplerMode;
+	samplerInfo.minLod = minLod;
+	samplerInfo.maxLod = maxLod;
 
 	if ((vkRes = vkCreateSampler(device, &samplerInfo, nullptr, &sampler)) != VK_SUCCESS) 
 	{
