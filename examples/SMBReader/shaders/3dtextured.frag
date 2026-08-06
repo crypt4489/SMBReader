@@ -1,5 +1,11 @@
 #version 460
 #extension GL_EXT_nonuniform_qualifier : require
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/Math.iglsl"
+#include "include/Mesh.iglsl"
+#include "include/Lights.iglsl"
+
 layout(location = 0) in vec4 worldPosition;
 layout(location = 1) in vec2 texCoords[8];
 layout(location = 9) in vec3 inNormal;
@@ -8,95 +14,24 @@ layout(location = 11) flat in uint renderableIndex;
 layout(location = 12) in vec4 inTangent;
 layout(location = 0) out vec4 outColor;
 
-
-struct AABB
+layout(push_constant) uniform ShadowImageConstants 
 {
-    vec4 min;
-    vec4 max;
-};
-
-struct GeometryDetails
-{
-	AABB minMaxBox;
-};
-
-struct GeometryRenderable
-{
-	uint geomDescIndex;
-	uint renderableStart;
-	uint renderableCount;
-	uint pad1;
-	mat4 transform;
-};
-
-struct MeshRenderable
-{
-	uint meshIndex;
-	uint lightCount; 
-	uint instanceCount;
-	uint geomInstIndex;
-	uint lightIndices[4];
-	uint materialStart;
-	uint blendLayersStart;
-	uint materialCount;
-    uint pad2;
-	mat4 transform;
-};
-
-
-struct Plane
-{
-	vec4 pointInPlane;
-	vec4 planeEquation;
-};
-
-struct Frustum
-{
-	Plane nearplane;
-	Plane farplane;
-	Plane topplane;
-	Plane bottomplane;
-	Plane rightplane;
-	Plane leftplane;
-	float nearwidth;
-	float nearheight;
-	float farDistance;
-    float nearDistance;
-};
-
-layout(push_constant) uniform ShadowImageConstants {
     uint imageIndex;
     uint currentFrame;
 } sic;
 
-layout(set = 0, binding = 0) uniform GlobalContext {
+layout(set = 0, binding = 0) uniform GlobalContext 
+{
     mat4 view;
     mat4 proj;
     Frustum f;
     mat4 world;
 } gs;
 
-struct ShadowMapViewProj
-{
-    mat4 view;
-    mat4 proj;
-};
-
-
-
-struct ShadowMapView
-{
-	float xOff;
-	float yOff;
-	float xScale;
-	float yScale;
-};
-
-
-
 layout(set = 1, binding = 3) uniform texture2D Textures[];
 layout(set = 1, binding = 0) uniform sampler samplerLinear;
-layout(set = 1, binding = 1) readonly buffer ShadowMap {
+layout(set = 1, binding = 1) readonly buffer ShadowMap 
+{
     ShadowMapViewProj viewProjs[];
 } sm;
 
@@ -105,54 +40,27 @@ layout(set = 1, binding = 2) uniform shadowViews
     ShadowMapView views[128];
 } sv;
 
-struct LightSource
+layout(set = 2, binding = 3) readonly buffer GLBuffer 
 {
-	vec4 color; //w is diffuse intensity;
-	vec4 pos; //w is radius for point right
-	vec4 direction; //w is specular intensity;
-	vec4 ancillary; //for spot, x, y are cosine theta cutoffs //ambient for directional
-};
-
-layout(set = 2, binding = 3) readonly buffer GLBuffer {
     LightSource objects[];
 } lightBuffer;
 
 layout(set = 2, binding = 4) uniform usamplerBuffer globalLightTypes;
 
-const uint TANGENTNORMALMAPPED = 2u;
-const uint ALBEDOMAPPED = 4u;
-const uint WORLDNORMALMAPPED = 8u;
-const uint VERTEXNORMAL = 16u;
-
-struct Material
+layout(set = 2, binding = 5) uniform MaterialContext 
 {
-	uint materialFlags;
-	float shininess;
-	uint unused2;
-	uint unused3;
-	vec4 albedoColor;
-	uvec4 textureHandles; // y - normalMapCoordinates // x- albedo
-    vec4 emissive;
-    vec4 specular;
-};
-
-layout(set = 2, binding = 5) uniform MaterialContext {
    Material matsData[50];
 } mats;
 
-layout(set = 2, binding = 6) readonly buffer RENDBuffer {
+layout(set = 2, binding = 6) readonly buffer RENDBuffer 
+{
     MeshRenderable renderables[];
 } rends;
 
 layout(set = 2, binding = 7) uniform usamplerBuffer globalMaterialIndices;
 
-struct BlendDetails
+layout(set = 2, binding = 8) readonly buffer BLENDBuffer 
 {
-	uint type;
-    uint alphaMapHandleBlendFactor; //union based on type;
-};
-
-layout(set = 2, binding = 8) readonly buffer BLENDBuffer {
     BlendDetails details[];
 } blends;
 
@@ -204,7 +112,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, MeshRenderable currentRend
 
         vec3 lightDirection = light.direction.xyz;
         
-        if (lType == 0)
+        if (lType == LIGHT_TYPE_DIRECTIONAL)
         {
             vec3 lightingDir = normalize(-lightDirection); 
 
@@ -227,7 +135,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, MeshRenderable currentRend
             ShadowMapViewProj sViewProj = sm.viewProjs[currentLightIndex];
             ShadowMapView sViewRange = sv.views[currentLightIndex];
 
-            vec4 smTransCoords = sViewProj.proj * sViewProj.view * worldPosition;
+            vec4 smTransCoords = sViewProj.shadowMapProj * sViewProj.shadowMapView * worldPosition;
 
             vec3 projCoords = smTransCoords.xyz / smTransCoords.w;
 
@@ -253,7 +161,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, MeshRenderable currentRend
                 shadowColor = 0.0;
             }
         }
-        else if (lType == 1)
+        else if (lType == LIGHT_TYPE_POINT)
         {
             vec3 lightDir = normalize(light.pos.xyz - worldPos);
 
@@ -276,7 +184,7 @@ vec4 DoLights(vec3 normal, vec3 worldPos, vec4 color, MeshRenderable currentRend
             SpecularColor += lightColor * specularBase * specFactor * specularIntensity;
 
         }
-        else if (lType == 2)
+        else if (lType == LIGHT_TYPE_SPOT)
         {
             vec3 lightLook =  light.pos.xyz - worldPos;
 
@@ -329,10 +237,6 @@ PixelColorData ZeroColorData()
     return data;
 }
 
-
-const uint ConstantAlpha = 1;
-const uint BlendMap = 2;
-
 float GetPixelBlendWeight(BlendDetails details, uint textureIndex)
 {
     float ret = 1.0; 
@@ -350,12 +254,6 @@ float GetPixelBlendWeight(BlendDetails details, uint textureIndex)
     }
 
     return ret;
-}
-
-mat3 AdjointMatrix(mat4 worldTransform)
-{
-    mat3 scoped = mat3(worldTransform);
-    return transpose(determinant(scoped) * inverse(scoped));
 }
 
 void main() {

@@ -17,19 +17,6 @@ layout(push_constant) uniform GlobalContext
     float aspect;
 } gs;
 
-float roundCorners(vec2 pos, vec2 rectSize, float radius)
-{
-    vec2 d = abs(pos) - rectSize + radius;
-    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - radius;
-}
-
-float rectBorder(vec2 pos, vec2 rectSize, float margin)
-{
-    vec2 d = abs(pos) - (rectSize - margin);
-    
-    return (d.x<=0.0 && d.y<=0.0) ? 1.0 : 0.0; //within margin
-}
-
 void main() 
 {
     float alpha = 1.0;

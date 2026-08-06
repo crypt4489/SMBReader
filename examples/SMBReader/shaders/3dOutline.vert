@@ -1,114 +1,39 @@
 #version 460
 #extension GL_EXT_shader_8bit_storage : enable
 #extension GL_ARB_shader_draw_parameters : require
+#extension GL_GOOGLE_include_directive: require
 
-const uint POSITION = 1u;
-const uint TEXTURES1 = 2u;
-const uint TEXTURES2 = 4u;
-const uint TEXTURES3 = 8u;
-const uint NORMAL = 16u;
-const uint BONES2 = 32u;
-const uint COLOR = 64u;
-const uint TANGENT = 128u;
-const uint COMPRESSED = 0x80000000u;
+#include "include/Math.iglsl"
+#include "include/Mesh.iglsl"
+#include "include/Lights.iglsl"
 
-const float dx = 3.051851e-05;
-const float ax = 0.0009770395;
-const float bx = 0.0019550342;
-
-layout(push_constant) uniform OutlineContext {
+layout(push_constant) uniform OutlineContext 
+{
     vec4 color;
     float uniScale;
 } outline;
 
-
-struct AABB
-{
-    vec4 min;
-    vec4 max;
-};
-
-struct GeometryDetails
-{
-	AABB minMaxBox;
-};
-
-struct GeometryRenderable
-{
-	uint geomDescIndex;
-	uint renderableStart;
-	uint renderableCount;
-	uint pad1;
-	mat4 transform;
-};
-
-struct MeshRenderable
-{
-	uint meshIndex;
-	uint lightCount; 
-	uint instanceCount;
-	uint geomInstIndex;
-	uint lightIndices[4];
-	uint materialStart;
-	uint blendLayersStart;
-	uint materialCount;
-    uint pad2;
-	mat4 transform;
-};
-
-
-struct MeshDetails
-{
-    uint vertexComponents;
-    uint vertexStride;
-    uint indexCount;
-	uint firstIndex;
-    uint vertexByteOffset;
-    uint pad1;
-	uint pad2;
-	uint pad3;
-    vec4 sphere;
-};
-
-
-struct Plane
-{
-	vec4 pointInPlane;
-	vec4 planeEquation;
-};
-
-struct Frustum
-{
-	Plane nearplane;
-	Plane farplane;
-	Plane topplane;
-	Plane bottomplane;
-	Plane rightplane;
-	Plane leftplane;
-	float nearwidth;
-	float nearheight;
-	float farDistance;
-    float nearDistance;
-};
-
-
 layout(location = 0) out vec4 outColor;
 
-layout(set = 0, binding = 0) uniform GlobalContext {
+layout(set = 0, binding = 0) uniform GlobalContext 
+{
     mat4 view;
     mat4 proj;
     Frustum f;
     mat4 world;
 } gs;
 
-
-layout(set = 2, binding = 0) readonly buffer PMBuffer {
+layout(set = 2, binding = 0) readonly buffer PMBuffer 
+{
     MeshDetails objects[];
 } perModelBuffer;
 
-layout(set = 2, binding = 1) readonly buffer InputVertices {
+layout(set = 2, binding = 1) readonly buffer InputVertices 
+{
 	uint8_t vertexData[];
 } VertexData;
+
+#include "include/MeshVertexFetch.iglsl"
 
 layout(set = 2, binding = 2) uniform usamplerBuffer globalRenderableIndices;
 
@@ -127,144 +52,8 @@ layout(set = 2, binding = 5) readonly buffer GeomInstBuffer
     GeometryRenderable geomRenderables[];
 } geomRends;
 
-vec4 ReconstructVEC4(uint offset)
+void main() 
 {
-   uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
-            uint(VertexData.vertexData[offset+2]) << 16 |
-            uint(VertexData.vertexData[offset+1]) << 8 |
-            uint(VertexData.vertexData[offset+0]));
-   uint y = (uint(VertexData.vertexData[offset+7]) << 24 | 
-            uint(VertexData.vertexData[offset+6]) << 16 |
-            uint(VertexData.vertexData[offset+5]) << 8 |
-            uint(VertexData.vertexData[offset+4]));
-   uint z = (uint(VertexData.vertexData[offset+11]) << 24 | 
-            uint(VertexData.vertexData[offset+10]) << 16 |
-            uint(VertexData.vertexData[offset+9]) << 8 |
-            uint(VertexData.vertexData[offset+8]));
-   uint w = (uint(VertexData.vertexData[offset+15]) << 24 | 
-            uint(VertexData.vertexData[offset+14]) << 16 |
-            uint(VertexData.vertexData[offset+13]) << 8 |
-            uint(VertexData.vertexData[offset+12]));
-
-   return vec4(uintBitsToFloat(x),uintBitsToFloat(y),uintBitsToFloat(z),uintBitsToFloat(w));
-}
-
-vec3 ReconstructVEC3(uint offset)
-{
-   uint x = (uint(VertexData.vertexData[offset+3]) << 24 | 
-            uint(VertexData.vertexData[offset+2]) << 16 |
-            uint(VertexData.vertexData[offset+1]) << 8 |
-            uint(VertexData.vertexData[offset+0]));
-   uint y = (uint(VertexData.vertexData[offset+7]) << 24 | 
-            uint(VertexData.vertexData[offset+6]) << 16 |
-            uint(VertexData.vertexData[offset+5]) << 8 |
-            uint(VertexData.vertexData[offset+4]));
-   uint z = (uint(VertexData.vertexData[offset+11]) << 24 | 
-            uint(VertexData.vertexData[offset+10]) << 16 |
-            uint(VertexData.vertexData[offset+9]) << 8 |
-            uint(VertexData.vertexData[offset+8]));
-   
-   return vec3(uintBitsToFloat(x),uintBitsToFloat(y),uintBitsToFloat(z));
-}
-
-
-int unpack_i16(uint offset)
-{
-    uint lo = uint(VertexData.vertexData[offset + 0]);
-    uint hi = uint(VertexData.vertexData[offset + 1]);
-
-    int comp = int((hi << 8) | lo);
-    return int((hi << 8) | lo) << 16 >> 16; // sign-extend
-}
-
-vec2 converttexcoords16(uint offset)
-{
-    int tiX = unpack_i16(offset);
-
-    int tiY = unpack_i16(offset+2);
-
-	return vec2(float(tiX), float(tiY)) * dx * 16.0;;
-}
-
-
-vec3 convertnormal(uint offset)
-{
-    uint lo = uint(VertexData.vertexData[offset + 0]);
-    uint lo2 = uint(VertexData.vertexData[offset + 1]);
-    uint hi = uint(VertexData.vertexData[offset + 2]);
-    uint hi2 = uint(VertexData.vertexData[offset + 3]);
-
-    int normal = int(((hi2&0xff)<<24) | ((hi&0xff)<<16) | ((lo2&0xff)<<8) | (lo&0xff));
-
-    int normx = normal << 21;
-    int normy = (normal << 10) & 0xfffff800;
-    int normz = (normal & 0xffc00000);
-
-
-    float x = float(normx) / 2145386496.0;
-    float y = float(normy) / 2145386496.0;
-    float z = float(normz) / 2143289344.0;
-
-    vec3 ret = vec3(x, y, z);
-
-    return ret;
-}
-
-vec3 pack6decomp(uint offset, AABB minMaxBox)
-{
-
-    int piX = unpack_i16(offset);
-
-    int piY = unpack_i16(offset+2);
-
-    int piZ = unpack_i16(offset+4);
-
-    vec3 unormPos = (((vec3(float(piX), float(piY), float(piZ)) * dx) + 1.0) * 0.5);
-
-    vec3 min = minMaxBox.min.xyz;
-    vec3 max = minMaxBox.max.xyz;
-
-    vec3 pos = mix(min, max, unormPos);
-
-	return pos.xyz;
-}
-
-vec4 DecompressTangent(uint offset)
-{
-    uint lo = uint(VertexData.vertexData[offset + 0]);
-    uint lo2 = uint(VertexData.vertexData[offset + 1]);
-    uint hi = uint(VertexData.vertexData[offset + 2]);
-    uint hi2 = uint(VertexData.vertexData[offset + 3]);
-
-    int ctangent = int(((hi2&0xff)<<24) | ((hi&0xff)<<16) | ((lo2&0xff)<<8) | (lo&0xff));
-
-	uint w = (ctangent & 1);
-       
-    float wf = -1.0;
-
-    if (w == 1)
-    {
-        wf = 1.0;
-    }
-
-    int zi = int((ctangent & 0xffc00000));
-	int yi = int((ctangent & 0x003ff000))<<10;
-	int xi = int((ctangent & 0x00000ffc))<<20;
-
-	float x = float(xi) / 2143289344.0;
-	float y = float(yi) / 2143289344.0;
-	float z = float(zi) / 2143289344.0;
-
-
-    vec4 ret = vec4(x, y, z, wf);
-
-	return ret;
-}
-
-
-void main() {
-    
-
     uint renderableIndex = uint(texelFetch(globalRenderableIndices, gl_DrawID).r);
 
     MeshRenderable currentRenderable = rends.renderables[renderableIndex];

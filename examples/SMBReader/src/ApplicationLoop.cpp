@@ -4073,7 +4073,6 @@ void ApplicationLoop::InitializeRuntime()
 	CreateFontTexture(&font2Name, &fontDataName, 20, 4, 0);
 	CreateFontTexture(&fontName, &fontDataName, 20, 5, 0);
 	
-
 	CreateUIText(&mainCenterContainer, globalUITestText, sizeof(globalUITestText) - 1);
 	CreateUIText(&mainRightContainer, globalUITestText2, sizeof(globalUITestText2) - 1);
 

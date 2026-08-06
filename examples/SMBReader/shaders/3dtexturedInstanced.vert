@@ -7,14 +7,14 @@ layout(location = 1) in vec4 inTex;
 layout(location = 0) out vec2 texCoords;
 layout(location = 1) flat out int instanceID;
 
-layout(set = 0, binding = 0) uniform GlobalContext {
+layout(set = 0, binding = 0) uniform GlobalContext 
+{
     mat4 view;
     mat4 proj;
 } gs;
 
-
-
-layout(set = 2, binding = 0) readonly buffer UniformBuffers {
+layout(set = 2, binding = 0) readonly buffer UniformBuffers 
+{
 	mat4 InstancedData[];
 };
 

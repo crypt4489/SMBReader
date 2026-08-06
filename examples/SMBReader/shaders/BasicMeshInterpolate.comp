@@ -6,19 +6,23 @@ struct VertexTex
 	vec4 tex;
 };
 
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     float interpolate;
 } gs;
 
-layout(set = 0, binding = 0) readonly buffer InputVertices {
+layout(set = 0, binding = 0) readonly buffer InputVertices 
+{
 	VertexTex inBase[];
 };
 
-layout(set = 0, binding = 1) readonly buffer InputVerticesMorph {
+layout(set = 0, binding = 1) readonly buffer InputVerticesMorph 
+{
 	VertexTex inMorph[];
 };
 
-layout(set = 0, binding = 2) writeonly buffer OutputVerticesMorph {
+layout(set = 0, binding = 2) writeonly buffer OutputVerticesMorph 
+{
 	VertexTex OutMorphed[];
 };
 
@@ -27,8 +31,6 @@ layout (local_size_x = 8, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
 	uint index = gl_GlobalInvocationID.x;
-
-
 
 	OutMorphed[index].pos.x = inBase[index].pos.x * gs.interpolate;
 	OutMorphed[index].pos.y = inBase[index].pos.y * gs.interpolate;

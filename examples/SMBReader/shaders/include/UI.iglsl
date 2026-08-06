@@ -141,3 +141,16 @@ vec4 makeColorFrom10_11_10_1(uint packedColor)
 {
     return vec4(float((packedColor&4290772992U)>>22u), float((packedColor&4192256)>>11u), float((packedColor&2046u)>>1u), float(packedColor&1u)) * vec4(0.000977, 0.000488, 0.000977, 1.0);
 }
+
+float roundCorners(vec2 pos, vec2 rectSize, float radius)
+{
+    vec2 d = abs(pos) - rectSize + radius;
+    return min(max(d.x, d.y), 0.0) + length(max(d, 0.0)) - radius;
+}
+
+float rectBorder(vec2 pos, vec2 rectSize, float margin)
+{
+    vec2 d = abs(pos) - (rectSize - margin);
+    
+    return (d.x<=0.0 && d.y<=0.0) ? 1.0 : 0.0; //within margin
+}

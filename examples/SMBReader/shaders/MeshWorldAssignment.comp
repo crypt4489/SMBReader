@@ -1,4 +1,10 @@
 #version 450
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/Math.iglsl"
+#include "include/Mesh.iglsl"
+
 struct UniformGrid
 {
     vec4 max;
@@ -7,66 +13,18 @@ struct UniformGrid
     uint numberOfMeshes;
 };
 
-
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     UniformGrid grid;
 } gs;
 
-layout(set = 0, binding = 0) buffer Offset {
+layout(set = 0, binding = 0) buffer Offset 
+{
 	uint offsetAtN[];
 } offsets;
 
-struct AABB
+layout(set = 0, binding = 1) readonly buffer PMBuffer 
 {
-    vec4 min;
-    vec4 max;
-};
-
-struct GeometryDetails
-{
-	AABB minMaxBox;
-};
-
-struct GeometryRenderable
-{
-	uint geomDescIndex;
-	uint renderableStart;
-	uint renderableCount;
-	uint pad1;
-	mat4 transform;
-};
-
-struct MeshRenderable
-{
-	uint meshIndex;
-	uint lightCount; 
-	uint instanceCount;
-	uint geomInstIndex;
-	uint lightIndices[4];
-	uint materialStart;
-	uint blendLayersStart;
-	uint materialCount;
-    uint pad2;
-	mat4 transform;
-};
-
-
-struct MeshDetails
-{
-    uint vertexComponents;
-    uint vertexStride;
-    uint indexCount;
-	uint firstIndex;
-    uint vertexByteOffset;
-    uint pad1;
-	uint pad2;
-	uint pad3;
-    vec4 sphere;
-};
-
-
-
-layout(set = 0, binding = 1) readonly buffer PMBuffer {
     MeshDetails objects[];
 } perModelBuffer;
 
@@ -87,36 +45,10 @@ layout(set = 0, binding = 5) readonly buffer GeomInstBuffer
     GeometryRenderable geomRenderables[];
 } geomRends;
 
-AABB TransformAABBArvo(mat4 worldMatrix, AABB inputTransform)
-{
-    vec3 inMin = inputTransform.min.xyz;
-    vec3 inMax = inputTransform.max.xyz;
-
-    vec3 outMin = worldMatrix[3].xyz;
-    vec3 outMax = worldMatrix[3].xyz;
-
-    for (int i = 0; i<3; i++)
-    {
-        vec3 a = worldMatrix[i].xyz * inMin[i];
-        vec3 b = worldMatrix[i].xyz * inMax[i];
-
-        outMin += min(a, b);
-        outMax += max(a, b);
-    }
-
-    AABB outputAABB;
-
-    outputAABB.min = vec4(outMin, 1.0);
-    outputAABB.max = vec4(outMax, 1.0);
-
-    return outputAABB;
-}
-
 layout (local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
-
     uint lIndex =  (gl_WorkGroupID.x * gl_WorkGroupSize.x) + gl_LocalInvocationID.x;
 
     if (lIndex >= gs.grid.numberOfMeshes) 

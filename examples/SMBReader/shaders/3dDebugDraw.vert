@@ -1,50 +1,24 @@
 #version 460
 #extension GL_EXT_shader_8bit_storage : enable
 #extension GL_ARB_shader_draw_parameters : require
+#extension GL_GOOGLE_include_directive: require
 
-
-struct DebugDrawStruct
-{
-	vec4 center;
-	vec4 scale;
-    vec4 color;
-    vec4 halfExtents;
-};
-
-struct Plane
-{
-	vec4 pointInPlane;
-	vec4 planeEquation;
-};
-
-struct Frustum
-{
-	Plane nearplane;
-	Plane farplane;
-	Plane topplane;
-	Plane bottomplane;
-	Plane rightplane;
-	Plane leftplane;
-	float nearwidth;
-	float nearheight;
-	float farDistance;
-    float nearDistance;
-};
-
+#include "include/Math.iglsl"
+#include "include/Mesh.iglsl"
 
 layout(location = 0) out vec4 color;
 layout(location = 1) flat out uint modelIndex;
 
-
-layout(set = 0, binding = 0) uniform GlobalContext {
+layout(set = 0, binding = 0) uniform GlobalContext 
+{
     mat4 view;
     mat4 proj;
     Frustum f;
     mat4 world;
 } gs;
 
-
-layout(set = 1, binding = 0) readonly buffer DDSBuffer {
+layout(set = 1, binding = 0) readonly buffer DDSBuffer 
+{
     DebugDrawStruct objects[];
 } ddsbuffer;
 
@@ -52,28 +26,22 @@ layout(set = 1, binding = 1) uniform usamplerBuffer globalDebugIndices;
 
 layout(set = 1, binding = 2) uniform usamplerBuffer globalDebugTypes;
 
-
 vec4 boxStrides[8] =
-
-
 {
     vec4(-1.0, 1.0, -1.0, 0.0),
     vec4(1.0, 1.0, -1.0, 0.0),
     vec4(1.0, 1.0, 1.0, 0.0),
     vec4(-1.0, 1.0, 1.0, 0.0),
-     vec4(-1.0, -1.0, -1.0, 0.0),
+    vec4(-1.0, -1.0, -1.0, 0.0),
     vec4(1.0, -1.0, -1.0, 0.0),
     vec4(1.0, -1.0, 1.0, 0.0),
     vec4(-1.0, -1.0, 1.0, 0.0)
-
-
 };
 
 uint boxIndices[24] =
 {
-0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7
+    0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7
 };
-
 
 mat4 CreateBillboardMatrix(vec3 camWorld, vec4 objPos)
 {
@@ -102,13 +70,13 @@ void main()
 
     mat4 VP = gs.proj * gs.view;
 
-    if (debugType == 1)
+    if (debugType == DEBUG_DRAW_TYPE_BOX)
     {
         vec4 pos = (mainStruct.center + (boxStrides[boxIndices[gl_VertexIndex]] * mainStruct.halfExtents) * mainStruct.scale);
 
         gl_Position = VP * pos;
     } 
-    else if (debugType == 2)
+    else if (debugType == DEBUG_DRAW_TYPE_SPHERE)
     {
        
        uint sphereIndex = uint(gl_VertexIndex) / 2;

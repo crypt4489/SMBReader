@@ -3,7 +3,8 @@
 layout(location = 0) in vec2 texCoords;
 layout(location = 0) out vec4 outColor;
 
-layout(push_constant) uniform SampledImage {
+layout(push_constant) uniform SampledImage 
+{
     uint imageIndex;
 } si;
 

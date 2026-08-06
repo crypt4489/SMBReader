@@ -1,39 +1,25 @@
 #version 460
+
+#extension GL_GOOGLE_include_directive: require
+
+#include "include/Math.iglsl"
+
 layout(location = 0) in vec4 position;
 layout(location = 1) in vec4 inColor;
 layout(location = 0) out vec4 color;
 
-struct Plane
+layout(push_constant) uniform JointContext 
 {
-	vec4 pointInPlane;
-	vec4 planeEquation;
-};
-
-struct Frustum
-{
-	Plane nearplane;
-	Plane farplane;
-	Plane topplane;
-	Plane bottomplane;
-	Plane rightplane;
-	Plane leftplane;
-	float nearwidth;
-	float nearheight;
-	float farDistance;
-    float nearDistance;
-};
-
-layout(push_constant) uniform JointContext {
     uint startingLocation;
 } jointStart;
 
-layout(set = 0, binding = 0) uniform GlobalContext {
+layout(set = 0, binding = 0) uniform GlobalContext 
+{
     mat4 view;
     mat4 proj;
     Frustum f;
     mat4 world;
 } gs;
-
 
 layout(set = 1, binding = 0) readonly buffer JointMeshWorlds
 {

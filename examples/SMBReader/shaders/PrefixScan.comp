@@ -1,19 +1,22 @@
 #version 450
 
-
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     uint count;
 } gs;
 
-layout(set = 0, binding = 0) buffer Counts {
+layout(set = 0, binding = 0) buffer Counts 
+{
 	uint countsAtN[];
 } counts;
 
-layout(set = 0, binding = 1) buffer Offsets {
+layout(set = 0, binding = 1) buffer Offsets 
+{
 	uint offsetAtN[];
 } offsets;
 
-layout(set = 0, binding = 2) buffer Sums {
+layout(set = 0, binding = 2) buffer Sums 
+{
 	uint sumsAtN[];
 } sums;
 
@@ -39,7 +42,6 @@ void main()
 	{
 		sharedTemp[2*lIndex] = 0;
 	}
-
 
 	if ((2*globalIndex)+1 < n) 
 	{
@@ -92,11 +94,13 @@ void main()
 
 	barrier();
 
-	if ((2*globalIndex) < n) {
+	if ((2*globalIndex) < n) 
+	{
 		offsets.offsetAtN[(2*globalIndex)] = sharedTemp[2*lIndex];
 	} 
 
-	if ((2*globalIndex)+1 < n) {
+	if ((2*globalIndex)+1 < n) 
+	{
 		offsets.offsetAtN[(2*globalIndex)+1] = sharedTemp[(2*lIndex)+1];
 	} 
 

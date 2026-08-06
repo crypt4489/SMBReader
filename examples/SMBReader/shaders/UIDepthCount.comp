@@ -4,7 +4,8 @@
 
 #include "include/UI.iglsl"
 
-layout(push_constant) uniform GlobalContext {
+layout(push_constant) uniform GlobalContext 
+{
     uint count;
 } gs;
 

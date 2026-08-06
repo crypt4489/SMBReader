@@ -1,0 +1,26 @@
+
+#define LIGHT_TYPE_DIRECTIONAL 0
+#define LIGHT_TYPE_POINT 1
+#define LIGHT_TYPE_SPOT 2
+
+struct LightSource
+{
+	vec4 color; //w is intensity;
+	vec4 pos; //w is radius for point right
+	vec4 direction; //w is unused;
+	vec4 ancillary; //for spot, x, y are cosine theta cutoffs
+};
+
+struct ShadowMapViewProj
+{
+    mat4 shadowMapView;
+    mat4 shadowMapProj;
+};
+
+struct ShadowMapView
+{
+	float xOff;
+	float yOff;
+	float xScale;
+	float yScale;
+};

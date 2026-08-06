@@ -1,0 +1,117 @@
+
+
+#define DEBUG_DRAW_TYPE_BOX 1
+#define DEBUG_DRAW_TYPE_SPHERE 2
+
+#define POSITION 1u
+#define TEXTURES1 2u
+#define TEXTURES2 4u
+#define TEXTURES3 8u
+#define NORMAL 16u
+#define BONES2 32u
+#define COLOR 64u
+#define TANGENT 128u
+#define COMPRESSED 0x80000000u
+
+#define dx 3.051851e-05
+#define ax 0.0009770395
+#define bx 0.0019550342
+
+#define TANGENTNORMALMAPPED 2u
+#define ALBEDOMAPPED 4u
+#define WORLDNORMALMAPPED 8u
+#define VERTEXNORMAL 16u
+
+#define ConstantAlpha 1u
+#define BlendMap 2u
+
+struct DebugDrawStruct
+{
+	vec4 center;
+	vec4 scale;
+    vec4 color;
+    vec4 halfExtents;
+};
+
+struct VertexIndirectCommand
+{
+	uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+};
+
+struct IndexedIndirectCommand
+{
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int vertexOffset;
+	uint firstInstance;
+};
+
+struct GeometryDetails
+{
+	AABB minMaxBox;
+};
+
+struct GeometryRenderable
+{
+	uint geomDescIndex;
+	uint renderableStart;
+	uint renderableCount;
+	uint pad1;
+	mat4 transform;
+};
+
+struct MeshRenderable
+{
+	uint meshIndex;
+	uint lightCount; 
+	uint instanceCount;
+	uint geomInstIndex;
+	uint lightIndices[4];
+	uint materialStart;
+	uint blendLayersStart;
+	uint materialCount;
+    uint pad2;
+	mat4 transform;
+};
+
+struct MeshDetails
+{
+    uint vertexComponents;
+    uint vertexStride;
+    uint indexCount;
+	uint firstIndex;
+    uint vertexByteOffset;
+    uint pad1;
+	uint pad2;
+	uint pad3;
+    vec4 sphere;
+};
+
+struct Material
+{
+	uint materialFlags;
+	float shininess;
+	uint unused2;
+	uint unused3;
+	vec4 albedoColor;
+	uvec4 textureHandles; // y - normalMapCoordinates // x- albedo
+    vec4 emissive;
+    vec4 specular;
+};
+
+struct BlendDetails
+{
+	uint type;
+    uint alphaMapHandleBlendFactor; //union based on type;
+};
+
+mat3 AdjointMatrix(mat4 worldTransform)
+{
+    mat3 scoped = mat3(worldTransform);
+    return transpose(determinant(scoped) * inverse(scoped));
+}
+
