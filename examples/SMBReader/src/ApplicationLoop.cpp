@@ -4070,7 +4070,7 @@ void ApplicationLoop::InitializeRuntime()
 
 	CreateUITools(25);
 
-	CreateFontTexture(&font2Name, &fontDataName, 20, 3, 0);
+	CreateFontTexture(&font2Name, &fontDataName, 20, 4, 0);
 	CreateFontTexture(&fontName, &fontDataName, 20, 5, 0);
 	
 
