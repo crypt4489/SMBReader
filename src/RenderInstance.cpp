@@ -882,8 +882,8 @@ void RenderInstance::CreateDriverSpecificBarrierArenas(BarrierAccumulator* barri
 	barrierAccumulator->intraPassCount = 0;
 	barrierAccumulator->intraPassTop = 0;
 
-	std::construct_at(barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
-	std::construct_at(barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
+	std::construct_at(barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
+	std::construct_at(barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
 	std::construct_at(&barrierAccumulator->intraPassBarrierAllocator, storageAllocator->Allocate(12 * KiB, alignof(VkBufferMemoryBarrier)), 12 * KiB);
 
 	for (int i = 0; i < MAX_INTRA_PASS_BARRIERS; i++)
@@ -1438,7 +1438,7 @@ int RenderInstance::CreateResourceStatusActions(ResourceStatus* status, int numb
 {
 	status->currAction = (BarrierAction*)storageAllocator->Allocate(sizeof(BarrierAction) * numberOfCurrentActions);
 	status->currStage = (BarrierStage*)storageAllocator->Allocate(sizeof(BarrierStage) * numberOfCurrentStages);
-	status->currentLayout = (ImageLayout*)storageAllocator->Allocate(sizeof(ImageLayout) * numberOfCurrentStages);
+	status->currentLayout = (ImageLayout*)storageAllocator->Allocate(sizeof(ImageLayout) * numberOfCurrentLayouts);
 	return 0;
 }
 
@@ -1545,8 +1545,8 @@ int RenderInstance::CreateAttachmentImageView(int textureIndex, uint32_t firstMi
 
 	RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(viewIndex);
 
-	imageViewDesc->firstLayer = firstMip;
-	imageViewDesc->firstMipLevel = firstArrayLayer;
+	imageViewDesc->firstLayer = firstArrayLayer;
+	imageViewDesc->firstMipLevel = firstMip;
 	imageViewDesc->layerCount = arrayLayerCount;
 	imageViewDesc->mipLevelCount = mipCount;
 	imageViewDesc->mask = mask;
@@ -1759,7 +1759,7 @@ int RenderInstance::CreateAttachmentResources(
 			dev->DestroyRenderTarget(mainRenderTargets[absoluteRTIndex]);
 		}
 
-		mainRenderTargets.pool[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRTIndex], imageCount, rtWidth, rtHeight, 0, 0);
+		mainRenderTargets.pool[absoluteRTIndex] = dev->CreateRenderTarget(renderPasses[absoluteRPIndex], imageCount, rtWidth, rtHeight, 0, 0);
 
 		RenderTarget* renderTarget = dev->GetRenderTarget(mainRenderTargets[absoluteRTIndex]);
 
@@ -1967,7 +1967,7 @@ void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderG
 			internalRendererLogger
 		);
 
-		CreateShaderResourceMap(deviceSelection, shaderGraphs.shaderGraphPtrs.Get(i));
+		CreateShaderResourceMap(deviceSelection, graph);
 
 		totalDetailSize += detailsSize;
 
@@ -2156,9 +2156,10 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 		if (resource->type == ShaderResourceType::CONSTANT_BUFFER)
 		{
 			int rangeIndex = resource->rangeIndex;
-			pushConstantsSizes[rangeIndex] += resource->size;
 
-			shaderStages[rangeIndex] = API::ConvertShaderStageToVulkanShaderStage(resource->stages);
+			pushConstantsSizes[rangeIndex] += resource->size;
+			
+			shaderStages[rangeIndex] |= API::ConvertShaderStageToVulkanShaderStage(resource->stages);
 		}
 	}
 
@@ -2196,7 +2197,7 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 	
 	for (int i = 0; i < stateInfo->vertexBufferDescCount; i++)
 	{
-		API::ConvertVertexInputToVKVertexAttrDescription(stateInfo->vertexBufferDesc->descriptions, stateInfo->vertexBufferDesc[i].descCount, i, &vertexBufferInput[iter]);
+		API::ConvertVertexInputToVKVertexAttrDescription(stateInfo->vertexBufferDesc[i].descriptions, stateInfo->vertexBufferDesc[i].descCount, i, &vertexBufferInput[iter]);
 
 		iter += stateInfo->vertexBufferDesc[i].descCount;
 	}
@@ -2362,7 +2363,7 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 
 		if (alloc->allocType == AllocationType::PERFRAME)
 		{
-			intOffset = (currentFrame * rsize) + alloc->offset + region.allocoffset;;
+			intOffset = (currentFrame * rsize) + alloc->offset + region.allocoffset;
 		}
 		else if (alloc->allocType == AllocationType::STATIC)
 		{
@@ -2384,6 +2385,8 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 
 			previousBuffer = index;
 			batchCounter = 0;
+			previousMin = 0;
+			previousMax = 0;
 		}
 
 		batchAddresses[batchCounter] = data;
@@ -2727,7 +2730,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 
 		size_t rsize = 0, align = 0, intOffset = 0;
 
-		int bufferHandle = -1, resourceStatusIndex = 0;
+		int bufferHandle = -1;
 
 		RenderAllocation* alloc = allocations.Get(handle);
 
@@ -2741,7 +2744,6 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 		if (alloc->allocType == AllocationType::PERFRAME)
 		{
 			intOffset = (currentFrame * rsize) + alloc->offset + region.allocoffset;
-			resourceStatusIndex = currentFrame;
 		}
 		else if (alloc->allocType == AllocationType::STATIC)
 		{
@@ -2845,7 +2847,7 @@ void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBuffer
 	}
 }
 
-int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator)
+int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, int parentIndex, DeviceSlabAllocator* allocator)
 {
 	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
 
@@ -2875,6 +2877,14 @@ int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, si
 	case AllocationType::PERDRAW:
 		break;
 	}
+	
+	size_t parentOffset = 0;
+
+	if (parentIndex >= 0)
+	{
+		RenderAllocation* alloc = allocations.Get(parentIndex);
+		parentOffset = alloc->offset;
+	}
 
 	size_t location = allocator->Allocate(allocSize * copies, alignment);
 
@@ -2883,7 +2893,7 @@ int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, si
 	RenderAllocation* alloc = allocations.Get(index);
 
 	alloc->memIndex = bufferHandle;
-	alloc->offset = location;
+	alloc->offset = location + parentOffset;
 	alloc->deviceAllocSize = allocSize * copies;
 	alloc->requestedSize = structureSize;
 	alloc->alignment = alignment;
@@ -2894,77 +2904,10 @@ int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, si
 
 	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
 	{
-		alloc->viewIndex = dev->CreateBufferView(bufferHandles[bufferHandle].bufferHandle, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location, copies);
+		alloc->viewIndex = dev->CreateBufferView(bufferHandles[bufferHandle].bufferHandle, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, location + parentOffset, copies);
 	}
 
 	int resourceIndex = alloc->resourceStatus = resourceStatuses.Allocate();
-
-	ResourceStatus* resourceStatus = resourceStatuses.Get(resourceIndex);
-
-	resourceStatus->resourceType = BUFFER_RESOURCE;
-
-	CreateResourceStatusActions(resourceStatus, copies, copies, 0);
-
-	InitializeResourceStatus(resourceStatus, copies, copies, 0, 0, BEGINNING_OF_PIPE, ImageLayout::UNDEFINED);
-
-	return index;
-}
-
-int RenderInstance::CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator)
-{
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
-
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
-
-	switch (bufferAlignmentType)
-	{
-	case BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT:
-		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1);
-		break;
-	case BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT:
-		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1);
-		break;
-	}
-
-	size_t allocSize = ((copiesOfStructure * structureSize) + alignment - 1) & ~(alignment - 1);
-
-	size_t copies = 1;
-
-	switch (allocType)
-	{
-	case AllocationType::STATIC:
-		break;
-	case AllocationType::PERFRAME:
-		copies = MAX_FRAMES_IN_FLIGHT;
-		break;
-	case AllocationType::PERDRAW:
-		break;
-	}
-
-	RenderAllocation* alloc = allocations.Get(parentAllocation);
-
-	size_t location = allocator->Allocate(allocSize * copies, alignment);
-
-	int index = allocations.Allocate();
-
-	RenderAllocation* subAlloc = allocations.Get(index);
-
-	subAlloc->parentAllocation = parentAllocation;
-	subAlloc->offset = location + alloc->offset;
-	subAlloc->deviceAllocSize = allocSize * copies;
-	subAlloc->requestedSize = structureSize;
-	subAlloc->alignment = alignment;
-	subAlloc->allocType = allocType;
-	subAlloc->formatType = formatType;
-	subAlloc->structureCopies = copiesOfStructure;
-
-
-	if (formatType != ComponentFormatType::NO_BUFFER_FORMAT && formatType != ComponentFormatType::RAW_8BIT_BUFFER)
-	{
-		subAlloc->viewIndex = dev->CreateBufferView(bufferHandles[alloc->memIndex].bufferHandle, API::ConvertComponentFormatTypeToVulkanFormat(formatType), allocSize, alloc->offset + location, copies);
-	}
-
-	int resourceIndex = subAlloc->resourceStatus = resourceStatuses.Allocate();
 
 	ResourceStatus* resourceStatus = resourceStatuses.Get(resourceIndex);
 

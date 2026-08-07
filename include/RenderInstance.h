@@ -158,7 +158,7 @@ struct RenderInstance
 
 	void UploadDeviceLocalTransfers(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum);
 
-	int GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
+	int GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, int parentIndex, DeviceSlabAllocator* allocator);
 
 	int CreateImageHandle(
 		int deviceSelection,
@@ -278,8 +278,6 @@ struct RenderInstance
 	void ClosePhysicalDevicePicker();
 
 	int CreatePerFrameStagingBuffers(int deviceSelection, uint32_t bufferSize);
-
-	int CreateSuballocation(int deviceSelection, int parentAllocation, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, DeviceSlabAllocator* allocator);
 
 	int CreateResourceStatusActions(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts);
 
