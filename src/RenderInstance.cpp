@@ -4024,7 +4024,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 				for (uint32_t ii = 0, jj = 0, constantBufferPerSet = 0; ii < handle->pushRangeCount && jj < handle->resourceSetCount;)
 				{
-					ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[jj].descriptorManagerIndex);
+					ShaderResourceManager* descriptorManager = descriptorManagers.Get(handle->resourceSets[ii].descriptorManagerIndex);
 
 					ShaderResourceConstantBuffer* pushArgs = (ShaderResourceConstantBuffer*)descriptorManager->GetConstantBuffer(handle->resourceSets[jj].descriptorSetIndex, constantBufferPerSet++);
 					if (!pushArgs)
@@ -4096,11 +4096,11 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 				AttachmentInstance* instances = rpInst->attachInst;
 
-				uint32_t clearCount = 0;
+				uint32_t clearCount = rpInst->attachInstCount;
 
 				for (int g = 0; g < rpInst->attachInstCount; g++)
 				{
-					VkClearValue* currClear = &clears[clearCount];
+					VkClearValue* currClear = &clears[g];
 					switch (instances[g].clear.type)
 					{
 					case NOCLEAR:
@@ -4110,12 +4110,10 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 						currClear->color.float32[1] = instances[g].clear.val.cdata[1];
 						currClear->color.float32[2] = instances[g].clear.val.cdata[2];
 						currClear->color.float32[3] = instances[g].clear.val.cdata[3];
-						clearCount++;
 						break;
 					case CLEARDEPTH:
 						currClear->depthStencil.depth = instances[g].clear.val.ddata;
 						currClear->depthStencil.stencil = instances[g].clear.val.sdata;
-						clearCount++;
 						break;
 					}
 				}
@@ -4632,6 +4630,7 @@ void RenderInstance::UpdateShaderResourceArray(ShaderResourceSetHandle handle, i
 	case ShaderResourceType::SAMPLER2D:
 	case ShaderResourceType::SAMPLERSTATE:
 	case ShaderResourceType::IMAGE2D:
+	case ShaderResourceType::SAMPLERCUBE:
 	{
 		DeviceHandleArrayUpdate* cachedUpdate = (DeviceHandleArrayUpdate*)(updateCommandsCache->Allocate(sizeof(DeviceHandleArrayUpdate)));
 
@@ -4824,11 +4823,9 @@ int RenderInstance::UploadFrameAttachmentResource(int frameGraph, int resourceIn
 void RenderInstance::PipelineUpdateIndirectCommandBuffer(int pipelineIndex, int allocationIndex)
 {
 	PipelineHandle* handle = pipelineHandles.Get(pipelineIndex);
-
-	RenderAllocation alloc = allocations[allocationIndex];
 	
 	if (handle->group == GRAPHICSO)
-		handle->indirectBufferHandle = alloc.memIndex;
+		handle->indirectBufferHandle = allocationIndex;
 }
 
 void RenderInstance::PipelineUpdateVertexBuffer(int pipelineIndex, int allocationIndex, uint32_t vertexCount)
