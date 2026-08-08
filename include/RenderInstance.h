@@ -7,8 +7,9 @@
 #include "VKTypes.h"
 #include "math/VertexTypes.h"
 #include "ShaderManagement.h"
-#include "RenderInstanceManagement.h"
 #include "WindowManager.h"
+
+#include "VKRenderInstance.h"
 
 namespace API 
 {
@@ -182,7 +183,7 @@ struct RenderInstance
 
 	void DrawScene(int deviceSelection, int commandStreamIndex, uint32_t imageIndex);
 
-	void DestoryTexture(int deviceSelection, EntryHandle handle);
+	void DestroyTexture(int deviceSelection, EntryHandle handle);
 
 	void IncreaseMSAA(int frameGraph, int renderPassIndex);
 
@@ -320,6 +321,16 @@ struct RenderInstance
 	void InsertIntraPassBarrier(RecordingBufferObject* rbo, BarrierAccumulator* accum, int pipelineIndex);
 
 	void ResetIntraBarrierAccumulator(BarrierAccumulator* accumulator);
+
+	void* AllocateFromStorageAllocator(size_t size, size_t alignment);
+
+	void* AllocateFromStorageAllocator(size_t size);
+
+	void FreeFromStorageAllocator(void* address);
+
+	RHIDevice* GetDeviceHandle(int deviceSelection);
+
+	size_t GetNecessaryMemoryUsage(RenderInstanceCreateInfo* info);
 	
 	void DeletePhysicalDevice(int physicalDeviceIndex);
 
@@ -339,7 +350,7 @@ struct RenderInstance
 
 	RenderPhysicalDeviceContainer* physicalDeviceIndices{};
 
-	RenderLogicalDeviceContainer* logicalDeviceIndices{};
+	RHIDevice* logicalDeviceIndices{};
 
 	PoolAllocator<RenderWindowSpecificData> windowsSurfaces{};
 

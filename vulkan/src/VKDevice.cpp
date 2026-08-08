@@ -3056,7 +3056,7 @@ VKSwapChain* VKDevice::GetSwapChain(EntryHandle handle)
 	if (objHandle.type != VulkSwapChain || !objHandle.memoryLocation)
 	{
 		AddDeviceErrorCode(MINOR_CODE_PACK(DEVICE_VK_TYPE_IMAGE_SWAPCHAIN_FAILED) | DEVICE_VK_TYPE_INCORRECT_TYPE_ON_RETRIEVE, VK_RESULT_MAX_ENUM);
-		return VK_NULL_HANDLE;
+		return nullptr;
 	}
 
 	return reinterpret_cast<VKSwapChain*>(objHandle.memoryLocation);

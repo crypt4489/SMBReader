@@ -768,20 +768,44 @@ int findMSB(unsigned int input)
 #endif
 }
 
+void* RenderInstance::AllocateFromStorageAllocator(size_t size, size_t alignment)
+{
+	void* ret = storageAllocator->Allocate(size, alignment);
+	return ret;
+}
+
+void* RenderInstance::AllocateFromStorageAllocator(size_t size)
+{
+	void* ret = storageAllocator->Allocate(size);
+	return ret;
+}
+
+void RenderInstance::FreeFromStorageAllocator(void* address)
+{
+	storageAllocator->Free(address);
+}
+
+RHIDevice* RenderInstance::GetDeviceHandle(int deviceSelection)
+{
+	RHIDevice* deviceContainer = &logicalDeviceIndices[deviceSelection];
+
+	return deviceContainer;
+}
+
 void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, Allocator* instanceStorageAllocator, RingAllocator* instanceCacheAllocator)
 {
-	vkInstance = (VKInstance*)instanceStorageAllocator->Allocate(sizeof(VKInstance), alignof(VKInstance));
-
 	cacheAllocator = instanceCacheAllocator;
 	storageAllocator = instanceStorageAllocator;
+	
+	vkInstance = (VKInstance*)AllocateFromStorageAllocator(sizeof(VKInstance), alignof(VKInstance));
 
-	updateCommandsCache = (RingAllocator*)instanceStorageAllocator->Allocate(sizeof(RingAllocator), alignof(RingAllocator));
-	std::construct_at(updateCommandsCache, instanceStorageAllocator->Allocate(info->commandsCacheSize, 64), info->commandsCacheSize);
+	updateCommandsCache = (RingAllocator*)AllocateFromStorageAllocator(sizeof(RingAllocator), alignof(RingAllocator));
+	std::construct_at(updateCommandsCache, AllocateFromStorageAllocator(info->commandsCacheSize, 64), info->commandsCacheSize);
 
 	for (uint32_t i = 0; i < 2; i++)
 	{
-		updateCommandBuffers[i] = (SlabAllocator*)instanceStorageAllocator->Allocate(sizeof(SlabAllocator));
-		std::construct_at(updateCommandBuffers[i], instanceStorageAllocator->Allocate(info->commandBuffersSize, 32), info->commandBuffersSize);
+		updateCommandBuffers[i] = (SlabAllocator*)AllocateFromStorageAllocator(sizeof(SlabAllocator));
+		std::construct_at(updateCommandBuffers[i], AllocateFromStorageAllocator(info->commandBuffersSize, 32), info->commandBuffersSize);
 	}
 
 	int driverHostLinkedSize = driverHostMemoryUpdater.GetSize(info->numberOfDriverHostAllocations);
@@ -790,69 +814,69 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, Alloca
 	int driverDeviceLinkedSize = driverDeviceMemoryUpdater.GetSize(info->numberOfDriverDeviceAllocations);
 	int imageMemoryLinkedSize = imageMemoryUpdateManager.GetSize(info->numberOfImageMemoryAllocations);
 
-	driverHostMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverHostLinkedSize, alignof(uintptr_t)), driverHostLinkedSize);
-	transferCommandPool.AllocateList(instanceStorageAllocator->Allocate(commandLinkedSize, alignof(uintptr_t)), commandLinkedSize);
-	driverDeviceMemoryUpdater.AllocateList(instanceStorageAllocator->Allocate(driverDeviceLinkedSize, alignof(uintptr_t)), driverDeviceLinkedSize);
-	imageMemoryUpdateManager.AllocateList(instanceStorageAllocator->Allocate(imageMemoryLinkedSize, alignof(uintptr_t)), imageMemoryLinkedSize);
-	descriptorUpdatePool.AllocateList(instanceStorageAllocator->Allocate(resourceUpdateLinkedSize, alignof(uintptr_t)), resourceUpdateLinkedSize);
+	driverHostMemoryUpdater.AllocateList(AllocateFromStorageAllocator(driverHostLinkedSize, alignof(uintptr_t)), driverHostLinkedSize);
+	transferCommandPool.AllocateList(AllocateFromStorageAllocator(commandLinkedSize, alignof(uintptr_t)), commandLinkedSize);
+	driverDeviceMemoryUpdater.AllocateList(AllocateFromStorageAllocator(driverDeviceLinkedSize, alignof(uintptr_t)), driverDeviceLinkedSize);
+	imageMemoryUpdateManager.AllocateList(AllocateFromStorageAllocator(imageMemoryLinkedSize, alignof(uintptr_t)), imageMemoryLinkedSize);
+	descriptorUpdatePool.AllocateList(AllocateFromStorageAllocator(resourceUpdateLinkedSize, alignof(uintptr_t)), resourceUpdateLinkedSize);
 
-	attachmentGraphsInstances.Create(instanceStorageAllocator, info->maxAttachmentGraphInstances);
-	attachmentGraphs.Create(instanceStorageAllocator, info->maxAttachmentGraphTemplates);
+	attachmentGraphsInstances.Create(storageAllocator, info->maxAttachmentGraphInstances);
+	attachmentGraphs.Create(storageAllocator, info->maxAttachmentGraphTemplates);
 	
-	internalRendererLogger = (Logger*)instanceStorageAllocator->Allocate(sizeof(Logger), alignof(Logger));
-	internalRendererLogger->InitLogger((char*)instanceStorageAllocator->Allocate(info->internalLoggerRingSize, 64), info->internalLoggerRingSize);
+	internalRendererLogger = (Logger*)AllocateFromStorageAllocator(sizeof(Logger), alignof(Logger));
+	internalRendererLogger->InitLogger((char*)AllocateFromStorageAllocator(info->internalLoggerRingSize, 64), info->internalLoggerRingSize);
 	internalRendererLogger->fileHandle = info->internalRendererHandle;
 
-	bufferHandles.Create(instanceStorageAllocator, info->maxBufferPoolsCount);
+	bufferHandles.Create(storageAllocator, info->maxBufferPoolsCount);
 
 	imagePools.Create(storageAllocator, info->maxImagePoolsCount);
 
-	pipelineInstancesIdentifier.Create(instanceStorageAllocator, info->maxPipelineInstances);
+	pipelineInstancesIdentifier.Create(storageAllocator, info->maxPipelineInstances);
 
-	pipelineHandles.Create(instanceStorageAllocator, info->maxPipelineHandles);
+	pipelineHandles.Create(storageAllocator, info->maxPipelineHandles);
 
-	gpuCommandStreams.Create(instanceStorageAllocator, info->maxGPUCommandsStreams);
+	gpuCommandStreams.Create(storageAllocator, info->maxGPUCommandsStreams);
 
-	renderTargetQueues.Create(instanceStorageAllocator, info->maxRenderQueues);
+	renderTargetQueues.Create(storageAllocator, info->maxRenderQueues);
 
-	computeQueues.Create(instanceStorageAllocator, info->maxComputeQueues);
+	computeQueues.Create(storageAllocator, info->maxComputeQueues);
 
-	samplerResourceHandles.Create(instanceStorageAllocator, info->maxSamplerHandles);
+	samplerResourceHandles.Create(storageAllocator, info->maxSamplerHandles);
 
-	textureResourceHandles.Create(instanceStorageAllocator, info->maxTextureHandles);
+	textureResourceHandles.Create(storageAllocator, info->maxTextureHandles);
 
-	textureViewsResourceHandles.Create(instanceStorageAllocator, info->maxTextureHandles);
+	textureViewsResourceHandles.Create(storageAllocator, info->maxTextureHandles);
 
-	resourceStatuses.Create(instanceStorageAllocator, info->maxResourceStatuses);
+	resourceStatuses.Create(storageAllocator, info->maxResourceStatuses);
 
-	pipelineInfos.Create(instanceStorageAllocator, info->maxPipelineTemplates);
+	pipelineInfos.Create(storageAllocator, info->maxPipelineTemplates);
 
-	mainRenderTargets.Create(instanceStorageAllocator, info->maxRenderTargets);
+	mainRenderTargets.Create(storageAllocator, info->maxRenderTargets);
 
-	renderPasses.Create(instanceStorageAllocator, info->maxRenderTargets);
+	renderPasses.Create(storageAllocator, info->maxRenderTargets);
 
-	shaderResourceTemplates.Create(instanceStorageAllocator, info->maxShaderResourceTemplates);
+	shaderResourceTemplates.Create(storageAllocator, info->maxShaderResourceTemplates);
 
-	allocations.Create(instanceStorageAllocator, info->maxAllocations + info->maxSubAllocations);
+	allocations.Create(storageAllocator, info->maxAllocations + info->maxSubAllocations);
 
-	descriptorManagers.Create(instanceStorageAllocator, info->maxDescriptorManagers);
+	descriptorManagers.Create(storageAllocator, info->maxDescriptorManagers);
 
-	shaderGraphs.Create(instanceStorageAllocator, info->maxShaderGraphs, info->maxShaderHandles);
+	shaderGraphs.Create(storageAllocator, info->maxShaderGraphs, info->maxShaderHandles);
 
-	windowsSurfaces.Create(instanceStorageAllocator, info->maxWindows);
+	windowsSurfaces.Create(storageAllocator, info->maxWindows);
 
-	swapChains.Create(instanceStorageAllocator, info->maxSwapChains);
+	swapChains.Create(storageAllocator, info->maxSwapChains);
 
-	physicalDeviceIndices = (RenderPhysicalDeviceContainer*)storageAllocator->Allocate(sizeof(RenderPhysicalDeviceContainer) * info->maxGPUS, alignof(RenderPhysicalDeviceContainer));
+	physicalDeviceIndices = (RenderPhysicalDeviceContainer*)AllocateFromStorageAllocator(sizeof(RenderPhysicalDeviceContainer) * info->maxGPUS, alignof(RenderPhysicalDeviceContainer));
 
-	logicalDeviceIndices = (RenderLogicalDeviceContainer*)storageAllocator->Allocate(sizeof(RenderLogicalDeviceContainer) * info->maxLogicalDevices, alignof(RenderLogicalDeviceContainer));
+	logicalDeviceIndices = (RHIDevice*)AllocateFromStorageAllocator(sizeof(RHIDevice) * info->maxLogicalDevices, alignof(RHIDevice));
 
 	maxLogicalDevices = info->maxLogicalDevices;
 	maxPhysicalDevices = info->maxGPUS;
 
-	barriersQueue = (uint32_t*)storageAllocator->Allocate(sizeof(uint32_t) * info->maxConcurrentRecordings);
+	barriersQueue = (uint32_t*)AllocateFromStorageAllocator(sizeof(uint32_t) * info->maxConcurrentRecordings);
 
-	barrierAccumulators = (BarrierAccumulator*)storageAllocator->Allocate(sizeof(BarrierAccumulator) * info->maxConcurrentRecordings);
+	barrierAccumulators = (BarrierAccumulator*)AllocateFromStorageAllocator(sizeof(BarrierAccumulator) * info->maxConcurrentRecordings);
 
 	maxBarrierAccumulationCount = info->maxConcurrentRecordings;
 
@@ -872,8 +896,8 @@ void RenderInstance::CreateRenderInstance(RenderInstanceCreateInfo* info, Alloca
 
 void RenderInstance::CreateDriverSpecificBarrierArenas(BarrierAccumulator* barrierAccumulator, int maxTextures, int maxAllocations)
 {
-	barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
-	barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)storageAllocator->Allocate(sizeof(SlabAllocator), alignof(SlabAllocator));
+	barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)AllocateFromStorageAllocator(sizeof(SlabAllocator), alignof(SlabAllocator));
+	barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator = (SlabAllocator*)AllocateFromStorageAllocator(sizeof(SlabAllocator), alignof(SlabAllocator));
 
 	int imageSize = (sizeof(VkImageMemoryBarrier) * MAX_ARRAYS_FOR_BARRIER * MAX_MIPS_FOR_BARRIER * maxTextures) + sizeof(BarrierStage) * 2;
 
@@ -882,9 +906,9 @@ void RenderInstance::CreateDriverSpecificBarrierArenas(BarrierAccumulator* barri
 	barrierAccumulator->intraPassCount = 0;
 	barrierAccumulator->intraPassTop = 0;
 
-	std::construct_at(barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
-	std::construct_at(barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator, storageAllocator->Allocate(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
-	std::construct_at(&barrierAccumulator->intraPassBarrierAllocator, storageAllocator->Allocate(12 * KiB, alignof(VkBufferMemoryBarrier)), 12 * KiB);
+	std::construct_at(barrierAccumulator->accumulators[IMAGE_BARRIER_ACCUMULATOR].allocator, AllocateFromStorageAllocator(imageSize, alignof(VkImageMemoryBarrier)), imageSize);
+	std::construct_at(barrierAccumulator->accumulators[BUFFER_BARRIER_ACCUMULATOR].allocator, AllocateFromStorageAllocator(bufferSize, alignof(VkBufferMemoryBarrier)), bufferSize);
+	std::construct_at(&barrierAccumulator->intraPassBarrierAllocator, AllocateFromStorageAllocator(12 * KiB, alignof(VkBufferMemoryBarrier)), 12 * KiB);
 
 	for (int i = 0; i < MAX_INTRA_PASS_BARRIERS; i++)
 	{
@@ -901,7 +925,7 @@ void RenderInstance::CreateDriverSpecificBarrierArenas(BarrierAccumulator* barri
 uint32_t RenderInstance::PopBarrierAccumulator()
 {
 	if (currentBarrierAccumulationTop == maxBarrierAccumulationCount)
-		return ~0;
+		return ~0ul;
 
 	uint32_t barrierAccumIndex = barriersQueue[currentBarrierAccumulationTop++];
 
@@ -928,7 +952,7 @@ void RenderInstance::ResetIntraBarrierAccumulator(BarrierAccumulator* accumulato
 
 void RenderInstance::ReturnBarrierAccumulator(uint32_t returnIndex)
 {
-	if (currentBarrierAccumulationTop == 0)
+	if (!currentBarrierAccumulationTop)
 		return;
 
 	barriersQueue[--currentBarrierAccumulationTop] = returnIndex;
@@ -939,22 +963,30 @@ RenderInstance::~RenderInstance()
 	if (vkInstance) vkInstance->~VKInstance();
 };
 
-void RenderInstance::DestoryTexture(int deviceSelection, EntryHandle handle)
+void RenderInstance::DestroyTexture(int deviceSelection, EntryHandle handle)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	//dev->DestroyTexture(handle);
 }
 
 void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandle swapChainIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VKSwapChain* swc = dev->GetSwapChain(swapChainIndex);
+
+	if (!swc)
+	{
+		int errorLength = 0;
+		char* errorString = dev->PopErrorOffQueue(&errorLength);
+		internalRendererLogger->AddLogMessage(LOGERROR, errorString, errorLength);
+		return;
+	}
 
 	for (uint32_t a = 0; a < attachmentGraphsInstances.count; a++) 
 	{
@@ -980,16 +1012,20 @@ void RenderInstance::DestroySwapChainAttachments(int deviceSelection, EntryHandl
 				{
 					RenderTextureDescription* texDesc = textureResourceHandles.Get(inst->textureIds[sampIndex][d]);
 
-					RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(texDesc->viewIndex[0]);
+					for (int viewIndex = 0; viewIndex < texDesc->viewCount; viewIndex++)
+					{
+						RenderImageViewDescription* imageViewDesc = textureViewsResourceHandles.Get(texDesc->viewIndex[viewIndex]);
+						
+						dev->DestroyImageView(imageViewDesc->viewIndex);
+						
+						textureViewsResourceHandles.Free(texDesc->viewIndex[viewIndex]);
+					}
 
 					dev->DestroyImage(texDesc->textureIndex);
-					dev->DestroyImageView(imageViewDesc->viewIndex);
-
+					
 					resourceStatuses.Free(texDesc->resourceStatusIndex);
 
 					textureResourceHandles.Free(inst->textureIds[sampIndex][d]);
-
-					textureViewsResourceHandles.Free(texDesc->viewIndex[0]);
 				}
 
 				sampLo <<= 1;
@@ -1004,11 +1040,17 @@ int RenderInstance::RecreateSwapChain(int deviceSelection, int swapChainIndex, u
 {
 	int ret = 0;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	RenderSwapchainData* data = swapChains.Get(swapChainIndex);
+
+	if (!data)
+	{
+		internalRendererLogger->AddLogMessage(LOGERROR, STRING_VIEW_FROM_LITERAL("RecreateSwapChain: Invalid Swapchain index"));
+		return ret;
+	}
 
 	if (width && height) 
 	{
@@ -1041,7 +1083,7 @@ int RenderInstance::RecreateSwapChain(int deviceSelection, int swapChainIndex, u
 
 int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, AttachmentGraph* graph)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
 	int attachmentInstanceIndex = attachmentGraphsInstances.Allocate();
 
@@ -1051,9 +1093,9 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 	AttachmentResource* resources = graph->resources;
 
-	graphInstance->passes = (AttachmentRenderPassInstance*)storageAllocator->Allocate(sizeof(AttachmentRenderPassInstance) * graph->passesCount);
+	graphInstance->passes = (AttachmentRenderPassInstance*)AllocateFromStorageAllocator(sizeof(AttachmentRenderPassInstance) * graph->passesCount);
 
-	graphInstance->resources = (AttachmentResourceInstance*)storageAllocator->Allocate(sizeof(AttachmentResourceInstance) * graph->resourceCount);
+	graphInstance->resources = (AttachmentResourceInstance*)AllocateFromStorageAllocator(sizeof(AttachmentResourceInstance) * graph->resourceCount);
 
 	int totalRenderTargetsCreated = 0;
 
@@ -1065,7 +1107,7 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 		AttachmentRenderPassInstance* rpInst = &graphInstance->passes[b];
 
-		AttachmentInstance* currentPassInstance = rpInst->attachInst = (AttachmentInstance*)storageAllocator->Allocate(sizeof(AttachmentInstance) * attachmentCount);
+		AttachmentInstance* currentPassInstance = rpInst->attachInst = (AttachmentInstance*)AllocateFromStorageAllocator(sizeof(AttachmentInstance) * attachmentCount);
 
 		rpInst->attachInstCount = attachmentCount;
 
@@ -1085,7 +1127,7 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 			int sampleCountLo = (resDesc->msaa ? 2 : 1);
 
-			int sampleCountHi = (resDesc->msaa ? (1 << (deviceContainer->relatedPhysDeviceInfo->maxMSAALevels)) : 1);
+			int sampleCountHi = (resDesc->msaa ? (1 << (rhiDevice->container.relatedPhysDeviceInfo->maxMSAALevels)) : 1);
 
 			sampHi = RENDER_MAX(sampleCountHi, sampHi);
 
@@ -1131,9 +1173,9 @@ int RenderInstance::CreateAttachmentGraphInstance(int deviceSelection, Attachmen
 
 int RenderInstance::CreateRenderPass(int deviceSelection, AttachmentGraphInstance* graphInstance)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	graphInstance->consecutiveRenderPassBase = -1;
 
@@ -1330,13 +1372,13 @@ int RenderInstance::CreateRenderPass(int deviceSelection, AttachmentGraphInstanc
 
 uint32_t RenderInstance::BeginFrame(int deviceSelection, int swapChainIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
 
-	int32_t res = dev->CommandBufferWaitOn(UINT64_MAX, deviceContainer->currentCommandBufferIndex[currentFrame]);
+	int32_t res = dev->CommandBufferWaitOn(UINT64_MAX, rhiDevice->container.currentCommandBufferIndex[currentFrame]);
 
 	uint32_t imageIndex = dev->BeginFrameForSwapchain(swcData->swapChainIdx, swcData->rendererWaitSemaphores[currentFrame], currentFrame);
 
@@ -1345,16 +1387,16 @@ uint32_t RenderInstance::BeginFrame(int deviceSelection, int swapChainIndex)
 		return imageIndex;
 	}
 
-	dev->CommandBufferResetFence(deviceContainer->currentCommandBufferIndex[currentFrame]);
+	dev->CommandBufferResetFence(rhiDevice->container.currentCommandBufferIndex[currentFrame]);
 
 	return imageIndex;
 }
 
 int RenderInstance::SubmitFrame(int deviceSelection, int swapChainIndex, uint32_t imageIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
 
@@ -1362,43 +1404,43 @@ int RenderInstance::SubmitFrame(int deviceSelection, int swapChainIndex, uint32_
 
 	int res = -1;
 	
-	if (deviceContainer->deviceTimelineSyncObject.driverTimelineObject == EntryHandle())
+	if (rhiDevice->container.deviceTimelineSyncObject.driverTimelineObject == EntryHandle())
 	{
-		res = dev->SubmitCommandBuffer(&swcData->rendererWaitSemaphores[currentFrame], &waitStages[0], &swcData->rendererFinishedSemaphores[imageIndex], 1, 1, deviceContainer->currentCommandBufferIndex[currentFrame]);
+		res = dev->SubmitCommandBuffer(&swcData->rendererWaitSemaphores[currentFrame], &waitStages[0], &swcData->rendererFinishedSemaphores[imageIndex], 1, 1, rhiDevice->container.currentCommandBufferIndex[currentFrame]);
 	}
 	else
 	{
-		uint64_t waitCount[2] = {0, deviceContainer->deviceTimelineSyncObject.currentValue};
+		uint64_t waitCount[2] = {0, rhiDevice->container.deviceTimelineSyncObject.currentValue};
 
-		uint64_t signalCount[2] = {0, deviceContainer->deviceTimelineSyncObject.currentValue + 1};
+		uint64_t signalCount[2] = {0, rhiDevice->container.deviceTimelineSyncObject.currentValue + 1};
 
 		res = dev->SubmitCommandBuffer(
 			&swcData->rendererWaitSemaphores[currentFrame], waitStages, 1,
-			&deviceContainer->deviceTimelineSyncObject.driverTimelineObject, 1, waitCount,
+			&rhiDevice->container.deviceTimelineSyncObject.driverTimelineObject, 1, waitCount,
 			&swcData->rendererFinishedSemaphores[imageIndex], 1,
-			&deviceContainer->deviceTimelineSyncObject.driverTimelineObject,
+			&rhiDevice->container.deviceTimelineSyncObject.driverTimelineObject,
 			1,
 			signalCount,
-			deviceContainer->currentCommandBufferIndex[currentFrame]
+			rhiDevice->container.currentCommandBufferIndex[currentFrame]
 		);
 		
-		deviceContainer->deviceTimelineSyncObject.currentValue++;
+		rhiDevice->container.deviceTimelineSyncObject.currentValue++;
 	}
 
 	if (res) return -1;
 
-	if (deviceContainer->presentQueue != deviceContainer->graphicsComputeTransfer)
+	if (rhiDevice->container.presentQueue != rhiDevice->container.graphicsComputeTransfer)
 	{
-		res = dev->PresentSwapChainSeparatePresentQueue(swcData->swapChainIdx, &swcData->rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, deviceContainer->presentQueue);
+		res = dev->PresentSwapChainSeparatePresentQueue(swcData->swapChainIdx, &swcData->rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, rhiDevice->container.presentQueue);
 	}
 	else
 	{
-		res = dev->PresentSwapChainCommandBufferInline(swcData->swapChainIdx, &swcData->rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, deviceContainer->currentCommandBufferIndex[currentFrame]);
+		res = dev->PresentSwapChainCommandBufferInline(swcData->swapChainIdx, &swcData->rendererFinishedSemaphores[imageIndex], 1, imageIndex, currentFrame, rhiDevice->container.currentCommandBufferIndex[currentFrame]);
 	}
 
 	if (res) 
 	{
-		dev->CommandBufferWaitOn(UINT64_MAX, deviceContainer->currentCommandBufferIndex[currentFrame]);
+		dev->CommandBufferWaitOn(UINT64_MAX, rhiDevice->container.currentCommandBufferIndex[currentFrame]);
 		return res;
 	}
 
@@ -1407,18 +1449,18 @@ int RenderInstance::SubmitFrame(int deviceSelection, int swapChainIndex, uint32_
 
 void RenderInstance::WaitOnRender(int deviceSelection)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	dev->WaitOnDevice();
 }
 
 int RenderInstance::CreateSwapChainAttachment(int deviceSelection, int swapChainIndex, int graphIndex, int renderPassIndex, AttachmentClear* clears, DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	RenderSwapchainData* swcData = swapChains.Get(swapChainIndex);
 
@@ -1436,9 +1478,9 @@ int RenderInstance::CreatePerFrameAttachment(int deviceSelection, int graphIndex
 
 int RenderInstance::CreateResourceStatusActions(ResourceStatus* status, int numberOfCurrentActions, int numberOfCurrentStages, int numberOfCurrentLayouts)
 {
-	status->currAction = (BarrierAction*)storageAllocator->Allocate(sizeof(BarrierAction) * numberOfCurrentActions);
-	status->currStage = (BarrierStage*)storageAllocator->Allocate(sizeof(BarrierStage) * numberOfCurrentStages);
-	status->currentLayout = (ImageLayout*)storageAllocator->Allocate(sizeof(ImageLayout) * numberOfCurrentLayouts);
+	status->currAction = (BarrierAction*)AllocateFromStorageAllocator(sizeof(BarrierAction) * numberOfCurrentActions);
+	status->currStage = (BarrierStage*)AllocateFromStorageAllocator(sizeof(BarrierStage) * numberOfCurrentStages);
+	status->currentLayout = (ImageLayout*)AllocateFromStorageAllocator(sizeof(ImageLayout) * numberOfCurrentLayouts);
 	return 0;
 }
 
@@ -1558,9 +1600,9 @@ int RenderInstance::CreateAttachmentImageView(int textureIndex, uint32_t firstMi
 
 int RenderInstance::CreateAttachmentImageView(int deviceSelection, int attachmentGraphInstance, int attachmentResourceIndex, uint32_t firstMip, uint32_t mipCount, uint32_t firstArrayLayer, uint32_t arrayLayerCount, ImageViewAspectMask mask, ImageLayout desiredLayout)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	AttachmentGraphInstance* graphInstance = attachmentGraphsInstances.Get(attachmentGraphInstance);
 
@@ -1592,9 +1634,9 @@ int RenderInstance::CreateAttachmentResources(
 	RenderPassType rpType, AttachmentClear* clears,
 	DeviceSlabAllocator* rtvAllocator, DeviceSlabAllocator* dsvAllocator, int rtvPoolIndex, int dsvPoolIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	AttachmentGraphInstance* graphInstance = attachmentGraphsInstances.Get(graphIndex);
 
@@ -1641,18 +1683,18 @@ int RenderInstance::CreateAttachmentResources(
 
 		if (resourceTempl->viewType == AttachmentViewType::SWAPCHAIN)
 		{
-			resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * 1);
+			resourceInst->textureIds = (int**)AllocateFromStorageAllocator(sizeof(int*) * 1);
 			resourceInst->textureIds[0] = backBufferTexturesIds;
 		}
 		else
 		{
 			if (!resourceInst->textureIds)
 			{
-				resourceInst->textureIds = (int**)storageAllocator->Allocate(sizeof(int*) * sampleCount);
+				resourceInst->textureIds = (int**)AllocateFromStorageAllocator(sizeof(int*) * sampleCount);
 
 				for (int c = 0; c<sampleCount; c++)
 				{ 
-					resourceInst->textureIds[c] = (int*)storageAllocator->Allocate(sizeof(int) * imageCount);
+					resourceInst->textureIds[c] = (int*)AllocateFromStorageAllocator(sizeof(int) * imageCount);
 				}
 			}
 
@@ -1802,9 +1844,9 @@ int RenderInstance::CreateAttachmentResources(
 
 void RenderInstance::CreateSwapChainData(int deviceSelection, EntryHandle swapChainIndex, uint32_t width, uint32_t height, bool recreate)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VKSwapChain* swapChain = dev->GetSwapChain(swapChainIndex);
 
@@ -1815,7 +1857,7 @@ void RenderInstance::CreateSwapChainData(int deviceSelection, EntryHandle swapCh
 	}
 	else
 	{
-		swapChain->CreateSwapChain(width, height, deviceContainer->graphicsComputeTransfer, deviceContainer->presentQueue);
+		swapChain->CreateSwapChain(width, height, rhiDevice->container.graphicsComputeTransfer, rhiDevice->container.presentQueue);
 	}
 
 	swapChain->CreateSwapchainViews();
@@ -1823,9 +1865,9 @@ void RenderInstance::CreateSwapChainData(int deviceSelection, EntryHandle swapCh
 
 void RenderInstance::CreateShaderResourceMap(int deviceSelection, ShaderGraph* graph)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int ResourceSetCount = graph->resourceSetCount;
 
@@ -1935,9 +1977,9 @@ void RenderInstance::CreateShaderResourceMap(int deviceSelection, ShaderGraph* g
 
 void RenderInstance::CreateShaderGraphs(int deviceSelection, StringView* shaderGraphLayouts, int shaderGraphLayoutsCount)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int totalDetailSize = 0;
 
@@ -2072,7 +2114,7 @@ int RenderInstance::CreateGraphicRenderStateObject(int deviceSelection, int shad
 			instData->frameGraphRenderPasses[i] = perFrameRenderPassSelection[i];
 		}
 
-		EntryHandle* pipelineHandles = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * totalPiplineVariations);
+		EntryHandle* pipelineHandles = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle) * totalPiplineVariations);
 
 		instData->pipelineCount = totalPiplineVariations;
 
@@ -2101,7 +2143,7 @@ int RenderInstance::CreateComputePipelineStateObject(int deviceSelection, int sh
 	
 	if (map->type == COMPUTESHADERSTAGE)
 	{
-		EntryHandle* pipelineID = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle));
+		EntryHandle* pipelineID = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle));
 
 		*pipelineID = CreateVulkanComputePipelineTemplate(deviceSelection, graph);
 
@@ -2125,9 +2167,9 @@ void RenderInstance::CreatePipelines(StringView* pipelineDescriptions, int pipel
 
 int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericPipelineStateInfo* stateInfo, ShaderGraph* graph, EntryHandle* outHandles, uint32_t outHandlePointer, AttachmentGraphInstance* graphInstance, uint32_t graphRenderPassIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	EntryHandle* layoutHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * graph->resourceSetCount);
 	EntryHandle* shaderHandle = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * graph->shaderMapCount);
@@ -2258,9 +2300,9 @@ int RenderInstance::CreatePipelineFromGraphAndSpec(int deviceSelection, GenericP
 
 EntryHandle RenderInstance::CreateVulkanComputePipelineTemplate(int deviceSelection, ShaderGraph* graph)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	EntryHandle* layoutHandles = (EntryHandle*)cacheAllocator->Allocate(sizeof(EntryHandle) * (graph->resourceSetCount));
 
@@ -2322,9 +2364,9 @@ void RenderInstance::UploadHostTransfers(int deviceSelection)
 
 	if (!memCount) return;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	BufferMemoryTransferRegion region;
 	int link = driverHostMemoryUpdater.linkHead;
@@ -2408,9 +2450,9 @@ void RenderInstance::UploadDescriptorsUpdates(int deviceSelection)
 
 	if (!memCount) return;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int link = descriptorUpdatePool.linkHead;
 	int* linkprev = &descriptorUpdatePool.linkHead;
@@ -2626,13 +2668,13 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 
 	if (!memCount) return;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int link = imageMemoryUpdateManager.linkHead;
 
-	DeviceSlabAllocator* stagingAlloc = &deviceContainer->stagingBufferAllocators[currentFrame];
+	DeviceSlabAllocator* stagingAlloc = &rhiDevice->container.stagingBufferAllocators[currentFrame];
 
 	TextureMemoryRegion* regions = (TextureMemoryRegion*)cacheAllocator->Allocate(sizeof(TextureMemoryRegion) * memCount, alignof(TextureMemoryRegion));
 
@@ -2671,13 +2713,13 @@ void RenderInstance::UploadImageMemoryTransfers(int deviceSelection, RecordingBu
 
 		EntryHandle handle = desc->textureIndex;
 
-		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region->totalSize, deviceContainer->relatedPhysDeviceInfo->optimalImageCopyOffsetAlignment);
+		size_t currentImageOffsetInUploadArena = stagingAlloc->Allocate(region->totalSize, rhiDevice->container.relatedPhysDeviceInfo->optimalImageCopyOffsetAlignment);
 
 		dev->UploadImageData(
 			handle,
 			(char*)region->data,
 			region->totalSize,
-			deviceContainer->stagingBuffers[currentFrame],
+			rhiDevice->container.stagingBuffers[currentFrame],
 			region->width,
 			region->height,
 			region->mipLevels,
@@ -2700,9 +2742,9 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 
 	if (!memCount) return;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	BufferMemoryTransferRegion region;
 	int link = driverDeviceMemoryUpdater.linkHead;
@@ -2718,7 +2760,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 
 	EntryHandle previousBuffer = EntryHandle();
 
-	DeviceSlabAllocator* stagingAlloc = &deviceContainer->stagingBufferAllocators[currentFrame];
+	DeviceSlabAllocator* stagingAlloc = &rhiDevice->container.stagingBufferAllocators[currentFrame];
 
 	while (link >= 0)
 	{
@@ -2762,7 +2804,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 			{
 				InsertAccumulatedBarriers(rbo, accum);
 				cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
-				dev->WriteToDeviceBufferBatch(previousBuffer, deviceContainer->stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
+				dev->WriteToDeviceBufferBatch(previousBuffer, rhiDevice->container.stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 			}
 
 			previousBuffer = index;
@@ -2782,7 +2824,7 @@ void RenderInstance::UploadDeviceLocalTransfers(int deviceSelection, RecordingBu
 
 	cumulativeSize = (uploadArenaOffset[batchCounter - 1] - uploadArenaOffset[0]) + batchSizes[batchCounter - 1];
 
-	dev->WriteToDeviceBufferBatch(previousBuffer, deviceContainer->stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
+	dev->WriteToDeviceBufferBatch(previousBuffer, rhiDevice->container.stagingBuffers[currentFrame], batchData, batchSizes, batchOffsets, cumulativeSize, uploadArenaOffset, batchCounter, rbo);
 }
 
 void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBufferObject* rbo, BarrierAccumulator* accum)
@@ -2791,9 +2833,9 @@ void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBuffer
 
 	if (!memCount) return;
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 	
 	TransferCommand region;
 	int link = transferCommandPool.linkHead;
@@ -2849,17 +2891,17 @@ void RenderInstance::InvokeTransferCommands(int deviceSelection, RecordingBuffer
 
 int RenderInstance::GetAllocFromBuffer(int deviceSelection, int bufferHandle, size_t structureSize, size_t copiesOfStructure, size_t alignment, AllocationType allocType, ComponentFormatType formatType, BufferAlignmentType bufferAlignmentType, int parentIndex, DeviceSlabAllocator* allocator)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	switch (bufferAlignmentType)
 	{
 	case BufferAlignmentType::UNIFORM_BUFFER_ALIGNMENT:
-		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minUniformAlignment - 1);
+		alignment = (alignment + rhiDevice->container.relatedPhysDeviceInfo->minUniformAlignment - 1) & ~((size_t)rhiDevice->container.relatedPhysDeviceInfo->minUniformAlignment - 1);
 		break;
 	case BufferAlignmentType::STORAGE_BUFFER_ALIGNMENT:
-		alignment = (alignment + deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1) & ~((size_t)deviceContainer->relatedPhysDeviceInfo->minStorageAlignment - 1);
+		alignment = (alignment + rhiDevice->container.relatedPhysDeviceInfo->minStorageAlignment - 1) & ~((size_t)rhiDevice->container.relatedPhysDeviceInfo->minStorageAlignment - 1);
 		break;
 	}
 
@@ -2926,9 +2968,9 @@ int RenderInstance::CreateImageHandle(
 	uint32_t width, uint32_t height,
 	uint32_t mipLevels, uint32_t arrayLayers, ImageFormat format, ImageType imageType, ImageUsageFlags usageFlags, int poolIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(format);
 
@@ -2981,9 +3023,9 @@ int RenderInstance::CreateImageHandle(
 
 int RenderInstance::CreateImageView(int deviceSelection, int imageHandle, int firstMip, int mipCount, int firstLayer, int layerCount, ImageViewAspectMask imageAspect, ImageLayout desiredImageLayoutUsage)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int viewIndex = textureViewsResourceHandles.Allocate();
 
@@ -3018,9 +3060,9 @@ int RenderInstance::CreateImageView(int deviceSelection, int imageHandle, int fi
 
 void RenderInstance::GetGPURequestedImageSizeAndAlignment(int deviceSelection, uint32_t width, uint32_t height, uint32_t mipLevels, uint32_t layers, ImageFormat type, ImageUsageFlags usageFlags, size_t* actualImageSize, size_t* actualAlignment)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VkFormat actualFormat = API::ConvertImageFormatToVulkanFormat(type);
 
@@ -3036,9 +3078,9 @@ void RenderInstance::GetGPURequestedImageSizeAndAlignment(int deviceSelection, u
 
 int RenderInstance::CreateImagePool(int deviceSelection, size_t size, ImageFormat format, int maxWidth, int maxHeight, ImageUsageFlags usageFlags, MemoryType memType)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VkFormat vkFormat = API::ConvertImageFormatToVulkanFormat(format);
 	VkImageUsageFlags vkUsageFlags = API::ConvertImageUsageFlagsToVulkanImageUsageFlags(usageFlags);
@@ -3064,7 +3106,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 { 
 	ShaderResourceManager* manager = descriptorManagers.Get(descriptorManagerIndex);
 
-    ShaderResourceSet* set = (ShaderResourceSet*)storageAllocator->Allocate(sizeof(ShaderResourceSet));
+    ShaderResourceSet* set = (ShaderResourceSet*)AllocateFromStorageAllocator(sizeof(ShaderResourceSet));
    
     ShaderGraph* graph = shaderGraphs.shaderGraphPtrs.Get(shaderGraphIndex);
 
@@ -3091,7 +3133,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		{
 		case ShaderResourceType::SAMPLERSTATE:
 		{
-			descArray->resourceArray.samplers.samplerHandles = (int*)storageAllocator->Allocate(sizeof(int) * actualRequestedArraySize, alignof(int));
+			descArray->resourceArray.samplers.samplerHandles = (int*)AllocateFromStorageAllocator(sizeof(int) * actualRequestedArraySize, alignof(int));
 			descArray->resourceArray.samplers.samplerCount = 0;
 			resourceViewsBinding++;
 			break;
@@ -3099,7 +3141,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		case ShaderResourceType::IMAGE2D:
 		case ShaderResourceType::IMAGESTORE2D:
 		{
-			descArray->resourceArray.images.textureDetails = (ShaderResourceImageContainer*)storageAllocator->Allocate(sizeof(ShaderResourceImageContainer) * actualRequestedArraySize, alignof(ShaderResourceImageContainer));
+			descArray->resourceArray.images.textureDetails = (ShaderResourceImageContainer*)AllocateFromStorageAllocator(sizeof(ShaderResourceImageContainer) * actualRequestedArraySize, alignof(ShaderResourceImageContainer));
 			descArray->resourceArray.images.textureCount = 0;
 			resourceViewsBinding++;
 			break;
@@ -3108,7 +3150,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		case ShaderResourceType::SAMPLER2D:
 		case ShaderResourceType::SAMPLERCUBE:
 		{
-			descArray->resourceArray.combinedImages.textureDetails = (ShaderResourceCombinedImageContainer*)storageAllocator->Allocate(
+			descArray->resourceArray.combinedImages.textureDetails = (ShaderResourceCombinedImageContainer*)AllocateFromStorageAllocator(
 				sizeof(ShaderResourceCombinedImageContainer) * actualRequestedArraySize, alignof(ShaderResourceCombinedImageContainer));
 			descArray->resourceArray.combinedImages.textureCount = 0;
 			resourceViewsBinding++;
@@ -3130,7 +3172,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		case ShaderResourceType::STORAGE_BUFFER:
 		case ShaderResourceType::UNIFORM_BUFFER:
 		{
-			descArray->resourceArray.buffers.allocationIndex = (int*)storageAllocator->Allocate(sizeof(int) * actualRequestedArraySize, alignof(int));
+			descArray->resourceArray.buffers.allocationIndex = (int*)AllocateFromStorageAllocator(sizeof(int) * actualRequestedArraySize, alignof(int));
 			descArray->resourceArray.buffers.bufferCount = 0;
 			resourceViewsBinding++;
 			break;
@@ -3138,7 +3180,7 @@ ShaderResourceSetBuilder RenderInstance::AllocateShaderResourceSet(int descripto
 		case ShaderResourceType::BUFFER_VIEW:
 		{
 			descArray->resourceArray.views.bufferCount = 0;
-			descArray->resourceArray.views.allocationIndex = (int*)storageAllocator->Allocate(sizeof(int) * actualRequestedArraySize, alignof(int));
+			descArray->resourceArray.views.allocationIndex = (int*)AllocateFromStorageAllocator(sizeof(int) * actualRequestedArraySize, alignof(int));
 			resourceViewsBinding++;
 			break;
 		}
@@ -3377,17 +3419,17 @@ int RenderInstance::CreatePhysicalDeviceAdapterWithQuerying(GPUFeatureRequest* r
 
 int RenderInstance::CreatePerFrameStagingBuffers(int deviceSelection, uint32_t bufferSize)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		deviceContainer->stagingBuffers[i] = dev->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		rhiDevice->container.stagingBuffers[i] = dev->CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			API::ConvertMemoryTypeToVkMemoryPropertyFlags(MemoryTypeBits::HOST_MEMORY_COHERENT_TYPE)
 		);
-		deviceContainer->stagingBufferAllocators[i].dataSize = bufferSize;
-		deviceContainer->stagingBufferAllocators[i].dataAllocator = 0;
+		rhiDevice->container.stagingBufferAllocators[i].dataSize = bufferSize;
+		rhiDevice->container.stagingBufferAllocators[i].dataAllocator = 0;
 	}
 
 	return 0;
@@ -3397,13 +3439,13 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 {	
 	int currentLogicalDeviceIndex = logicalDeviceCounter++;
 
-	RenderLogicalDeviceContainer* logicalDevice = &logicalDeviceIndices[currentLogicalDeviceIndex];
+	RHIDevice* rhiDevice = GetDeviceHandle(currentLogicalDeviceIndex);
 
 	RenderPhysicalDeviceContainer* physicalDevice = &physicalDeviceIndices[createInfo->physicalDeviceIndex];
 
 	EntryHandle physicalIndex = physicalDevice->physicalDeviceIndex;
 
-	logicalDevice->relatedPhysDeviceInfo = &physicalDevice->information;
+	rhiDevice->container.relatedPhysDeviceInfo = &physicalDevice->information;
 
 	uint32_t deviceExtNameCount = vkInstance->GetLogicalDeviceExtensionsCount(createInfo->requestedDeviceFeatures);
 
@@ -3418,9 +3460,11 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 
 	EntryHandle deviceIndex = vkInstance->CreateLogicalDevice(physicalIndex);
 
-	logicalDevice->logicalDeviceIndex = deviceIndex;
+	rhiDevice->container.logicalDeviceIndex = deviceIndex;
 
 	VKDevice* majorDevice = vkInstance->GetLogicalDevice(deviceIndex);
+
+	rhiDevice->device = majorDevice;
 
 	uint32_t totalQueueFamilyCount = majorDevice->QueueFamilyDetailsCount();
 
@@ -3463,8 +3507,8 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 		queuePriorites[i] = 1.0f;
 	}
 
-	void* driverDeviceDataHead = storageAllocator->Allocate(createInfo->driverPermanentSize + createInfo->driverCacheSize, 64);
-	void* deviceDataHead = storageAllocator->Allocate(createInfo->deviceInstPermanentSize + createInfo->deviceInstHandleSize + createInfo->deviceInstCacheSize + 192, 64);
+	void* driverDeviceDataHead = AllocateFromStorageAllocator(createInfo->driverPermanentSize + createInfo->driverCacheSize, 64);
+	void* deviceDataHead = AllocateFromStorageAllocator(createInfo->deviceInstPermanentSize + createInfo->deviceInstHandleSize + createInfo->deviceInstCacheSize + 192, 64);
 
 	majorDevice->CreateLogicalDevice(
 		deviceFeatureNames, 
@@ -3483,47 +3527,47 @@ int RenderInstance::CreateLogicalDevice(LogicalDeviceCreateInfo* createInfo)
 		deviceDataHead
 	);
 
-	logicalDevice->graphicsComputeTransfer = majorDevice->CreateQueueManager(queueIndices[0], queueCounts[0], VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, (queueCount == 1) ? true : false);
+	rhiDevice->container.graphicsComputeTransfer = majorDevice->CreateQueueManager(queueIndices[0], queueCounts[0], VK_QUEUE_COMPUTE_BIT | VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_TRANSFER_BIT, (queueCount == 1) ? true : false);
 
 	if (queueCount > 1)
 	{
-		logicalDevice->presentQueue = majorDevice->CreateQueueManager(queueIndices[1], queueCounts[1], 0, true);
+		rhiDevice->container.presentQueue = majorDevice->CreateQueueManager(queueIndices[1], queueCounts[1], 0, true);
 	}
 	else
 	{
-		logicalDevice->presentQueue = logicalDevice->graphicsComputeTransfer;
+		rhiDevice->container.presentQueue = rhiDevice->container.graphicsComputeTransfer;
 	}
 
-	logicalDevice->currentCommandBufferIndex = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT, alignof(EntryHandle));
-	logicalDevice->stagingBuffers = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT, alignof(EntryHandle));
+	rhiDevice->container.currentCommandBufferIndex = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT, alignof(EntryHandle));
+	rhiDevice->container.stagingBuffers = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT, alignof(EntryHandle));
 
 	for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
-		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(logicalDevice->graphicsComputeTransfer, 1, true, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-		logicalDevice->currentCommandBufferIndex[i] = *lprimaryCommandBuffers;
+		EntryHandle* lprimaryCommandBuffers = majorDevice->CreateReusableCommandBuffers(rhiDevice->container.graphicsComputeTransfer, 1, true, VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+		rhiDevice->container.currentCommandBufferIndex[i] = *lprimaryCommandBuffers;
 	}
 
-	logicalDevice->stagingBufferAllocators = (DeviceSlabAllocator*)storageAllocator->Allocate(sizeof(DeviceSlabAllocator) * MAX_FRAMES_IN_FLIGHT, alignof(DeviceSlabAllocator));
+	rhiDevice->container.stagingBufferAllocators = (DeviceSlabAllocator*)AllocateFromStorageAllocator(sizeof(DeviceSlabAllocator) * MAX_FRAMES_IN_FLIGHT, alignof(DeviceSlabAllocator));
 
-	logicalDevice->queryResults = (uint32_t*)storageAllocator->Allocate(sizeof(uint32_t) * createInfo->maxQueries, alignof(uint32_t));
+	rhiDevice->container.queryResults = (uint32_t*)AllocateFromStorageAllocator(sizeof(uint32_t) * createInfo->maxQueries, alignof(uint32_t));
 
-	logicalDevice->queryCounts = (uint32_t*)storageAllocator->Allocate(sizeof(uint32_t) * MAX_FRAMES_IN_FLIGHT, alignof(uint32_t));
+	rhiDevice->container.queryCounts = (uint32_t*)AllocateFromStorageAllocator(sizeof(uint32_t) * MAX_FRAMES_IN_FLIGHT, alignof(uint32_t));
 
-	logicalDevice->maxQueryResults = createInfo->maxQueries;
+	rhiDevice->container.maxQueryResults = createInfo->maxQueries;
 
-	logicalDevice->queryPoolIndex = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * createInfo->maxQueries);
+	rhiDevice->container.queryPoolIndex = majorDevice->CreateQueryPool(VK_QUERY_TYPE_TIMESTAMP, MAX_FRAMES_IN_FLIGHT * createInfo->maxQueries);
 
-	logicalDevice->deviceTimelineSyncObject.currentValue = 0;
-	logicalDevice->deviceTimelineSyncObject.driverTimelineObject = *majorDevice->CreateTimelineSemaphores(1, logicalDevice->deviceTimelineSyncObject.currentValue);
+	rhiDevice->container.deviceTimelineSyncObject.currentValue = 0;
+	rhiDevice->container.deviceTimelineSyncObject.driverTimelineObject = *majorDevice->CreateTimelineSemaphores(1, rhiDevice->container.deviceTimelineSyncObject.currentValue);
 
 	return currentLogicalDeviceIndex;
 }
 
 int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex, ImageFormat mainBackBufferColorFormat, uint32_t _width, uint32_t _height)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	RenderWindowSpecificData* winData = windowsSurfaces.Get(surfaceIndex);
 
@@ -3543,10 +3587,10 @@ int RenderInstance::CreateSwapChainHandle(int deviceSelection, int surfaceIndex,
 
 	uint32_t imageCount = swcData->imageCount = vkSwcData->imageCount;
 
-	swcData->rendererWaitSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
-	swcData->rendererFinishedSemaphores = (EntryHandle*)storageAllocator->Allocate(sizeof(EntryHandle) * imageCount);
+	swcData->rendererWaitSemaphores = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle) * MAX_FRAMES_IN_FLIGHT);
+	swcData->rendererFinishedSemaphores = (EntryHandle*)AllocateFromStorageAllocator(sizeof(EntryHandle) * imageCount);
 
-	swcData->textureIds = (int*)storageAllocator->Allocate(sizeof(int) * imageCount);
+	swcData->textureIds = (int*)AllocateFromStorageAllocator(sizeof(int) * imageCount);
 
 	for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -3617,9 +3661,9 @@ ImageFormat RenderInstance::FindSupportedBackBufferColorFormat(int physicalDevic
 
 ImageFormat RenderInstance::FindSupportedDepthFormat(int deviceSelection, ImageFormat* requestedFormats, uint32_t requestSize)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VkFormat format;
 
@@ -3645,9 +3689,9 @@ ImageFormat RenderInstance::FindSupportedDepthFormat(int deviceSelection, ImageF
 
 int RenderInstance::CreateSampler(int deviceSelection, uint32_t baseLod, uint32_t maxLod, SamplerFilterMode minFilter, SamplerFilterMode magFilter, SamplerAddressMode addressMode, SamplerMipmapMode mipmapMode, CompareOp compareOp)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	VkSamplerAddressMode mode = API::ConvertSamplerAddressModeToVulkanSamplerAddressMode(addressMode);
 
@@ -3691,9 +3735,9 @@ EntryHandle RenderInstance::CreateShaderResourceSet(ShaderResourceManager* descr
 		return descriptorManager->descriptorSetHandles[descriptorSet];
 	}
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	ShaderResourceSet* set = descriptorManager->descriptorSets[descriptorSet];
 
@@ -3944,13 +3988,13 @@ int RenderInstance::CreateComputePipelineObject(int deviceSelection, ComputeInte
 
 void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint32_t imageIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
-	deviceContainer->stagingBufferAllocators[currentFrame].dataAllocator = 0;
+	rhiDevice->container.stagingBufferAllocators[currentFrame].dataAllocator = 0;
 
-	EntryHandle cbindex = deviceContainer->currentCommandBufferIndex[currentFrame];
+	EntryHandle cbindex = rhiDevice->container.currentCommandBufferIndex[currentFrame];
 	RecordingBufferObject rcb = dev->GetRecordingBufferObject(cbindex);
 	rcb.ResetCommandPoolForBuffer();
 
@@ -3966,7 +4010,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 	rcb.BeginRecordingCommand(nullptr, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	rcb.ResetQueries(deviceContainer->queryPoolIndex, deviceContainer->maxQueryResults * currentFrame, deviceContainer->maxQueryResults);
+	rcb.ResetQueries(rhiDevice->container.queryPoolIndex, rhiDevice->container.maxQueryResults * currentFrame, rhiDevice->container.maxQueryResults);
 
 	UploadDeviceLocalTransfers(deviceSelection, &rcb, accumulator);
 
@@ -3976,7 +4020,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 	int commandCountIter = 0;
 
-	int queryCountBaseIndex = deviceContainer->maxQueryResults * currentFrame;
+	int queryCountBaseIndex = rhiDevice->container.maxQueryResults * currentFrame;
 
 	int queryCountIndex = queryCountBaseIndex;
 
@@ -3988,7 +4032,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 		if (command->streamType == GPUCommandStreamType::COMPUTE_QUEUE_COMMANDS)
 		{
-			rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			rcb.WriteTimestamp(rhiDevice->container.queryPoolIndex, queryCountIndex, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 			
 			ComputeQueue* queue = computeQueues.Get(command->indexForStreamType);
 
@@ -4066,7 +4110,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 			ResetIntraBarrierAccumulator(accumulator);
 			
-			rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+			rcb.WriteTimestamp(rhiDevice->container.queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
 
 			queryCountIndex += 2;
 		}
@@ -4076,7 +4120,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 			for (int i = 0; i < currentGraphInstance->graphLayout->passesCount; i++)
 			{
-				rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
+				rcb.WriteTimestamp(rhiDevice->container.queryPoolIndex, queryCountIndex, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
 				AttachmentRenderPassInstance* rpInst = &currentGraphInstance->passes[i];
 
@@ -4321,7 +4365,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 
 				ResetIntraBarrierAccumulator(accumulator);
 
-				rcb.WriteTimestamp(deviceContainer->queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+				rcb.WriteTimestamp(rhiDevice->container.queryPoolIndex, queryCountIndex+1, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 			
 				queryCountIndex += 2;
 			}
@@ -4330,7 +4374,7 @@ void RenderInstance::DrawScene(int deviceSelection, int commandStreamIndex, uint
 		commandCountIter++;
 	}
 
-	deviceContainer->queryCounts[currentFrame] = (queryCountIndex - queryCountBaseIndex);
+	rhiDevice->container.queryCounts[currentFrame] = (queryCountIndex - queryCountBaseIndex);
 
 	ReturnBarrierAccumulator(accumulatorIndex);
 
@@ -4406,7 +4450,7 @@ int RenderInstance::CreateGPUCommandStream(int maxGPUCommandCount)
 
 	stream->commandCount = 0;
 	stream->maxCommandCount = maxGPUCommandCount;
-	stream->commands = (GPUCommand*)storageAllocator->Allocate(sizeof(GPUCommand) * maxGPUCommandCount);
+	stream->commands = (GPUCommand*)AllocateFromStorageAllocator(sizeof(GPUCommand) * maxGPUCommandCount);
 
 	return gpuCommandsIndex;
 }
@@ -4415,9 +4459,9 @@ void RenderInstance::EndFrame(int commandStreamIndex, int deviceSelection)
 {
 	char StringBuffer[512];
 
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int commandCountIter = 0;
 
@@ -4463,21 +4507,21 @@ void RenderInstance::EndFrame(int commandStreamIndex, int deviceSelection)
 			passDesc = "Render Pass : ";
 		}
 
-		if (previousFrame < MAX_FRAMES_IN_FLIGHT && (deviceContainer->queryCounts[previousFrame] >= queryOffset + queryCount))
+		if (previousFrame < MAX_FRAMES_IN_FLIGHT && (rhiDevice->container.queryCounts[previousFrame] >= queryOffset + queryCount))
 		{
 			dev->ReadbackResultsFromQueries(
-				deviceContainer->queryPoolIndex,
-				(deviceContainer->maxQueryResults * previousFrame) + queryOffset,
+				rhiDevice->container.queryPoolIndex,
+				(rhiDevice->container.maxQueryResults * previousFrame) + queryOffset,
 				queryCount,
-				deviceContainer->queryResults,
-				sizeof(uint32_t) * deviceContainer->maxQueryResults,
+				rhiDevice->container.queryResults,
+				sizeof(uint32_t) * rhiDevice->container.maxQueryResults,
 				sizeof(uint32_t), 
 				VK_QUERY_RESULT_WAIT_BIT
 			);
 
 			for (uint32_t i = 0; i < queryCount; i += 2)
 			{
-				double timeNs = (deviceContainer->queryResults[i + 1] - deviceContainer->queryResults[i]) * deviceContainer->relatedPhysDeviceInfo->deviceTimeStampPeriodNS;
+				double timeNs = (rhiDevice->container.queryResults[i + 1] - rhiDevice->container.queryResults[i]) * rhiDevice->container.relatedPhysDeviceInfo->deviceTimeStampPeriodNS;
 				
 				double timeMs = timeNs / 1e6;
 
@@ -4521,9 +4565,9 @@ void RenderInstance::AddPipelineToComputeQueue(int queueIndex, int psoIndex)
 
 void RenderInstance::ReadData(int deviceSelection, int handle, void* dest, int size, int offset)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	size_t allocOffset = 0;
 
@@ -4873,9 +4917,9 @@ void RenderInstance::PipelineUpdateDispatchCommands(int pipelineIndex, uint32_t 
 
 int RenderInstance::CreateUniversalBuffer(int deviceSelection, size_t size, MemoryType bufferMemoryType)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int bufferIndex = bufferHandles.Allocate();
 
@@ -4901,8 +4945,8 @@ int RenderInstance::CreateUniversalBuffer(int deviceSelection, size_t size, Memo
 
 int RenderInstance::CreateHighLevelInstance(uint32_t vkDriverSpecificMemory, uint32_t vkDriverCacheSize, uint32_t instancePermanentSpecificMemory, uint32_t instanceCacheMemory)
 {
-	void* driverInstanceDataHead = storageAllocator->Allocate(vkDriverSpecificMemory + vkDriverCacheSize);
-	void* instanceDataHead = storageAllocator->Allocate(instancePermanentSpecificMemory + instanceCacheMemory);
+	void* driverInstanceDataHead = AllocateFromStorageAllocator(vkDriverSpecificMemory + vkDriverCacheSize);
+	void* instanceDataHead = AllocateFromStorageAllocator(instancePermanentSpecificMemory + instanceCacheMemory);
 
 	vkInstance->SetInstanceDataAndSize(driverInstanceDataHead, vkDriverSpecificMemory, vkDriverCacheSize);
 
@@ -4953,9 +4997,9 @@ int RenderInstance::CreateWindowedSurface(OSWindowInternalData* windowData)
 
 int RenderInstance::CreateDescriptorHeap(int deviceSelection, DescriptorTypes* types, uint32_t* descriptorCountPerFrame, uint32_t numDescriptorTypesCount, uint32_t maxDescriptorSets, uint32_t maxShaderResourceSets)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	int descriptorManagerIndex = descriptorManagers.Allocate();
 
@@ -5015,9 +5059,9 @@ int RenderInstance::CreateDescriptorHeap(int deviceSelection, DescriptorTypes* t
 
 void RenderInstance::GeneratePipelineDescriptorBarriers(int deviceSelection, RecordingBufferObject* rcb, ShaderResourceSetHandle* descriptorid, int descriptorcount, BarrierAccumulator* accumulator, int pipelineIndex)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	for (int i = 0; i < descriptorcount; i++)
 	{
@@ -5148,9 +5192,9 @@ void RenderInstance::InsertAccumulatedBarriers(RecordingBufferObject* rcb, Barri
 
 void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle, BarrierAccumulator* accumulator)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	if (handle->vertexBufferHandle != -1)
 		InsertBufferBarrier(dev, rcb, handle->vertexBufferHandle, BarrierStageBits::VERTEX_INPUT_BARRIER, BarrierActionBits::READ_VERTEX_INPUT, accumulator);
@@ -5164,9 +5208,9 @@ void RenderInstance::GenerateDrawBindingsBarriers(int deviceSelection, Recording
 
 void RenderInstance::GenerateComputeDispatchBindingsBarriers(int deviceSelection, RecordingBufferObject* rcb, PipelineHandle* handle, int pipelineIndex, BarrierAccumulator* accumulator)
 {
-	RenderLogicalDeviceContainer* deviceContainer = &logicalDeviceIndices[deviceSelection];
+	RHIDevice* rhiDevice = GetDeviceHandle(deviceSelection);
 
-	VKDevice* dev = vkInstance->GetLogicalDevice(deviceContainer->logicalDeviceIndex);
+	VKDevice* dev = rhiDevice->device;
 
 	if (handle->indirectDispatchCommandHandle != -1)
 	{
